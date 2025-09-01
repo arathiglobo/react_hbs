@@ -220,7 +220,7 @@ export default function HotelSearch() {
   const [nights, setNights] = useState(1);
   const [agent, setAgent] = useState("");
   const [rooms, setRooms] = useState([
-    { adults: 2, children: 0, childAges: [] },
+    { adults: 1, children: 0, childAges: [] },
   ]);
   const [roomsOpen, setRoomsOpen] = useState(false);
 
@@ -642,7 +642,7 @@ export default function HotelSearch() {
     setCheckOut("");
     setNights(1);
     setAgent("");
-    setRooms([{ adults: 2, children: 0, childAges: [] }]);
+    setRooms([{ adults: 1, children: 0, childAges: [] }]);
     setRoomsOpen(false);
     setStarRating([]);
     setHotelType([]);
