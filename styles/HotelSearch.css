@@ -234,7 +234,7 @@
 }
 
 .hotel-name {
-  font-size: 1.5rem;
+  font-size: 1.5rem !important;
   line-height: 1.3;
   color: #2d3748;
   height: 2.2rem;

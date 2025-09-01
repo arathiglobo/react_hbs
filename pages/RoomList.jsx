@@ -123,28 +123,7 @@ const RoomList = () => {
 
     setTimeout(async () => {
       try {
-        // let priceCheckReq = {
-        //   searchCriteria: {
-        //     roomConfiguration: {
-        //       room: {
-        //         adult: {
-        //           age: "25",
-        //         },
-        //         roomTypeCode: "16306703",
-        //         mealPlanCode: "7",
-        //         contractTokenId: "766536",
-        //         roomConfigurationId: "1",
-        //       },
-        //     },
-        //     startDate: "2025-09-25",
-        //     endDate: "2025-09-26",
-        //     hotelCode: "101-1256",
-        //     nationality: "AF",
-        //     includeRateDetails: "Y",
-        //     cancellationPolicy: "Y",
-        //     groupByRooms: "Y",
-        //   },
-        // };
+    
         const { payload, hotels } = roomData;
         const hotelsdetail = hotels[0];
         console.log("hotelsdetail::", hotelsdetail)
