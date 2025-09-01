@@ -119,16 +119,101 @@ const RoomList = () => {
   }, [location.state]);
 
   const handleBooking = async (rate) => {
-    setSelectedRate(rate);
     setLoadingRate(true);
 
     setTimeout(async () => {
       try {
-        // example API call to fetch accurate rate
+        // let priceCheckReq = {
+        //   searchCriteria: {
+        //     roomConfiguration: {
+        //       room: {
+        //         adult: {
+        //           age: "25",
+        //         },
+        //         roomTypeCode: "16306703",
+        //         mealPlanCode: "7",
+        //         contractTokenId: "766536",
+        //         roomConfigurationId: "1",
+        //       },
+        //     },
+        //     startDate: "2025-09-25",
+        //     endDate: "2025-09-26",
+        //     hotelCode: "101-1256",
+        //     nationality: "AF",
+        //     includeRateDetails: "Y",
+        //     cancellationPolicy: "Y",
+        //     groupByRooms: "Y",
+        //   },
+        // };
+        const { payload, hotels } = roomData;
+        const hotelsdetail = hotels[0];
+        console.log("hotelsdetail::", hotelsdetail)
 
-        //  const response = await axiosInstance.get(`/api/rates/${rate.id}`);
-        // setSelectedRate(response.data); // update with accurate rate
-        setSelectedRate(rate);
+         console.log("rate::", rate)
+
+      
+
+        // Pick roomCategory + rate details dynamically
+        // const selectedCategory = hotelsdetail.roomCategories.find(
+        //   (cat) => cat.roomTypeCode === rate.roomTypeCode
+        // );
+
+        // const selectedRate = selectedCategory?.availableRates.find(
+        //   (r) => r.mealPlanCode === rate.mealPlanCode
+        // );
+
+      
+
+       
+
+        // Build dynamic request body
+        let priceCheckReq = {
+          searchCriteria: {
+            roomConfiguration: {
+              room: {
+                adult: {
+                  age: payload.rooms[0].adultAges[0].toString(),
+                },
+                roomTypeCode:  rate.roomTypeCode, 
+                mealPlanCode: rate.mealPlanCode, 
+                contractTokenId: rate.contractTokenId || "0", 
+                roomConfigurationId: "1",
+              },
+            },
+            startDate: payload.checkInDate,
+            endDate: payload.checkOutDate,
+            hotelCode: payload.hotelCode,
+            nationality: payload.nationality,
+            includeRateDetails: "Y",
+            cancellationPolicy: "Y",
+            groupByRooms: "Y",
+          },
+        };
+
+        console.log("priceCheckReq ::", priceCheckReq);
+        const response = await axiosInstance.post(
+          `/api/iwtx/hotel/availability`,
+          priceCheckReq
+        );
+        console.log("itemprice check response ::", response);
+
+        const hotel = response.data.hotels.hotel[0];
+        const rooms = hotel.roomTypeDetails.rooms.room;
+        // Map all rooms to a structured object
+        const accurateRates = rooms
+          .filter((room) => room != null)
+          .map((room) => ({
+            hotelId: hotel.hotelId,
+            hotelName: hotel.hotelName,
+            roomCategory: room.roomType,
+            mealPlan: room.mealPlan,
+            contractLabel: room.contractLabel,
+            refundStatus: room.nonRefundable,
+            rate: room.rateDetails.rate, // ✅ actual rate
+            currency: room.currCode,
+          }));
+        console.log("accurateRate:", accurateRates);
+        setSelectedRate(accurateRates[0]); // update with accurate rate
         setLoadingRate(false);
         setShowBookingModal(true);
       } catch (err) {
@@ -250,8 +335,10 @@ const RoomList = () => {
     );
   }
 
+  console.log("roomdata ::::::::::::::::::", roomData);
   const hotel = roomData.hotels[0];
   const payload = roomData.payload || {};
+  console.log("selectedRate before bookingmodal:::", selectedRate);
 
   return (
     <div className="room-list-container">
@@ -654,13 +741,17 @@ const RoomList = () => {
                   <div className="d-flex justify-content-between mb-2">
                     <span>Total Rate:</span>
                     <span className="fw-semibold text-primary">
-                      {formatPrice(selectedRate.totalRate)}
+                      {formatPrice(selectedRate.rate)}
                     </span>
                   </div>
                   <div className="d-flex justify-content-between mb-2">
                     <span>Refund Status:</span>
                     <span>
-                      {getRefundStatusBadge(selectedRate.refundStatus)}
+                      {getRefundStatusBadge(
+                        selectedRate.refundStatus
+                          ? "NON REFUNDABLE"
+                          : "FLEXIBLE"
+                      )}
                     </span>
                   </div>
                   <div className="d-flex justify-content-between">

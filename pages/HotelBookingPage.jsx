@@ -23,7 +23,7 @@ const HotelBookingPage = () => {
 
   const [bookingData, setBookingData] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [primaryGuest, setPrimaryGuest] = useState({
+  const [primaryGuest, setPrimaryGuest] = useState({ 
     salutation: "",
     firstName: "",
     middleName: "",
@@ -127,9 +127,9 @@ const HotelBookingPage = () => {
                           <small className="text-muted me-2">
                             ⭐ {hotelStaticData.starRating} Star
                           </small>
-                          {selectedRate.nonRefundable !== undefined &&
+                          {selectedRate.refundStatus !== undefined &&
                             getRefundStatusBadge(
-                              selectedRate.nonRefundable
+                              selectedRate.refundStatus
                                 ? "NON REFUNDABLE"
                                 : "FLEXIBLE"
                             )}
@@ -183,7 +183,7 @@ const HotelBookingPage = () => {
                       <h4 className="mb-0">
                         Total Price :{" "}
                         <span className="text-success fw-bold">
-                          {formatPrice(selectedRate.totalRate)}
+                          {formatPrice(selectedRate.rate)}
                         </span>
                       </h4>
                     </div>

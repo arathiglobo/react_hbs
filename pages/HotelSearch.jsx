@@ -427,6 +427,7 @@ export default function HotelSearch() {
         ? response.data.map((country) => ({
             value: country.id,
             label: country.name,
+            code:country.countryCode,
           }))
         : [];
       setNationalityList(options);
@@ -680,10 +681,14 @@ export default function HotelSearch() {
     setTotalElements(0);
     setTotalPages(1);
 
+    console.log("selectedNationality::" , selectedNationality)
+    console.log("selectedDestination::" , selectedDestination)
     try {
-      const nationalityId = "AF"; //selectedNationality.value;
-      const destinationCityId = 88; //selectedDestination.value;
-      const destinationCountryId = 23; //selectedDestination.countryId;
+
+      const nationalityId = selectedNationality.value;   
+      const nationalityCode = selectedNationality.code; // "AF"; //
+      const destinationCityId =selectedDestination.value;  // 88; //
+      const destinationCountryId = selectedDestination.countryId;  //23; //
       const noOfRooms = String(rooms.length);
 
       const roomConfigurations = rooms.map((room, index) => ({
@@ -698,6 +703,7 @@ export default function HotelSearch() {
 
       const searchPayloadReq = {
         nationalityId,
+        nationalityCode,
         destinationCityId,
         destinationCountryId,
         checkIn,
@@ -706,6 +712,8 @@ export default function HotelSearch() {
         roomConfigurations,
         agentId,
       };
+
+      console.log("searchPayloadReq::" , searchPayloadReq)
 
       const searchKeyRes = await axiosInstance.post(
         "/hotel-search/search",
