@@ -44,6 +44,10 @@ const RoomList = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [hotelStaticData, setHotelStaticData] = useState(null);
+  const [loadingRate, setLoadingRate] = useState(false);
+
+  let activeUserRole = localStorage.getItem("currentActiveRole");
+  console.log("currentActiveRole::", activeUserRole);
 
   // Trigger API call on page load with state passed from HotelSearch
   useEffect(() => {
@@ -114,9 +118,25 @@ const RoomList = () => {
     fetchRooms();
   }, [location.state]);
 
-  const handleBooking = (rate) => {
+  const handleBooking = async (rate) => {
     setSelectedRate(rate);
-    setShowBookingModal(true);
+    setLoadingRate(true);
+
+    setTimeout(async () => {
+      try {
+        // example API call to fetch accurate rate
+
+        //  const response = await axiosInstance.get(`/api/rates/${rate.id}`);
+        // setSelectedRate(response.data); // update with accurate rate
+        setSelectedRate(rate);
+        setLoadingRate(false);
+        setShowBookingModal(true);
+      } catch (err) {
+        console.error("Accurate rate fetch failed:", err);
+        setLoadingRate(false);
+        alert("Unable to fetch accurate rate. Please try again.");
+      }
+    }, 3000);
   };
 
   const sampleGallery = [
@@ -240,6 +260,20 @@ const RoomList = () => {
         <TopBar />
         <main className="content-wrapper">
           <div className="container-fluid">
+            {/* Loader Modal 🔹 */}
+            <Modal
+              show={loadingRate}
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Body className="text-center p-4">
+                <Spinner animation="border" variant="primary" />
+                <p className="mt-3 mb-0 fw-bold text-primary">
+                  Fetching accurate rate...
+                </p>
+              </Modal.Body>
+            </Modal>
             {/* Hotel Header */}
             <Card className="hotel-header-card mb-4">
               <Card.Body className="p-4">
@@ -292,6 +326,7 @@ const RoomList = () => {
                   </Col>
                   <Col md={4}>
                     <Card className="booking-summary">
+                      total Rate
                       <Card.Body className="p-3">
                         <h6 className="mb-3">Booking Summary</h6>
                         <div className="booking-details">
@@ -606,6 +641,16 @@ const RoomList = () => {
                     <span>Meal Plan:</span>
                     <span className="fw-semibold">{selectedRate.mealPlan}</span>
                   </div>
+
+                  {/* ✅ Show Selling Price only if ADMIN */}
+                  {activeUserRole === "ADMIN" && (
+                    <div className="d-flex justify-content-between mb-2">
+                      <span>Selling Price:</span>
+                      <span className="fw-semibold text-primary">
+                        {formatPrice(selectedRate.sellingPrice)}
+                      </span>
+                    </div>
+                  )}
                   <div className="d-flex justify-content-between mb-2">
                     <span>Total Rate:</span>
                     <span className="fw-semibold text-primary">
@@ -641,7 +686,7 @@ const RoomList = () => {
             className="btn-confirm-booking"
             size="sm"
             onClick={() => {
-            try {
+              try {
                 sessionStorage.setItem(
                   "bookingData",
                   JSON.stringify({ selectedRate, hotelStaticData, payload })

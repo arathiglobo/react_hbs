@@ -18,14 +18,20 @@ import {
 const HotelBookingPage = () => {
   const navigate = useNavigate();
 
+  let activeUserRole = localStorage.getItem("currentActiveRole");
+  console.log("currentActiveRole::", activeUserRole);
+
   const [bookingData, setBookingData] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [primaryGuest, setPrimaryGuest] = useState({
     salutation: "",
     firstName: "",
+    middleName: "",
     lastName: "",
     email: "",
     phone: "",
+    passportNo: "",
+    agentLpo: "",
   });
 
   // Load bookingData once
@@ -41,6 +47,7 @@ const HotelBookingPage = () => {
         guests: Array.from({ length: room.adults + room.children }, (_, i) => ({
           salutation: "",
           firstName: "",
+          middleName: "",
           lastName: "",
           gender: "",
           isChild: i >= room.adults,
@@ -159,11 +166,26 @@ const HotelBookingPage = () => {
                       </Col>
                     </Row>
                     <hr />
-                    <div className="d-flex justify-content-between align-items-center">
-                      <h5 className="mb-0">Total Price</h5>
-                      <h3 className="text-success fw-bold mb-0">
-                        {formatPrice(selectedRate.totalRate)}
+
+   {/* ✅ Show Selling Price only if ADMIN */}
+ {activeUserRole === "ADMIN" && (
+                    <div className="d-flex justify-content-end align-items-center">
+                      <h3 className="mb-0">
+                        Selling Price :{" "}
+                        <span className="text-success fw-bold">
+                          {formatPrice(selectedRate.sellingPrice)}
+                        </span>
                       </h3>
+                    </div>
+                     )}
+
+                    <div className="d-flex justify-content-end align-items-center mt-3">
+                      <h4 className="mb-0">
+                        Total Price :{" "}
+                        <span className="text-success fw-bold">
+                          {formatPrice(selectedRate.totalRate)}
+                        </span>
+                      </h4>
                     </div>
                   </Card.Body>
                 </Card>
@@ -186,9 +208,7 @@ const HotelBookingPage = () => {
                     <Accordion.Body className="bg-light rounded-bottom">
                       <div className="mb-4">
                         <strong>Room Type:</strong>{" "}
-                        <Badge bg="info">
-                          {selectedRate.roomCategory}
-                        </Badge>
+                        <Badge bg="info">{selectedRate.roomCategory}</Badge>
                       </div>
                       {room.guests.map((guest, guestIndex) => (
                         <Card
@@ -200,9 +220,12 @@ const HotelBookingPage = () => {
                             {guest.isChild ? "(Child)" : "(Adult)"}
                           </h6>
                           <Row className="g-3">
-                            <Col md={4}>
+                            <Col md={3}>
                               <Form.Group>
-                                <Form.Label>Salutation</Form.Label>
+                                <Form.Label>
+                                  <span style={{ color: "red" }}>*</span>
+                                  Salutation
+                                </Form.Label>
                                 <Form.Select
                                   value={guest.salutation}
                                   onChange={(e) =>
@@ -222,9 +245,12 @@ const HotelBookingPage = () => {
                                 </Form.Select>
                               </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col md={3}>
                               <Form.Group>
-                                <Form.Label>First Name</Form.Label>
+                                <Form.Label>
+                                  <span style={{ color: "red" }}>*</span>First
+                                  Name
+                                </Form.Label>
                                 <Form.Control
                                   type="text"
                                   value={guest.firstName}
@@ -239,9 +265,12 @@ const HotelBookingPage = () => {
                                 />
                               </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col md={3}>
                               <Form.Group>
-                                <Form.Label>Last Name</Form.Label>
+                                <Form.Label>
+                                  <span style={{ color: "red" }}>*</span>Last
+                                  Name
+                                </Form.Label>
                                 <Form.Control
                                   type="text"
                                   value={guest.lastName}
@@ -256,9 +285,11 @@ const HotelBookingPage = () => {
                                 />
                               </Form.Group>
                             </Col>
-                            <Col md={12}>
+                            <Col md={3}>
                               <Form.Group>
-                                <Form.Label>Gender</Form.Label>
+                                <Form.Label>
+                                  <span style={{ color: "red" }}>*</span>Gender
+                                </Form.Label>
                                 <Form.Select
                                   value={guest.gender}
                                   onChange={(e) =>
@@ -287,13 +318,13 @@ const HotelBookingPage = () => {
 
               {/* Primary Guest */}
               <Card className="p-4 mb-4 shadow-sm border-0">
-                <h5 className="mb-3 fw-bold">
-                  Primary Guest Details (Mandatory)
-                </h5>
+                <h5 className="mb-3 fw-bold">Primary Guest Details</h5>
                 <Row className="g-3">
-                  <Col md={2}>
+                  <Col md={3}>
                     <Form.Group>
-                      <Form.Label>Salutation</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span>Salutation
+                      </Form.Label>
                       <Form.Select
                         value={primaryGuest.salutation}
                         onChange={(e) =>
@@ -308,9 +339,11 @@ const HotelBookingPage = () => {
                       </Form.Select>
                     </Form.Group>
                   </Col>
-                  <Col md={5}>
+                  <Col md={3}>
                     <Form.Group>
-                      <Form.Label>First Name</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span>First Name
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={primaryGuest.firstName}
@@ -321,9 +354,28 @@ const HotelBookingPage = () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={5}>
+                  <Col md={3}>
                     <Form.Group>
-                      <Form.Label>Last Name</Form.Label>
+                      <Form.Label>Middle Name</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={primaryGuest.middleName}
+                        onChange={(e) =>
+                          handleGuestChange(
+                            roomIndex,
+                            guestIndex,
+                            "middleName",
+                            e.target.value
+                          )
+                        }
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span>Last Name
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={primaryGuest.lastName}
@@ -334,9 +386,11 @@ const HotelBookingPage = () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={6}>
+                  <Col md={3}>
                     <Form.Group>
-                      <Form.Label>Email</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span>Email
+                      </Form.Label>
                       <Form.Control
                         type="email"
                         value={primaryGuest.email}
@@ -347,14 +401,44 @@ const HotelBookingPage = () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={6}>
+                  <Col md={3}>
                     <Form.Group>
-                      <Form.Label>Phone</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span>Phone
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={primaryGuest.phone}
                         onChange={(e) =>
                           handlePrimaryGuestChange("phone", e.target.value)
+                        }
+                        required
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group>
+                      <Form.Label>Passport No</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={primaryGuest.passportNo}
+                        onChange={(e) =>
+                          handlePrimaryGuestChange("passportNo", e.target.value)
+                        }
+                        required
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span>Agent LPO
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={primaryGuest.agentLpo}
+                        onChange={(e) =>
+                          handlePrimaryGuestChange("agentLpo", e.target.value)
                         }
                         required
                       />
