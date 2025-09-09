@@ -392,7 +392,7 @@ const RoomList = () => {
                   </Col>
                   <Col md={4}>
                     <Card className="booking-summary">
-                      total Rate
+                     
                       <Card.Body className="p-3">
                         <h6 className="mb-3">Booking Summary</h6>
                         <div className="booking-details">
