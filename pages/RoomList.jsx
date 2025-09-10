@@ -59,6 +59,11 @@ const RoomList = () => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
 
+        console.log("location::" , location)
+        console.log("location.state::" , location.state)
+        console.log("payload::" , payload)
+        console.log("meta::" , meta)
+
         if (!payload) {
           try {
             const stored = sessionStorage.getItem("roomListPayload");
@@ -713,7 +718,8 @@ const RoomList = () => {
                     <div className="d-flex justify-content-between mb-2">
                       <span>Selling Price:</span>
                       <span className="fw-semibold text-primary">
-                        {formatPrice(selectedRate.sellingPrice)}
+                         {formatPrice(selectedRate.rate)}
+                        {/* {formatPrice(selectedRate.sellingPrice)} */}
                       </span>
                     </div>
                   )}

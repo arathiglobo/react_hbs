@@ -169,24 +169,29 @@ const HotelBookingPage = () => {
 
    {/* ✅ Show Selling Price only if ADMIN */}
  {activeUserRole === "ADMIN" && (
-                    <div className="d-flex justify-content-end align-items-center">
-                      <h3 className="mb-0">
+                    <div className="d-flex justify-content-end align-items-center mt-3">
+                      <h4 className="mb-0">
                         Selling Price :{" "}
                         <span className="text-success fw-bold">
-                          {formatPrice(selectedRate.sellingPrice)}
+                            {formatPrice(selectedRate.rate)}
+                          {/* {formatPrice(selectedRate.sellingPrice)} */}
                         </span>
-                      </h3>
+                      </h4>
                     </div>
                      )}
 
+                    
                     <div className="d-flex justify-content-end align-items-center mt-3">
                       <h4 className="mb-0">
                         Total Price :{" "}
                         <span className="text-success fw-bold">
-                          {formatPrice(selectedRate.rate)}
+                            {formatPrice(selectedRate.rate)}
                         </span>
                       </h4>
                     </div>
+                  
+
+
                   </Card.Body>
                 </Card>
               </Col>
