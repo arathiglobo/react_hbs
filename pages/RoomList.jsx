@@ -44,7 +44,9 @@ const RoomList = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [hotelStaticData, setHotelStaticData] = useState(null);
+  const [searchPayload, setSearchPayload] = useState(null);
   const [loadingRate, setLoadingRate] = useState(false);
+  const [showUnavailableModal, setShowUnavailableModal] = useState(false);
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
   console.log("currentActiveRole::", activeUserRole);
@@ -59,11 +61,12 @@ const RoomList = () => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
 
-        console.log("location::" , location)
-        console.log("location.state::" , location.state)
-        console.log("payload::" , payload)
-        console.log("meta::" , meta)
+        console.log("location::", location);
+        console.log("location.state::", location.state);
+        console.log("payload::", payload);
+        console.log("meta::", meta);
 
+        // Fallback to sessionStorage if location.state is null (e.g., via window.open)
         if (!payload) {
           try {
             const stored = sessionStorage.getItem("roomListPayload");
@@ -72,8 +75,13 @@ const RoomList = () => {
               payload = parsed.payload;
               meta = parsed.meta;
               setHotelStaticData(meta);
+              setSearchPayload(payload);
+              console.log("Retrieved payload from sessionStorage:", payload);
+              console.log("Retrieved meta from sessionStorage:", meta);
             }
-          } catch {}
+          } catch (e) {
+            console.error("Error parsing sessionStorage:", e);
+          }
         }
 
         if (!payload) {
@@ -87,10 +95,19 @@ const RoomList = () => {
           payload
         );
 
+        console.log("room search res::", res);
+
+        // Check for no availability or failed search
         if (!res.data || res.data.success === false) {
-          const message =
-            res.data?.message || "Search failed. Please try again.";
-          setError(message);
+          const message = res.data?.message || "Search failed. Please try again.";
+          console.log("API error message:", message);
+
+          if (message.toLowerCase().includes("no availability found")) {
+            console.log("Triggering no availability modal");
+            setShowUnavailableModal(true);
+          } else {
+            setError(message);
+          }
           setLoading(false);
           return;
         }
@@ -128,27 +145,10 @@ const RoomList = () => {
 
     setTimeout(async () => {
       try {
-    
         const { payload, hotels } = roomData;
         const hotelsdetail = hotels[0];
-        console.log("hotelsdetail::", hotelsdetail)
-
-         console.log("rate::", rate)
-
-      
-
-        // Pick roomCategory + rate details dynamically
-        // const selectedCategory = hotelsdetail.roomCategories.find(
-        //   (cat) => cat.roomTypeCode === rate.roomTypeCode
-        // );
-
-        // const selectedRate = selectedCategory?.availableRates.find(
-        //   (r) => r.mealPlanCode === rate.mealPlanCode
-        // );
-
-      
-
-       
+        console.log("hotelsdetail::", hotelsdetail);
+        console.log("rate::", rate);
 
         // Build dynamic request body
         let priceCheckReq = {
@@ -158,9 +158,9 @@ const RoomList = () => {
                 adult: {
                   age: payload.rooms[0].adultAges[0].toString(),
                 },
-                roomTypeCode:  rate.roomTypeCode, 
-                mealPlanCode: rate.mealPlanCode, 
-                contractTokenId: rate.contractTokenId || "0", 
+                roomTypeCode: rate.roomTypeCode,
+                mealPlanCode: rate.mealPlanCode,
+                contractTokenId: rate.contractTokenId || "0",
                 roomConfigurationId: "1",
               },
             },
@@ -193,11 +193,11 @@ const RoomList = () => {
             mealPlan: room.mealPlan,
             contractLabel: room.contractLabel,
             refundStatus: room.nonRefundable,
-            rate: room.rateDetails.rate, // ✅ actual rate
+            rate: room.rateDetails.rate,
             currency: room.currCode,
           }));
         console.log("accurateRate:", accurateRates);
-        setSelectedRate(accurateRates[0]); // update with accurate rate
+        setSelectedRate(accurateRates[0]);
         setLoadingRate(false);
         setShowBookingModal(true);
       } catch (err) {
@@ -312,10 +312,24 @@ const RoomList = () => {
 
   if (!roomData || !roomData.hotels || roomData.hotels.length === 0) {
     return (
-      <Alert variant="info">
-        <Alert.Heading>No Rooms Available</Alert.Heading>
-        <p>No room data found for this hotel.</p>
-      </Alert>
+      <div className="d-flex" style={{ minHeight: "100vh" }}>
+        <Sidebar />
+        <div className="flex-grow-1 d-flex flex-column">
+          <TopBar />
+          <main className="flex-grow-1 d-flex justify-content-center align-items-center p-3">
+            <Alert variant="info">
+              <Alert.Heading>No Rooms Available</Alert.Heading>
+              <p>No room data found for this hotel.</p>
+              <Button
+                variant="primary"
+                onClick={() => navigate("/new-booking/hotel")}
+              >
+                Back to Search
+              </Button>
+            </Alert>
+          </main>
+        </div>
+      </div>
     );
   }
 
@@ -331,7 +345,7 @@ const RoomList = () => {
         <TopBar />
         <main className="content-wrapper">
           <div className="container-fluid">
-            {/* Loader Modal 🔹 */}
+            {/* Loader Modal */}
             <Modal
               show={loadingRate}
               centered
@@ -344,6 +358,35 @@ const RoomList = () => {
                   Fetching accurate rate...
                 </p>
               </Modal.Body>
+            </Modal>
+            {/* No Availability Modal */}
+            <Modal
+              show={showUnavailableModal}
+              onHide={() => {
+                setShowUnavailableModal(false);
+                navigate("/new-booking/hotel");
+              }}
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header closeButton>
+                <Modal.Title>No Rooms Available</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <p className="mb-0">Rooms not available for the selected dates.</p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setShowUnavailableModal(false);
+                    navigate("/new-booking/hotel");
+                  }}
+                >
+                  Back to Search
+                </Button>
+              </Modal.Footer>
             </Modal>
             {/* Hotel Header */}
             <Card className="hotel-header-card mb-4">
@@ -397,7 +440,6 @@ const RoomList = () => {
                   </Col>
                   <Col md={4}>
                     <Card className="booking-summary">
-                     
                       <Card.Body className="p-3">
                         <h6 className="mb-3">Booking Summary</h6>
                         <div className="booking-details">
@@ -661,14 +703,6 @@ const RoomList = () => {
                         <img src={img} className="d-block w-100" alt="Room" />
                       </div>
                     ))}
-
-                    {/* <div className="carousel-item active">
-  <img
-    src={meta.hotelImage}
-    className="d-block w-100"
-    alt="Room"
-  />
-</div> */}
                   </div>
                   <button
                     className="carousel-control-prev"
@@ -712,14 +746,11 @@ const RoomList = () => {
                     <span>Meal Plan:</span>
                     <span className="fw-semibold">{selectedRate.mealPlan}</span>
                   </div>
-
-                  {/* ✅ Show Selling Price only if ADMIN */}
                   {activeUserRole === "ADMIN" && (
                     <div className="d-flex justify-content-between mb-2">
                       <span>Selling Price:</span>
                       <span className="fw-semibold text-primary">
-                         {formatPrice(selectedRate.rate)}
-                        {/* {formatPrice(selectedRate.sellingPrice)} */}
+                        {formatPrice(selectedRate.rate)}
                       </span>
                     </div>
                   )}
@@ -767,7 +798,9 @@ const RoomList = () => {
                   "bookingData",
                   JSON.stringify({ selectedRate, hotelStaticData, payload })
                 );
-              } catch {}
+              } catch (e) {
+                console.error("Error storing bookingData:", e);
+              }
               window.open("/hotel-booking-page", "_blank");
             }}
           >

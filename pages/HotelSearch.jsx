@@ -524,7 +524,7 @@ export default function HotelSearch() {
   const fetchHotels = async (page, searchId, agentId) => {
     try {
       const params = {
-        agentId: agentId || 1,
+        agentId: agentId,
         page,
         pageSize,
         sortBy:
@@ -1124,8 +1124,8 @@ export default function HotelSearch() {
                         }}
                       >
                         <option value="">Select Agent</option>
-                        <option value="101">Agent 101</option>
-                        <option value="102">Agent 102</option>
+                        <option value="1">Agent 101</option>
+                        <option value="2">Agent 102</option>
                       </Form.Select>
                       {errors.agent && (
                         <div className="text-danger small mt-1">
@@ -1525,7 +1525,7 @@ export default function HotelSearch() {
                                       nationalityValue.length === 2
                                         ? nationalityValue
                                         : "AF";
-                                    const agentIdToUse = agent || "101";
+                                    const agentIdToUse =     1;   //agent;
                                     const roomsPayload = rooms.map((r) => ({
                                       adults: r.adults || 1,
                                       children: r.children || 0,
@@ -1537,17 +1537,17 @@ export default function HotelSearch() {
 
                                     // Dynamic apiId based on channelType
                                     const apiIdMapping = {
-                                      jumeirah:10,
+                                      jumeirah: 10,
                                       iwtx: 12,
                                       x3: 15,
-                                      inhouse: 0, 
-                                      ratehawk: 14, 
-                                      darina:16,
+                                      inhouse: 0,
+                                      ratehawk: 14,
+                                      darina: 16,
                                     };
                                     const apiId =
                                       apiIdMapping[hotel.channelType] || 0; // Default to 0 if not found
 
-                                      console.log("apiId:::" , apiId)
+                                    console.log("apiId:::", apiId);
 
                                     const payload = {
                                       checkInDate: checkIn,
@@ -1561,7 +1561,7 @@ export default function HotelSearch() {
                                         "",
                                       nationality: nationalityCode,
                                       agentId: String(agentIdToUse),
-                                      apiId: apiId,
+                                      apiId:  apiId,
                                       rooms: roomsPayload,
                                     };
                                     const meta = {
@@ -1572,18 +1572,23 @@ export default function HotelSearch() {
                                       hotelImage: hotel.image,
                                     };
 
-                                    console.log("payload::" ,payload)
-                                    console.log("meta::" ,meta)
+                                    console.log("payload::", payload);
+                                    console.log("meta::", meta);
                                     try {
-                                      // sessionStorage.setItem(
-                                      //   "roomListPayload",
-                                      //   JSON.stringify({ payload, meta })
-                                      // );
-                                      navigate("/room-list", { state: { payload, meta } });
+                                      sessionStorage.setItem(
+                                        "roomListPayload",
+                                        JSON.stringify({ payload, meta })
+                                      );
+                                      setTimeout(() => {
+                                        window.open("/room-list", "_blank");
+                                      }, 50);
+
+                                      // navigate("/room-list", { state: { payload, meta } });
                                     } catch {}
-                                    // window.open("/room-list", "_blank");
-                                    console.log("page redirection faces an issue")
-                                    
+
+                                    console.log(
+                                      "page redirection faces an issue"
+                                    );
                                   }}
                                 >
                                   View Rooms
