@@ -233,6 +233,7 @@ export default function HotelSearch() {
   const [sortBy, setSortBy] = useState("priceAsc");
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
+  const [clickedHotelIds, setClickedHotelIds] = useState([]); // New state to track clicked hotels
 
   const [allResults, setAllResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -1859,7 +1860,13 @@ export default function HotelSearch() {
                                 <Button
                                   className="btn-view-rooms"
                                   size="sm"
+                                  //  disabled={clickedHotelIds.includes(hotel.id)}
+                                  variant={clickedHotelIds.includes(hotel.id) ? "secondary" : "primary"}
                                   onClick={() => {
+
+                                     // Add hotel ID to clickedHotelIds
+                                    setClickedHotelIds((prev) => [...prev, hotel.id]);
+                                    
                                     const nationalityValue =
                                       selectedNationality?.value;
 
