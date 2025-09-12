@@ -1752,6 +1752,56 @@ export default function HotelSearch() {
                 </Card.Body>
               </Card>
 
+                  {/* New Pagination Section After Filters */}
+              {filteredResults.length > 0 && (
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+                  <small className="text-muted fw-semibold">
+                    Showing{" "}
+                    {pageIndex * pageSize + 1}-
+                    {(hotelSearchTerm || hotelType.length > 0
+                      ? Math.min(
+                          pageIndex * pageSize + pageSize,
+                          filteredResults.length
+                        )
+                      : Math.min(
+                          pageIndex * pageSize + pageSize,
+                          totalElements
+                        ))}{" "}
+                    of{" "}
+                    {(hotelSearchTerm || hotelType.length > 0
+                      ? filteredResults.length
+                      : totalElements)}{" "}
+                    results{" "}
+                    {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
+                  </small>
+                  {!(hotelSearchTerm || hotelType.length > 0) && (
+                    <Pagination className="mb-0 pagination-modern">
+                      <Pagination.Prev
+                        disabled={pageIndex === 0}
+                        onClick={() => goToPage(pageIndex - 1)}
+                      />
+                      {pageNumbers.map((n) =>
+                        typeof n === "number" ? (
+                          <Pagination.Item
+                            key={n}
+                            active={n === pageIndex + 1}
+                            onClick={() => goToPage(n - 1)}
+                          >
+                            {n}
+                          </Pagination.Item>
+                        ) : (
+                          <Pagination.Ellipsis key={n} disabled />
+                        )
+                      )}
+                      <Pagination.Next
+                        disabled={pageIndex >= effectiveTotalPages - 1}
+                        onClick={() => goToPage(pageIndex + 1)}
+                      />
+                    </Pagination>
+                  )}
+                </div>
+              )}
+
               {isLoading && (
                 <Card className="shadow-sm rounded-xl mb-4">
                   <Card.Body className="text-center py-5">
