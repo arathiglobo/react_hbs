@@ -377,9 +377,14 @@ export default function HotelSearch() {
     return results;
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType]);
 
-  const pageItems = useMemo(() => {
+  // const pageItems = useMemo(() => {
+  //   return filteredResults;
+  // }, [filteredResults, pageIndex]);
+
+    const pageItems = useMemo(() => {
+    console.log("Page items:", filteredResults.length);
     return filteredResults;
-  }, [filteredResults, pageIndex]);
+  }, [filteredResults]);
 
   const effectiveTotalPages = useMemo(
     () => Math.max(1, totalPages),
@@ -521,7 +526,7 @@ export default function HotelSearch() {
     });
   };
 
-  const fetchHotels = async (page, searchId, agentId) => {
+   const fetchHotels = async (page, searchId, agentId) => {
     try {
       const params = {
         agentId: agentId,
@@ -567,16 +572,8 @@ export default function HotelSearch() {
           }))
         : [];
 
-      setAllResults((prevResults) => {
-        const existingMap = new Map(prevResults.map((h) => [h.id, h]));
-        const newResults = [...prevResults];
-        for (const hotel of mappedResults) {
-          if (!existingMap.has(hotel.id)) {
-            newResults.push(hotel);
-          }
-        }
-        return newResults;
-      });
+      // Clear previous results and set new results for the current page
+      setAllResults(mappedResults);
 
       setTotalElements(Number(res.data.totalResults) || mappedResults.length);
       setTotalPages(
@@ -619,7 +616,7 @@ export default function HotelSearch() {
               res.data.result?.length || 0
             } hotels`
           );
-          console.log("Full response:", res.data); // For debugging channel statuses
+          console.log("Full response:", res.data);
 
           if (onUpdate) {
             onUpdate(res.data, localPollCount);
@@ -648,6 +645,133 @@ export default function HotelSearch() {
     });
   };
 
+  // const fetchHotels = async (page, searchId, agentId) => {
+  //   try {
+  //     const params = {
+  //       agentId: agentId,
+  //       page,
+  //       pageSize,
+  //       sortBy:
+  //         sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
+  //       sortOrder:
+  //         sortBy === "priceAsc" ||
+  //         sortBy === "ratingAsc" ||
+  //         sortBy === "nameAsc"
+  //           ? "asc"
+  //           : "desc",
+  //       starRating: starRating.map((s) => s.value).join(",") || undefined,
+  //       apiType:
+  //         channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+  //     };
+
+  //     const res = await axiosInstance.get(`/hotel-search/results/${searchId}`, {
+  //       params,
+  //     });
+
+  //     const mappedResults = Array.isArray(res.data.result)
+  //       ? res.data.result.map((hotel, index) => ({
+  //           id: hotel.hotelCode
+  //             ? `${searchId}-${hotel.hotelCode}`
+  //             : `${searchId}-h${index + 1}`,
+  //           searchId,
+  //           hotelCode: hotel.hotelCode || null,
+  //           name: hotel.hotelName || "Unknown Hotel",
+  //           address: hotel.hotelAddress || "",
+  //           city: hotel.hotelAddress
+  //             ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+  //             : "Unknown City",
+  //           price: hotel.baseRate || null,
+  //           badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+  //           image:
+  //             hotel.hotelImage ||
+  //             "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+  //           rating: hotel.starRating || 0,
+  //           hotelType: "hotel",
+  //           channelType: hotel.apiType?.toLowerCase() || "inhouse",
+  //         }))
+  //       : [];
+
+  //     setAllResults((prevResults) => {
+  //       const existingMap = new Map(prevResults.map((h) => [h.id, h]));
+  //       const newResults = [...prevResults];
+  //       for (const hotel of mappedResults) {
+  //         if (!existingMap.has(hotel.id)) {
+  //           newResults.push(hotel);
+  //         }
+  //       }
+  //       return newResults;
+  //     });
+
+  //     setTotalElements(Number(res.data.totalResults) || mappedResults.length);
+  //     setTotalPages(
+  //       Math.max(
+  //         1,
+  //         Math.ceil(
+  //           (Number(res.data.totalResults) || mappedResults.length) / pageSize
+  //         )
+  //       )
+  //     );
+  //     setHasSearchResult(true);
+  //     return res.data;
+  //   } catch (err) {
+  //     console.error("Fetch hotels failed:", err);
+  //     setPollStatus("ERROR");
+  //     throw err;
+  //   }
+  // };
+
+  // const pollUntilComplete = async (
+  //   url,
+  //   params,
+  //   checkComplete,
+  //   onUpdate,
+  //   intervalMs = 4000,
+  //   timeoutMs = 20000,
+  //   initialDelay = 2000
+  // ) => {
+  //   return new Promise((resolve, reject) => {
+  //     const startTime = Date.now();
+  //     let localPollCount = 0;
+
+  //     const poll = async () => {
+  //       try {
+  //         localPollCount++;
+  //         const res = await axiosInstance.get(url, { params });
+
+  //         console.log(
+  //           `Poll ${localPollCount} received ${
+  //             res.data.result?.length || 0
+  //           } hotels`
+  //         );
+  //         console.log("Full response:", res.data); // For debugging channel statuses
+
+  //         if (onUpdate) {
+  //           onUpdate(res.data, localPollCount);
+  //         }
+
+  //         if (checkComplete(res.data)) {
+  //           setPollStatus("COMPLETED");
+  //           return resolve(res.data);
+  //         }
+
+  //         if (Date.now() - startTime >= timeoutMs) {
+  //           setPollStatus("TIMEOUT");
+  //           return reject(new Error("Polling timed out"));
+  //         }
+
+  //         setTimeout(poll, intervalMs);
+  //       } catch (err) {
+  //         console.error("Poll failed:", err);
+  //         setPollStatus("ERROR");
+  //         reject(err);
+  //       }
+  //     };
+
+  //     setPollStatus("IN_PROGRESS");
+  //     setTimeout(poll, initialDelay);
+  //   });
+  // };
+
   const resetForm = () => {
     setSelectedNationality(null);
     setSelectedDestination(null);
@@ -674,7 +798,7 @@ export default function HotelSearch() {
     setCompletedChannels(new Set());
   };
 
-  const handleSearchSubmit = async (e) => {
+   const handleSearchSubmit = async (e) => {
     e.preventDefault();
     const formErrors = validateForm();
     if (Object.keys(formErrors).length > 0) {
@@ -685,7 +809,7 @@ export default function HotelSearch() {
     setErrors({});
     setIsLoading(true);
     setHasSearched(true);
-    setHasSearchResult(false); // Initial
+    setHasSearchResult(false);
     setAllResults([]);
     setPollStatus("IDLE");
     setPageIndex(0);
@@ -747,17 +871,15 @@ export default function HotelSearch() {
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
 
-      // Expected channels (adjust based on your API)
       const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
 
       await pollUntilComplete(
         `/hotel-search/results/${searchId}`,
         params,
-        (data) => data.finalStatus === "COMPLETED", // Stop when all channels complete
+        (data) => data.finalStatus === "COMPLETED",
         (data, pollCount) => {
           console.log(`Poll ${pollCount} data:`, data);
 
-          // Map hotels and group by channel
           const mappedResults = Array.isArray(data.result)
             ? data.result.map((hotel, index) => ({
                 id: hotel.hotelCode
@@ -781,20 +903,10 @@ export default function HotelSearch() {
               }))
             : [];
 
-          // Incremental merge: Add only new hotels, preserving order
-          setAllResults((prevResults) => {
-            const existingMap = new Map(prevResults.map((h) => [h.id, h]));
-            const newResults = [...prevResults];
-            mappedResults.forEach((hotel) => {
-              if (!existingMap.has(hotel.id)) {
-                newResults.push(hotel);
-              }
-            });
-            return newResults;
-          });
+          // Update results for the current page
+          setAllResults(mappedResults);
 
-          // Check and update completed channels (adjust 'data.status' path if different)
-          const currentStatuses = data.status || {}; // e.g., {iwtx: "COMPLETED", x3: "PROCESSING"}
+          const currentStatuses = data.status || {};
           const newCompleted = new Set(completedChannels);
           expectedChannels.forEach((ch) => {
             if (
@@ -807,31 +919,25 @@ export default function HotelSearch() {
           });
           setCompletedChannels(newCompleted);
 
-          // Show partial results after first poll with data
           if (pollCount === 1 || mappedResults.length > 0) {
             setHasSearchResult(true);
-            // Show results only if at least one channel is complete or enough results are fetched
             if (newCompleted.size >= 1 || mappedResults.length >= 10) {
               setIsInitialResultsLoaded(true);
             }
           }
 
-          // Update totals (cumulative as channels complete)
           setTotalElements(
-            Number(data.totalResults) ||
-              allResults.length + mappedResults.length
+            Number(data.totalResults) || mappedResults.length
           );
           setTotalPages(
             Math.max(
               1,
               Math.ceil(
-                (Number(data.totalResults) ||
-                  allResults.length + mappedResults.length) / pageSize
+                (Number(data.totalResults) || mappedResults.length) / pageSize
               )
             )
           );
 
-          // Log progress
           console.log(
             `Completed channels: ${Array.from(newCompleted).join(", ")} (${
               newCompleted.size
@@ -850,6 +956,182 @@ export default function HotelSearch() {
       setIsLoading(false);
     }
   };
+  // const handleSearchSubmit = async (e) => {
+  //   e.preventDefault();
+  //   const formErrors = validateForm();
+  //   if (Object.keys(formErrors).length > 0) {
+  //     setErrors(formErrors);
+  //     setHasSearched(false);
+  //     return;
+  //   }
+  //   setErrors({});
+  //   setIsLoading(true);
+  //   setHasSearched(true);
+  //   setHasSearchResult(false); // Initial
+  //   setAllResults([]);
+  //   setPollStatus("IDLE");
+  //   setPageIndex(0);
+  //   setTotalElements(0);
+  //   setTotalPages(1);
+  //   setCompletedChannels(new Set());
+
+  //   try {
+  //     const nationalityId = selectedNationality.value;
+  //     const nationalityCode = selectedNationality.code;
+  //     const destinationCityId = selectedDestination.value;
+  //     const destinationCountryId = selectedDestination.countryId;
+  //     const noOfRooms = String(rooms.length);
+
+  //     const roomConfigurations = rooms.map((room, index) => ({
+  //       roomNo: index + 1,
+  //       adultCount: String(room.adults || 1),
+  //       childCount: String(room.children || 0),
+  //       childAges: room.childAges?.length ? room.childAges : [0],
+  //       adultAges: room.adultAges?.length ? room.adultAges : [25],
+  //     }));
+
+  //     const agentId = 1;
+
+  //     const searchPayloadReq = {
+  //       nationalityId,
+  //       nationalityCode,
+  //       destinationCityId,
+  //       destinationCountryId,
+  //       checkIn,
+  //       checkOut,
+  //       noOfRooms,
+  //       roomConfigurations,
+  //       agentId,
+  //     };
+
+  //     const searchKeyRes = await axiosInstance.post(
+  //       "/hotel-search/search",
+  //       searchPayloadReq
+  //     );
+  //     const searchId = searchKeyRes.data.searchId;
+  //     if (!searchId) throw new Error("No searchId returned");
+  //     setSearchId(searchId);
+
+  //     const params = {
+  //       agentId: 1,
+  //       page: 0,
+  //       pageSize,
+  //       sortBy:
+  //         sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
+  //       sortOrder:
+  //         sortBy === "priceAsc" ||
+  //         sortBy === "ratingAsc" ||
+  //         sortBy === "nameAsc"
+  //           ? "asc"
+  //           : "desc",
+  //       starRating: starRating.map((s) => s.value).join(",") || undefined,
+  //       apiType:
+  //         channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+  //     };
+
+  //     // Expected channels (adjust based on your API)
+  //     const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
+
+  //     await pollUntilComplete(
+  //       `/hotel-search/results/${searchId}`,
+  //       params,
+  //       (data) => data.finalStatus === "COMPLETED", // Stop when all channels complete
+  //       (data, pollCount) => {
+  //         console.log(`Poll ${pollCount} data:`, data);
+
+  //         // Map hotels and group by channel
+  //         const mappedResults = Array.isArray(data.result)
+  //           ? data.result.map((hotel, index) => ({
+  //               id: hotel.hotelCode
+  //                 ? `${searchId}-${hotel.hotelCode}`
+  //                 : `${searchId}-h${index + 1}`,
+  //               searchId,
+  //               hotelCode: hotel.hotelCode || null,
+  //               name: hotel.hotelName || "Unknown Hotel",
+  //               address: hotel.hotelAddress || "",
+  //               city: hotel.hotelAddress
+  //                 ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+  //                 : "Unknown City",
+  //               price: hotel.baseRate || null,
+  //               badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+  //               image:
+  //                 hotel.hotelImage ||
+  //                 "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+  //               rating: hotel.starRating || 0,
+  //               hotelType: "hotel",
+  //               channelType: hotel.apiType?.toLowerCase() || "inhouse",
+  //             }))
+  //           : [];
+
+  //         // Incremental merge: Add only new hotels, preserving order
+  //         setAllResults((prevResults) => {
+  //           const existingMap = new Map(prevResults.map((h) => [h.id, h]));
+  //           const newResults = [...prevResults];
+  //           mappedResults.forEach((hotel) => {
+  //             if (!existingMap.has(hotel.id)) {
+  //               newResults.push(hotel);
+  //             }
+  //           });
+  //           return newResults;
+  //         });
+
+  //         // Check and update completed channels (adjust 'data.status' path if different)
+  //         const currentStatuses = data.status || {}; // e.g., {iwtx: "COMPLETED", x3: "PROCESSING"}
+  //         const newCompleted = new Set(completedChannels);
+  //         expectedChannels.forEach((ch) => {
+  //           if (
+  //             currentStatuses[ch] === "COMPLETED" &&
+  //             !completedChannels.has(ch)
+  //           ) {
+  //             newCompleted.add(ch);
+  //             console.log(`Channel ${ch} completed at poll ${pollCount}`);
+  //           }
+  //         });
+  //         setCompletedChannels(newCompleted);
+
+  //         // Show partial results after first poll with data
+  //         if (pollCount === 1 || mappedResults.length > 0) {
+  //           setHasSearchResult(true);
+  //           // Show results only if at least one channel is complete or enough results are fetched
+  //           if (newCompleted.size >= 1 || mappedResults.length >= 10) {
+  //             setIsInitialResultsLoaded(true);
+  //           }
+  //         }
+
+  //         // Update totals (cumulative as channels complete)
+  //         setTotalElements(
+  //           Number(data.totalResults) ||
+  //             allResults.length + mappedResults.length
+  //         );
+  //         setTotalPages(
+  //           Math.max(
+  //             1,
+  //             Math.ceil(
+  //               (Number(data.totalResults) ||
+  //                 allResults.length + mappedResults.length) / pageSize
+  //             )
+  //           )
+  //         );
+
+  //         // Log progress
+  //         console.log(
+  //           `Completed channels: ${Array.from(newCompleted).join(", ")} (${
+  //             newCompleted.size
+  //           }/${expectedChannels.length})`
+  //         );
+  //       },
+  //       4000,
+  //       20000,
+  //       2000
+  //     );
+  //   } catch (err) {
+  //     console.error("Search failed:", err);
+  //     setHasSearched(false);
+  //     setPollStatus("ERROR");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
 
   // Show results during polling if we have partial data
   const showResultsDuringPolling =

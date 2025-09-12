@@ -61,11 +61,6 @@ const RoomList = () => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
 
-        console.log("location::", location);
-        console.log("location.state::", location.state);
-        console.log("payload::", payload);
-        console.log("meta::", meta);
-
         // Fallback to sessionStorage if location.state is null (e.g., via window.open)
         if (!payload) {
           try {
@@ -99,7 +94,8 @@ const RoomList = () => {
 
         // Check for no availability or failed search
         if (!res.data || res.data.success === false) {
-          const message = res.data?.message || "Search failed. Please try again.";
+          const message =
+            res.data?.message || "Search failed. Please try again.";
           console.log("API error message:", message);
 
           if (message.toLowerCase().includes("no availability found")) {
@@ -149,7 +145,6 @@ const RoomList = () => {
         const hotelsdetail = hotels[0];
         console.log("hotelsdetail::", hotelsdetail);
         console.log("rate::", rate);
-        
 
         // Build dynamic request body
         let priceCheckReq = {
@@ -176,12 +171,21 @@ const RoomList = () => {
         };
 
         console.log("priceCheckReq ::", priceCheckReq);
-        const response = await axiosInstance.post(
-          `/api/iwtx/hotel/availability`,
-          priceCheckReq
-        );
-        console.log("itemprice check response ::", response);
 
+        // Choose endpoint dynamically
+        let endpoint = "";
+        switch (payload.apiId) {
+          case 12:
+            endpoint = "/api/iwtx/hotel/availability";
+            break;
+          case 15:
+            endpoint = "/api/x3/hotel/availability";
+            break;
+          default:
+            throw new Error(`Unsupported API type: ${payload.apiId}`);
+        }
+
+        const response = await axiosInstance.post(endpoint, priceCheckReq);
         const hotel = response.data.hotels.hotel[0];
         const rooms = hotel.roomTypeDetails.rooms.room;
         // Map all rooms to a structured object
@@ -375,7 +379,9 @@ const RoomList = () => {
                 <Modal.Title>No Rooms Available</Modal.Title>
               </Modal.Header>
               <Modal.Body>
-                <p className="mb-0">Rooms not available for the selected dates.</p>
+                <p className="mb-0">
+                  Rooms not available for the selected dates.
+                </p>
               </Modal.Body>
               <Modal.Footer>
                 <Button
