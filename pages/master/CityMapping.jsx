@@ -134,7 +134,10 @@ const CityMapping = () => {
         `/api/province/getByCountryId/${countryId}`,
         { params: { search: inputValue } }
       );
-      return response.data.map((c) => ({ value: c.id,  label: `${c.stateName}, ${c.country}`}));
+      return response.data.map((c) => ({
+        value: c.id,
+        label: `${c.stateName}, ${c.country}`,
+      }));
     } catch (error) {
       console.error("Error loading platform cities (row):", error);
       return [];
@@ -175,8 +178,7 @@ const CityMapping = () => {
   };
 
   const handleRowCityChange = (platform, option) => {
-
-    console.log("handleRowCityChange::option val::" , option)
+    console.log("handleRowCityChange::option val::", option);
     setRowState((prev) => ({
       ...prev,
       [platform]: { ...prev[platform], cityOption: option, status: null },
@@ -184,15 +186,14 @@ const CityMapping = () => {
   };
 
   const handleRowSearch = async (platform) => {
-
-    console.log("platform:::" , platform)
+    console.log("platform:::", platform);
     const current = rowState[platform] || {};
     const apiCountryId = current.countryOption?.value || "";
     const apiCityId = current.cityOption?.value || "";
 
-    console.log("current:::" , current)
-    console.log("apiCountryId:::" , apiCountryId)
-    console.log("apiCityId:::" , apiCityId)
+    console.log("current:::", current);
+    console.log("apiCountryId:::", apiCountryId);
+    console.log("apiCityId:::", apiCityId);
 
     if (!apiCountryId) {
       toast.error("Select Platform Country first");
@@ -272,10 +273,7 @@ const CityMapping = () => {
     }
 
     try {
-      const res = await axiosInstance.post(
-        "/api/cityMapping/save",
-        formData
-      );
+      const res = await axiosInstance.post("/api/cityMapping/save", formData);
       setMappings((prev) => [...prev, res.data]);
       toast.success("Mapping added successfully ✅");
 
@@ -336,6 +334,29 @@ const CityMapping = () => {
                           value={selectedCountryOption}
                           loadOptions={loadCountries}
                           onChange={handleCountrySelect}
+                          menuPortalTarget={document.body} // 👈 force portal
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                            control: (base) => ({
+                              ...base,
+                              minHeight: "36px",
+                              border: "1px solid #dee2e6",
+                              borderRadius: "6px",
+                              fontSize: "0.875rem",
+                              "&:hover": {
+                                borderColor: "#86b7fe",
+                              },
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              zIndex: 99999,
+                              position: "absolute",
+                              marginTop: "2px",
+                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                              border: "1px solid #dee2e6",
+                              borderRadius: "6px",
+                            }),
+                          }}
                         />
                       </Form.Group>
                     </Col>
@@ -352,6 +373,29 @@ const CityMapping = () => {
                           loadOptions={loadCities}
                           onChange={handleCitySelect}
                           isDisabled={!formData.masterCountryId}
+                          menuPortalTarget={document.body} // 👈 force portal
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                            control: (base) => ({
+                              ...base,
+                              minHeight: "36px",
+                              border: "1px solid #dee2e6",
+                              borderRadius: "6px",
+                              fontSize: "0.875rem",
+                              "&:hover": {
+                                borderColor: "#86b7fe",
+                              },
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              zIndex: 99999,
+                              position: "absolute",
+                              marginTop: "2px",
+                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                              border: "1px solid #dee2e6",
+                              borderRadius: "6px",
+                            }),
+                          }}
                         />
                       </Form.Group>
                     </Col>
@@ -389,6 +433,29 @@ const CityMapping = () => {
                             value={selectedPlatformCountryOption}
                             loadOptions={loadPlatformCountry}
                             onChange={handlePlatformCountrySelect}
+                            menuPortalTarget={document.body} // 👈 force portal
+                            styles={{
+                              menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                              control: (base) => ({
+                                ...base,
+                                minHeight: "36px",
+                                border: "1px solid #dee2e6",
+                                borderRadius: "6px",
+                                fontSize: "0.875rem",
+                                "&:hover": {
+                                  borderColor: "#86b7fe",
+                                },
+                              }),
+                              menu: (base) => ({
+                                ...base,
+                                zIndex: 99999,
+                                position: "absolute",
+                                marginTop: "2px",
+                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                                border: "1px solid #dee2e6",
+                                borderRadius: "6px",
+                              }),
+                            }}
                           />
                         </Form.Group>
                       </Col>
@@ -406,6 +473,29 @@ const CityMapping = () => {
                             loadOptions={loadPlatformCity}
                             onChange={handlePlatformCitySelect}
                             isDisabled={!formData.apiProvider}
+                            menuPortalTarget={document.body} // 👈 force portal
+                            styles={{
+                              menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                              control: (base) => ({
+                                ...base,
+                                minHeight: "36px",
+                                border: "1px solid #dee2e6",
+                                borderRadius: "6px",
+                                fontSize: "0.875rem",
+                                "&:hover": {
+                                  borderColor: "#86b7fe",
+                                },
+                              }),
+                              menu: (base) => ({
+                                ...base,
+                                zIndex: 99999,
+                                position: "absolute",
+                                marginTop: "2px",
+                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                                border: "1px solid #dee2e6",
+                                borderRadius: "6px",
+                              }),
+                            }}
                           />
                         </Form.Group>
                       </Col>
