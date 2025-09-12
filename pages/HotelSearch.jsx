@@ -928,15 +928,17 @@ export default function HotelSearch() {
                         isSearchable
                         isClearable
                         className="modern-select"
-                        styles={{
-                          clearIndicator: (base) => ({
-                            ...base,
-                            color: "#6c757d",
-                            "&:hover": {
-                              color: "#dc3545",
-                            },
-                          }),
-                        }}
+                        menuPortalTarget={document.body}   // 👈 force portal
+  styles={{
+    menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+    control: (base) => ({
+      ...base,
+      minHeight: "42px",
+      border: "1px solid #dee2e6",
+      "&:hover": { borderColor: "#86b7fe" },
+    }),
+  }}
+               
                       />
                       {errors.nationality && (
                         <div className="text-danger small mt-1">
@@ -979,8 +981,10 @@ export default function HotelSearch() {
                             cityList(inputValue);
                           }
                         }}
-                        styles={{
-                          control: (base) => ({
+                         menuPortalTarget={document.body}   // 👈 force portal
+                       styles={{
+                           menuPortal: base => ({ ...base, zIndex: 9999 }), 
+                          control: (base ) => ({
                             ...base,
                             minHeight: "42px",
                             border: "1px solid #dee2e6",
@@ -1300,7 +1304,9 @@ export default function HotelSearch() {
                           className="modern-select-sm"
                           menuPosition="absolute"
                           menuPlacement="auto"
-                          styles={{
+                           menuPortalTarget={document.body}   // 👈 force portal
+                           styles={{
+                            menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
                             control: (base) => ({
                               ...base,
                               minHeight: "36px",
@@ -1340,7 +1346,9 @@ export default function HotelSearch() {
                           className="modern-select-sm"
                           menuPosition="absolute"
                           menuPlacement="auto"
+                           menuPortalTarget={document.body}  
                           styles={{
+                             menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
                             control: (base) => ({
                               ...base,
                               minHeight: "36px",
@@ -1380,7 +1388,9 @@ export default function HotelSearch() {
                           className="modern-select-sm"
                           menuPosition="absolute"
                           menuPlacement="auto"
+                           menuPortalTarget={document.body}  
                           styles={{
+                             menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
                             control: (base) => ({
                               ...base,
                               minHeight: "36px",
@@ -1520,12 +1530,14 @@ export default function HotelSearch() {
                                   onClick={() => {
                                     const nationalityValue =
                                       selectedNationality?.value;
-                                    const nationalityCode =
-                                      typeof nationalityValue === "string" &&
-                                      nationalityValue.length === 2
-                                        ? nationalityValue
-                                        : "AF";
-                                    const agentIdToUse =     1;   //agent;
+
+                                   const nationalityCode =
+                                      (selectedNationality?.code || "")
+                                        .length === 2
+                                        ? selectedNationality.code
+                                        : " ";
+
+                                    const agentIdToUse = 1; //agent;
                                     const roomsPayload = rooms.map((r) => ({
                                       adults: r.adults || 1,
                                       children: r.children || 0,
@@ -1548,6 +1560,10 @@ export default function HotelSearch() {
                                       apiIdMapping[hotel.channelType] || 0; // Default to 0 if not found
 
                                     console.log("apiId:::", apiId);
+                                    console.log(
+                                      "selectedNationality:::",
+                                      selectedNationality
+                                    );
 
                                     const payload = {
                                       checkInDate: checkIn,
@@ -1561,7 +1577,7 @@ export default function HotelSearch() {
                                         "",
                                       nationality: nationalityCode,
                                       agentId: String(agentIdToUse),
-                                      apiId:  apiId,
+                                      apiId: apiId,
                                       rooms: roomsPayload,
                                     };
                                     const meta = {

@@ -273,7 +273,7 @@ const CityMapping = () => {
 
     try {
       const res = await axiosInstance.post(
-        "/api/iwtxCityMapping/save",
+        "/api/cityMapping/save",
         formData
       );
       setMappings((prev) => [...prev, res.data]);
@@ -300,7 +300,7 @@ const CityMapping = () => {
     Iwtx: { showCountry: false, showCity: false },
     Darina: { showCountry: true, showCity: true },
     Jumeirah: { showCountry: true, showCity: true },
-    X3: { showCountry: true, showCity: true },
+    X3: { showCountry: false, showCity: false },
     Ratehawk: { showCountry: true, showCity: true },
     // add more platforms as needed
   };

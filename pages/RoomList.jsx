@@ -149,6 +149,7 @@ const RoomList = () => {
         const hotelsdetail = hotels[0];
         console.log("hotelsdetail::", hotelsdetail);
         console.log("rate::", rate);
+        
 
         // Build dynamic request body
         let priceCheckReq = {
@@ -161,7 +162,7 @@ const RoomList = () => {
                 roomTypeCode: rate.roomTypeCode,
                 mealPlanCode: rate.mealPlanCode,
                 contractTokenId: rate.contractTokenId || "0",
-                roomConfigurationId: "1",
+                roomConfigurationId: payload.rooms.length,
               },
             },
             startDate: payload.checkInDate,
