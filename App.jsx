@@ -28,6 +28,7 @@ import Region from "./pages/master/Region";
 import Province from "./pages/master/Province";
 import CityMapping from "./pages/master/CityMapping";
 import HotelBookingPage from "./pages/HotelBookingPage";
+import AgentReg from "./pages/Registration/AgentReg";
 
 
 
@@ -113,6 +114,7 @@ export default function App() {
        <Route path="/masters/destination" element={<Destination />} />
        <Route path="/masters/city-mapping" element={<CityMapping />} />
        <Route path="/hotel-booking-page" element={<HotelBookingPage/>} />
+       <Route path="/registration/agent" element={<AgentReg />} />
                 {/* <Route path="/hotel-registration-actions" element={<HotelRegistrationActions />} /> */}
 
       </Routes>
