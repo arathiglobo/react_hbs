@@ -14,7 +14,7 @@ import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash } from "react-icons/fa";
+import { FaEdit, FaTrash, FaEye, FaSignInAlt, FaCreditCard } from "react-icons/fa";
 
 const AgentReg = () => {
   const [items, setItems] = useState([]);
@@ -49,6 +49,17 @@ const AgentReg = () => {
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false); // New state for login modal
+  const [loginFormData, setLoginFormData] = useState({
+    username: "",
+    password: "",
+    repassword: "",
+  });
+  const [loginErrors, setLoginErrors] = useState({
+    username: "",
+    password: "",
+    repassword: "",
+  });
 
   const nextId = useMemo(
     () => Math.max(0, ...items.map((i) => i.id)) + 1,
@@ -115,10 +126,7 @@ const AgentReg = () => {
 
     try {
       setIsLoading(true);
-      const editRes = await axiosInstance.put(
-        `/api/agent/${editing.id}`,
-        formData
-      );
+      const editRes = await axiosInstance.put(`/api/agent/${editing.id}`, formData);
 
       if (editRes.data) {
         toast.success("Agent Updated Successfully!");
@@ -189,7 +197,7 @@ const AgentReg = () => {
         setPage(0);
       }
     } catch (err) {
-      //   toast.error("Failed to load agents");
+      toast.error("Failed to load agents");
       setItems([]);
       setTotalPages(0);
       setPage(0);
@@ -202,10 +210,7 @@ const AgentReg = () => {
     try {
       setIsLoading(true);
       const agentPayload = { ...formData };
-      const agentSaveRes = await axiosInstance.post(
-        "/api/agent/save",
-        agentPayload
-      );
+      const agentSaveRes = await axiosInstance.post("/api/agent/save", agentPayload);
       if (agentSaveRes.data !== 0) {
         toast.success("Agent added Successfully!");
         await fetchAgentList(page, search);
@@ -220,7 +225,7 @@ const AgentReg = () => {
   };
 
   useEffect(() => {
-    // fetchAgentList();
+    fetchAgentList();
   }, []);
 
   useEffect(() => {
@@ -272,6 +277,124 @@ const AgentReg = () => {
     });
   };
 
+  const handleView = (item) => {
+    setEditing(item);
+    setFormData({
+      companyName: item.companyName || "",
+      shortName: item.shortName || "",
+      businessType: item.businessType || "",
+      companyType: item.companyType || "",
+      companyCode: item.companyCode || "",
+      agentUrl: item.agentUrl || "",
+      authorizedPersonFirstName: item.authorizedPersonFirstName || "",
+      authorizedPersonLastName: item.authorizedPersonLastName || "",
+      agentEmail: item.agentEmail || "",
+      zipCode: item.zipCode || "",
+      mobileNumber: item.mobileNumber || "",
+      telephoneNumber: item.telephoneNumber || "",
+      contactPerson: item.contactPerson || "",
+      country: item.country || "",
+      province: item.province || "",
+      city: item.city || "",
+      address: item.address || "",
+      markup: item.markup || "",
+      currency: item.currency || "",
+      status: item.status || "",
+    });
+    setShowModal(true);
+  };
+
+  const handleLogin = (item) => {
+    setEditing(item); // Store the selected item for reference
+    setLoginFormData({
+      username: "",
+      password: "",
+      repassword: "",
+    });
+    setLoginErrors({
+      username: "",
+      password: "",
+      repassword: "",
+    });
+    setShowLoginModal(true); // Open the login modal
+  };
+
+  const handleLoginSubmit = () => {
+    let isValid = true;
+    const errors = { username: "", password: "", repassword: "" };
+
+    // Username validation
+    if (!loginFormData.username.trim()) {
+      errors.username = "Username is required";
+      isValid = false;
+    } else if (loginFormData.username.length < 4) {
+      errors.username = "Username must be at least 4 characters long";
+      isValid = false;
+    } else if (!/^[a-zA-Z0-9_]+$/.test(loginFormData.username)) {
+      errors.username = "Username can only contain letters, numbers, and underscores";
+      isValid = false;
+    }
+
+    // Password validation
+    if (!loginFormData.password) {
+      errors.password = "Password is required";
+      isValid = false;
+    } else if (loginFormData.password.length < 8) {
+      errors.password = "Password must be at least 8 characters long";
+      isValid = false;
+    } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(loginFormData.password)) {
+      errors.password = "Password must contain at least one uppercase letter and one number";
+      isValid = false;
+    }
+
+    // Repassword validation
+    if (!loginFormData.repassword) {
+      errors.repassword = "Please confirm your password";
+      isValid = false;
+    } else if (loginFormData.password !== loginFormData.repassword) {
+      errors.repassword = "Passwords do not match";
+      isValid = false;
+    }
+
+    setLoginErrors(errors);
+
+    if (isValid) {
+      // Simulate API call or login logic
+      console.log("Login data for agent:", editing.companyName, loginFormData);
+      toast.success("Login credentials saved successfully!");
+      setShowLoginModal(false); // Close modal on success
+    } else {
+      toast.error("Please fix the errors in the form");
+    }
+  };
+
+  const handleLoginChange = (e) => {
+    const { name, value } = e.target;
+    setLoginFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const closeLoginModal = () => {
+    setShowLoginModal(false);
+    setLoginFormData({
+      username: "",
+      password: "",
+      repassword: "",
+    });
+    setLoginErrors({
+      username: "",
+      password: "",
+      repassword: "",
+    });
+  };
+
+  const handleCreditLimit = (item) => {
+    console.log("Manage credit limit for agent:", item.companyName);
+    // Add credit limit logic here
+  };
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
@@ -304,6 +427,7 @@ const AgentReg = () => {
                   <tr>
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Agent Name</th>
+                    <th>Business Type</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
                 </thead>
@@ -312,6 +436,7 @@ const AgentReg = () => {
                     <tr key={item.id}>
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.companyName}</td>
+                      <td>{item.businessType}</td>
                       <td>
                         <div className="d-flex gap-2">
                           <FaEdit
@@ -319,6 +444,24 @@ const AgentReg = () => {
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => openEdit(item)}
                             title="Edit"
+                          />
+                          <FaEye
+                            className="text-info"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleView(item)}
+                            title="View"
+                          />
+                          <FaSignInAlt
+                            className="text-success"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleLogin(item)}
+                            title="Login"
+                          />
+                          <FaCreditCard
+                            className="text-warning"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleCreditLimit(item)}
+                            title="Credit Limit"
                           />
                           <FaTrash
                             className="text-danger"
@@ -332,7 +475,7 @@ const AgentReg = () => {
                   ))}
                   {isLoading && (
                     <tr>
-                      <td colSpan={3} className="text-center text-muted py-4">
+                      <td colSpan={4} className="text-center text-muted py-4">
                         <div
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -345,7 +488,7 @@ const AgentReg = () => {
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={3} className="text-center text-muted py-4">
+                      <td colSpan={4} className="text-center text-muted py-4">
                         No agents found.
                       </td>
                     </tr>
@@ -619,82 +762,83 @@ const AgentReg = () => {
                             </Form.Group>
                           </Col>
                           <Col md={6}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Country</Form.Label>
-                          <Form.Select
-                            value={formData.country}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                country: e.target.value,
-                              })
-                            }
-                          >
-                            <option value="">SELECT</option>
-                            <option value="Country1">Country1</option>
-                            <option value="Country2">Country2</option>
-                          </Form.Select>
-                        </Form.Group>
-                        </Col>
-                        </Row>
-                          <Row>
-                             
-                          <Col md={6}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Province</Form.Label>
-                          <Form.Select
-                            value={formData.province}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                province: e.target.value,
-                              })
-                            }
-                          >
-                            <option value="">SELECT</option>
-                            <option value="Province1">Province1</option>
-                            <option value="Province2">Province2</option>
-                          </Form.Select>
-                        </Form.Group>
-                        </Col>
-  <Col md={6}>
-  
-   <Form.Group className="mb-3">
-                          <Form.Label>City</Form.Label>
-                          <Form.Select
-                            value={formData.city}
-                            onChange={(e) =>
-                              setFormData({ ...formData, city: e.target.value })
-                            }
-                          >
-                            <option value="">SELECT</option>
-                            <option value="City1">City1</option>
-                            <option value="City2">City2</option>
-                          </Form.Select>
-                        </Form.Group>
-  </Col>
-
-                        </Row>
-                         <Col md={12}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Address</Form.Label>
-                              <Form.Control
-                                value={formData.address}
+                              <Form.Label>Country</Form.Label>
+                              <Form.Select
+                                value={formData.country}
                                 onChange={(e) =>
                                   setFormData({
                                     ...formData,
-                                    address: e.target.value,
+                                    country: e.target.value,
                                   })
                                 }
-                                placeholder="Enter address"
-                              />
+                              >
+                                <option value="">SELECT</option>
+                                <option value="Country1">Country1</option>
+                                <option value="Country2">Country2</option>
+                              </Form.Select>
                             </Form.Group>
                           </Col>
-                       
+                        </Row>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Province</Form.Label>
+                              <Form.Select
+                                value={formData.province}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    province: e.target.value,
+                                  })
+                                }
+                              >
+                                <option value="">SELECT</option>
+                                <option value="Province1">Province1</option>
+                                <option value="Province2">Province2</option>
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>City</Form.Label>
+                              <Form.Select
+                                value={formData.city}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    city: e.target.value,
+                                  })
+                                }
+                              >
+                                <option value="">SELECT</option>
+                                <option value="City1">City1</option>
+                                <option value="City2">City2</option>
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <Col md={12}>
+                          <Form.Group className="mb-3">
+                            <Form.Label>Address</Form.Label>
+                            <Form.Control
+                              as="textarea"
+                              rows={3}
+                              value={formData.address}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  address: e.target.value,
+                                })
+                              }
+                              placeholder="Enter address"
+                            />
+                          </Form.Group>
+                        </Col>
                       </Card.Body>
                     </Card>
                   </Col>
-                  
+
                   <Col md={4}>
                     <Card className="mb-3">
                       <Card.Header>Settings</Card.Header>
@@ -785,6 +929,66 @@ const AgentReg = () => {
                 ) : (
                   "Save"
                 )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          <Modal show={showLoginModal} onHide={closeLoginModal} centered>
+            <Modal.Header closeButton>
+              <Modal.Title>Set Login Credentials for {editing?.companyName}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form>
+                <Form.Group className="mb-3">
+                  <Form.Label>Username</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="username"
+                    value={loginFormData.username}
+                    onChange={handleLoginChange}
+                    isInvalid={!!loginErrors.username}
+                    placeholder="Enter username"
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {loginErrors.username}
+                  </Form.Control.Feedback>
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Password</Form.Label>
+                  <Form.Control
+                    type="password"
+                    name="password"
+                    value={loginFormData.password}
+                    onChange={handleLoginChange}
+                    isInvalid={!!loginErrors.password}
+                    placeholder="Enter password"
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {loginErrors.password}
+                  </Form.Control.Feedback>
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Re-enter Password</Form.Label>
+                  <Form.Control
+                    type="password"
+                    name="repassword"
+                    value={loginFormData.repassword}
+                    onChange={handleLoginChange}
+                    isInvalid={!!loginErrors.repassword}
+                    placeholder="Re-enter password"
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {loginErrors.repassword}
+                  </Form.Control.Feedback>
+                </Form.Group>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={closeLoginModal}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleLoginSubmit}>
+                Save
               </Button>
             </Modal.Footer>
           </Modal>
