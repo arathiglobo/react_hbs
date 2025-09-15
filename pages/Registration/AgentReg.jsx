@@ -12,31 +12,44 @@ import {
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash, FaEye, FaSignInAlt, FaCreditCard } from "react-icons/fa";
+import {
+  FaEdit,
+  FaTrash,
+  FaEye,
+  FaSignInAlt,
+  FaCreditCard,
+} from "react-icons/fa";
 
 const AgentReg = () => {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [agentCategoryies, setAgentCategoryies] = useState([]);
+  const [countries, setCountries] = useState([]);
+  const [provinces, setProvinces] = useState([]);
+  const [places, setPlaces] = useState([]);
+  const [markup, setMarkup] = useState([]);
+  const [currency, setCurrency] = useState([]);
   const [formData, setFormData] = useState({
     companyName: "",
     shortName: "",
     businessType: "",
-    companyType: "",
+    agentCategoryId: "",
     companyCode: "",
     agentUrl: "",
-    authorizedPersonFirstName: "",
-    authorizedPersonLastName: "",
-    agentEmail: "",
+    firstName: "",
+    lastName: "",
+    personalEmail: "",
     zipCode: "",
     mobileNumber: "",
     telephoneNumber: "",
     contactPerson: "",
-    country: "",
-    province: "",
-    city: "",
+    countryId: "",
+    provinceId: "",
+    placeId: "",
     address: "",
     markup: "",
     currency: "",
@@ -48,8 +61,8 @@ const AgentReg = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
-  const [searchTerm, setSearchTerm] = useState(null);
-  const [showLoginModal, setShowLoginModal] = useState(false); // New state for login modal
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginFormData, setLoginFormData] = useState({
     username: "",
     password: "",
@@ -72,61 +85,169 @@ const AgentReg = () => {
       companyName: "",
       shortName: "",
       businessType: "",
-      companyType: "",
+      agentCategoryId: "",
       companyCode: "",
       agentUrl: "",
-      authorizedPersonFirstName: "",
-      authorizedPersonLastName: "",
-      agentEmail: "",
+      firstName: "",
+      lastName: "",
+      personalEmail: "",
       zipCode: "",
       mobileNumber: "",
       telephoneNumber: "",
       contactPerson: "",
-      country: "",
-      province: "",
-      city: "",
+      countryId: "",
+      provinceId: "",
+      placeId: "",
       address: "",
       markup: "",
       currency: "",
       status: "",
     });
+    setProvinces([]);
+    setPlaces([]);
     setError("");
     setShowModal(true);
   };
 
   const openEdit = (item) => {
+    console.log("edit item:::", item);
     setEditing(item);
     setFormData({
       companyName: item.companyName || "",
       shortName: item.shortName || "",
       businessType: item.businessType || "",
-      companyType: item.companyType || "",
+      agentCategoryId: item.agentCategoryId || "",
       companyCode: item.companyCode || "",
       agentUrl: item.agentUrl || "",
-      authorizedPersonFirstName: item.authorizedPersonFirstName || "",
-      authorizedPersonLastName: item.authorizedPersonLastName || "",
-      agentEmail: item.agentEmail || "",
+      firstName: item.firstName || "",
+      lastName: item.lastName || "",
+      personalEmail: item.personalEmail || "",
       zipCode: item.zipCode || "",
       mobileNumber: item.mobileNumber || "",
       telephoneNumber: item.telephoneNumber || "",
       contactPerson: item.contactPerson || "",
-      country: item.country || "",
-      province: item.province || "",
-      city: item.city || "",
+      countryId: item.countryId || "",
+      provinceId: item.provinceId || "",
+      placeId: item.placeId || "",
       address: item.address || "",
       markup: item.markup || "",
-      currency: item.currency || "",
+      currency: item.currencyId || "", // Use currencyId from item
       status: item.status || "",
     });
+    // Fetch provinces and cities for the selected country and province
+    if (item.countryId) {
+      provinceList(item.countryId).then(() => {
+        if (item.provinceId) {
+          cityList(item.provinceId);
+        }
+      });
+    }
     setShowModal(true);
   };
+
+  const agentCategoryList = async () => {
+    try {
+      const agentCatResponse = await axios.get("/api/agentCategory");
+      setAgentCategoryies(agentCatResponse.data);
+    } catch (error) {
+      console.log("agent category api call error::", error);
+    }
+  };
+
+  const countryList = async () => {
+    try {
+      const response = await axios.get("/api/country");
+      setCountries(response.data);
+    } catch (error) {
+      console.log("error for country list :", error);
+    }
+  };
+
+  const provinceList = async (countryId) => {
+    try {
+      const response = await axios.get(
+        `/api/province/getByCountryId/${countryId}`
+      );
+      setProvinces(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for province list : ", error);
+    }
+  };
+
+  const cityList = async (stateId) => {
+    try {
+      const response = await axios.get(`/api/destination/getplaces/${stateId}`);
+      setPlaces(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for city list : ", error);
+    }
+  };
+
+  const markupList = async () => {
+    try {
+      const response = await axiosInstance.get(`/api/markupType`);
+      setMarkup(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for markup list : ", error);
+    }
+  };
+
+  const currencyList = async () => {
+    try {
+      const response = await axiosInstance.get(`/api/currency`);
+      setCurrency(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for currency list : ", error);
+    }
+  };
+
+  useEffect(() => {
+    if (formData.countryId) {
+      setProvinces([]);
+      setPlaces([]);
+      setFormData((prev) => ({
+        ...prev,
+        provinceId: "",
+        placeId: "",
+      }));
+      provinceList(formData.countryId);
+    } else {
+      setProvinces([]);
+      setPlaces([]);
+      setFormData((prev) => ({
+        ...prev,
+        provinceId: "",
+        placeId: "",
+      }));
+    }
+  }, [formData.countryId]);
+
+  useEffect(() => {
+    if (formData.provinceId) {
+      setPlaces([]);
+      setFormData((prev) => ({
+        ...prev,
+        placeId: "",
+      }));
+      cityList(formData.provinceId);
+    } else {
+      setPlaces([]);
+      setFormData((prev) => ({
+        ...prev,
+        placeId: "",
+      }));
+    }
+  }, [formData.provinceId]);
 
   const handleEdit = async () => {
     if (!editing) return;
 
     try {
       setIsLoading(true);
-      const editRes = await axiosInstance.put(`/api/agent/${editing.id}`, formData);
+      const editRes = await axiosInstance.put(
+        `/api/agent/${editing.id}`,
+        formData
+      );
 
       if (editRes.data) {
         toast.success("Agent Updated Successfully!");
@@ -148,24 +269,26 @@ const AgentReg = () => {
       companyName: "",
       shortName: "",
       businessType: "",
-      companyType: "",
+      agentCategoryId: "",
       companyCode: "",
       agentUrl: "",
-      authorizedPersonFirstName: "",
-      authorizedPersonLastName: "",
-      agentEmail: "",
+      firstName: "",
+      lastName: "",
+      personalEmail: "",
       zipCode: "",
       mobileNumber: "",
       telephoneNumber: "",
       contactPerson: "",
-      country: "",
-      province: "",
-      city: "",
+      countryId: "",
+      provinceId: "",
+      placeId: "",
       address: "",
       markup: "",
       currency: "",
       status: "",
     });
+    setProvinces([]);
+    setPlaces([]);
     setError("");
   };
 
@@ -206,11 +329,23 @@ const AgentReg = () => {
     }
   };
 
+  useEffect(() => {
+    fetchAgentList();
+    countryList();
+    agentCategoryList();
+    markupList();
+    currencyList();
+  }, []);
+
   const saveAgent = async () => {
     try {
       setIsLoading(true);
       const agentPayload = { ...formData };
-      const agentSaveRes = await axiosInstance.post("/api/agent/save", agentPayload);
+      console.log("agentPayload::", agentPayload);
+      const agentSaveRes = await axiosInstance.post(
+        "/api/agent/register",
+        agentPayload
+      );
       if (agentSaveRes.data !== 0) {
         toast.success("Agent added Successfully!");
         await fetchAgentList(page, search);
@@ -223,10 +358,6 @@ const AgentReg = () => {
       setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchAgentList();
-  }, []);
 
   useEffect(() => {
     if (searchTimeout) {
@@ -283,29 +414,37 @@ const AgentReg = () => {
       companyName: item.companyName || "",
       shortName: item.shortName || "",
       businessType: item.businessType || "",
-      companyType: item.companyType || "",
+      agentCategoryId: item.agentCategoryId || "",
       companyCode: item.companyCode || "",
       agentUrl: item.agentUrl || "",
-      authorizedPersonFirstName: item.authorizedPersonFirstName || "",
-      authorizedPersonLastName: item.authorizedPersonLastName || "",
-      agentEmail: item.agentEmail || "",
+      firstName: item.firstName || "",
+      lastName: item.lastName || "",
+      personalEmail: item.personalEmail || "",
       zipCode: item.zipCode || "",
       mobileNumber: item.mobileNumber || "",
       telephoneNumber: item.telephoneNumber || "",
       contactPerson: item.contactPerson || "",
-      country: item.country || "",
-      province: item.province || "",
-      city: item.city || "",
+      countryId: item.countryId || "",
+      provinceId: item.provinceId || "",
+      placeId: item.placeId || "",
       address: item.address || "",
       markup: item.markup || "",
-      currency: item.currency || "",
+      currency: item.currencyId || "",
       status: item.status || "",
     });
+    // Fetch provinces and cities for the selected country and province
+    if (item.countryId) {
+      provinceList(item.countryId).then(() => {
+        if (item.provinceId) {
+          cityList(item.provinceId);
+        }
+      });
+    }
     setShowModal(true);
   };
 
   const handleLogin = (item) => {
-    setEditing(item); // Store the selected item for reference
+    setEditing(item);
     setLoginFormData({
       username: "",
       password: "",
@@ -316,14 +455,13 @@ const AgentReg = () => {
       password: "",
       repassword: "",
     });
-    setShowLoginModal(true); // Open the login modal
+    setShowLoginModal(true);
   };
 
   const handleLoginSubmit = () => {
     let isValid = true;
     const errors = { username: "", password: "", repassword: "" };
 
-    // Username validation
     if (!loginFormData.username.trim()) {
       errors.username = "Username is required";
       isValid = false;
@@ -331,11 +469,11 @@ const AgentReg = () => {
       errors.username = "Username must be at least 4 characters long";
       isValid = false;
     } else if (!/^[a-zA-Z0-9_]+$/.test(loginFormData.username)) {
-      errors.username = "Username can only contain letters, numbers, and underscores";
+      errors.username =
+        "Username can only contain letters, numbers, and underscores";
       isValid = false;
     }
 
-    // Password validation
     if (!loginFormData.password) {
       errors.password = "Password is required";
       isValid = false;
@@ -343,11 +481,11 @@ const AgentReg = () => {
       errors.password = "Password must be at least 8 characters long";
       isValid = false;
     } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(loginFormData.password)) {
-      errors.password = "Password must contain at least one uppercase letter and one number";
+      errors.password =
+        "Password must contain at least one uppercase letter and one number";
       isValid = false;
     }
 
-    // Repassword validation
     if (!loginFormData.repassword) {
       errors.repassword = "Please confirm your password";
       isValid = false;
@@ -359,10 +497,9 @@ const AgentReg = () => {
     setLoginErrors(errors);
 
     if (isValid) {
-      // Simulate API call or login logic
       console.log("Login data for agent:", editing.companyName, loginFormData);
       toast.success("Login credentials saved successfully!");
-      setShowLoginModal(false); // Close modal on success
+      setShowLoginModal(false);
     } else {
       toast.error("Please fix the errors in the form");
     }
@@ -392,7 +529,6 @@ const AgentReg = () => {
 
   const handleCreditLimit = (item) => {
     console.log("Manage credit limit for agent:", item.companyName);
-    // Add credit limit logic here
   };
 
   return (
@@ -413,7 +549,7 @@ const AgentReg = () => {
                   onChange={(e) => {
                     const value = e.target.value;
                     setSearchTerm(value);
-                    fetchAgentList(0, value);
+                    setSearch(value);
                   }}
                 />
               </Form.Group>
@@ -510,13 +646,13 @@ const AgentReg = () => {
                         onClick={() => fetchAgentList(page - 1, search)}
                       />
                       {[...Array(totalPages).keys()].map((num) => (
-                        <Pagination.Item
+                        <option
                           key={num}
                           active={num === page}
                           onClick={() => fetchAgentList(num, search)}
                         >
                           {num + 1}
-                        </Pagination.Item>
+                        </option>
                       ))}
                       <Pagination.Next
                         disabled={page === totalPages - 1}
@@ -576,7 +712,7 @@ const AgentReg = () => {
                       <Col md={3}>
                         <Form.Group className="mb-3">
                           <Form.Label>Business Type</Form.Label>
-                          <Form.Select
+                          <Form.Control
                             value={formData.businessType}
                             onChange={(e) =>
                               setFormData({
@@ -584,28 +720,31 @@ const AgentReg = () => {
                                 businessType: e.target.value,
                               })
                             }
-                          >
-                            <option value="">SELECT</option>
-                            <option value="Type1">Type1</option>
-                            <option value="Type2">Type2</option>
-                          </Form.Select>
+                            placeholder="Enter business name"
+                          />
                         </Form.Group>
                       </Col>
                       <Col md={3}>
                         <Form.Group className="mb-3">
                           <Form.Label>Company Type</Form.Label>
                           <Form.Select
-                            value={formData.companyType}
+                            value={formData.agentCategoryId}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
-                                companyType: e.target.value,
+                                agentCategoryId: e.target.value,
                               })
                             }
                           >
-                            <option value="">SELECT</option>
-                            <option value="TypeA">TypeA</option>
-                            <option value="TypeB">TypeB</option>
+                            <option value="">Select company type</option>
+                            {agentCategoryies.map((agent) => (
+                              <option
+                                key={agent.agentCategoryId}
+                                value={agent.agentCategoryId}
+                              >
+                                {agent.name}
+                              </option>
+                            ))}
                           </Form.Select>
                         </Form.Group>
                       </Col>
@@ -643,13 +782,28 @@ const AgentReg = () => {
                       </Col>
                       <Col md={3}>
                         <Form.Group className="mb-3">
-                          <Form.Label>First Name</Form.Label>
+                          <Form.Label>Company Logo</Form.Label>
                           <Form.Control
-                            value={formData.authorizedPersonFirstName}
+                            type="file"
+                            accept="image/*"
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
-                                authorizedPersonFirstName: e.target.value,
+                                agentLogo: e.target.files[0],
+                              })
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>First Name</Form.Label>
+                          <Form.Control
+                            value={formData.firstName}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                firstName: e.target.value,
                               })
                             }
                             placeholder="Enter first name"
@@ -660,11 +814,11 @@ const AgentReg = () => {
                         <Form.Group className="mb-3">
                           <Form.Label>Last Name</Form.Label>
                           <Form.Control
-                            value={formData.authorizedPersonLastName}
+                            value={formData.lastName}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
-                                authorizedPersonLastName: e.target.value,
+                                lastName: e.target.value,
                               })
                             }
                             placeholder="Enter last name"
@@ -685,11 +839,11 @@ const AgentReg = () => {
                             <Form.Group className="mb-3">
                               <Form.Label>Agent Email</Form.Label>
                               <Form.Control
-                                value={formData.agentEmail}
+                                value={formData.personalEmail}
                                 onChange={(e) =>
                                   setFormData({
                                     ...formData,
-                                    agentEmail: e.target.value,
+                                    personalEmail: e.target.value,
                                   })
                                 }
                                 placeholder="Enter email"
@@ -765,17 +919,21 @@ const AgentReg = () => {
                             <Form.Group className="mb-3">
                               <Form.Label>Country</Form.Label>
                               <Form.Select
-                                value={formData.country}
+                                name="countryId"
+                                value={formData.countryId}
                                 onChange={(e) =>
                                   setFormData({
                                     ...formData,
-                                    country: e.target.value,
+                                    countryId: e.target.value,
                                   })
                                 }
                               >
-                                <option value="">SELECT</option>
-                                <option value="Country1">Country1</option>
-                                <option value="Country2">Country2</option>
+                                <option value="">Select country</option>
+                                {countries.map((country) => (
+                                  <option key={country.id} value={country.id}>
+                                    {country.name}
+                                  </option>
+                                ))}
                               </Form.Select>
                             </Form.Group>
                           </Col>
@@ -785,17 +943,26 @@ const AgentReg = () => {
                             <Form.Group className="mb-3">
                               <Form.Label>Province</Form.Label>
                               <Form.Select
-                                value={formData.province}
+                                name="provinceId"
+                                value={formData.provinceId}
                                 onChange={(e) =>
                                   setFormData({
                                     ...formData,
-                                    province: e.target.value,
+                                    provinceId: e.target.value,
                                   })
                                 }
+                                disabled={!formData.countryId}
                               >
-                                <option value="">SELECT</option>
-                                <option value="Province1">Province1</option>
-                                <option value="Province2">Province2</option>
+                                <option value="">Select province/state</option>
+                                {Array.isArray(provinces) &&
+                                  provinces.map((province) => (
+                                    <option
+                                      key={province.id}
+                                      value={province.id}
+                                    >
+                                      {province.stateName}
+                                    </option>
+                                  ))}
                               </Form.Select>
                             </Form.Group>
                           </Col>
@@ -803,17 +970,23 @@ const AgentReg = () => {
                             <Form.Group className="mb-3">
                               <Form.Label>City</Form.Label>
                               <Form.Select
-                                value={formData.city}
+                                name="placeId"
+                                value={formData.placeId}
                                 onChange={(e) =>
                                   setFormData({
                                     ...formData,
-                                    city: e.target.value,
+                                    placeId: e.target.value,
                                   })
                                 }
+                                disabled={!formData.provinceId}
                               >
-                                <option value="">SELECT</option>
-                                <option value="City1">City1</option>
-                                <option value="City2">City2</option>
+                                <option value="">Select city</option>
+                                {Array.isArray(places) &&
+                                  places.map((place) => (
+                                    <option key={place.id} value={place.id}>
+                                      {place.name}
+                                    </option>
+                                  ))}
                               </Form.Select>
                             </Form.Group>
                           </Col>
@@ -854,9 +1027,13 @@ const AgentReg = () => {
                               })
                             }
                           >
-                            <option value="">SELECT</option>
-                            <option value="Markup1">Markup1</option>
-                            <option value="Markup2">Markup2</option>
+                            <option value="">Select Markup</option>
+                            {Array.isArray(markup) &&
+                              markup.map((mar) => (
+                                <option key={mar.id} value={mar.id}>
+                                  {mar.name}
+                                </option>
+                              ))}
                           </Form.Select>
                         </Form.Group>
                         <Form.Group className="mb-3">
@@ -870,9 +1047,16 @@ const AgentReg = () => {
                               })
                             }
                           >
-                            <option value="">SELECT</option>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
+                            <option value="">Select Currency</option>
+                            {Array.isArray(currency) &&
+                              currency.map((curr) => (
+                                <option
+                                  key={curr.currencyId}
+                                  value={curr.currencyId}
+                                >
+                                  {curr.name}
+                                </option>
+                              ))}
                           </Form.Select>
                         </Form.Group>
                         <Form.Group className="mb-3">
@@ -935,7 +1119,9 @@ const AgentReg = () => {
 
           <Modal show={showLoginModal} onHide={closeLoginModal} centered>
             <Modal.Header closeButton>
-              <Modal.Title>Set Login Credentials for {editing?.companyName}</Modal.Title>
+              <Modal.Title>
+                Set Login Credentials for {editing?.companyName}
+              </Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <Form>
