@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Card,
@@ -54,9 +55,18 @@ const AgentReg = () => {
     markup: "",
     currency: "",
     status: "",
+    agentClassification: "",
+    agentGstIn: "",
+    agentProvisionalGstno: "",
+    agentCorrespondmail: "",
+    agentRegisterstatus: "",
+    agentHsncode: "",
+    agentLogo: null,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [validationErrors, setValidationErrors] = useState({});
+  const [currentStep, setCurrentStep] = useState(1);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
@@ -102,9 +112,17 @@ const AgentReg = () => {
       markup: "",
       currency: "",
       status: "",
+      agentClassification: "",
+      agentGstIn: "",
+      agentProvisionalGstno: "",
+      agentCorrespondmail: "",
+      agentRegisterstatus: "",
+      agentHsncode: "",
+      agentLogo: null,
     });
     setProvinces([]);
     setPlaces([]);
+    setValidationErrors({});
     setError("");
     setShowModal(true);
   };
@@ -131,8 +149,15 @@ const AgentReg = () => {
       placeId: item.placeId || "",
       address: item.address || "",
       markup: item.markup || "",
-      currency: item.currencyId || "", // Use currencyId from item
+      currency: item.currency || "",
       status: item.status || "",
+      agentClassification: item.agentClassification || "",
+      agentGstIn: item.agentGstIn || "",
+      agentProvisionalGstno: item.agentProvisionalGstno || "",
+      agentCorrespondmail: item.agentCorrespondmail || "",
+      agentRegisterstatus: item.agentRegisterstatus || "",
+      agentHsncode: item.agentHsncode || "",
+      agentLogo: null,
     });
     // Fetch provinces and cities for the selected country and province
     if (item.countryId) {
@@ -142,6 +167,7 @@ const AgentReg = () => {
         }
       });
     }
+    setValidationErrors({});
     setShowModal(true);
   };
 
@@ -240,6 +266,12 @@ const AgentReg = () => {
   }, [formData.provinceId]);
 
   const handleEdit = async () => {
+    const errors = validateAgentForm(formData);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
     if (!editing) return;
 
     try {
@@ -251,6 +283,7 @@ const AgentReg = () => {
 
       if (editRes.data) {
         toast.success("Agent Updated Successfully!");
+        setValidationErrors({});
         await fetchAgentList(page, search);
         closeModal();
       }
@@ -286,9 +319,17 @@ const AgentReg = () => {
       markup: "",
       currency: "",
       status: "",
+      agentClassification: "",
+      agentGstIn: "",
+      agentProvisionalGstno: "",
+      agentCorrespondmail: "",
+      agentRegisterstatus: "",
+      agentHsncode: "",
+      agentLogo: null,
     });
     setProvinces([]);
     setPlaces([]);
+    setValidationErrors({});
     setError("");
   };
 
@@ -337,7 +378,77 @@ const AgentReg = () => {
     currencyList();
   }, []);
 
-  const saveAgent = async () => {
+  // Validation function
+  const validateAgentForm = (data) => {
+    console.log("data.countryId::" , data.countryId)
+    const newErrors = {};
+
+    // Required field validations
+    if (!data.companyName.trim())
+      newErrors.companyName = "Company Name is required";
+    if (!data.businessType.trim())
+      newErrors.businessType = "Business Type is required";
+    if (!data.agentCategoryId)
+      newErrors.agentCategoryId = "Company Type or Agent category is required";
+    if (!data.firstName.trim())
+      newErrors.firstName = "First Name is required";
+    if (!data.lastName.trim()) newErrors.lastName = "Last Name is required";
+    if (!data.mobileNumber.trim())
+      newErrors.mobileNumber = "Mobile Number is required";
+    if (!data.personalEmail.trim())
+      newErrors.personalEmail = "Email ID is required";
+    if (!data.countryId) newErrors.countryId = "Country is required";
+    if (!data.provinceId) newErrors.provinceId = "Province is required";
+    if (!data.placeId) newErrors.placeId = "City is required";
+    if (!data.address.trim()) newErrors.address = "Address is required";
+     if (!data.markup.trim()) newErrors.markup = "Markup is required";
+     if (!data.currency.trim()) newErrors.currency = "Currency is required";
+     if (!data.status.trim()) newErrors.status = "Status is required";
+
+    // Additional format validations
+    if (
+      data.personalEmail &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.personalEmail)
+    )
+      newErrors.personalEmail = "Invalid email format";
+    if (
+      data.mobileNumber &&
+      !/^\+?\d{10,15}$/.test(data.mobileNumber.replace(/\s/g, ""))
+    )
+      newErrors.mobileNumber = "Mobile Number must be 10-15 digits";
+
+    // GST fields validation (only if companyType is 3 or 5)
+    if (data.countryId === "1") {
+      if (
+        data.agentClassification === "registered" &&
+        !data.agentGstIn.trim()
+      )
+        newErrors.agentGstIn = "GSTIN is required for registered agencies";
+      if (
+        data.agentGstIn &&
+        !/^[A-Z0-9]{15}$/.test(data.agentGstIn.trim())
+      )
+        newErrors.agentGstIn = "GSTIN must be 15 alphanumeric characters";
+      if (
+        data.agentCorrespondmail &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.agentCorrespondmail)
+      )
+        newErrors.agentCorrespondmail = "Invalid correspondence email format";
+    }
+
+    return newErrors;
+  };
+
+  const saveAgent = async (e) => {
+
+    console.log("formdata::" , formData);
+    e.preventDefault();
+    const errors = validateAgentForm(formData);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors); // keep errors in state to show on UI
+      return;
+    }
+
     try {
       setIsLoading(true);
       const agentPayload = { ...formData };
@@ -348,6 +459,7 @@ const AgentReg = () => {
       );
       if (agentSaveRes.data !== 0) {
         toast.success("Agent added Successfully!");
+        setValidationErrors({});
         await fetchAgentList(page, search);
         closeModal();
       }
@@ -429,8 +541,15 @@ const AgentReg = () => {
       placeId: item.placeId || "",
       address: item.address || "",
       markup: item.markup || "",
-      currency: item.currencyId || "",
+      currency: item.currency || "",
       status: item.status || "",
+      agentClassification: item.agentClassification || "",
+      agentGstIn: item.agentGstIn || "",
+      agentProvisionalGstno: item.agentProvisionalGstno || "",
+      agentCorrespondmail: item.agentCorrespondmail || "",
+      agentRegisterstatus: item.agentRegisterstatus || "",
+      agentHsncode: item.agentHsncode || "",
+      agentLogo: null,
     });
     // Fetch provinces and cities for the selected country and province
     if (item.countryId) {
@@ -440,6 +559,7 @@ const AgentReg = () => {
         }
       });
     }
+    setValidationErrors({});
     setShowModal(true);
   };
 
@@ -646,13 +766,13 @@ const AgentReg = () => {
                         onClick={() => fetchAgentList(page - 1, search)}
                       />
                       {[...Array(totalPages).keys()].map((num) => (
-                        <option
+                        <Pagination.Item
                           key={num}
                           active={num === page}
                           onClick={() => fetchAgentList(num, search)}
                         >
                           {num + 1}
-                        </option>
+                        </Pagination.Item>
                       ))}
                       <Pagination.Next
                         disabled={page === totalPages - 1}
@@ -689,9 +809,17 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter company name"
+                            className={`form-input ${
+                              validationErrors.companyName ? "is-invalid" : ""
+                            }`}
+                            isInvalid={!!validationErrors.companyName}
                             autoFocus
-                            isInvalid={!!error}
                           />
+                          {validationErrors.companyName && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.companyName}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Col>
                       <Col md={3}>
@@ -706,7 +834,14 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter short name"
+                            className={`form-input ${validationErrors.shortName ? 'is-invalid' : ''}`}
+                            isInvalid={!!validationErrors.shortName}
                           />
+                          {validationErrors.shortName && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.shortName}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Col>
                       <Col md={3}>
@@ -721,7 +856,14 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter business name"
+                             className={`form-input ${validationErrors.businessType ? 'is-invalid' : ''}`}
+                            isInvalid={!!validationErrors.businessType}
                           />
+                          {validationErrors.businessType && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.businessType}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Col>
                       <Col md={3}>
@@ -735,6 +877,8 @@ const AgentReg = () => {
                                 agentCategoryId: e.target.value,
                               })
                             }
+                             className={`form-input ${validationErrors.agentCategoryId ? 'is-invalid' : ''}`}
+                            isInvalid={!!validationErrors.agentCategoryId}
                           >
                             <option value="">Select company type</option>
                             {agentCategoryies.map((agent) => (
@@ -746,6 +890,11 @@ const AgentReg = () => {
                               </option>
                             ))}
                           </Form.Select>
+                           {validationErrors.agentCategoryId && (
+                                                      <Form.Control.Feedback type="invalid">
+                                                        {validationErrors.agentCategoryId}
+                                                      </Form.Control.Feedback>
+                                                    )}
                         </Form.Group>
                       </Col>
                     </Row>
@@ -762,7 +911,14 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter company code"
+                             className={`form-input ${validationErrors.companyCode ? 'is-invalid' : ''}`}
+                            isInvalid={!!validationErrors.companyCode}
                           />
+                           {validationErrors.companyCode && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.companyCode}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Col>
                       <Col md={3}>
@@ -777,7 +933,14 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter agent URL"
+                             className={`form-input ${validationErrors.agentUrl ? 'is-invalid' : ''}`}
+                            isInvalid={!!validationErrors.agentUrl}
                           />
+                           {validationErrors.agentUrl && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.agentUrl}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Col>
                       <Col md={3}>
@@ -807,7 +970,14 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter first name"
+                             className={`form-input ${validationErrors.firstName ? 'is-invalid' : ''}`}
+                            isInvalid={!!validationErrors.firstName}
                           />
+                           {validationErrors.firstName && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.firstName}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Col>
                       <Col md={3}>
@@ -822,7 +992,14 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter last name"
+                             className={`form-input ${validationErrors.lastName ? 'is-invalid' : ''}`}
+                            isInvalid={!!validationErrors.lastName}
                           />
+                           {validationErrors.lastName && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.lastName}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Col>
                     </Row>
@@ -847,7 +1024,15 @@ const AgentReg = () => {
                                   })
                                 }
                                 placeholder="Enter email"
+                                 className={`form-input ${validationErrors.personalEmail ? 'is-invalid' : ''}`}
+                                isInvalid={!!validationErrors.personalEmail}
                               />
+
+                               {validationErrors.personalEmail && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.personalEmail}
+                            </Form.Control.Feedback>
+                          )}
                             </Form.Group>
                           </Col>
                           <Col md={6}>
@@ -880,7 +1065,15 @@ const AgentReg = () => {
                                   })
                                 }
                                 placeholder="Enter mobile number"
+                                 className={`form-input ${validationErrors.mobileNumber ? 'is-invalid' : ''}`}
+                                isInvalid={!!validationErrors.mobileNumber}
                               />
+
+                               {validationErrors.mobileNumber && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.mobileNumber}
+                            </Form.Control.Feedback>
+                          )}
                             </Form.Group>
                           </Col>
                           <Col md={6}>
@@ -927,6 +1120,8 @@ const AgentReg = () => {
                                     countryId: e.target.value,
                                   })
                                 }
+                                 className={`form-input ${validationErrors.countryId ? 'is-invalid' : ''}`}
+                                isInvalid={!!validationErrors.countryId}
                               >
                                 <option value="">Select country</option>
                                 {countries.map((country) => (
@@ -935,6 +1130,11 @@ const AgentReg = () => {
                                   </option>
                                 ))}
                               </Form.Select>
+                              {validationErrors.countryId && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.countryId}
+                            </Form.Control.Feedback>
+                          )}
                             </Form.Group>
                           </Col>
                         </Row>
@@ -952,6 +1152,8 @@ const AgentReg = () => {
                                   })
                                 }
                                 disabled={!formData.countryId}
+                                 className={`form-input ${validationErrors.provinceId ? 'is-invalid' : ''}`}
+                                isInvalid={!!validationErrors.provinceId}
                               >
                                 <option value="">Select province/state</option>
                                 {Array.isArray(provinces) &&
@@ -964,6 +1166,11 @@ const AgentReg = () => {
                                     </option>
                                   ))}
                               </Form.Select>
+                               {validationErrors.provinceId && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.provinceId}
+                            </Form.Control.Feedback>
+                          )}
                             </Form.Group>
                           </Col>
                           <Col md={6}>
@@ -979,6 +1186,8 @@ const AgentReg = () => {
                                   })
                                 }
                                 disabled={!formData.provinceId}
+                                 className={`form-input ${validationErrors.placeId ? 'is-invalid' : ''}`}
+                                isInvalid={!!validationErrors.placeId}
                               >
                                 <option value="">Select city</option>
                                 {Array.isArray(places) &&
@@ -988,6 +1197,11 @@ const AgentReg = () => {
                                     </option>
                                   ))}
                               </Form.Select>
+                                {validationErrors.placeId && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.placeId}
+                            </Form.Control.Feedback>
+                          )}
                             </Form.Group>
                           </Col>
                         </Row>
@@ -1005,9 +1219,201 @@ const AgentReg = () => {
                                 })
                               }
                               placeholder="Enter address"
+                               className={`form-input ${validationErrors.address ? 'is-invalid' : ''}`}
+                              isInvalid={!!validationErrors.address}
                             />
+                              {validationErrors.address && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.address}
+                            </Form.Control.Feedback>
+                          )}
                           </Form.Group>
                         </Col>
+                        {/* Step 4: GST Details (India only) */}
+                        {formData.countryId === "1" && (
+                          <div
+                            className={`form-step ${
+                              currentStep === 4 ? "active" : ""
+                            }`}
+                          >
+                            <div className="step-header">
+                              <h3 className="step-title">
+                                <svg
+                                  width="24"
+                                  height="24"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                  className="step-icon"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                                GST Information
+                              </h3>
+                              <p className="step-description">
+                                Tax registration details for Indian businesses
+                              </p>
+                            </div>
+
+                            <Row className="g-3">
+                              <Col md={6}>
+                                <Form.Group>
+                                  <Form.Label className="form-label">
+                                    Agency Classification
+                                  </Form.Label>
+                                  <Form.Select
+                                    name="agentClassification"
+                                    value={formData.agentClassification}
+                                    onChange={(e) =>
+                                      setFormData({
+                                        ...formData,
+                                        agentClassification: e.target.value,
+                                      })
+                                    }
+                                    className="form-input"
+                                  >
+                                    <option value="registered">
+                                      Registered
+                                    </option>
+                                    <option value="unregistered">
+                                      Unregistered
+                                    </option>
+                                  </Form.Select>
+                                </Form.Group>
+                              </Col>
+
+                              <Col md={6}>
+                                <Form.Group>
+                                  <Form.Label className="form-label">
+                                    GSTIN <span className="required">*</span>
+                                  </Form.Label>
+                                  <Form.Control
+                                    type="text"
+                                    name="agentGstIn"
+                                    value={formData.agentGstIn}
+                                    onChange={(e) =>
+                                      setFormData({
+                                        ...formData,
+                                        agentGstIn: e.target.value,
+                                      })
+                                    }
+                                    placeholder="Enter 15-digit GSTIN"
+                                    className={`form-input ${
+                                      validationErrors.agentGstIn ? "is-invalid" : ""
+                                    }`}
+                                    isInvalid={!!validationErrors.agentGstIn}
+                                    maxLength={15}
+                                  />
+                                  {validationErrors.agentGstIn && (
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.agentGstIn}
+                                    </Form.Control.Feedback>
+                                  )}
+                                </Form.Group>
+                              </Col>
+
+                              <Col md={6}>
+                                <Form.Group>
+                                  <Form.Label className="form-label">
+                                    Provisional GST Number
+                                  </Form.Label>
+                                  <Form.Control
+                                    type="text"
+                                    name="agentProvisionalGstno"
+                                    value={formData.agentProvisionalGstno}
+                                    onChange={(e) =>
+                                      setFormData({
+                                        ...formData,
+                                        agentProvisionalGstno: e.target.value,
+                                      })
+                                    }
+                                    placeholder="Enter provisional GST number"
+                                    className="form-input"
+                                    maxLength={30}
+                                  />
+                                </Form.Group>
+                              </Col>
+
+                              <Col md={6}>
+                                <Form.Group>
+                                  <Form.Label className="form-label">
+                                    Correspondence Email
+                                  </Form.Label>
+                                  <Form.Control
+                                    type="email"
+                                    name="agentCorrespondmail"
+                                    value={formData.agentCorrespondmail}
+                                    onChange={(e) =>
+                                      setFormData({
+                                        ...formData,
+                                        agentCorrespondmail: e.target.value,
+                                      })
+                                    }
+                                    placeholder="Enter correspondence email"
+                                    className={`form-input ${
+                                      validationErrors.agentCorrespondmail
+                                        ? "is-invalid"
+                                        : ""
+                                    }`}
+                                    isInvalid={!!validationErrors.agentCorrespondmail}
+                                  />
+                                  {validationErrors.agentCorrespondmail && (
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.agentCorrespondmail}
+                                    </Form.Control.Feedback>
+                                  )}
+                                </Form.Group>
+                              </Col>
+
+                              <Col md={6}>
+                                <Form.Group>
+                                  <Form.Label className="form-label">
+                                    GST Registration Status
+                                  </Form.Label>
+                                  <Form.Control
+                                    type="text"
+                                    name="agentRegisterstatus"
+                                    value={formData.agentRegisterstatus}
+                                    onChange={(e) =>
+                                      setFormData({
+                                        ...formData,
+                                        agentRegisterstatus: e.target.value,
+                                      })
+                                    }
+                                    placeholder="Enter registration status"
+                                    className="form-input"
+                                    maxLength={30}
+                                  />
+                                </Form.Group>
+                              </Col>
+
+                              <Col md={6}>
+                                <Form.Group>
+                                  <Form.Label className="form-label">
+                                    HSN/SAC Code
+                                  </Form.Label>
+                                  <Form.Control
+                                    type="text"
+                                    name="agentHsncode"
+                                    value={formData.agentHsncode}
+                                    onChange={(e) =>
+                                      setFormData({
+                                        ...formData,
+                                        agentHsncode: e.target.value,
+                                      })
+                                    }
+                                    placeholder="Enter HSN/SAC code"
+                                    className="form-input"
+                                    maxLength={30}
+                                  />
+                                </Form.Group>
+                              </Col>
+                            </Row>
+                          </div>
+                        )}
                       </Card.Body>
                     </Card>
                   </Col>
@@ -1020,6 +1426,7 @@ const AgentReg = () => {
                           <Form.Label>Markup</Form.Label>
                           <Form.Select
                             value={formData.markup}
+                             className={`form-input ${validationErrors.markup ? 'is-invalid' : ''}`}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
@@ -1035,11 +1442,17 @@ const AgentReg = () => {
                                 </option>
                               ))}
                           </Form.Select>
+                           {validationErrors.markup && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.markup}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label>Currency</Form.Label>
                           <Form.Select
                             value={formData.currency}
+                             className={`form-input ${validationErrors.currency ? 'is-invalid' : ''}`}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
@@ -1058,11 +1471,17 @@ const AgentReg = () => {
                                 </option>
                               ))}
                           </Form.Select>
+                           {validationErrors.currency && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.currency}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label>Status</Form.Label>
                           <Form.Select
                             value={formData.status}
+                             className={`form-input ${validationErrors.status ? 'is-invalid' : ''}`}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
@@ -1074,6 +1493,11 @@ const AgentReg = () => {
                             <option value="Active">Active</option>
                             <option value="Inactive">Inactive</option>
                           </Form.Select>
+                           {validationErrors.status && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.status}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Card.Body>
                     </Card>
