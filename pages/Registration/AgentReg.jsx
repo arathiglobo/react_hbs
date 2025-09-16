@@ -83,6 +83,18 @@ const AgentReg = () => {
     password: "",
     repassword: "",
   });
+  const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
+  const [creditLimitFormData, setCreditLimitFormData] = useState({
+    addCreditLimit: "",
+    remarks: "",
+    totalCreditLimit: "",
+    availableCreditLimit: "",
+    usedCreditLimit: "",
+  });
+  const [creditLimitErrors, setCreditLimitErrors] = useState({
+    addCreditLimit: "",
+    remarks: "",
+  });
 
   const nextId = useMemo(
     () => Math.max(0, ...items.map((i) => i.id)) + 1,
@@ -159,9 +171,15 @@ const AgentReg = () => {
       agentHsncode: item.agentHsncode || "",
       agentLogo: null,
     });
+    
+    // Clear existing provinces and places first
+    setProvinces([]);
+    setPlaces([]);
+    
     // Fetch provinces and cities for the selected country and province
     if (item.countryId) {
       provinceList(item.countryId).then(() => {
+        // After provinces are loaded, fetch cities if provinceId exists
         if (item.provinceId) {
           cityList(item.provinceId);
         }
@@ -551,9 +569,15 @@ const AgentReg = () => {
       agentHsncode: item.agentHsncode || "",
       agentLogo: null,
     });
+    
+    // Clear existing provinces and places first
+    setProvinces([]);
+    setPlaces([]);
+    
     // Fetch provinces and cities for the selected country and province
     if (item.countryId) {
       provinceList(item.countryId).then(() => {
+        // After provinces are loaded, fetch cities if provinceId exists
         if (item.provinceId) {
           cityList(item.provinceId);
         }
@@ -649,6 +673,108 @@ const AgentReg = () => {
 
   const handleCreditLimit = (item) => {
     console.log("Manage credit limit for agent:", item.companyName);
+    setEditing(item);
+    
+    // Set default values for credit limit form
+    setCreditLimitFormData({
+      addCreditLimit: "",
+      remarks: "",
+      totalCreditLimit: item.totalCreditLimit || "0",
+      availableCreditLimit: item.availableCreditLimit || "0",
+      usedCreditLimit: item.usedCreditLimit || "0",
+    });
+    
+    setCreditLimitErrors({
+      addCreditLimit: "",
+      remarks: "",
+    });
+    
+    setShowCreditLimitModal(true);
+  };
+
+  const validateCreditLimitForm = (data) => {
+    const newErrors = {};
+
+    if (!data.addCreditLimit.trim()) {
+      newErrors.addCreditLimit = "Add Credit Limit is required";
+    } else if (isNaN(data.addCreditLimit) || parseFloat(data.addCreditLimit) <= 0) {
+      newErrors.addCreditLimit = "Add Credit Limit must be a positive number";
+    }
+
+    if (!data.remarks.trim()) {
+      newErrors.remarks = "Remarks is required";
+    }
+
+    return newErrors;
+  };
+
+  const handleCreditLimitSubmit = async () => {
+    const errors = validateCreditLimitForm(creditLimitFormData);
+    if (Object.keys(errors).length > 0) {
+      setCreditLimitErrors(errors);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      const creditLimitPayload = {
+        agentId: editing.id,
+        addCreditLimit: parseFloat(creditLimitFormData.addCreditLimit),
+        remarks: creditLimitFormData.remarks,
+        totalCreditLimit: parseFloat(creditLimitFormData.totalCreditLimit),
+        availableCreditLimit: parseFloat(creditLimitFormData.availableCreditLimit),
+        usedCreditLimit: parseFloat(creditLimitFormData.usedCreditLimit),
+      };
+
+      console.log("Credit limit payload:", creditLimitPayload);
+      
+      const response = await axiosInstance.post("/api/agent/credit-limit", creditLimitPayload);
+      
+      if (response.data) {
+        toast.success("Credit limit updated successfully!");
+        setCreditLimitErrors({});
+        closeCreditLimitModal();
+        // Optionally refresh the agent list
+        await fetchAgentList(page, search);
+      }
+    } catch (error) {
+      console.error("Credit limit update failed:", error);
+      toast.error("Failed to update credit limit");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const closeCreditLimitModal = () => {
+    setShowCreditLimitModal(false);
+    setCreditLimitFormData({
+      addCreditLimit: "",
+      remarks: "",
+      totalCreditLimit: "",
+      availableCreditLimit: "",
+      usedCreditLimit: "",
+    });
+    setCreditLimitErrors({
+      addCreditLimit: "",
+      remarks: "",
+    });
+  };
+
+  const handleCreditLimitChange = (e) => {
+    const { name, value } = e.target;
+    setCreditLimitFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    
+    // Clear error when user starts typing
+    if (creditLimitErrors[name]) {
+      setCreditLimitErrors((prev) => ({
+        ...prev,
+        [name]: "",
+      }));
+    }
   };
 
   return (
@@ -1599,6 +1725,130 @@ const AgentReg = () => {
               </Button>
               <Button variant="primary" onClick={handleLoginSubmit}>
                 Save
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Credit Limit Modal */}
+          <Modal show={showCreditLimitModal} onHide={closeCreditLimitModal} centered size="md">
+            <Modal.Header closeButton={!isLoading}>
+              <Modal.Title>
+                Manage Credit Limit - {editing?.companyName}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form>
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label><span className="text-danger">*</span>Add Credit Limit </Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="addCreditLimit"
+                        value={creditLimitFormData.addCreditLimit}
+                        onChange={handleCreditLimitChange}
+                        placeholder="Enter amount to add"
+                        className={`form-input ${
+                          creditLimitErrors.addCreditLimit ? "is-invalid" : ""
+                        }`}
+                        isInvalid={!!creditLimitErrors.addCreditLimit}
+                        min="0"
+                        step="0.01"
+                      />
+                      {creditLimitErrors.addCreditLimit && (
+                        <Form.Control.Feedback type="invalid">
+                          {creditLimitErrors.addCreditLimit}
+                        </Form.Control.Feedback>
+                      )}
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label><span className="text-danger">*</span>Remarks </Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="remarks"
+                        value={creditLimitFormData.remarks}
+                        onChange={handleCreditLimitChange}
+                        placeholder="Enter remarks"
+                        className={`form-input ${
+                          creditLimitErrors.remarks ? "is-invalid" : ""
+                        }`}
+                        isInvalid={!!creditLimitErrors.remarks}
+                      />
+                      {creditLimitErrors.remarks && (
+                        <Form.Control.Feedback type="invalid">
+                          {creditLimitErrors.remarks}
+                        </Form.Control.Feedback>
+                      )}
+                    </Form.Group>
+                  </Col>
+                </Row>
+                
+                <hr className="my-3" />
+                
+                <Row>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Total Credit Limit</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={creditLimitFormData.totalCreditLimit}
+                        readOnly
+                        className="form-control-plaintext bg-light"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Available Credit Limit</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={creditLimitFormData.availableCreditLimit}
+                        readOnly
+                        className="form-control-plaintext bg-light"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Used Credit Limit</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={creditLimitFormData.usedCreditLimit}
+                        readOnly
+                        className="form-control-plaintext bg-light"
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={closeCreditLimitModal}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleCreditLimitSubmit}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Updating...
+                  </>
+                ) : (
+                  "Update Credit Limit"
+                )}
               </Button>
             </Modal.Footer>
           </Modal>

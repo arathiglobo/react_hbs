@@ -877,7 +877,12 @@ export default function HotelSearch() {
       await pollUntilComplete(
         `/hotel-search/results/${searchId}`,
         params,
-        (data) => data.finalStatus === "COMPLETED",
+        (data) => {
+          // Check if any individual API is completed OR if finalStatus is completed
+          const currentStatuses = data.status || {};
+          const hasAnyCompleted = expectedChannels.some(ch => currentStatuses[ch] === "COMPLETED");
+          return hasAnyCompleted || data.finalStatus === "COMPLETED";
+        },
         (data, pollCount) => {
           console.log(`Poll ${pollCount} data:`, data);
 
@@ -920,9 +925,11 @@ export default function HotelSearch() {
           });
           setCompletedChannels(newCompleted);
 
+          // Show results immediately if any channel is completed or we have results
           if (pollCount === 1 || mappedResults.length > 0) {
             setHasSearchResult(true);
-            if (newCompleted.size >= 1 || mappedResults.length >= 10) {
+            // Show results as soon as any channel completes or we have data
+            if (newCompleted.size >= 1 || mappedResults.length > 0) {
               setIsInitialResultsLoaded(true);
             }
           }
