@@ -23,11 +23,11 @@ const revenueData = [3000,4800,5500,4000,6800];
 export default function AdminDashboard(){
   const navigate = useNavigate();
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="bg-light d-flex flex-column" style={{ minHeight: '100vh' }}>
       <TopBar/>
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-4" style={{ overflow: 'auto' }}>
         <div className="mb-4">
           {/* <h1 className="h3">Admin </h1> */}
           <div className="d-flex flex-wrap gap-2">
@@ -40,8 +40,8 @@ export default function AdminDashboard(){
           </div>
         </div>
 
-        <Container fluid>
-          <Row xs={1} sm={2} lg={3} className="g-4 mb-3">
+        <Container fluid className="px-0">
+          <Row xs={1} sm={2} lg={3} className="g-4 mb-3 mx-0">
             <Col><KpiCard title="Total Bookings" value={kpiData.totalBookings} /></Col>
             <Col><KpiCard title="Today's Bookings" value={kpiData.todaysBookings} /></Col>
             <Col><KpiCard title="Total Revenue" value={`$${kpiData.totalRevenue.toLocaleString()}`} /></Col>
@@ -50,9 +50,9 @@ export default function AdminDashboard(){
             <Col><KpiCard title="API Bookings" value={kpiData.apiBookings} /></Col>
           </Row>
 
-          <Row className="g-4">
+          <Row className="g-4 mx-0">
             <Col lg={6}>
-              <Card className="h-100">
+              <Card className="h-100 border-0 shadow-sm">
                 <Card.Body>
                   <Card.Title>Bookings Over Time</Card.Title>
                   <LineChart labels={bookingsLabels} data={bookingsData} />
@@ -60,7 +60,7 @@ export default function AdminDashboard(){
               </Card>
             </Col>
             <Col lg={6}>
-              <Card className="h-100">
+              <Card className="h-100 border-0 shadow-sm">
                 <Card.Body>
                   <Card.Title>Revenue Trends</Card.Title>
                   <BarChart labels={bookingsLabels} data={revenueData} />
@@ -77,7 +77,7 @@ export default function AdminDashboard(){
 
 function KpiCard({title, value}){
   return (
-    <Card className="shadow-sm rounded-xl p-3 h-100">
+    <Card className="shadow-sm rounded-xl p-3 h-100 border-0">
       <div className="text-muted">{title}</div>
       <div className="h4 fw-bold">{value}</div>
     </Card>

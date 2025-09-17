@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Badge, Button, Spinner, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Card, Badge, Button, Spinner, Alert, Modal, Form, Table } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   FaArrowLeft, 
@@ -47,18 +47,36 @@ const HotelRegistrationActions = () => {
   const [hotelData, setHotelData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Modal states
+  const [showMailCenterModal, setShowMailCenterModal] = useState(false);
+  const [showLoginDetailsModal, setShowLoginDetailsModal] = useState(false);
+  const [mailCenterData, setMailCenterData] = useState([]);
 
-  // Sample amenities data - in real app, this would come from API
-  const amenitiesData = {
-    1: "Swimming pool",
-    2: "Restaurant", 
-    3: "Spa",
-    4: "Steam room",
-    5: "Free WiFi",
-    6: "Gym",
-    7: "Parking",
-    8: "Room Service"
-  };
+   console.log("hotel complete data::" , hotelData)
+  
+  // Mail Center data  
+ useEffect(() => {
+  if (hotelData?.contactDetails) {
+    console.log("hotelData contact details::" , hotelData.contactDetails)
+    const formattedData = hotelData.contactDetails.map((item) => ({
+      id: item.id,
+      userType: 'Hotel Contact', // you can change this dynamically if needed
+      username: item.contactPerson || 'N/A',
+      contactNumber: item.mobileNumber || item.teleNumber || 'N/A',
+      mailId: item.personalEmail || 'N/A',
+      mailType: item.mailTyIds || 'N/A'
+    }));
+    setMailCenterData(formattedData);
+  }
+}, [hotelData]);
+  
+  // Login Details form data
+  const [loginFormData, setLoginFormData] = useState({
+    username: '',
+    password: '',
+    repassword: ''
+  });
 
   const navigationTabs = [
     { id: 'basic-details', label: 'Basic details', icon: FaUser },
@@ -169,12 +187,12 @@ const HotelRegistrationActions = () => {
               <div className="amenities-section">
                 <h5>Amenities</h5>
                 <div className="amenities-grid">
-                  {hotelData.amenityIds && hotelData.amenityIds.map((amenityId) => {
-                    const IconComponent = getAmenityIcon(amenityId);
+                  {hotelData.amenities && hotelData.amenities.map((amenity) => {
+                    const IconComponent = getAmenityIcon(amenity.amenityId);
                     return (
-                      <div key={amenityId} className="amenity-item">
+                      <div key={amenity.amenityId} className="amenity-item">
                         <IconComponent className="amenity-icon" />
-                        <span>{amenitiesData[amenityId] || `Amenity ${amenityId}`}</span>
+                       <span>{amenity.amenityName}</span>
                       </div>
                     );
                   })}
@@ -335,6 +353,52 @@ const HotelRegistrationActions = () => {
     return null;
   };
 
+  // Modal handlers
+  const handleActionClick = (actionLabel) => {
+    if (actionLabel === 'Mail center') {
+      setShowMailCenterModal(true);
+    } else if (actionLabel === 'Login Details') {
+      setShowLoginDetailsModal(true);
+    } else if (actionLabel === 'Hotel Edit') {
+      navigate(`/registration/hotel/create/${id}`);
+    }
+  };
+
+  const handleMailTypeChange = (id, newMailType) => {
+    setMailCenterData(prevData => 
+      prevData.map(item => 
+        item.id === id ? { ...item, mailType: newMailType } : item
+      )
+    );
+  };
+
+  const handleLoginFormChange = (field, value) => {
+    setLoginFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleLoginSave = () => {
+    if (loginFormData.password !== loginFormData.repassword) {
+      toast.error("Passwords do not match!");
+      return;
+    }
+    if (!loginFormData.username || !loginFormData.password) {
+      toast.error("Please fill in all fields!");
+      return;
+    }
+    // Here you would typically save to API
+    toast.success("Login details saved successfully!");
+    setShowLoginDetailsModal(false);
+    setLoginFormData({ username: '', password: '', repassword: '' });
+  };
+
+  const handleLoginCancel = () => {
+    setShowLoginDetailsModal(false);
+    setLoginFormData({ username: '', password: '', repassword: '' });
+  };
+
   if (isLoading) {
     return (
       <div className="min-vh-100 bg-gradient-light d-flex flex-column" style={{
@@ -437,7 +501,12 @@ const HotelRegistrationActions = () => {
                         </div>
                         <div className="actions-list">
                           {actions.map((action, index) => (
-                            <div key={index} className="action-item">
+                            <div 
+                              key={index} 
+                              className="action-item"
+                              onClick={() => handleActionClick(action.label)}
+                              style={{ cursor: action.label === 'Mail center' || action.label === 'Login Details' || action.label === 'Hotel Edit' ? 'pointer' : 'default' }}
+                            >
                               <div className="action-content">
                                 <action.icon className="action-icon" />
                                 <span className="action-label">{action.label}</span>
@@ -455,6 +524,131 @@ const HotelRegistrationActions = () => {
           </Container>
         </main>
       </div>
+
+      {/* Mail Center Modal */}
+      <Modal show={showMailCenterModal} onHide={() => setShowMailCenterModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <FaAt className="me-2" />
+            Mail Center
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Table responsive striped hover>
+            <thead>
+              <tr>
+                <th>User Type</th>
+                <th>Username</th>
+                <th>Contact Number</th>
+                <th>Mail ID</th>
+                <th>Mail Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mailCenterData.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <Form.Control
+                      type="text"
+                      value={item.userType}
+                      readOnly
+                      className="border-0 bg-transparent"
+                    />
+                  </td>
+                  <td>
+                    <Form.Control
+                      type="text"
+                      value={item.username}
+                      readOnly
+                      className="border-0 bg-transparent"
+                    />
+                  </td>
+                  <td>
+                    <Form.Control
+                      type="text"
+                      value={item.contactNumber}
+                      readOnly
+                      className="border-0 bg-transparent"
+                    />
+                  </td>
+                  <td>
+                    <Form.Control
+                      type="text"
+                      value={item.mailId}
+                      readOnly
+                      className="border-0 bg-transparent"
+                    />
+                  </td>
+                  <td>
+                    <Form.Select
+                      value={item.mailType}
+                      onChange={(e) => handleMailTypeChange(item.id, e.target.value)}
+                      size="sm"
+                    >
+                      <option value="login credentials">Login Credentials</option>
+                      <option value="voucher">Voucher</option>
+                    </Form.Select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowMailCenterModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Login Details Modal */}
+      <Modal show={showLoginDetailsModal} onHide={handleLoginCancel} size="md">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <FaArrowRight className="me-2" />
+            Login Details
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form>
+            <Form.Group className="mb-3">
+              <Form.Label>Username</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder="Enter username"
+                value={loginFormData.username}
+                onChange={(e) => handleLoginFormChange('username', e.target.value)}
+              />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Password</Form.Label>
+              <Form.Control
+                type="password"
+                placeholder="Enter password"
+                value={loginFormData.password}
+                onChange={(e) => handleLoginFormChange('password', e.target.value)}
+              />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Re-enter Password</Form.Label>
+              <Form.Control
+                type="password"
+                placeholder="Re-enter password"
+                value={loginFormData.repassword}
+                onChange={(e) => handleLoginFormChange('repassword', e.target.value)}
+              />
+            </Form.Group>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleLoginCancel}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleLoginSave}>
+            Save
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

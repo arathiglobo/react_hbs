@@ -10,7 +10,9 @@ import {
   Alert,
   Container,
   ProgressBar,
+  Spinner,
 } from "react-bootstrap";
+import { useParams, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -33,6 +35,10 @@ import {
 } from "react-icons/fa";
 
 const HotelReg = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isEditMode = !!id;
+  
   // Master data states
   const [currencies, setCurrencies] = useState([]);
   const [hotelCategories, setHotelCategories] = useState([]);
@@ -96,6 +102,7 @@ const HotelReg = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [isLoadingHotelData, setIsLoadingHotelData] = useState(false);
 
   // Weekdays configuration
   const weekdays = [
@@ -107,6 +114,83 @@ const HotelReg = () => {
     { key: "wdFriday", label: "Friday" },
     { key: "wdSaturday", label: "Saturday" },
   ];
+
+  // Load hotel data for edit mode
+  const loadHotelData = async () => {
+    if (!isEditMode) return;
+    
+    try {
+      setIsLoadingHotelData(true);
+      const response = await axiosInstance.get(`/api/hotels/${id}`);
+      const hotelData = response.data;
+      
+      console.log("Loaded hotel data for edit:", hotelData);
+      
+      // Pre-fill form data
+      setFormData({
+        hotelName: hotelData.hotelName || "",
+        hotelDescription: hotelData.hotelDescription || "",
+        image360: hotelData.image360 || "",
+        address: hotelData.address || "",
+        zipcode: hotelData.zipcode || "",
+        latitude: hotelData.latitude || "",
+        longitude: hotelData.longitude || "",
+        childComAgeMin: hotelData.childComAgeMin || "",
+        childComAgeMax: hotelData.childComAgeMax || "",
+        childChargeableAgeMin: hotelData.childChargeableAgeMin || "",
+        childChargeableAgeMax: hotelData.childChargeableAgeMax || "",
+        hotelCurrencyId: hotelData.hotelCurrencyId || "",
+        hotelCategoryId: hotelData.hotelCategoryId || "",
+        hotelTypeId: hotelData.hotelTypeId || "",
+        markupTypeId: hotelData.markupTypeId || "",
+        regionId: hotelData.regionId || "",
+        countryId: hotelData.countryId || "",
+        stateId: hotelData.stateId || "",
+        placeId: hotelData.placeId || "",
+        isDeleted: hotelData.isDeleted || false,
+        contactDetails: hotelData.contactDetails || [],
+        bankDetails: hotelData.bankDetails || [],
+        weekDays: hotelData.weekDays || {
+          wdSunday: false,
+          wdMonday: false,
+          wdTuesday: false,
+          wdWednesday: false,
+          wdThursday: false,
+          wdFriday: false,
+          wdSaturday: false,
+          wedSunday: false,
+          wedMonday: false,
+          wedTuesday: false,
+          wedWednesday: false,
+          wedThursday: false,
+          wedFriday: false,
+          wedSaturday: false,
+        },
+        rooms: hotelData.rooms ? hotelData.rooms.map(room => ({
+          ...room,
+          roomTypes: room.roomTypes || []
+        })) : [],
+        termsAndConditions: hotelData.termsAndConditions || [],
+        amenityIds: hotelData.amenityIds || [],
+      });
+      
+      // Load dependent data for location
+      if (hotelData.countryId) {
+        await loadProvinces(hotelData.countryId);
+      }
+      if (hotelData.stateId) {
+        await loadPlaces(hotelData.stateId);
+      }
+      
+    } catch (error) {
+      console.error("Error loading hotel data:", error);
+      toast.error("Failed to load hotel data for editing");
+      // Navigate back to hotel list if loading fails
+      navigate("/registration/hotel");
+    } finally {
+      setIsLoadingHotelData(false);
+    }
+  };
 
   // Load master data on component mount
   useEffect(() => {
@@ -122,6 +206,13 @@ const HotelReg = () => {
     loadRoomCategories();
     loadRoomTypes();
   }, []);
+
+  // Load hotel data for edit mode
+  useEffect(() => {
+    if (isEditMode) {
+      loadHotelData();
+    }
+  }, [isEditMode, id]);
 
   // Load dependent data when country/province changes
   useEffect(() => {
@@ -620,59 +711,70 @@ const HotelReg = () => {
         longitude: parseFloat(formData.longitude) || 0,
       };
 
-      const response = await axiosInstance.post("/api/hotels", payload);
+      let response;
+      if (isEditMode) {
+        response = await axiosInstance.put(`/api/hotels/${id}`, payload);
+        toast.success("Hotel updated successfully!");
+      } else {
+        response = await axiosInstance.post("/api/hotels", payload);
+        toast.success("Hotel registered successfully!");
+      }
       
       if (response.data) {
-        toast.success("Hotel registered successfully!");
-        // Reset form
-        setFormData({
-          hotelName: "",
-          hotelDescription: "",
-          image360: "",
-          address: "",
-          zipcode: "",
-          latitude: "",
-          longitude: "",
-          childComAgeMin: "",
-          childComAgeMax: "",
-          childChargeableAgeMin: "",
-          childChargeableAgeMax: "",
-          hotelCurrencyId: "",
-          hotelCategoryId: "",
-          hotelTypeId: "",
-          markupTypeId: "",
-          regionId: "",
-          countryId: "",
-          stateId: "",
-          placeId: "",
-          isDeleted: false,
-          contactDetails: [],
-          bankDetails: [],
-          weekDays: {
-            wdSunday: false,
-            wdMonday: false,
-            wdTuesday: false,
-            wdWednesday: false,
-            wdThursday: false,
-            wdFriday: false,
-            wdSaturday: false,
-            wedSunday: false,
-            wedMonday: false,
-            wedTuesday: false,
-            wedWednesday: false,
-            wedThursday: false,
-            wedFriday: false,
-            wedSaturday: false,
-          },
-          rooms: [],
-          termsAndConditions: [],
-          amenityIds: [],
-        });
+        if (!isEditMode) {
+          // Reset form only for new hotel creation
+          setFormData({
+            hotelName: "",
+            hotelDescription: "",
+            image360: "",
+            address: "",
+            zipcode: "",
+            latitude: "",
+            longitude: "",
+            childComAgeMin: "",
+            childComAgeMax: "",
+            childChargeableAgeMin: "",
+            childChargeableAgeMax: "",
+            hotelCurrencyId: "",
+            hotelCategoryId: "",
+            hotelTypeId: "",
+            markupTypeId: "",
+            regionId: "",
+            countryId: "",
+            stateId: "",
+            placeId: "",
+            isDeleted: false,
+            contactDetails: [],
+            bankDetails: [],
+            weekDays: {
+              wdSunday: false,
+              wdMonday: false,
+              wdTuesday: false,
+              wdWednesday: false,
+              wdThursday: false,
+              wdFriday: false,
+              wdSaturday: false,
+              wedSunday: false,
+              wedMonday: false,
+              wedTuesday: false,
+              wedWednesday: false,
+              wedThursday: false,
+              wedFriday: false,
+              wedSaturday: false,
+            },
+            rooms: [],
+            termsAndConditions: [],
+            amenityIds: [],
+          });
+        }
         setValidationErrors({});
+        
+        // Navigate back to hotel list after successful save
+        navigate("/registration/hotel");
       }
     } catch (error) {
       console.error("Error submitting hotel:", error);
-      toast.error("Failed to register hotel");
+      toast.error(isEditMode ? "Failed to update hotel" : "Failed to register hotel");
     } finally {
       setIsLoading(false);
     }
@@ -698,6 +800,27 @@ const HotelReg = () => {
     
     return Math.round((completedFields / totalFields) * 100);
   };
+
+  // Show loading state when loading hotel data for edit
+  if (isLoadingHotelData) {
+    return (
+      <div className="min-vh-100 bg-gradient-light d-flex flex-column" style={{
+        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
+      }}>
+        <Topbar />
+        <div className="d-flex flex-grow-1">
+          <Sidebar />
+          <main className="flex-grow-1 d-flex justify-content-center align-items-center">
+            <div className="text-center">
+             
+              <Spinner animation="border" variant="primary" size="lg" />
+              <p className="mt-3 text-muted">Loading hotel data for editing...</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-vh-100 bg-gradient-light d-flex flex-column" style={{
@@ -728,14 +851,16 @@ const HotelReg = () => {
               <div>
                 <h2 className="text-primary mb-1">
                   <FaHotel className="me-2" />
-                  Hotel Registration
+                  {isEditMode ? 'Edit Hotel' : 'Hotel Registration'}
                 </h2>
-                <p className="text-muted mb-0">Register a new hotel with complete details</p>
+                <p className="text-muted mb-0">
+                  {isEditMode ? 'Update hotel information and details' : 'Register a new hotel with complete details'}
+                </p>
               </div>
               <div className="text-end">
-                <Badge bg="success" className="fs-6 px-3 py-2">
+                <Badge bg={isEditMode ? "info" : "success"} className="fs-6 px-3 py-2">
                   <FaCheckCircle className="me-1" />
-                  New Hotel
+                  {isEditMode ? 'Edit Mode' : 'New Hotel'}
                 </Badge>
                 <div className="mt-2">
                   <small className="text-muted">Form Completion</small>
@@ -1180,7 +1305,7 @@ const HotelReg = () => {
                         </Alert>
                       )}
                       
-                      {formData.contactDetails.map((contact, index) => (
+                      {formData.contactDetails && formData.contactDetails.map((contact, index) => (
                         <Card key={index} className="mb-3">
                           <Card.Header className="d-flex justify-content-between align-items-center">
                             <h6 className="mb-0">Contact {index + 1}</h6>
@@ -1294,7 +1419,7 @@ const HotelReg = () => {
                         </Alert>
                       )}
                       
-                      {formData.bankDetails.map((bank, index) => (
+                      {formData.bankDetails && formData.bankDetails.map((bank, index) => (
                         <Card key={index} className="mb-3">
                           <Card.Header className="d-flex justify-content-between align-items-center">
                             <h6 className="mb-0">Bank {index + 1}</h6>
@@ -1555,7 +1680,7 @@ const HotelReg = () => {
                         </Alert>
                       )}
                       
-                      {formData.rooms.map((room, roomIndex) => (
+                      {formData.rooms && formData.rooms.map((room, roomIndex) => (
                         <Card key={roomIndex} className="mb-4 border-0 shadow-sm">
                           <Card.Header className="bg-light border-0">
                             <div className="d-flex justify-content-between align-items-center">
@@ -1639,7 +1764,7 @@ const HotelReg = () => {
                                 </Alert>
                               )}
 
-                              {room.roomTypes.map((roomType, typeIndex) => (
+                              {room.roomTypes && room.roomTypes.map((roomType, typeIndex) => (
                                 <Card key={typeIndex} className="mb-3 border-start border-primary border-3">
                                   <Card.Body className="py-3">
                                     <Row>
@@ -1746,7 +1871,7 @@ const HotelReg = () => {
                         </Alert>
                       )}
                       
-                      {formData.termsAndConditions.map((term, index) => (
+                      {formData.termsAndConditions && formData.termsAndConditions.map((term, index) => (
                         <Card key={index} className="mb-3">
                           <Card.Header className="d-flex justify-content-between align-items-center">
                             <h6 className="mb-0">Term {index + 1}</h6>
@@ -1815,12 +1940,12 @@ const HotelReg = () => {
                               role="status"
                               aria-hidden="true"
                             ></span>
-                            Registering Hotel...
+                            {isEditMode ? 'Updating Hotel...' : 'Registering Hotel...'}
                           </>
                         ) : (
                           <>
                             <FaSave />
-                            Register Hotel
+                            {isEditMode ? 'Update Hotel' : 'Register Hotel'}
                           </>
                         )}
                       </Button>

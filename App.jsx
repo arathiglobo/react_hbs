@@ -120,6 +120,7 @@ export default function App() {
        <Route path="/registration/agent" element={<AgentReg />} />
        <Route path="/registration/hotel" element={<HotelList />} />
        <Route path="/registration/hotel/create" element={<HotelReg />} />
+       <Route path="/registration/hotel/create/:id" element={<HotelReg />} />
        <Route path="/hotel-details/:id" element={<HotelRegistrationActions />} />
 
       </Routes>

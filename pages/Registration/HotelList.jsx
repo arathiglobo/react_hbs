@@ -64,8 +64,7 @@ const HotelList = () => {
 
   // Handle edit hotel
   const handleEditHotel = (hotelId) => {
-    // You can implement edit functionality here
-    console.log("Edit hotel:", hotelId);
+    navigate(`/registration/hotel/create/${hotelId}`);
   };
 
   // Handle delete hotel
