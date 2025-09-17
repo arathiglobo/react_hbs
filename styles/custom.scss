@@ -42,23 +42,23 @@ body{
 
 /* Sidebar */
 .sidebar{
-  width: 20rem;
+  width: 16rem;
   background: #fff;
-  padding: 1.25rem;
+  padding: 0.75rem;
   box-shadow: 0 10px 15px rgba(0,0,0,0.06);
   display: flex;
   flex-direction: column;
-  min-width: 17rem !important;
-  max-width: 10rem;
+  min-width: 14rem !important;
+  max-width: 16rem;
 }
 
 /* Removed sidebar brand heading per request */
 .nav-item-custom .nav-link{
-  padding: .5rem .75rem;
+  padding: .4rem .6rem;
   border-radius: .75rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.25rem;
   color: #111827;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -71,6 +71,11 @@ body{
   text-decoration: none;
 }
 
+.nav-item-custom.nav-item-has-children:hover .nav-link{
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
 /* Submenu */
 .nav-item-has-children{
   position: relative;
@@ -81,12 +86,13 @@ body{
   position: absolute;
   left: 100%;
   top: 0;
-  min-width: 14rem;
+  min-width: 16rem;
   background: #fff;
-  border-radius: .5rem;
-  box-shadow: 0 10px 15px rgba(0,0,0,0.08);
-  padding: .25rem;
+  border-radius: .75rem;
+  box-shadow: 0 20px 25px rgba(0,0,0,0.1);
+  padding: .5rem;
   z-index: 1000;
+  border: 1px solid #e5e7eb;
 }
 
 /* Open submenu upwards */
@@ -130,8 +136,10 @@ body{
 }
 
 .submenu .submenu-accordion-header.open {
-  background: #f3f4f6;
-  color: #111827;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-left: 3px solid #0ea5e9;
+  font-weight: 600;
 }
 
 /* Submenu items (like "Designation") */
@@ -169,19 +177,50 @@ body{
 }
 
 /* Accordion groups inside submenu */
-.submenu-group{ padding: .25rem; }
+.submenu-group{ 
+  padding: .25rem; 
+  margin-bottom: .25rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+.submenu-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
 .submenu-accordion-header{
   width: 100%;
   border: none;
   background: transparent;
-  padding: .5rem .5rem;
-  border-radius: .5rem;
+  padding: .4rem .6rem;
+  border-radius: .4rem;
   text-align: left;
-  font-size: 0.8rem; /* Same size as other submenu items */
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  transition: all 0.2s ease;
 }
-.submenu-accordion-header:hover{ background: #f3f4f6; }
-.submenu-children{ padding-left: .5rem; }
-.caret-small{ font-size: .8rem; }
+.submenu-accordion-header:hover{ 
+  background: #f3f4f6; 
+  color: #374151;
+}
+.submenu-accordion-header.open {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-weight: 600;
+}
+.submenu-children{ 
+  padding-left: .75rem; 
+  margin-top: .25rem;
+}
+.caret-small{ 
+  font-size: .7rem; 
+  color: #9ca3af;
+  transition: transform 0.2s ease;
+}
+.submenu-accordion-header.open .caret-small {
+  transform: rotate(180deg);
+  color: #0369a1;
+}
 
 /* Icon appears on hover before only second-level leaf submenu labels */
 .submenu-children .submenu-link::before{
@@ -222,7 +261,7 @@ body{
 
 /* Ensure offcanvas closes nicely */
 .offcanvas{
-  width: 16rem;
+  width: 14rem;
 }
 
 /* Responsiveness */
@@ -303,43 +342,43 @@ body{
 /* Responsive adjustments for sidebar */
 @media (max-width: 1200px) {
   .sidebar {
-    width: 18rem;
-    min-width: 18rem;
-    max-width: 18rem;
+    width: 14rem;
+    min-width: 14rem;
+    max-width: 14rem;
   }
   
   .nav-item-custom .nav-link {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
   }
   
   .submenu .submenu-link {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
   }
   
   .submenu .submenu-accordion-header {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
   }
 }
 
 @media (max-width: 992px) {
   .sidebar {
-    width: 16rem;
-    min-width: 16rem;
-    max-width: 16rem;
+    width: 12rem;
+    min-width: 12rem;
+    max-width: 12rem;
   }
   
   .nav-item-custom .nav-link {
-    font-size: 0.8rem;
-    padding: .4rem .6rem;
+    font-size: 0.75rem;
+    padding: .35rem .5rem;
   }
   
   .submenu .submenu-link {
-    font-size: 0.7rem;
-    padding: .4rem .6rem;
+    font-size: 0.65rem;
+    padding: .35rem .5rem;
   }
   
   .submenu .submenu-accordion-header {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
   }
 }
 

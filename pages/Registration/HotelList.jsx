@@ -59,8 +59,7 @@ const HotelList = () => {
 
   // Handle view hotel details
   const handleViewHotel = (hotelId) => {
-    // You can implement view functionality here
-    console.log("View hotel:", hotelId);
+    navigate(`/hotel-details/${hotelId}`);
   };
 
   // Handle edit hotel
@@ -199,7 +198,7 @@ const HotelList = () => {
                             </div>
 
                             <div className="mt-auto">
-                              <div className="d-flex justify-content-between align-items-center mb-3">
+                              {/* <div className="d-flex justify-content-between align-items-center mb-3">
                                 <div>
                                   <small className="text-muted">Category ID: {hotel.hotelCategoryId}</small>
                                   <br />
@@ -210,7 +209,7 @@ const HotelList = () => {
                                   <br />
                                   <small className="text-muted">Markup ID: {hotel.markupTypeId}</small>
                                 </div>
-                              </div>
+                              </div> */}
 
                               <div className="d-flex gap-2">
                                 <Button
