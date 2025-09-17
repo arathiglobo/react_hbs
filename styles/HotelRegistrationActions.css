@@ -152,14 +152,14 @@
   margin-bottom: 0;
 }
 
-.nav-card {
+.hotel-registration-container .nav-card {
   border: none;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   background: white;
 }
 
-.nav-item {
+.hotel-registration-container .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -170,38 +170,38 @@
   position: relative;
 }
 
-.nav-item:last-child {
+.hotel-registration-container .nav-item:last-child {
   border-bottom: none;
 }
 
-.nav-item:hover {
+.hotel-registration-container .nav-item:hover {
   background-color: #f8f9fa;
 }
 
-.nav-item.active {
+.hotel-registration-container .nav-item.active {
   background-color: #e3f2fd;
   border-left: 4px solid #1976d2;
   color: #1976d2;
   font-weight: 600;
 }
 
-.nav-icon {
+.hotel-registration-container .nav-icon {
   font-size: 16px;
   color: #6c757d;
   min-width: 20px;
 }
 
-.nav-item.active .nav-icon {
+.hotel-registration-container .nav-item.active .nav-icon {
   color: #1976d2;
 }
 
-.arrow-icon {
+.hotel-registration-container .arrow-icon {
   margin-left: auto;
   font-size: 12px;
   color: #adb5bd;
 }
 
-.nav-item.active .arrow-icon {
+.hotel-registration-container .nav-item.active .arrow-icon {
   color: #1976d2;
 }
 
@@ -514,86 +514,7 @@
   margin: 0;
 }
 
-/* Sidebar Fixes - Override for immediate effect */
-.sidebar {
-  width: 14rem !important;
-  padding: 0.5rem !important;
-  min-width: 12rem !important;
-  max-width: 14rem !important;
-}
-
-.nav-item-custom .nav-link {
-  padding: .3rem .5rem !important;
-  font-size: 0.8rem !important;
-  margin-bottom: 0.2rem !important;
-}
-
-.nav-item-custom.nav-item-has-children:hover .nav-link {
-  background: #f3f4f6 !important;
-  color: #111827 !important;
-}
-
-.nav-item-has-children .submenu {
-  min-width: 16rem !important;
-  border-radius: .75rem !important;
-  box-shadow: 0 20px 25px rgba(0,0,0,0.1) !important;
-  padding: .5rem !important;
-  border: 1px solid #e5e7eb !important;
-}
-
-.submenu .submenu-accordion-header.open {
-  background: #f3f4f6 !important;
-  color: #111827 !important;
-  border-left: none !important;
-  font-weight: 600 !important;
-}
-
-.submenu-group {
-  padding: .15rem !important;
-  margin-bottom: .15rem !important;
-  border-bottom: 1px solid #f3f4f6 !important;
-}
-
-.submenu-group:last-child {
-  border-bottom: none !important;
-  margin-bottom: 0 !important;
-}
-
-.submenu-accordion-header {
-  padding: .3rem .5rem !important;
-  border-radius: .4rem !important;
-  font-size: 0.7rem !important;
-  font-weight: 500 !important;
-  color: #6b7280 !important;
-  transition: all 0.2s ease !important;
-}
-
-.submenu-accordion-header:hover {
-  background: #f3f4f6 !important;
-  color: #374151 !important;
-}
-
-.submenu-accordion-header.open {
-  background: #f3f4f6 !important;
-  color: #111827 !important;
-  font-weight: 600 !important;
-}
-
-.submenu-children {
-  padding-left: .5rem !important;
-  margin-top: .15rem !important;
-}
-
-.caret-small {
-  font-size: .7rem !important;
-  color: #9ca3af !important;
-  transition: transform 0.2s ease !important;
-}
-
-.submenu-accordion-header.open .caret-small {
-  transform: rotate(180deg) !important;
-  color: #111827 !important;
-}
+/* Sidebar styles removed - using main sidebar styles from custom.scss */
 
 .back-button {
   color: #6c757d;

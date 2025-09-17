@@ -42,27 +42,27 @@ body{
 
 /* Sidebar */
 .sidebar{
-  width: 16rem;
+  width: 13rem;
   background: #fff;
   padding: 0.75rem;
   box-shadow: 0 10px 15px rgba(0,0,0,0.06);
   display: flex;
   flex-direction: column;
-  min-width: 14rem !important;
-  max-width: 16rem;
+  min-width: 11rem !important;
+  max-width: 13rem;
 }
 
 /* Removed sidebar brand heading per request */
 .nav-item-custom .nav-link{
-  padding: .4rem .6rem;
-  border-radius: .75rem;
+  padding: .5rem .75rem;
+  border-radius: .5rem;
   margin-bottom: 0.25rem;
   color: #111827;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.2;
+  line-height: 1.3;
   max-width: 100%;
 }
 
@@ -72,8 +72,8 @@ body{
 }
 
 .nav-item-custom.nav-item-has-children:hover .nav-link{
-  background: #e0f2fe;
-  color: #0369a1;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 /* Submenu */
@@ -87,7 +87,7 @@ body{
   left: 100%;
   top: 0;
   min-width: 16rem;
-  background: #fff;
+  background: #ffffff !important;
   border-radius: .75rem;
   box-shadow: 0 20px 25px rgba(0,0,0,0.1);
   padding: .5rem;
@@ -111,14 +111,14 @@ body{
   display: block;
   width: 100%;
   padding: .4rem .75rem;
-  color: #111827;
+  color: #111827 !important;
   border-radius: .5rem;
   font-size: 0.8rem;
   font-weight: 600;
   text-transform: none;
   letter-spacing: normal;
   margin-bottom: 0.25rem;
-  background: transparent;
+  background: transparent !important;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -131,14 +131,14 @@ body{
 }
 
 .submenu .submenu-accordion-header:hover {
-  background: #f3f4f6;
-  color: #111827;
+  background: #f3f4f6 !important;
+  color: #111827 !important;
 }
 
 .submenu .submenu-accordion-header.open {
-  background: #e0f2fe;
-  color: #0369a1;
-  border-left: 3px solid #0ea5e9;
+  background: #f3f4f6 !important;
+  color: #111827 !important;
+  border-left: none !important;
   font-weight: 600;
 }
 
@@ -146,7 +146,7 @@ body{
 .submenu .submenu-link{
   display: block;
   padding: .4rem .75rem;
-  color: #111827;
+  color: #111827 !important;
   border-radius: .5rem;
   font-size: 0.8rem;
   font-weight: 600;
@@ -157,12 +157,13 @@ body{
   max-width: 100%;
   margin-left: 0.5rem;
   text-decoration: none;
+  background: transparent !important;
 }
 
 .submenu .submenu-link:hover{
-  background: #f3f4f6;
+  background: #f3f4f6 !important;
   text-decoration: none;
-  color: #111827;
+  color: #111827 !important;
 }
 
 /* Submenu children container */
@@ -204,8 +205,8 @@ body{
   color: #374151;
 }
 .submenu-accordion-header.open {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: #f3f4f6;
+  color: #111827;
   font-weight: 600;
 }
 .submenu-children{ 
@@ -219,7 +220,7 @@ body{
 }
 .submenu-accordion-header.open .caret-small {
   transform: rotate(180deg);
-  color: #0369a1;
+  color: #111827;
 }
 
 /* Icon appears on hover before only second-level leaf submenu labels */
@@ -342,13 +343,13 @@ body{
 /* Responsive adjustments for sidebar */
 @media (max-width: 1200px) {
   .sidebar {
-    width: 14rem;
-    min-width: 14rem;
-    max-width: 14rem;
+    width: 12rem;
+    min-width: 11rem;
+    max-width: 12rem;
   }
   
   .nav-item-custom .nav-link {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
   }
   
   .submenu .submenu-link {
@@ -362,19 +363,19 @@ body{
 
 @media (max-width: 992px) {
   .sidebar {
-    width: 12rem;
-    min-width: 12rem;
-    max-width: 12rem;
+    width: 11rem;
+    min-width: 10rem;
+    max-width: 11rem;
   }
   
   .nav-item-custom .nav-link {
-    font-size: 0.75rem;
-    padding: .35rem .5rem;
+    font-size: 0.8rem;
+    padding: .4rem .6rem;
   }
   
   .submenu .submenu-link {
     font-size: 0.65rem;
-    padding: .35rem .5rem;
+    padding: .3rem .4rem;
   }
   
   .submenu .submenu-accordion-header {
