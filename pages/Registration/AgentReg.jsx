@@ -23,7 +23,6 @@ import {
   FaCreditCard,
   FaBan,
 } from "react-icons/fa";
-import { useLocation, useNavigate } from "react-router-dom";
 
 const AgentReg = () => {
   const [items, setItems] = useState([]);
@@ -75,6 +74,7 @@ const AgentReg = () => {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [rolesList, setUserRolesList] = useState([]);
   const [loginFormData, setLoginFormData] = useState({
     username: "",
     password: "",
@@ -87,8 +87,6 @@ const AgentReg = () => {
     repassword: "",
     userroles: "",
   });
-
-  
 
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
   const [creditLimitFormData, setCreditLimitFormData] = useState({
@@ -231,6 +229,16 @@ const AgentReg = () => {
 
     setValidationErrors({});
     setShowModal(true);
+  };
+
+  const userRolesList = async () => {
+    try {
+      const rolesRes = await axiosInstance.get("/api/roles");
+      console.log("rolesRes::", rolesRes);
+      setUserRolesList(rolesRes.data);
+    } catch (error) {
+      console.log("User roles  api call error::", error);
+    }
   };
 
   const agentCategoryList = async () => {
@@ -496,6 +504,7 @@ const AgentReg = () => {
   useEffect(() => {
     fetchAgentList();
     countryList();
+    userRolesList();
     agentCategoryList();
     markupList();
     currencyList();
@@ -776,18 +785,25 @@ const AgentReg = () => {
       username: "",
       password: "",
       repassword: "",
+      userroles: "",
     });
     setLoginErrors({
       username: "",
       password: "",
       repassword: "",
+      userroles: "",
     });
     setShowLoginModal(true);
   };
 
-  const handleLoginSubmit = () => {
+  const handleLoginSubmit = async () => {
     let isValid = true;
-    const errors = { username: "", password: "", repassword: "" };
+    const errors = {
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: "",
+    };
 
     if (!loginFormData.username.trim()) {
       errors.username = "Username is required";
@@ -821,12 +837,56 @@ const AgentReg = () => {
       isValid = false;
     }
 
+    if (!loginFormData.userroles) {
+      errors.userroles = "User role is required";
+      isValid = false;
+    }
+
     setLoginErrors(errors);
 
     if (isValid) {
-      console.log("Login data for agent:", editing.companyName, loginFormData);
-      toast.success("Login credentials saved successfully!");
-      setShowLoginModal(false);
+      try {
+        setIsLoading(true);
+
+        let activeUserRole = localStorage.getItem("currentActiveRole");
+        console.log("currentActiveRole::", activeUserRole);
+
+        const loginPayload = {
+          userId: editing.id,
+          userTypeId: parseInt(loginFormData.userroles),
+          userName: loginFormData.username,
+          password: loginFormData.password,
+          userRoleIds: [parseInt(loginFormData.userroles)],
+        };
+
+        console.log(
+          "Login payload for agent:",
+          editing.companyName,
+          loginPayload
+        );
+
+        const response = await axiosInstance.post(
+          "/auth/registerr",
+          loginPayload
+        );
+
+        if (response.data) {
+          toast.success("Login credentials saved successfully!");
+          setLoginErrors({});
+          closeLoginModal();
+          // Refresh the agent list
+          await fetchAgentList(page, search);
+        }
+      } catch (error) {
+        console.error("Login submission failed:", error);
+        toast.error(
+          `Failed to save login credentials: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      } finally {
+        setIsLoading(false);
+      }
     } else {
       toast.error("Please fix the errors in the form");
     }
@@ -846,11 +906,13 @@ const AgentReg = () => {
       username: "",
       password: "",
       repassword: "",
+      userroles: "",
     });
     setLoginErrors({
       username: "",
       password: "",
       repassword: "",
+      userroles: "",
     });
   };
 
@@ -2110,7 +2172,7 @@ const AgentReg = () => {
           <Modal show={showLoginModal} onHide={closeLoginModal} centered>
             <Modal.Header closeButton>
               <Modal.Title>
-                Set Login Credentials for {editing?.companyName}
+                Register Agent {editing?.companyName} here..
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -2160,37 +2222,51 @@ const AgentReg = () => {
                 <Form.Group className="mb-3">
                   <Form.Label>User Roles</Form.Label>
                   <Form.Select
-                    type="password"
-                    name="repassword"
+                    name="userroles"
                     value={loginFormData.userroles}
                     onChange={handleLoginChange}
                     isInvalid={!!loginErrors.userroles}
                   >
                     <option value="">Select Roles</option>
-                    {agentCategoryies.map((agent) => (
-                      <option
-                        key={agent.agentCategoryId}
-                        value={agent.agentCategoryId}
-                      >
-                        {agent.name}
+                    {rolesList.map((roles) => (
+                      <option key={roles.id} value={roles.id}>
+                        {roles.roleName}
                       </option>
                     ))}
-                    {console.log("user roles::" , roles)}
                   </Form.Select>
-                  {validationErrors.agentCategoryId && (
+                  {loginErrors.userroles && (
                     <Form.Control.Feedback type="invalid">
-                      {validationErrors.agentCategoryId}
+                      {loginErrors.userroles}
                     </Form.Control.Feedback>
                   )}
                 </Form.Group>
               </Form>
             </Modal.Body>
             <Modal.Footer>
-              <Button variant="secondary" onClick={closeLoginModal}>
+              <Button
+                variant="secondary"
+                onClick={closeLoginModal}
+                disabled={isLoading}
+              >
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleLoginSubmit}>
-                Save
+              <Button
+                variant="primary"
+                onClick={handleLoginSubmit}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Saving...
+                  </>
+                ) : (
+                  "Save"
+                )}
               </Button>
             </Modal.Footer>
           </Modal>

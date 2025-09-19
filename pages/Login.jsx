@@ -42,6 +42,8 @@ const Login = () => {
      
       localStorage.setItem("authToken", token);
       localStorage.setItem("userRole", roles);
+
+      console.log("roles::" , roles)
      
 
       if (roles.length > 1) {
