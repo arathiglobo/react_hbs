@@ -65,6 +65,7 @@ const AgentReg = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
+  const [gstinError, setGstinError] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -426,6 +427,7 @@ const AgentReg = () => {
     setProvinces([]);
     setPlaces([]);
     setValidationErrors({});
+    setGstinError("");
     setError("");
   };
 
@@ -978,6 +980,41 @@ const AgentReg = () => {
       provinceId: "", // Reset province when country changes
       placeId: "", // Reset city when country changes
     }));
+  };
+
+  // Handle GSTIN input validation
+  const handleGstinChange = (e) => {
+    const value = e.target.value;
+    
+    // Check if Agent Classification is selected first
+    if (!formData.agentClassification) {
+      setGstinError("Please select Agent Classification first.");
+      return; // Don't update the form data
+    }
+    
+    // Clear the error if classification is selected
+    setGstinError("");
+    
+    // Update the form data
+    setFormData({
+      ...formData,
+      agentGstIn: value,
+    });
+  };
+
+  // Handle Agent Classification change
+  const handleAgentClassificationChange = (e) => {
+    const value = e.target.value;
+    
+    setFormData({
+      ...formData,
+      agentClassification: value,
+    });
+    
+    // Clear GSTIN error when classification is selected
+    if (value) {
+      setGstinError("");
+    }
   };
 
   return (
@@ -1594,13 +1631,7 @@ const AgentReg = () => {
                         {/* Step 4: GST Details (India only) */}
                         {formData.countryId === "1" && (
                           <div className="gstdetails" style={{border: '2px solid #007bff', padding: '15px', margin: '15px 0', borderRadius: '5px'}}>
-                            {/* Debug validation errors */}
-                            <div style={{background: 'yellow', padding: '5px', margin: '5px 0', fontSize: '12px'}}>
-                              <strong>DEBUG:</strong> GSTIN Error: {validationErrors.agentGstIn || 'None'} | 
-                              Classification: {formData.agentClassification || 'None'} | 
-                              Country: {formData.countryId}
-                            </div>
-                            <div className="step-header">
+                           <div className="step-header">
                               <h3 className="step-title">
                                 <svg
                                   width="24"
@@ -1631,12 +1662,7 @@ const AgentReg = () => {
                                   <Form.Select
                                     name="agentClassification"
                                     value={formData.agentClassification}
-                                    onChange={(e) =>
-                                      setFormData({
-                                        ...formData,
-                                        agentClassification: e.target.value,
-                                      })
-                                    }
+                                    onChange={handleAgentClassificationChange}
                                     className="form-input"
                                   >
                                     <option value="">Select classification</option>
@@ -1659,30 +1685,20 @@ const AgentReg = () => {
                                     type="text"
                                     name="agentGstIn"
                                     value={formData.agentGstIn}
-                                    onChange={(e) =>
-                                      setFormData({
-                                        ...formData,
-                                        agentGstIn: e.target.value,
-                                      })
-                                    }
+                                    onChange={handleGstinChange}
                                     placeholder="Enter 15-digit GSTIN"
                                     className={`form-input ${
-                                      validationErrors.agentGstIn ? "is-invalid" : ""
+                                      validationErrors.agentGstIn || gstinError ? "is-invalid" : ""
                                     }`}
-                                    isInvalid={!!validationErrors.agentGstIn}
+                                    isInvalid={!!(validationErrors.agentGstIn || gstinError)}
                                     maxLength={15}
                                   />
-                                  {validationErrors.agentGstIn && (
+                                  {(validationErrors.agentGstIn || gstinError) && (
                                     <Form.Control.Feedback type="invalid">
-                                      {validationErrors.agentGstIn}
+                                      {gstinError || validationErrors.agentGstIn}
                                     </Form.Control.Feedback>
                                   )}
-                                  {/* Debug info */}
-                                  {console.log("GSTIN validation error:", validationErrors.agentGstIn)}
-                                  {/* Force show error for testing */}
-                                  <div style={{color: 'red', fontSize: '12px', marginTop: '5px'}}>
-                                    TEST: {validationErrors.agentGstIn || 'No error'}
-                                  </div>
+                            
                                 </Form.Group>
                               </Col>
 
