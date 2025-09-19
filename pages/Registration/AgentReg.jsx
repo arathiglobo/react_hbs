@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Card,
@@ -101,6 +100,16 @@ const AgentReg = () => {
     [items]
   );
 
+  // Helper function to convert file to base64
+  const convertToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   const openCreate = () => {
     setEditing(null);
     setFormData({
@@ -139,14 +148,16 @@ const AgentReg = () => {
     setShowModal(true);
   };
 
-  const openEdit = (item) => {
+  const openEdit = async (item) => {
     console.log("edit item:::", item);
     setEditing(item);
+
+    // Set form data first
     setFormData({
       companyName: item.companyName || "",
       shortName: item.shortName || "",
       businessType: item.businessType || "",
-      agentCategoryId: item.agentCategoryId || "",
+      agentCategoryId: String(item.agentCategoryId || ""),
       companyCode: item.companyCode || "",
       agentUrl: item.agentUrl || "",
       firstName: item.firstName || "",
@@ -156,12 +167,12 @@ const AgentReg = () => {
       mobileNumber: item.mobileNumber || "",
       telephoneNumber: item.telephoneNumber || "",
       contactPerson: item.contactPerson || "",
-      countryId: item.countryId || "",
-      provinceId: item.provinceId || "",
-      placeId: item.placeId || "",
+      countryId: String(item.countryId || ""),
+      provinceId: String(item.provinceId || ""),
+      placeId: String(item.placeId || ""),
       address: item.address || "",
-      markup: item.markup || "",
-      currency: item.currency || "",
+      markup: String(item.markup || ""),
+      currency: String(item.currency || ""),
       status: item.status || "",
       agentClassification: item.agentClassification || "",
       agentGstIn: item.agentGstIn || "",
@@ -171,20 +182,27 @@ const AgentReg = () => {
       agentHsncode: item.agentHsncode || "",
       agentLogo: null,
     });
-    
+
     // Clear existing provinces and places first
     setProvinces([]);
     setPlaces([]);
-    
+
     // Fetch provinces and cities for the selected country and province
     if (item.countryId) {
-      provinceList(item.countryId).then(() => {
+      try {
+        console.log("Loading provinces for countryId:", item.countryId);
+        await provinceList(item.countryId);
+
         // After provinces are loaded, fetch cities if provinceId exists
         if (item.provinceId) {
-          cityList(item.provinceId);
+          console.log("Loading cities for provinceId:", item.provinceId);
+          await cityList(item.provinceId);
         }
-      });
+      } catch (error) {
+        console.error("Error loading provinces/cities:", error);
+      }
     }
+
     setValidationErrors({});
     setShowModal(true);
   };
@@ -201,6 +219,7 @@ const AgentReg = () => {
   const countryList = async () => {
     try {
       const response = await axios.get("/api/country");
+      console.log("Countries loaded:", response.data);
       setCountries(response.data);
     } catch (error) {
       console.log("error for country list :", error);
@@ -246,14 +265,18 @@ const AgentReg = () => {
   };
 
   useEffect(() => {
+    // Only clear provinces/cities if we're not in edit mode or if country actually changed
     if (formData.countryId) {
-      setProvinces([]);
-      setPlaces([]);
-      setFormData((prev) => ({
-        ...prev,
-        provinceId: "",
-        placeId: "",
-      }));
+      // Don't clear if we're in edit mode and just opened the modal
+      if (!editing) {
+        setProvinces([]);
+        setPlaces([]);
+        setFormData((prev) => ({
+          ...prev,
+          provinceId: "",
+          placeId: "",
+        }));
+      }
       provinceList(formData.countryId);
     } else {
       setProvinces([]);
@@ -267,12 +290,16 @@ const AgentReg = () => {
   }, [formData.countryId]);
 
   useEffect(() => {
+    // Only clear cities if we're not in edit mode or if province actually changed
     if (formData.provinceId) {
-      setPlaces([]);
-      setFormData((prev) => ({
-        ...prev,
-        placeId: "",
-      }));
+      // Don't clear if we're in edit mode and just opened the modal
+      if (!editing) {
+        setPlaces([]);
+        setFormData((prev) => ({
+          ...prev,
+          placeId: "",
+        }));
+      }
       cityList(formData.provinceId);
     } else {
       setPlaces([]);
@@ -294,10 +321,55 @@ const AgentReg = () => {
 
     try {
       setIsLoading(true);
+
+      // Prepare the payload - convert image to base64 if present
+      const agentPayload = { ...formData };
+
+      // Handle image upload - convert to base64 if present
+      if (agentPayload.agentLogo && agentPayload.agentLogo instanceof File) {
+        try {
+          const base64 = await convertToBase64(agentPayload.agentLogo);
+          agentPayload.agentLogo = base64;
+        } catch (error) {
+          console.error("Error converting image to base64:", error);
+          toast.error("Error processing image file");
+          return;
+        }
+      } else {
+        // If no new image is selected, remove the agentLogo field
+        // The backend will keep the existing image
+        delete agentPayload.agentLogo;
+      }
+
+      // Ensure numeric fields are properly converted
+      if (agentPayload.countryId) {
+        agentPayload.countryId = parseInt(agentPayload.countryId);
+      }
+      if (agentPayload.provinceId) {
+        agentPayload.provinceId = parseInt(agentPayload.provinceId);
+      }
+      if (agentPayload.placeId) {
+        agentPayload.placeId = parseInt(agentPayload.placeId);
+      }
+      if (agentPayload.agentCategoryId) {
+        agentPayload.agentCategoryId = parseInt(agentPayload.agentCategoryId);
+      }
+      if (agentPayload.markup) {
+        agentPayload.markup = parseInt(agentPayload.markup);
+      }
+      if (agentPayload.currency) {
+        agentPayload.currency = parseInt(agentPayload.currency);
+      }
+
+      console.log("Edit payload:", agentPayload);
+      console.log("Editing agent ID:", editing.id);
+
       const editRes = await axiosInstance.put(
         `/api/agent/${editing.id}`,
-        formData
+        agentPayload
       );
+
+      console.log("Edit response:", editRes);
 
       if (editRes.data) {
         toast.success("Agent Updated Successfully!");
@@ -306,8 +378,14 @@ const AgentReg = () => {
         closeModal();
       }
     } catch (error) {
+      console.error("Edit agent error:", error);
+      console.error("Error details:", error.response?.data);
       setError("Failed to update agent");
-      toast.error("Failed to update agent");
+      toast.error(
+        `Failed to update agent: ${
+          error.response?.data?.message || error.message
+        }`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -398,68 +476,76 @@ const AgentReg = () => {
 
   // Validation function
   const validateAgentForm = (data) => {
-    console.log("data.countryId::" , data.countryId)
+    console.log("Validation - data.countryId::", data.countryId, "agentClassification:", data.agentClassification, "agentGstIn:", data.agentGstIn);
     const newErrors = {};
 
+    // Helper function to safely get string value
+    const getStringValue = (value) => {
+      return value ? String(value).trim() : "";
+    };
+
     // Required field validations
-    if (!data.companyName.trim())
+    if (!getStringValue(data.companyName))
       newErrors.companyName = "Company Name is required";
-    if (!data.businessType.trim())
+    if (!getStringValue(data.businessType))
       newErrors.businessType = "Business Type is required";
     if (!data.agentCategoryId)
       newErrors.agentCategoryId = "Company Type or Agent category is required";
-    if (!data.firstName.trim())
+    if (!getStringValue(data.firstName))
       newErrors.firstName = "First Name is required";
-    if (!data.lastName.trim()) newErrors.lastName = "Last Name is required";
-    if (!data.mobileNumber.trim())
+    if (!getStringValue(data.lastName))
+      newErrors.lastName = "Last Name is required";
+    if (!getStringValue(data.mobileNumber))
       newErrors.mobileNumber = "Mobile Number is required";
-    if (!data.personalEmail.trim())
+    if (!getStringValue(data.personalEmail))
       newErrors.personalEmail = "Email ID is required";
     if (!data.countryId) newErrors.countryId = "Country is required";
     if (!data.provinceId) newErrors.provinceId = "Province is required";
     if (!data.placeId) newErrors.placeId = "City is required";
-    if (!data.address.trim()) newErrors.address = "Address is required";
-     if (!data.markup.trim()) newErrors.markup = "Markup is required";
-     if (!data.currency.trim()) newErrors.currency = "Currency is required";
-     if (!data.status.trim()) newErrors.status = "Status is required";
+    if (!getStringValue(data.address))
+      newErrors.address = "Address is required";
+    if (!data.markup) newErrors.markup = "Markup is required";
+    if (!data.currency) newErrors.currency = "Currency is required";
+    if (!getStringValue(data.status)) newErrors.status = "Status is required";
 
     // Additional format validations
-    if (
-      data.personalEmail &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.personalEmail)
-    )
+    const emailValue = getStringValue(data.personalEmail);
+    if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue))
       newErrors.personalEmail = "Invalid email format";
-    if (
-      data.mobileNumber &&
-      !/^\+?\d{10,15}$/.test(data.mobileNumber.replace(/\s/g, ""))
-    )
+
+    const mobileValue = getStringValue(data.mobileNumber);
+    if (mobileValue && !/^\+?\d{10,15}$/.test(mobileValue.replace(/\s/g, "")))
       newErrors.mobileNumber = "Mobile Number must be 10-15 digits";
 
-    // GST fields validation (only if companyType is 3 or 5)
-    if (data.countryId === "1") {
-      if (
-        data.agentClassification === "registered" &&
-        !data.agentGstIn.trim()
-      )
+    // GST fields validation (only if country is India)
+    if (String(data.countryId) === "1") {
+      console.log("GST validation running - country is India");
+      const gstInValue = getStringValue(data.agentGstIn);
+      console.log("GST validation - gstInValue:", gstInValue, "agentClassification:", data.agentClassification);
+      
+      if (data.agentClassification === "registered" && !gstInValue) {
+        console.log("Adding GSTIN required error");
         newErrors.agentGstIn = "GSTIN is required for registered agencies";
-      if (
-        data.agentGstIn &&
-        !/^[A-Z0-9]{15}$/.test(data.agentGstIn.trim())
-      )
+      }
+      if (gstInValue && !/^[A-Z0-9]{15}$/.test(gstInValue)) {
+        console.log("Adding GSTIN format error");
         newErrors.agentGstIn = "GSTIN must be 15 alphanumeric characters";
+      }
       if (
         data.agentCorrespondmail &&
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.agentCorrespondmail)
       )
         newErrors.agentCorrespondmail = "Invalid correspondence email format";
+    } else {
+      console.log("GST validation skipped - country is not India:", data.countryId);
     }
 
+    console.log("Final validation errors:", newErrors);
     return newErrors;
   };
 
   const saveAgent = async (e) => {
-
-    console.log("formdata::" , formData);
+    console.log("formdata::", formData);
     e.preventDefault();
     const errors = validateAgentForm(formData);
     if (Object.keys(errors).length > 0) {
@@ -469,12 +555,52 @@ const AgentReg = () => {
 
     try {
       setIsLoading(true);
+
+      // Prepare the payload - convert image to base64 if present
       const agentPayload = { ...formData };
+
+      // Handle image upload - convert to base64 if present
+      if (agentPayload.agentLogo && agentPayload.agentLogo instanceof File) {
+        try {
+          const base64 = await convertToBase64(agentPayload.agentLogo);
+          agentPayload.agentLogo = base64;
+        } catch (error) {
+          console.error("Error converting image to base64:", error);
+          toast.error("Error processing image file");
+          return;
+        }
+      } else {
+        // Remove the file object if no file is selected
+        delete agentPayload.agentLogo;
+      }
+
+      // Ensure numeric fields are properly converted
+      if (agentPayload.countryId) {
+        agentPayload.countryId = parseInt(agentPayload.countryId);
+      }
+      if (agentPayload.provinceId) {
+        agentPayload.provinceId = parseInt(agentPayload.provinceId);
+      }
+      if (agentPayload.placeId) {
+        agentPayload.placeId = parseInt(agentPayload.placeId);
+      }
+      if (agentPayload.agentCategoryId) {
+        agentPayload.agentCategoryId = parseInt(agentPayload.agentCategoryId);
+      }
+      if (agentPayload.markup) {
+        agentPayload.markup = parseInt(agentPayload.markup);
+      }
+      if (agentPayload.currency) {
+        agentPayload.currency = parseInt(agentPayload.currency);
+      }
+
       console.log("agentPayload::", agentPayload);
+
       const agentSaveRes = await axiosInstance.post(
         "/api/agent/register",
         agentPayload
       );
+
       if (agentSaveRes.data !== 0) {
         toast.success("Agent added Successfully!");
         setValidationErrors({});
@@ -482,8 +608,14 @@ const AgentReg = () => {
         closeModal();
       }
     } catch (error) {
+      console.error("Save agent error:", error);
+      console.error("Error details:", error.response?.data);
       setError("Sorry! Data not saved to db..");
-      toast.error("Failed to save agent data");
+      toast.error(
+        `Failed to save agent data: ${
+          error.response?.data?.message || error.message
+        }`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -538,13 +670,15 @@ const AgentReg = () => {
     });
   };
 
-  const handleView = (item) => {
+  const handleView = async (item) => {
     setEditing(item);
+
+    // Set form data first
     setFormData({
       companyName: item.companyName || "",
       shortName: item.shortName || "",
       businessType: item.businessType || "",
-      agentCategoryId: item.agentCategoryId || "",
+      agentCategoryId: String(item.agentCategoryId || ""),
       companyCode: item.companyCode || "",
       agentUrl: item.agentUrl || "",
       firstName: item.firstName || "",
@@ -554,12 +688,12 @@ const AgentReg = () => {
       mobileNumber: item.mobileNumber || "",
       telephoneNumber: item.telephoneNumber || "",
       contactPerson: item.contactPerson || "",
-      countryId: item.countryId || "",
-      provinceId: item.provinceId || "",
-      placeId: item.placeId || "",
+      countryId: String(item.countryId || ""),
+      provinceId: String(item.provinceId || ""),
+      placeId: String(item.placeId || ""),
       address: item.address || "",
-      markup: item.markup || "",
-      currency: item.currency || "",
+      markup: String(item.markup || ""),
+      currency: String(item.currency || ""),
       status: item.status || "",
       agentClassification: item.agentClassification || "",
       agentGstIn: item.agentGstIn || "",
@@ -569,20 +703,27 @@ const AgentReg = () => {
       agentHsncode: item.agentHsncode || "",
       agentLogo: null,
     });
-    
+
     // Clear existing provinces and places first
     setProvinces([]);
     setPlaces([]);
-    
+
     // Fetch provinces and cities for the selected country and province
     if (item.countryId) {
-      provinceList(item.countryId).then(() => {
+      try {
+        console.log("Loading provinces for countryId:", item.countryId);
+        await provinceList(item.countryId);
+
         // After provinces are loaded, fetch cities if provinceId exists
         if (item.provinceId) {
-          cityList(item.provinceId);
+          console.log("Loading cities for provinceId:", item.provinceId);
+          await cityList(item.provinceId);
         }
-      });
+      } catch (error) {
+        console.error("Error loading provinces/cities:", error);
+      }
     }
+
     setValidationErrors({});
     setShowModal(true);
   };
@@ -671,24 +812,43 @@ const AgentReg = () => {
     });
   };
 
-  const handleCreditLimit = (item) => {
+  const handleCreditLimit = async (item) => {
     console.log("Manage credit limit for agent:", item.companyName);
     setEditing(item);
-    
+
     // Set default values for credit limit form
     setCreditLimitFormData({
       addCreditLimit: "",
       remarks: "",
-      totalCreditLimit: item.totalCreditLimit || "0",
-      availableCreditLimit: item.availableCreditLimit || "0",
-      usedCreditLimit: item.usedCreditLimit || "0",
+      totalCreditLimit: "0",
+      availableCreditLimit: "0",
+      usedCreditLimit: "0",
     });
-    
+
     setCreditLimitErrors({
       addCreditLimit: "",
       remarks: "",
     });
-    
+
+    // Fetch existing credit limit data
+    try {
+      const response = await axiosInstance.get(
+        `/api/agent-credit-limit/agent/${item.id}`
+      );
+      if (response.data) {
+        const creditData = response.data;
+        setCreditLimitFormData((prev) => ({
+          ...prev,
+          totalCreditLimit: creditData.totalCreditLimit || "0",
+          availableCreditLimit: creditData.availableCreditLimit || "0",
+          usedCreditLimit: creditData.usedCreditLimit || "0",
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to fetch credit limit data:", error);
+      // If no credit limit exists, we'll create one when adding credit
+    }
+
     setShowCreditLimitModal(true);
   };
 
@@ -697,7 +857,10 @@ const AgentReg = () => {
 
     if (!data.addCreditLimit.trim()) {
       newErrors.addCreditLimit = "Add Credit Limit is required";
-    } else if (isNaN(data.addCreditLimit) || parseFloat(data.addCreditLimit) <= 0) {
+    } else if (
+      isNaN(data.addCreditLimit) ||
+      parseFloat(data.addCreditLimit) <= 0
+    ) {
       newErrors.addCreditLimit = "Add Credit Limit must be a positive number";
     }
 
@@ -717,25 +880,48 @@ const AgentReg = () => {
 
     try {
       setIsLoading(true);
-      
-      const creditLimitPayload = {
-        agentId: editing.id,
-        addCreditLimit: parseFloat(creditLimitFormData.addCreditLimit),
-        remarks: creditLimitFormData.remarks,
-        totalCreditLimit: parseFloat(creditLimitFormData.totalCreditLimit),
-        availableCreditLimit: parseFloat(creditLimitFormData.availableCreditLimit),
-        usedCreditLimit: parseFloat(creditLimitFormData.usedCreditLimit),
-      };
 
-      console.log("Credit limit payload:", creditLimitPayload);
-      
-      const response = await axiosInstance.post("/api/agent/credit-limit", creditLimitPayload);
-      
+      const addAmount = parseFloat(creditLimitFormData.addCreditLimit);
+      const currentTotal =
+        parseFloat(creditLimitFormData.totalCreditLimit) || 0;
+
+      let response;
+
+      if (currentTotal === 0) {
+        // Create initial credit limit
+        const createPayload = {
+          agentId: editing.id,
+          totalCreditLimit: addAmount,
+        };
+
+        console.log("Creating initial credit limit:", createPayload);
+        response = await axiosInstance.post(
+          "/api/agent-credit-limit/create",
+          null,
+          {
+            params: createPayload,
+          }
+        );
+      } else {
+        // Add additional credit
+        const addCreditPayload = {
+          agentId: editing.id,
+          amount: addAmount,
+          remarks: creditLimitFormData.remarks,
+        };
+
+        console.log("Adding credit:", addCreditPayload);
+        response = await axiosInstance.post(
+          "/api/agent-credit-limit/add-credit",
+          addCreditPayload
+        );
+      }
+
       if (response.data) {
         toast.success("Credit limit updated successfully!");
         setCreditLimitErrors({});
         closeCreditLimitModal();
-        // Optionally refresh the agent list
+        // Refresh the agent list to show updated credit information
         await fetchAgentList(page, search);
       }
     } catch (error) {
@@ -767,7 +953,7 @@ const AgentReg = () => {
       ...prev,
       [name]: value,
     }));
-    
+
     // Clear error when user starts typing
     if (creditLimitErrors[name]) {
       setCreditLimitErrors((prev) => ({
@@ -775,6 +961,23 @@ const AgentReg = () => {
         [name]: "",
       }));
     }
+  };
+
+  // Ensure countryId is always treated as a string
+  const handleCountryChange = (e) => {
+    const value = e.target.value;
+    console.log(
+      "Country selected:",
+      value,
+      "Country name:",
+      e.target.options[e.target.selectedIndex].text
+    );
+    setFormData((prev) => ({
+      ...prev,
+      countryId: String(value), // Explicitly convert to string
+      provinceId: "", // Reset province when country changes
+      placeId: "", // Reset city when country changes
+    }));
   };
 
   return (
@@ -960,7 +1163,9 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter short name"
-                            className={`form-input ${validationErrors.shortName ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.shortName ? "is-invalid" : ""
+                            }`}
                             isInvalid={!!validationErrors.shortName}
                           />
                           {validationErrors.shortName && (
@@ -982,7 +1187,9 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter business name"
-                             className={`form-input ${validationErrors.businessType ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.businessType ? "is-invalid" : ""
+                            }`}
                             isInvalid={!!validationErrors.businessType}
                           />
                           {validationErrors.businessType && (
@@ -1003,7 +1210,11 @@ const AgentReg = () => {
                                 agentCategoryId: e.target.value,
                               })
                             }
-                             className={`form-input ${validationErrors.agentCategoryId ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.agentCategoryId
+                                ? "is-invalid"
+                                : ""
+                            }`}
                             isInvalid={!!validationErrors.agentCategoryId}
                           >
                             <option value="">Select company type</option>
@@ -1016,11 +1227,11 @@ const AgentReg = () => {
                               </option>
                             ))}
                           </Form.Select>
-                           {validationErrors.agentCategoryId && (
-                                                      <Form.Control.Feedback type="invalid">
-                                                        {validationErrors.agentCategoryId}
-                                                      </Form.Control.Feedback>
-                                                    )}
+                          {validationErrors.agentCategoryId && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.agentCategoryId}
+                            </Form.Control.Feedback>
+                          )}
                         </Form.Group>
                       </Col>
                     </Row>
@@ -1037,10 +1248,12 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter company code"
-                             className={`form-input ${validationErrors.companyCode ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.companyCode ? "is-invalid" : ""
+                            }`}
                             isInvalid={!!validationErrors.companyCode}
                           />
-                           {validationErrors.companyCode && (
+                          {validationErrors.companyCode && (
                             <Form.Control.Feedback type="invalid">
                               {validationErrors.companyCode}
                             </Form.Control.Feedback>
@@ -1059,10 +1272,12 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter agent URL"
-                             className={`form-input ${validationErrors.agentUrl ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.agentUrl ? "is-invalid" : ""
+                            }`}
                             isInvalid={!!validationErrors.agentUrl}
                           />
-                           {validationErrors.agentUrl && (
+                          {validationErrors.agentUrl && (
                             <Form.Control.Feedback type="invalid">
                               {validationErrors.agentUrl}
                             </Form.Control.Feedback>
@@ -1096,10 +1311,12 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter first name"
-                             className={`form-input ${validationErrors.firstName ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.firstName ? "is-invalid" : ""
+                            }`}
                             isInvalid={!!validationErrors.firstName}
                           />
-                           {validationErrors.firstName && (
+                          {validationErrors.firstName && (
                             <Form.Control.Feedback type="invalid">
                               {validationErrors.firstName}
                             </Form.Control.Feedback>
@@ -1118,10 +1335,12 @@ const AgentReg = () => {
                               })
                             }
                             placeholder="Enter last name"
-                             className={`form-input ${validationErrors.lastName ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.lastName ? "is-invalid" : ""
+                            }`}
                             isInvalid={!!validationErrors.lastName}
                           />
-                           {validationErrors.lastName && (
+                          {validationErrors.lastName && (
                             <Form.Control.Feedback type="invalid">
                               {validationErrors.lastName}
                             </Form.Control.Feedback>
@@ -1150,15 +1369,19 @@ const AgentReg = () => {
                                   })
                                 }
                                 placeholder="Enter email"
-                                 className={`form-input ${validationErrors.personalEmail ? 'is-invalid' : ''}`}
+                                className={`form-input ${
+                                  validationErrors.personalEmail
+                                    ? "is-invalid"
+                                    : ""
+                                }`}
                                 isInvalid={!!validationErrors.personalEmail}
                               />
 
-                               {validationErrors.personalEmail && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.personalEmail}
-                            </Form.Control.Feedback>
-                          )}
+                              {validationErrors.personalEmail && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.personalEmail}
+                                </Form.Control.Feedback>
+                              )}
                             </Form.Group>
                           </Col>
                           <Col md={6}>
@@ -1191,15 +1414,19 @@ const AgentReg = () => {
                                   })
                                 }
                                 placeholder="Enter mobile number"
-                                 className={`form-input ${validationErrors.mobileNumber ? 'is-invalid' : ''}`}
+                                className={`form-input ${
+                                  validationErrors.mobileNumber
+                                    ? "is-invalid"
+                                    : ""
+                                }`}
                                 isInvalid={!!validationErrors.mobileNumber}
                               />
 
-                               {validationErrors.mobileNumber && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.mobileNumber}
-                            </Form.Control.Feedback>
-                          )}
+                              {validationErrors.mobileNumber && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.mobileNumber}
+                                </Form.Control.Feedback>
+                              )}
                             </Form.Group>
                           </Col>
                           <Col md={6}>
@@ -1240,27 +1467,27 @@ const AgentReg = () => {
                               <Form.Select
                                 name="countryId"
                                 value={formData.countryId}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    countryId: e.target.value,
-                                  })
-                                }
-                                 className={`form-input ${validationErrors.countryId ? 'is-invalid' : ''}`}
+                                onChange={handleCountryChange} // Use the new handler
+                                className={`form-input ${
+                                  validationErrors.countryId ? "is-invalid" : ""
+                                }`}
                                 isInvalid={!!validationErrors.countryId}
                               >
                                 <option value="">Select country</option>
                                 {countries.map((country) => (
-                                  <option key={country.id} value={country.id}>
+                                  <option
+                                    key={country.id}
+                                    value={String(country.id)}
+                                  >
                                     {country.name}
                                   </option>
                                 ))}
                               </Form.Select>
                               {validationErrors.countryId && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.countryId}
-                            </Form.Control.Feedback>
-                          )}
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.countryId}
+                                </Form.Control.Feedback>
+                              )}
                             </Form.Group>
                           </Col>
                         </Row>
@@ -1278,7 +1505,11 @@ const AgentReg = () => {
                                   })
                                 }
                                 disabled={!formData.countryId}
-                                 className={`form-input ${validationErrors.provinceId ? 'is-invalid' : ''}`}
+                                className={`form-input ${
+                                  validationErrors.provinceId
+                                    ? "is-invalid"
+                                    : ""
+                                }`}
                                 isInvalid={!!validationErrors.provinceId}
                               >
                                 <option value="">Select province/state</option>
@@ -1292,11 +1523,11 @@ const AgentReg = () => {
                                     </option>
                                   ))}
                               </Form.Select>
-                               {validationErrors.provinceId && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.provinceId}
-                            </Form.Control.Feedback>
-                          )}
+                              {validationErrors.provinceId && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.provinceId}
+                                </Form.Control.Feedback>
+                              )}
                             </Form.Group>
                           </Col>
                           <Col md={6}>
@@ -1312,7 +1543,9 @@ const AgentReg = () => {
                                   })
                                 }
                                 disabled={!formData.provinceId}
-                                 className={`form-input ${validationErrors.placeId ? 'is-invalid' : ''}`}
+                                className={`form-input ${
+                                  validationErrors.placeId ? "is-invalid" : ""
+                                }`}
                                 isInvalid={!!validationErrors.placeId}
                               >
                                 <option value="">Select city</option>
@@ -1323,11 +1556,11 @@ const AgentReg = () => {
                                     </option>
                                   ))}
                               </Form.Select>
-                                {validationErrors.placeId && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.placeId}
-                            </Form.Control.Feedback>
-                          )}
+                              {validationErrors.placeId && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.placeId}
+                                </Form.Control.Feedback>
+                              )}
                             </Form.Group>
                           </Col>
                         </Row>
@@ -1345,23 +1578,28 @@ const AgentReg = () => {
                                 })
                               }
                               placeholder="Enter address"
-                               className={`form-input ${validationErrors.address ? 'is-invalid' : ''}`}
+                              className={`form-input ${
+                                validationErrors.address ? "is-invalid" : ""
+                              }`}
                               isInvalid={!!validationErrors.address}
                             />
-                              {validationErrors.address && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.address}
-                            </Form.Control.Feedback>
-                          )}
+                            {validationErrors.address && (
+                              <Form.Control.Feedback type="invalid">
+                                {validationErrors.address}
+                              </Form.Control.Feedback>
+                            )}
                           </Form.Group>
                         </Col>
+
                         {/* Step 4: GST Details (India only) */}
                         {formData.countryId === "1" && (
-                          <div
-                            className={`form-step ${
-                              currentStep === 4 ? "active" : ""
-                            }`}
-                          >
+                          <div className="gstdetails" style={{border: '2px solid #007bff', padding: '15px', margin: '15px 0', borderRadius: '5px'}}>
+                            {/* Debug validation errors */}
+                            <div style={{background: 'yellow', padding: '5px', margin: '5px 0', fontSize: '12px'}}>
+                              <strong>DEBUG:</strong> GSTIN Error: {validationErrors.agentGstIn || 'None'} | 
+                              Classification: {formData.agentClassification || 'None'} | 
+                              Country: {formData.countryId}
+                            </div>
                             <div className="step-header">
                               <h3 className="step-title">
                                 <svg
@@ -1401,6 +1639,7 @@ const AgentReg = () => {
                                     }
                                     className="form-input"
                                   >
+                                    <option value="">Select classification</option>
                                     <option value="registered">
                                       Registered
                                     </option>
@@ -1414,7 +1653,7 @@ const AgentReg = () => {
                               <Col md={6}>
                                 <Form.Group>
                                   <Form.Label className="form-label">
-                                    GSTIN <span className="required">*</span>
+                                    GSTIN <span className="text-danger">*</span>
                                   </Form.Label>
                                   <Form.Control
                                     type="text"
@@ -1438,6 +1677,12 @@ const AgentReg = () => {
                                       {validationErrors.agentGstIn}
                                     </Form.Control.Feedback>
                                   )}
+                                  {/* Debug info */}
+                                  {console.log("GSTIN validation error:", validationErrors.agentGstIn)}
+                                  {/* Force show error for testing */}
+                                  <div style={{color: 'red', fontSize: '12px', marginTop: '5px'}}>
+                                    TEST: {validationErrors.agentGstIn || 'No error'}
+                                  </div>
                                 </Form.Group>
                               </Col>
 
@@ -1552,7 +1797,9 @@ const AgentReg = () => {
                           <Form.Label>Markup</Form.Label>
                           <Form.Select
                             value={formData.markup}
-                             className={`form-input ${validationErrors.markup ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.markup ? "is-invalid" : ""
+                            }`}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
@@ -1568,7 +1815,7 @@ const AgentReg = () => {
                                 </option>
                               ))}
                           </Form.Select>
-                           {validationErrors.markup && (
+                          {validationErrors.markup && (
                             <Form.Control.Feedback type="invalid">
                               {validationErrors.markup}
                             </Form.Control.Feedback>
@@ -1578,7 +1825,9 @@ const AgentReg = () => {
                           <Form.Label>Currency</Form.Label>
                           <Form.Select
                             value={formData.currency}
-                             className={`form-input ${validationErrors.currency ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.currency ? "is-invalid" : ""
+                            }`}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
@@ -1597,7 +1846,7 @@ const AgentReg = () => {
                                 </option>
                               ))}
                           </Form.Select>
-                           {validationErrors.currency && (
+                          {validationErrors.currency && (
                             <Form.Control.Feedback type="invalid">
                               {validationErrors.currency}
                             </Form.Control.Feedback>
@@ -1607,7 +1856,9 @@ const AgentReg = () => {
                           <Form.Label>Status</Form.Label>
                           <Form.Select
                             value={formData.status}
-                             className={`form-input ${validationErrors.status ? 'is-invalid' : ''}`}
+                            className={`form-input ${
+                              validationErrors.status ? "is-invalid" : ""
+                            }`}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
@@ -1619,7 +1870,7 @@ const AgentReg = () => {
                             <option value="Active">Active</option>
                             <option value="Inactive">Inactive</option>
                           </Form.Select>
-                           {validationErrors.status && (
+                          {validationErrors.status && (
                             <Form.Control.Feedback type="invalid">
                               {validationErrors.status}
                             </Form.Control.Feedback>
@@ -1730,7 +1981,12 @@ const AgentReg = () => {
           </Modal>
 
           {/* Credit Limit Modal */}
-          <Modal show={showCreditLimitModal} onHide={closeCreditLimitModal} centered size="md">
+          <Modal
+            show={showCreditLimitModal}
+            onHide={closeCreditLimitModal}
+            centered
+            size="md"
+          >
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
                 Manage Credit Limit - {editing?.companyName}
@@ -1741,7 +1997,9 @@ const AgentReg = () => {
                 <Row>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label><span className="text-danger">*</span>Add Credit Limit </Form.Label>
+                      <Form.Label>
+                        <span className="text-danger">*</span>Add Credit Limit{" "}
+                      </Form.Label>
                       <Form.Control
                         type="number"
                         name="addCreditLimit"
@@ -1764,7 +2022,9 @@ const AgentReg = () => {
                   </Col>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label><span className="text-danger">*</span>Remarks </Form.Label>
+                      <Form.Label>
+                        <span className="text-danger">*</span>Remarks{" "}
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         name="remarks"
@@ -1784,9 +2044,9 @@ const AgentReg = () => {
                     </Form.Group>
                   </Col>
                 </Row>
-                
+
                 <hr className="my-3" />
-                
+
                 <Row>
                   <Col md={4}>
                     <Form.Group className="mb-3">
