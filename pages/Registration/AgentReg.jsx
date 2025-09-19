@@ -21,7 +21,9 @@ import {
   FaEye,
   FaSignInAlt,
   FaCreditCard,
+  FaBan,
 } from "react-icons/fa";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const AgentReg = () => {
   const [items, setItems] = useState([]);
@@ -77,12 +79,17 @@ const AgentReg = () => {
     username: "",
     password: "",
     repassword: "",
+    userroles: "",
   });
   const [loginErrors, setLoginErrors] = useState({
     username: "",
     password: "",
     repassword: "",
+    userroles: "",
   });
+
+  
+
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
   const [creditLimitFormData, setCreditLimitFormData] = useState({
     addCreditLimit: "",
@@ -95,6 +102,24 @@ const AgentReg = () => {
     addCreditLimit: "",
     remarks: "",
   });
+  const [showExclusionModal, setShowExclusionModal] = useState(false);
+  const [exclusionFormData, setExclusionFormData] = useState({
+    nationality: "",
+    externalApi: "",
+  });
+  const [exclusionErrors, setExclusionErrors] = useState({
+    nationality: "",
+    externalApi: "",
+  });
+
+  // Static data for external APIs
+  const externalApis = [
+    { code: "IWTX", name: "IWTX" },
+    { code: "x2", name: "X2" },
+    { code: "jumeirah", name: "Jumeirah" },
+    { code: "darina", name: "Darina" },
+    { code: "ratehawk", name: "RateHawk" },
+  ];
 
   const nextId = useMemo(
     () => Math.max(0, ...items.map((i) => i.id)) + 1,
@@ -478,7 +503,14 @@ const AgentReg = () => {
 
   // Validation function
   const validateAgentForm = (data) => {
-    console.log("Validation - data.countryId::", data.countryId, "agentClassification:", data.agentClassification, "agentGstIn:", data.agentGstIn);
+    console.log(
+      "Validation - data.countryId::",
+      data.countryId,
+      "agentClassification:",
+      data.agentClassification,
+      "agentGstIn:",
+      data.agentGstIn
+    );
     const newErrors = {};
 
     // Helper function to safely get string value
@@ -523,8 +555,13 @@ const AgentReg = () => {
     if (String(data.countryId) === "1") {
       console.log("GST validation running - country is India");
       const gstInValue = getStringValue(data.agentGstIn);
-      console.log("GST validation - gstInValue:", gstInValue, "agentClassification:", data.agentClassification);
-      
+      console.log(
+        "GST validation - gstInValue:",
+        gstInValue,
+        "agentClassification:",
+        data.agentClassification
+      );
+
       if (data.agentClassification === "registered" && !gstInValue) {
         console.log("Adding GSTIN required error");
         newErrors.agentGstIn = "GSTIN is required for registered agencies";
@@ -539,7 +576,10 @@ const AgentReg = () => {
       )
         newErrors.agentCorrespondmail = "Invalid correspondence email format";
     } else {
-      console.log("GST validation skipped - country is not India:", data.countryId);
+      console.log(
+        "GST validation skipped - country is not India:",
+        data.countryId
+      );
     }
 
     console.log("Final validation errors:", newErrors);
@@ -985,16 +1025,16 @@ const AgentReg = () => {
   // Handle GSTIN input validation
   const handleGstinChange = (e) => {
     const value = e.target.value;
-    
+
     // Check if Agent Classification is selected first
     if (!formData.agentClassification) {
       setGstinError("Please select Agent Classification first.");
       return; // Don't update the form data
     }
-    
+
     // Clear the error if classification is selected
     setGstinError("");
-    
+
     // Update the form data
     setFormData({
       ...formData,
@@ -1005,16 +1045,120 @@ const AgentReg = () => {
   // Handle Agent Classification change
   const handleAgentClassificationChange = (e) => {
     const value = e.target.value;
-    
+
     setFormData({
       ...formData,
       agentClassification: value,
     });
-    
+
     // Clear GSTIN error when classification is selected
     if (value) {
       setGstinError("");
     }
+  };
+
+  // Handle Agent Exclude function
+  const handleAgentExclude = (item) => {
+    console.log("Exclude agent:", item.companyName);
+    console.log("item:", item);
+    setEditing(item);
+    setExclusionFormData({
+      nationality: "",
+      externalApi: "",
+    });
+    setExclusionErrors({
+      nationality: "",
+      externalApi: "",
+    });
+    setShowExclusionModal(true);
+  };
+
+  // Handle exclusion form change
+  const handleExclusionChange = (e) => {
+    const { name, value } = e.target;
+    setExclusionFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+
+    // Clear error when user starts typing
+    if (exclusionErrors[name]) {
+      setExclusionErrors((prev) => ({
+        ...prev,
+        [name]: "",
+      }));
+    }
+  };
+
+  // Validate exclusion form
+  const validateExclusionForm = (data) => {
+    const newErrors = {};
+
+    if (!data.nationality.trim()) {
+      newErrors.nationality = "Nationality is required";
+    }
+
+    if (!data.externalApi.trim()) {
+      newErrors.externalApi = "External API is required";
+    }
+
+    return newErrors;
+  };
+
+  // Handle exclusion form submit
+  const handleExclusionSubmit = async () => {
+    const errors = validateExclusionForm(exclusionFormData);
+    if (Object.keys(errors).length > 0) {
+      setExclusionErrors(errors);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const exclusionPayload = {
+        agentId: editing.id,
+        nationality: exclusionFormData.nationality,
+        apiCode: exclusionFormData.externalApi,
+      };
+
+      console.log("Exclusion payload:", exclusionPayload);
+
+      const response = await axiosInstance.post(
+        "/api/agent-api-exclusion/exclude",
+        exclusionPayload
+      );
+
+      if (response.data) {
+        toast.success("Agent exclusion added successfully!");
+        setExclusionErrors({});
+        closeExclusionModal();
+        // Refresh the agent list
+        await fetchAgentList(page, search);
+      }
+    } catch (error) {
+      console.error("Exclusion submission failed:", error);
+      toast.error(
+        `Failed to add exclusion: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Close exclusion modal
+  const closeExclusionModal = () => {
+    setShowExclusionModal(false);
+    setExclusionFormData({
+      nationality: "",
+      externalApi: "",
+    });
+    setExclusionErrors({
+      nationality: "",
+      externalApi: "",
+    });
   };
 
   return (
@@ -1062,34 +1206,43 @@ const AgentReg = () => {
                       <td>
                         <div className="d-flex gap-2">
                           <FaEdit
-                            className="text-primary"
+                            className="text-primary edit"
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => openEdit(item)}
                             title="Edit"
                           />
                           <FaEye
-                            className="text-info"
+                            className="text-info view"
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => handleView(item)}
                             title="View"
                           />
-                          <FaSignInAlt
-                            className="text-success"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => handleLogin(item)}
-                            title="Login"
-                          />
+
                           <FaCreditCard
-                            className="text-warning"
+                            className="text-warning creditlimit"
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => handleCreditLimit(item)}
                             title="Credit Limit"
                           />
+
+                          <FaBan
+                            className="text-secondary agentexclude"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleAgentExclude(item)}
+                            title="Agent Exclude"
+                          />
+
                           <FaTrash
-                            className="text-danger"
+                            className="text-danger delete"
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => handleDelete(item)}
                             title="Delete"
+                          />
+                          <FaSignInAlt
+                            className="text-success login"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleLogin(item)}
+                            title="Login"
                           />
                         </div>
                       </td>
@@ -1630,8 +1783,16 @@ const AgentReg = () => {
 
                         {/* Step 4: GST Details (India only) */}
                         {formData.countryId === "1" && (
-                          <div className="gstdetails" style={{border: '2px solid #007bff', padding: '15px', margin: '15px 0', borderRadius: '5px'}}>
-                           <div className="step-header">
+                          <div
+                            className="gstdetails"
+                            style={{
+                              border: "2px solid #007bff",
+                              padding: "15px",
+                              margin: "15px 0",
+                              borderRadius: "5px",
+                            }}
+                          >
+                            <div className="step-header">
                               <h3 className="step-title">
                                 <svg
                                   width="24"
@@ -1665,7 +1826,9 @@ const AgentReg = () => {
                                     onChange={handleAgentClassificationChange}
                                     className="form-input"
                                   >
-                                    <option value="">Select classification</option>
+                                    <option value="">
+                                      Select classification
+                                    </option>
                                     <option value="registered">
                                       Registered
                                     </option>
@@ -1688,17 +1851,25 @@ const AgentReg = () => {
                                     onChange={handleGstinChange}
                                     placeholder="Enter 15-digit GSTIN"
                                     className={`form-input ${
-                                      validationErrors.agentGstIn || gstinError ? "is-invalid" : ""
+                                      validationErrors.agentGstIn || gstinError
+                                        ? "is-invalid"
+                                        : ""
                                     }`}
-                                    isInvalid={!!(validationErrors.agentGstIn || gstinError)}
+                                    isInvalid={
+                                      !!(
+                                        validationErrors.agentGstIn ||
+                                        gstinError
+                                      )
+                                    }
                                     maxLength={15}
                                   />
-                                  {(validationErrors.agentGstIn || gstinError) && (
+                                  {(validationErrors.agentGstIn ||
+                                    gstinError) && (
                                     <Form.Control.Feedback type="invalid">
-                                      {gstinError || validationErrors.agentGstIn}
+                                      {gstinError ||
+                                        validationErrors.agentGstIn}
                                     </Form.Control.Feedback>
                                   )}
-                            
                                 </Form.Group>
                               </Col>
 
@@ -1745,7 +1916,9 @@ const AgentReg = () => {
                                         ? "is-invalid"
                                         : ""
                                     }`}
-                                    isInvalid={!!validationErrors.agentCorrespondmail}
+                                    isInvalid={
+                                      !!validationErrors.agentCorrespondmail
+                                    }
                                   />
                                   {validationErrors.agentCorrespondmail && (
                                     <Form.Control.Feedback type="invalid">
@@ -1984,6 +2157,32 @@ const AgentReg = () => {
                     {loginErrors.repassword}
                   </Form.Control.Feedback>
                 </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>User Roles</Form.Label>
+                  <Form.Select
+                    type="password"
+                    name="repassword"
+                    value={loginFormData.userroles}
+                    onChange={handleLoginChange}
+                    isInvalid={!!loginErrors.userroles}
+                  >
+                    <option value="">Select Roles</option>
+                    {agentCategoryies.map((agent) => (
+                      <option
+                        key={agent.agentCategoryId}
+                        value={agent.agentCategoryId}
+                      >
+                        {agent.name}
+                      </option>
+                    ))}
+                    {console.log("user roles::" , roles)}
+                  </Form.Select>
+                  {validationErrors.agentCategoryId && (
+                    <Form.Control.Feedback type="invalid">
+                      {validationErrors.agentCategoryId}
+                    </Form.Control.Feedback>
+                  )}
+                </Form.Group>
               </Form>
             </Modal.Body>
             <Modal.Footer>
@@ -2124,6 +2323,122 @@ const AgentReg = () => {
                   </>
                 ) : (
                   "Update Credit Limit"
+                )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Agent Exclusion Modal */}
+          <Modal
+            show={showExclusionModal}
+            onHide={closeExclusionModal}
+            centered
+            size="md"
+          >
+            <Modal.Header closeButton={!isLoading}>
+              <Modal.Title>
+                Agent Exclusion - {editing?.companyName}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form>
+                <Row>
+                  <Col md={12}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>
+                        <span className="text-danger">*</span>Exclude
+                        Nationality
+                      </Form.Label>
+                      <Form.Select
+                        name="nationality"
+                        value={exclusionFormData.nationality}
+                        onChange={handleExclusionChange}
+                        className={`form-input ${
+                          exclusionErrors.nationality ? "is-invalid" : ""
+                        }`}
+                        isInvalid={!!exclusionErrors.nationality}
+                      >
+                        <option value="">Select nationality to exclude</option>
+                        {countries.map((country) => (
+                          <option key={country.id} value={String(country.id)}>
+                            {country.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {exclusionErrors.nationality && (
+                        <Form.Control.Feedback type="invalid">
+                          {exclusionErrors.nationality}
+                        </Form.Control.Feedback>
+                      )}
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Row>
+                  <Col md={12}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>
+                        <span className="text-danger">*</span>External API
+                      </Form.Label>
+                      <Form.Select
+                        name="externalApi"
+                        value={exclusionFormData.externalApi}
+                        onChange={handleExclusionChange}
+                        className={`form-input ${
+                          exclusionErrors.externalApi ? "is-invalid" : ""
+                        }`}
+                        isInvalid={!!exclusionErrors.externalApi}
+                      >
+                        <option value="">Select external API to exclude</option>
+                        {externalApis.map((api) => (
+                          <option key={api.code} value={api.code}>
+                            {api.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {exclusionErrors.externalApi && (
+                        <Form.Control.Feedback type="invalid">
+                          {exclusionErrors.externalApi}
+                        </Form.Control.Feedback>
+                      )}
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <div className="alert alert-info">
+                  <small>
+                    <strong>Note:</strong> This will exclude the selected
+                    nationality and external API for this agent. The agent will
+                    not be able to access bookings through the selected API for
+                    the specified nationality.
+                  </small>
+                </div>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={closeExclusionModal}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleExclusionSubmit}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit Exclusion"
                 )}
               </Button>
             </Modal.Footer>
