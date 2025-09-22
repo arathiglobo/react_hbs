@@ -74,12 +74,13 @@ const AgentReg = () => {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showRolesDropdown, setShowRolesDropdown] = useState(false);
   const [rolesList, setUserRolesList] = useState([]);
   const [loginFormData, setLoginFormData] = useState({
     username: "",
     password: "",
     repassword: "",
-    userroles: "",
+    userroles: [], // Changed to array for multiple selection
   });
   const [loginErrors, setLoginErrors] = useState({
     username: "",
@@ -233,7 +234,7 @@ const AgentReg = () => {
 
   const userRolesList = async () => {
     try {
-      const rolesRes = await axiosInstance.get("/api/roles");
+      const rolesRes = await axiosInstance.get("/api/userRoles");
       console.log("rolesRes::", rolesRes);
       setUserRolesList(rolesRes.data);
     } catch (error) {
@@ -510,6 +511,20 @@ const AgentReg = () => {
     currencyList();
   }, []);
 
+  // Close roles dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showRolesDropdown && !event.target.closest('.position-relative')) {
+        setShowRolesDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showRolesDropdown]);
+
   // Validation function
   const validateAgentForm = (data) => {
     console.log(
@@ -779,13 +794,16 @@ const AgentReg = () => {
     setShowModal(true);
   };
 
-  const handleLogin = (item) => {
+  const handleLogin = async (item) => {
+    console.log("handle login submit::", item);
     setEditing(item);
+    
+    // Reset form data and errors first
     setLoginFormData({
       username: "",
       password: "",
       repassword: "",
-      userroles: "",
+      userroles: [],
     });
     setLoginErrors({
       username: "",
@@ -793,6 +811,24 @@ const AgentReg = () => {
       repassword: "",
       userroles: "",
     });
+
+    // Fetch existing login credentials for this agent
+    try {
+      const response = await axiosInstance.get(`/auth/user/${item.id}`);
+      if (response.data && response.data.length > 0) {
+        const userData = response.data[0]; // Get the first user record
+        setLoginFormData({
+          username: userData.userName || "",
+          password: userData.password || "", // Show existing password
+          repassword: userData.password || "", // Show existing password
+          userroles: userData.userRoleIds ? userData.userRoleIds : [],
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch existing login credentials:", error);
+      // If no existing credentials found, form will remain empty (which is correct for new login)
+    }
+
     setShowLoginModal(true);
   };
 
@@ -837,8 +873,8 @@ const AgentReg = () => {
       isValid = false;
     }
 
-    if (!loginFormData.userroles) {
-      errors.userroles = "User role is required";
+    if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
+      errors.userroles = "At least one user role is required";
       isValid = false;
     }
 
@@ -853,10 +889,10 @@ const AgentReg = () => {
 
         const loginPayload = {
           userId: editing.id,
-          userTypeId: parseInt(loginFormData.userroles),
+          userTypeId: loginFormData.userroles[0], // Use first role as primary type
           userName: loginFormData.username,
           password: loginFormData.password,
-          userRoleIds: [parseInt(loginFormData.userroles)],
+          userRoleIds: loginFormData.userroles, // Send array of all selected roles
         };
 
         console.log(
@@ -900,13 +936,31 @@ const AgentReg = () => {
     }));
   };
 
+  const toggleRole = (roleId) => {
+    setLoginFormData((prev) => ({
+      ...prev,
+      userroles: prev.userroles.includes(roleId)
+        ? prev.userroles.filter(id => id !== roleId)
+        : [...prev.userroles, roleId]
+    }));
+  };
+
+  const removeRole = (roleId) => {
+    setLoginFormData((prev) => ({
+      ...prev,
+      userroles: prev.userroles.filter(id => id !== roleId)
+    }));
+  };
+ 
+
   const closeLoginModal = () => {
     setShowLoginModal(false);
+    setShowRolesDropdown(false);
     setLoginFormData({
       username: "",
       password: "",
       repassword: "",
-      userroles: "",
+      userroles: [],
     });
     setLoginErrors({
       username: "",
@@ -2169,14 +2223,22 @@ const AgentReg = () => {
             </Modal.Footer>
           </Modal>
 
-          <Modal show={showLoginModal} onHide={closeLoginModal} centered>
+          <Modal show={showLoginModal} onHide={closeLoginModal}  centered>
             <Modal.Header closeButton>
               <Modal.Title>
-                Register Agent {editing?.companyName} here..
+                {loginFormData.username ? 'Update' : 'Create'} Login for Agent: {editing?.companyName || editing?.agentName}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              <Form>
+              {loginFormData.username && (
+                <div className="alert alert-info mb-3">
+                  <small>
+                    <i className="fas fa-info-circle me-2"></i>
+                    Existing login credentials found. You can update the username and password.
+                  </small>
+                </div>
+              )}
+              <Form className="loginForm">
                 <Form.Group className="mb-3">
                   <Form.Label>Username</Form.Label>
                   <Form.Control
@@ -2187,6 +2249,7 @@ const AgentReg = () => {
                     isInvalid={!!loginErrors.username}
                     placeholder="Enter username"
                   />
+                 
                   <Form.Control.Feedback type="invalid">
                     {loginErrors.username}
                   </Form.Control.Feedback>
@@ -2221,23 +2284,99 @@ const AgentReg = () => {
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>User Roles</Form.Label>
-                  <Form.Select
-                    name="userroles"
-                    value={loginFormData.userroles}
-                    onChange={handleLoginChange}
-                    isInvalid={!!loginErrors.userroles}
-                  >
-                    <option value="">Select Roles</option>
-                    {rolesList.map((roles) => (
-                      <option key={roles.id} value={roles.id}>
-                        {roles.roleName}
-                      </option>
-                    ))}
-                  </Form.Select>
+                  <div className="position-relative">
+                    <div 
+                      className="form-control d-flex flex-wrap align-items-center" 
+                      style={{ minHeight: '38px', padding: '4px 8px', cursor: 'pointer' }}
+                      onClick={() => {
+                        console.log('Clicking dropdown, current state:', showRolesDropdown);
+                        setShowRolesDropdown(!showRolesDropdown);
+                      }}
+                    >
+                      {console.log("rolesList length:::" , rolesList.length)}
+                      {loginFormData.userroles.length > 0 ? (
+                        loginFormData.userroles.map((roleId) => {
+                          const role = rolesList.find(r => r.id === roleId);
+                          return role ? (
+                            <span 
+                              key={roleId}
+                              className="badge bg-primary me-1 mb-1 d-flex align-items-center"
+                              style={{ fontSize: '12px' }}
+                            >
+                              {role.roleName}
+                              <button
+                                type="button"
+                                className="btn-close btn-close-white ms-1"
+                                style={{ fontSize: '8px' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeRole(roleId);
+                                }}
+                              ></button>
+                            </span>
+                          ) : null;
+                        })
+                      ) : (
+                        <span className="text-muted">Select roles...</span>
+                      )}
+                    </div>
+                    
+                    {showRolesDropdown && (
+                      <div 
+                        className="position-absolute w-100 bg-white border rounded shadow-lg"
+                        style={{ 
+                          bottom: '100%', 
+                          left: 0, 
+                          zIndex: 9999,
+                          maxHeight: '200px',
+                          overflowY: 'auto',
+                          minHeight: '120px',
+                          border: '2px solid #007bff',
+                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                          marginBottom: '2px'
+                        }}
+                      >
+                        {console.log('Rendering dropdown with rolesList:', rolesList)}
+                        {rolesList.map((role) => {
+                          const isSelected = loginFormData.userroles.includes(role.id);
+                          console.log('Rendering role:', role.id, role.roleName);
+                          return (
+                            <div
+                              key={role.id}
+                              className={`px-3 py-2 ${isSelected ? 'bg-light text-muted' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleRole(role.id);
+                              }}
+                              style={{ 
+                                cursor: 'pointer',
+                                borderBottom: '1px solid #eee'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) {
+                                  e.target.style.backgroundColor = '#f8f9fa';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) {
+                                  e.target.style.backgroundColor = '';
+                                }
+                              }}
+                            >
+                              {role.roleName}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {/* <Form.Text className="text-muted">
+                    Click to select multiple roles (Dropdown state: {showRolesDropdown ? 'Open' : 'Closed'})
+                  </Form.Text> */}
                   {loginErrors.userroles && (
-                    <Form.Control.Feedback type="invalid">
+                    <div className="text-danger small mt-1">
                       {loginErrors.userroles}
-                    </Form.Control.Feedback>
+                    </div>
                   )}
                 </Form.Group>
               </Form>
