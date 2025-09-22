@@ -81,6 +81,8 @@ const AgentReg = () => {
   const [showRolesDropdown, setShowRolesDropdown] = useState(false);
   const [rolesList, setUserRolesList] = useState([]);
   const [loginModalKey, setLoginModalKey] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRePassword, setShowRePassword] = useState(false);
   const [loginFormData, setLoginFormData] = useState({
     username: "",
     password: "",
@@ -848,10 +850,7 @@ const AgentReg = () => {
   
   setEditing(item);
 
-  // AGGRESSIVE: Force completely empty form - NO API CALLS
-  console.log("FORCING COMPLETELY EMPTY FORM - NO DATA LOADING");
-  
-  // Reset ALL states to empty
+  // Reset form data first
   setLoginFormData({
     username: "",
     password: "",
@@ -867,17 +866,42 @@ const AgentReg = () => {
   });
   
   setShowRolesDropdown(false);
+  setShowPassword(false);
+  setShowRePassword(false);
+  
+  // Fetch existing login data for this agent
+  try {
+    console.log("Fetching existing login data for agent:", item.id);
+    const response = await axiosInstance.get(`/auth/checkRegisteredUserExist/${item.id}`);
+    
+    if (response.data) {
+      console.log("Existing login data found:", response.data);
+      
+      // Populate form with existing data
+      // Note: userName field appears to contain password hash based on response format
+      setLoginFormData({
+        username: "", // No username field in response, keeping empty
+        password: response.data.userName || "", // userName contains the password hash
+        repassword: response.data.userName || "", // Same for repassword field
+        userroles: [], // You may need to fetch roles separately if needed
+      });
+      
+      console.log("Form populated with existing data");
+    } else {
+      console.log("No existing login data found for agent:", item.id);
+    }
+  } catch (error) {
+    console.log("No existing login data found or error fetching:", error);
+    // This is normal for agents with no existing login credentials
+  }
   
   // Force modal re-render with new key
   setLoginModalKey(prev => prev + 1);
   
-  console.log("Form data set to empty values");
-  console.log("About to show modal with empty fields");
-  
-  // Show modal immediately
+  // Show modal
   setShowLoginModal(true);
   
-  console.log("Modal should now show with empty fields");
+  console.log("Modal opened with data loaded");
 };
 
 const handleLoginSubmit = async () => {
@@ -934,13 +958,16 @@ const handleLoginSubmit = async () => {
       console.log("currentActiveRole::", activeUserRole);
       console.log("roleslist::", rolesList);
 
-      let activeRoleObj = rolesList.find((role) => role.roleName === activeUserRole);
+      let activeRoleObj = rolesList.find((role) => role.roleName === "AGENT");
+
+      let loginPayload = null;
 
       if (activeRoleObj) {
         console.log("Active role exists in rolesList:", activeUserRole);
         console.log("activeRoleObj:", activeRoleObj);
+        
 
-        const loginPayload = {
+        loginPayload = {
           userId: editing.id,
           userTypeId: activeRoleObj.id,
           userName: loginFormData.username,
@@ -956,13 +983,16 @@ const handleLoginSubmit = async () => {
         console.log("Active role not found in rolesList");
       }
 
-      const response = await axiosInstance.post("/auth/registerr", loginPayload);
+      const response = await axiosInstance.post("/auth/register", loginPayload);
+      console.log("login register success::" , response)
 
       if (response.data) {
         toast.success("Login credentials saved successfully!");
         setLoginErrors({});
         closeLoginModal();
         await fetchAgentList(page, search);
+      }else{
+        toast.error("Something went wrong!!Failed to save login credentials.");
       }
     } catch (error) {
       console.error("Login submission failed:", error);
@@ -997,6 +1027,9 @@ const handleLoginSubmit = async () => {
         ? prev.userroles.filter((id) => id !== roleId)
         : [...prev.userroles, roleId],
     }));
+
+    // Close dropdown after selecting a role
+    setShowRolesDropdown(false);
   };
 
   const removeRole = (roleId) => {
@@ -1006,9 +1039,20 @@ const handleLoginSubmit = async () => {
     }));
   };
 
+  // Toggle password visibility
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
+
+  const toggleRePasswordVisibility = () => {
+    setShowRePassword(!showRePassword);
+  };
+
   const closeLoginModal = () => {
     setShowLoginModal(false);
     setShowRolesDropdown(false);
+    setShowPassword(false);
+    setShowRePassword(false);
     setLoginModalKey(prev => prev + 1); // Reset modal key
     setLoginFormData({
       username: "",
@@ -2463,32 +2507,74 @@ const handleLoginSubmit = async () => {
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Password</Form.Label>
-                  <Form.Control
-                    type="password"
-                    name="login-password"
-                    value={loginFormData.password}
-                    onChange={handleLoginChange}
-                    isInvalid={!!loginErrors.password}
-                    placeholder="Enter password"
-                    autoComplete="new-password"
-                    autoFill="off"
-                  />
+                  <div className="position-relative">
+                    <Form.Control
+                      type={showPassword ? "text" : "password"}
+                      name="login-password"
+                      value={loginFormData.password}
+                      onChange={handleLoginChange}
+                      isInvalid={!!loginErrors.password}
+                      placeholder="Enter password"
+                      autoComplete="new-password"
+                      autoFill="off"
+                      style={{ paddingRight: "40px" }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#6c757d",
+                        padding: "0 12px",
+                        zIndex: 10,
+                      }}
+                      onClick={togglePasswordVisibility}
+                    >
+                      {showPassword ? (
+                        <i className="fas fa-eye-slash"></i>
+                      ) : (
+                        <i className="fas fa-eye"></i>
+                      )}
+                    </button>
+                  </div>
                   <Form.Control.Feedback type="invalid">
                     {loginErrors.password}
                   </Form.Control.Feedback>
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Re-enter Password</Form.Label>
-                  <Form.Control
-                    type="password"
-                    name="login-repassword"
-                    value={loginFormData.repassword}
-                    onChange={handleLoginChange}
-                    isInvalid={!!loginErrors.repassword}
-                    placeholder="Re-enter password"
-                    autoComplete="new-password"
-                    autoFill="off"
-                  />
+                  <div className="position-relative">
+                    <Form.Control
+                      type={showRePassword ? "text" : "password"}
+                      name="login-repassword"
+                      value={loginFormData.repassword}
+                      onChange={handleLoginChange}
+                      isInvalid={!!loginErrors.repassword}
+                      placeholder="Re-enter password"
+                      autoComplete="new-password"
+                      autoFill="off"
+                      style={{ paddingRight: "40px" }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#6c757d",
+                        padding: "0 12px",
+                        zIndex: 10,
+                      }}
+                      onClick={toggleRePasswordVisibility}
+                    >
+                      {showRePassword ? (
+                        <i className="fas fa-eye-slash"></i>
+                      ) : (
+                        <i className="fas fa-eye"></i>
+                      )}
+                    </button>
+                  </div>
                   <Form.Control.Feedback type="invalid">
                     {loginErrors.repassword}
                   </Form.Control.Feedback>
