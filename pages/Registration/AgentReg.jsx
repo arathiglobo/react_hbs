@@ -109,12 +109,13 @@ const AgentReg = () => {
   const [showExclusionModal, setShowExclusionModal] = useState(false);
   const [exclusionFormData, setExclusionFormData] = useState({
     nationality: "",
-    externalApi: "",
+    externalApi: [], // Changed to array for multiple selection
   });
   const [exclusionErrors, setExclusionErrors] = useState({
     nationality: "",
     externalApi: "",
   });
+  const [showApiDropdown, setShowApiDropdown] = useState(false);
 
   // Static data for external APIs
   const externalApis = [
@@ -537,6 +538,20 @@ const AgentReg = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showRolesDropdown]);
+
+  // Close API dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showApiDropdown && !event.target.closest(".api-dropdown-container")) {
+        setShowApiDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showApiDropdown]);
 
   // Force reset form data when modal opens
   useEffect(() => {
@@ -1219,18 +1234,43 @@ const handleLoginSubmit = async () => {
   };
 
   // Handle Agent Exclude function
-  const handleAgentExclude = (item) => {
+  const handleAgentExclude = async (item) => {
     console.log("Exclude agent:", item.companyName);
     console.log("item:", item);
     setEditing(item);
+    
+    // Reset form data first
     setExclusionFormData({
       nationality: "",
-      externalApi: "",
+      externalApi: [],
     });
     setExclusionErrors({
       nationality: "",
       externalApi: "",
     });
+    
+    // Fetch existing exclusions for this agent
+    try {
+      console.log("Fetching existing exclusions for agent:", item.id);
+      const response = await axiosInstance.get(`/api/agent-api-exclusion/agent/${item.id}`);
+      
+      if (response.data && Array.isArray(response.data)) {
+        // Extract API codes from existing exclusions
+        const existingApiCodes = response.data.map(exclusion => exclusion.apiCode).filter(Boolean);
+        console.log("Existing API exclusions found:", existingApiCodes);
+        
+        setExclusionFormData(prev => ({
+          ...prev,
+          externalApi: existingApiCodes,
+        }));
+      } else {
+        console.log("No existing exclusions found for agent:", item.id);
+      }
+    } catch (error) {
+      console.log("No existing exclusions found or error fetching:", error);
+      // This is normal for agents with no existing exclusions
+    }
+    
     setShowExclusionModal(true);
   };
 
@@ -1251,16 +1291,55 @@ const handleLoginSubmit = async () => {
     }
   };
 
+  // Handle API multi-select functionality
+  const toggleApi = (apiCode) => {
+    setExclusionFormData((prev) => ({
+      ...prev,
+      externalApi: prev.externalApi.includes(apiCode)
+        ? prev.externalApi.filter(code => code !== apiCode)
+        : [...prev.externalApi, apiCode]
+    }));
+
+    // Clear error when user selects an API
+    if (exclusionErrors.externalApi) {
+      setExclusionErrors((prev) => ({
+        ...prev,
+        externalApi: "",
+      }));
+    }
+
+    // Close dropdown after selecting an API
+    setShowApiDropdown(false);
+  };
+
+  const removeApi = async (apiCode) => {
+    // Remove from form data
+    setExclusionFormData((prev) => ({
+      ...prev,
+      externalApi: prev.externalApi.filter(code => code !== apiCode)
+    }));
+
+    // Also remove from backend if it exists
+    try {
+      console.log("Removing exclusion for API:", apiCode);
+      await axiosInstance.delete(`/api/agent-api-exclusion/agent/${editing.id}/api/${apiCode}`);
+      console.log("Exclusion removed successfully");
+    } catch (error) {
+      console.log("Error removing exclusion or exclusion doesn't exist:", error);
+      // This is normal if the exclusion doesn't exist in the backend
+    }
+  };
+
   // Validate exclusion form
   const validateExclusionForm = (data) => {
     const newErrors = {};
 
-    if (!data.nationality.trim()) {
-      newErrors.nationality = "Nationality is required";
-    }
+    // if (!data.nationality.trim()) {
+    //   newErrors.nationality = "Nationality is required";
+    // }
 
-    if (!data.externalApi.trim()) {
-      newErrors.externalApi = "External API is required";
+    if (!data.externalApi || data.externalApi.length === 0) {
+      newErrors.externalApi = "At least one External API is required";
     }
 
     return newErrors;
@@ -1277,21 +1356,52 @@ const handleLoginSubmit = async () => {
     try {
       setIsLoading(true);
 
-      const exclusionPayload = {
-        agentId: editing.id,
-        nationality: exclusionFormData.nationality,
-        apiCode: exclusionFormData.externalApi,
-      };
+      // First, fetch existing exclusions to avoid duplicates
+      let existingApiCodes = [];
+      try {
+        const existingResponse = await axiosInstance.get(`/api/agent-api-exclusion/agent/${editing.id}`);
+        if (existingResponse.data && Array.isArray(existingResponse.data)) {
+          existingApiCodes = existingResponse.data.map(exclusion => exclusion.apiCode).filter(Boolean);
+        }
+      } catch (error) {
+        console.log("No existing exclusions found");
+      }
 
-      console.log("Exclusion payload:", exclusionPayload);
+      // Filter out APIs that are already excluded
+      const newApiCodes = exclusionFormData.externalApi.filter(apiCode => !existingApiCodes.includes(apiCode));
+      
+      if (newApiCodes.length === 0) {
+        toast.info("All selected APIs are already excluded for this agent.");
+        setIsLoading(false);
+        return;
+      }
 
-      const response = await axiosInstance.post(
-        "/api/agent-api-exclusion/exclude",
-        exclusionPayload
-      );
+      console.log("Adding new exclusions:", newApiCodes);
+      console.log("Already excluded:", existingApiCodes);
 
-      if (response.data) {
-        toast.success("Agent exclusion added successfully!");
+      // Send multiple requests for each new API (avoiding duplicates)
+      const promises = newApiCodes.map(apiCode => {
+        const exclusionPayload = {
+          agentId: editing.id,
+          nationality: exclusionFormData.nationality,
+          apiCode: apiCode,
+        };
+        
+        console.log("Exclusion payload:", exclusionPayload);
+        
+        return axiosInstance.post(
+          "/api/agent-api-exclusion/exclude",
+          exclusionPayload
+        );
+      });
+
+      const responses = await Promise.all(promises);
+
+      // Check if all responses were successful
+      const allSuccessful = responses.every(response => response.data);
+      
+      if (allSuccessful) {
+        toast.success(`${newApiCodes.length} new API exclusion(s) added successfully!`);
         setExclusionErrors({});
         closeExclusionModal();
         // Refresh the agent list
@@ -1314,12 +1424,13 @@ const handleLoginSubmit = async () => {
     setShowExclusionModal(false);
     setExclusionFormData({
       nationality: "",
-      externalApi: "",
+      externalApi: [],
     });
     setExclusionErrors({
       nationality: "",
       externalApi: "",
     });
+    setShowApiDropdown(false);
   };
 
   return (
@@ -2713,27 +2824,103 @@ const handleLoginSubmit = async () => {
                       <Form.Label>
                         <span className="text-danger">*</span>External API
                       </Form.Label>
-                      <Form.Select
-                        name="externalApi"
-                        value={exclusionFormData.externalApi}
-                        onChange={handleExclusionChange}
-                        className={`form-input ${
-                          exclusionErrors.externalApi ? "is-invalid" : ""
-                        }`}
-                        isInvalid={!!exclusionErrors.externalApi}
-                      >
-                        <option value="">Select external API to exclude</option>
-                        {externalApis.map((api) => (
-                          <option key={api.code} value={api.code}>
-                            {api.name}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {exclusionErrors.externalApi && (
-                        <Form.Control.Feedback type="invalid">
-                          {exclusionErrors.externalApi}
-                        </Form.Control.Feedback>
-                      )}
+                      <div className="api-dropdown-container position-relative">
+                        {/* Multi-select dropdown for External APIs */}
+                        <div
+                          className={`form-control d-flex flex-wrap align-items-center ${
+                            exclusionErrors.externalApi ? "is-invalid" : ""
+                          }`}
+                          style={{
+                            minHeight: "38px",
+                            cursor: "pointer",
+                            border: exclusionErrors.externalApi ? "1px solid #dc3545" : "1px solid #ced4da",
+                          }}
+                          onClick={() => setShowApiDropdown(!showApiDropdown)}
+                        >
+                          {exclusionFormData.externalApi.length === 0 ? (
+                            <span className="text-muted">Select APIs to exclude</span>
+                          ) : (
+                            exclusionFormData.externalApi.map((apiCode) => {
+                              const api = externalApis.find(a => a.code === apiCode);
+                              return (
+                                <span
+                                  key={apiCode}
+                                  className="badge bg-primary me-1 mb-1 d-flex align-items-center"
+                                  style={{ fontSize: "12px" }}
+                                >
+                                  {api?.name || apiCode}
+                                  <button
+                                    type="button"
+                                    className="btn-close btn-close-white ms-1"
+                                    style={{ fontSize: "8px" }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeApi(apiCode);
+                                    }}
+                                  ></button>
+                                </span>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        {/* Dropdown list */}
+                        {showApiDropdown && (
+                          <div
+                            className="position-absolute w-100 bg-white border rounded shadow-lg"
+                            style={{
+                              zIndex: 9999,
+                              maxHeight: "200px",
+                              overflowY: "auto",
+                              minHeight: "120px",
+                              border: "2px solid #007bff",
+                              boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                              marginBottom: "2px",
+                            }}
+                          >
+                            {externalApis.map((api) => {
+                              const isSelected = exclusionFormData.externalApi.includes(api.code);
+                              return (
+                                <div
+                                  key={api.code}
+                                  className="px-3 py-2"
+                                  style={{
+                                    borderBottom: "1px solid #eee",
+                                    cursor: isSelected ? "not-allowed" : "pointer",
+                                    backgroundColor: "white",
+                                    opacity: isSelected ? 0.5 : 1,
+                                    color: isSelected ? "#6c757d" : "inherit",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!isSelected) {
+                                      e.target.style.backgroundColor = "#f8f9fa";
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!isSelected) {
+                                      e.target.style.backgroundColor = "white";
+                                    }
+                                  }}
+                                  onClick={() => {
+                                    if (!isSelected) {
+                                      toggleApi(api.code);
+                                    }
+                                  }}
+                                >
+                                  <div className="fw-small">{api.name}</div>
+                                 
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {exclusionErrors.externalApi && (
+                          <div className="invalid-feedback d-block">
+                            {exclusionErrors.externalApi}
+                          </div>
+                        )}
+                      </div>
                     </Form.Group>
                   </Col>
                 </Row>
