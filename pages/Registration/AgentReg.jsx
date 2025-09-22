@@ -55,13 +55,17 @@ const AgentReg = () => {
     markup: "",
     currency: "",
     status: "",
-    agentClassification: "",
-    agentGstIn: "",
-    agentProvisionalGstno: "",
-    agentCorrespondmail: "",
-    agentRegisterstatus: "",
-    agentHsncode: "",
     agentLogo: null,
+    // GST Details as nested object to match AgentGSTDetailsDTO
+    agentGSTDetailsDTO: {
+      agentClassification: "",
+      agentGstIn: "",
+      agentProvisionalGstno: "",
+      agentCorrespondmail: "",
+      agentRegisterstatus: "",
+      agentHsncode: "",
+      agentStatus: "",
+    },
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -76,6 +80,7 @@ const AgentReg = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showRolesDropdown, setShowRolesDropdown] = useState(false);
   const [rolesList, setUserRolesList] = useState([]);
+  const [loginModalKey, setLoginModalKey] = useState(0);
   const [loginFormData, setLoginFormData] = useState({
     username: "",
     password: "",
@@ -158,13 +163,17 @@ const AgentReg = () => {
       markup: "",
       currency: "",
       status: "",
-      agentClassification: "",
-      agentGstIn: "",
-      agentProvisionalGstno: "",
-      agentCorrespondmail: "",
-      agentRegisterstatus: "",
-      agentHsncode: "",
       agentLogo: null,
+      // GST Details as nested object to match AgentGSTDetailsDTO
+      agentGSTDetailsDTO: {
+        agentClassification: "",
+        agentGstIn: "",
+        agentProvisionalGstno: "",
+        agentCorrespondmail: "",
+        agentRegisterstatus: "",
+        agentHsncode: "",
+        agentStatus: "",
+      },
     });
     setProvinces([]);
     setPlaces([]);
@@ -199,13 +208,17 @@ const AgentReg = () => {
       markup: String(item.markup || ""),
       currency: String(item.currency || ""),
       status: item.status || "",
-      agentClassification: item.agentClassification || "",
-      agentGstIn: item.agentGstIn || "",
-      agentProvisionalGstno: item.agentProvisionalGstno || "",
-      agentCorrespondmail: item.agentCorrespondmail || "",
-      agentRegisterstatus: item.agentRegisterstatus || "",
-      agentHsncode: item.agentHsncode || "",
       agentLogo: null,
+      // GST Details as nested object to match AgentGSTDetailsDTO
+      agentGSTDetailsDTO: {
+        agentClassification: item.agentClassification || item.agentGSTDetailsDTO?.agentClassification || "",
+        agentGstIn: item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
+        agentProvisionalGstno: item.agentProvisionalGstno || item.agentGSTDetailsDTO?.agentProvisionalGstno || "",
+        agentCorrespondmail: item.agentCorrespondmail || item.agentGSTDetailsDTO?.agentCorrespondmail || "",
+        agentRegisterstatus: item.agentRegisterstatus || item.agentGSTDetailsDTO?.agentRegisterstatus || "",
+        agentHsncode: item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
+        agentStatus: item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
+      },
     });
 
     // Clear existing provinces and places first
@@ -514,16 +527,31 @@ const AgentReg = () => {
   // Close roles dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (showRolesDropdown && !event.target.closest('.position-relative')) {
+      if (showRolesDropdown && !event.target.closest(".position-relative")) {
         setShowRolesDropdown(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showRolesDropdown]);
+
+  // Force reset form data when modal opens
+  useEffect(() => {
+    if (showLoginModal) {
+      console.log("useEffect: Modal opened, forcing form reset");
+      const emptyFormData = {
+        username: "",
+        password: "",
+        repassword: "",
+        userroles: [],
+      };
+      setLoginFormData(emptyFormData);
+      console.log("useEffect: Form reset to empty:", emptyFormData);
+    }
+  }, [showLoginModal]);
 
   // Validation function
   const validateAgentForm = (data) => {
@@ -578,27 +606,27 @@ const AgentReg = () => {
     // GST fields validation (only if country is India)
     if (String(data.countryId) === "1") {
       console.log("GST validation running - country is India");
-      const gstInValue = getStringValue(data.agentGstIn);
+      const gstInValue = getStringValue(data.agentGSTDetailsDTO?.agentGstIn);
       console.log(
         "GST validation - gstInValue:",
         gstInValue,
         "agentClassification:",
-        data.agentClassification
+        data.agentGSTDetailsDTO?.agentClassification
       );
 
-      if (data.agentClassification === "registered" && !gstInValue) {
+      if (data.agentGSTDetailsDTO?.agentClassification === "registered" && !gstInValue) {
         console.log("Adding GSTIN required error");
-        newErrors.agentGstIn = "GSTIN is required for registered agencies";
+        newErrors["agentGSTDetailsDTO.agentGstIn"] = "GSTIN is required for registered agencies";
       }
       if (gstInValue && !/^[A-Z0-9]{15}$/.test(gstInValue)) {
         console.log("Adding GSTIN format error");
-        newErrors.agentGstIn = "GSTIN must be 15 alphanumeric characters";
+        newErrors["agentGSTDetailsDTO.agentGstIn"] = "GSTIN must be 15 alphanumeric characters";
       }
       if (
-        data.agentCorrespondmail &&
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.agentCorrespondmail)
+        data.agentGSTDetailsDTO?.agentCorrespondmail &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.agentGSTDetailsDTO.agentCorrespondmail)
       )
-        newErrors.agentCorrespondmail = "Invalid correspondence email format";
+        newErrors["agentGSTDetailsDTO.agentCorrespondmail"] = "Invalid correspondence email format";
     } else {
       console.log(
         "GST validation skipped - country is not India:",
@@ -761,13 +789,17 @@ const AgentReg = () => {
       markup: String(item.markup || ""),
       currency: String(item.currency || ""),
       status: item.status || "",
-      agentClassification: item.agentClassification || "",
-      agentGstIn: item.agentGstIn || "",
-      agentProvisionalGstno: item.agentProvisionalGstno || "",
-      agentCorrespondmail: item.agentCorrespondmail || "",
-      agentRegisterstatus: item.agentRegisterstatus || "",
-      agentHsncode: item.agentHsncode || "",
       agentLogo: null,
+      // GST Details as nested object to match AgentGSTDetailsDTO
+      agentGSTDetailsDTO: {
+        agentClassification: item.agentClassification || item.agentGSTDetailsDTO?.agentClassification || "",
+        agentGstIn: item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
+        agentProvisionalGstno: item.agentProvisionalGstno || item.agentGSTDetailsDTO?.agentProvisionalGstno || "",
+        agentCorrespondmail: item.agentCorrespondmail || item.agentGSTDetailsDTO?.agentCorrespondmail || "",
+        agentRegisterstatus: item.agentRegisterstatus || item.agentGSTDetailsDTO?.agentRegisterstatus || "",
+        agentHsncode: item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
+        agentStatus: item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
+      },
     });
 
     // Clear existing provinces and places first
@@ -794,145 +826,152 @@ const AgentReg = () => {
     setShowModal(true);
   };
 
-  const handleLogin = async (item) => {
-    console.log("handle login submit::", item);
-    setEditing(item);
-    
-    // Reset form data and errors first
-    setLoginFormData({
-      username: "",
-      password: "",
-      repassword: "",
-      userroles: [],
-    });
-    setLoginErrors({
-      username: "",
-      password: "",
-      repassword: "",
-      userroles: "",
-    });
+ const handleLogin = async (item) => {
+  console.log("=== LOGIN MODAL OPENED ===");
+  console.log("Agent clicked:", item);
+  console.log("Timestamp:", new Date().toISOString());
+  
+  setEditing(item);
 
-    // Fetch existing login credentials for this agent
-    try {
-      const response = await axiosInstance.get(`/auth/user/${item.id}`);
-      if (response.data && response.data.length > 0) {
-        const userData = response.data[0]; // Get the first user record
-        setLoginFormData({
-          username: userData.userName || "",
-          password: userData.password || "", // Show existing password
-          repassword: userData.password || "", // Show existing password
-          userroles: userData.userRoleIds ? userData.userRoleIds : [],
-        });
-      }
-    } catch (error) {
-      console.error("Failed to fetch existing login credentials:", error);
-      // If no existing credentials found, form will remain empty (which is correct for new login)
-    }
+  // AGGRESSIVE: Force completely empty form - NO API CALLS
+  console.log("FORCING COMPLETELY EMPTY FORM - NO DATA LOADING");
+  
+  // Reset ALL states to empty
+  setLoginFormData({
+    username: "",
+    password: "",
+    repassword: "",
+    userroles: [],
+  });
+  
+  setLoginErrors({
+    username: "",
+    password: "",
+    repassword: "",
+    userroles: "",
+  });
+  
+  setShowRolesDropdown(false);
+  
+  // Force modal re-render with new key
+  setLoginModalKey(prev => prev + 1);
+  
+  console.log("Form data set to empty values");
+  console.log("About to show modal with empty fields");
+  
+  // Show modal immediately
+  setShowLoginModal(true);
+  
+  console.log("Modal should now show with empty fields");
+};
 
-    setShowLoginModal(true);
+const handleLoginSubmit = async () => {
+  let isValid = true;
+  const errors = {
+    username: "",
+    password: "",
+    repassword: "",
+    userroles: "",
   };
 
-  const handleLoginSubmit = async () => {
-    let isValid = true;
-    const errors = {
-      username: "",
-      password: "",
-      repassword: "",
-      userroles: "",
-    };
+  if (!loginFormData.username.trim()) {
+    errors.username = "Username is required";
+    isValid = false;
+  } else if (loginFormData.username.length < 4) {
+    errors.username = "Username must be at least 4 characters long";
+    isValid = false;
+  } else if (!/^[a-zA-Z0-9_]+$/.test(loginFormData.username)) {
+    errors.username = "Username can only contain letters, numbers, and underscores";
+    isValid = false;
+  }
 
-    if (!loginFormData.username.trim()) {
-      errors.username = "Username is required";
-      isValid = false;
-    } else if (loginFormData.username.length < 4) {
-      errors.username = "Username must be at least 4 characters long";
-      isValid = false;
-    } else if (!/^[a-zA-Z0-9_]+$/.test(loginFormData.username)) {
-      errors.username =
-        "Username can only contain letters, numbers, and underscores";
-      isValid = false;
-    }
+  if (!loginFormData.password) {
+    errors.password = "Password is required";
+    isValid = false;
+  } else if (loginFormData.password.length < 8) {
+    errors.password = "Password must be at least 8 characters long";
+    isValid = false;
+  } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(loginFormData.password)) {
+    errors.password = "Password must contain at least one uppercase letter and one number";
+    isValid = false;
+  }
 
-    if (!loginFormData.password) {
-      errors.password = "Password is required";
-      isValid = false;
-    } else if (loginFormData.password.length < 8) {
-      errors.password = "Password must be at least 8 characters long";
-      isValid = false;
-    } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(loginFormData.password)) {
-      errors.password =
-        "Password must contain at least one uppercase letter and one number";
-      isValid = false;
-    }
+  if (!loginFormData.repassword) {
+    errors.repassword = "Please confirm your password";
+    isValid = false;
+  } else if (loginFormData.password !== loginFormData.repassword) {
+    errors.repassword = "Passwords do not match";
+    isValid = false;
+  }
 
-    if (!loginFormData.repassword) {
-      errors.repassword = "Please confirm your password";
-      isValid = false;
-    } else if (loginFormData.password !== loginFormData.repassword) {
-      errors.repassword = "Passwords do not match";
-      isValid = false;
-    }
+  if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
+    errors.userroles = "At least one user role is required";
+    isValid = false;
+  }
 
-    if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
-      errors.userroles = "At least one user role is required";
-      isValid = false;
-    }
+  setLoginErrors(errors);
 
-    setLoginErrors(errors);
+  if (isValid) {
+    try {
+      setIsLoading(true);
 
-    if (isValid) {
-      try {
-        setIsLoading(true);
+      let activeUserRole = localStorage.getItem("currentActiveRole");
+      console.log("currentActiveRole::", activeUserRole);
+      console.log("roleslist::", rolesList);
 
-        let activeUserRole = localStorage.getItem("currentActiveRole");
-        console.log("currentActiveRole::", activeUserRole);
+      let activeRoleObj = rolesList.find((role) => role.roleName === activeUserRole);
+
+      if (activeRoleObj) {
+        console.log("Active role exists in rolesList:", activeUserRole);
+        console.log("activeRoleObj:", activeRoleObj);
 
         const loginPayload = {
           userId: editing.id,
-          userTypeId: loginFormData.userroles[0], // Use first role as primary type
+          userTypeId: activeRoleObj.id,
           userName: loginFormData.username,
-          password: loginFormData.password,
-          userRoleIds: loginFormData.userroles, // Send array of all selected roles
+          userRoleIds: loginFormData.userroles,
         };
 
-        console.log(
-          "Login payload for agent:",
-          editing.companyName,
-          loginPayload
-        );
-
-        const response = await axiosInstance.post(
-          "/auth/registerr",
-          loginPayload
-        );
-
-        if (response.data) {
-          toast.success("Login credentials saved successfully!");
-          setLoginErrors({});
-          closeLoginModal();
-          // Refresh the agent list
-          await fetchAgentList(page, search);
+        if (loginFormData.password) {
+          loginPayload.password = loginFormData.password;
         }
-      } catch (error) {
-        console.error("Login submission failed:", error);
-        toast.error(
-          `Failed to save login credentials: ${
-            error.response?.data?.message || error.message
-          }`
-        );
-      } finally {
-        setIsLoading(false);
+
+        console.log("Login payload for agent:", editing.companyName, loginPayload);
+      } else {
+        console.log("Active role not found in rolesList");
       }
-    } else {
-      toast.error("Please fix the errors in the form");
+
+      const response = await axiosInstance.post("/auth/registerr", loginPayload);
+
+      if (response.data) {
+        toast.success("Login credentials saved successfully!");
+        setLoginErrors({});
+        closeLoginModal();
+        await fetchAgentList(page, search);
+      }
+    } catch (error) {
+      console.error("Login submission failed:", error);
+      toast.error(`Failed to save login credentials: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  } else {
+    toast.error("Please fix the errors in the form");
+  }
+};
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
+    
+    // Map the new field names back to the original state properties
+    let fieldName = name;
+    if (name === 'login-username') fieldName = 'username';
+    else if (name === 'login-password') fieldName = 'password';
+    else if (name === 'login-repassword') fieldName = 'repassword';
+    
     setLoginFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [fieldName]: value,
     }));
   };
 
@@ -940,22 +979,22 @@ const AgentReg = () => {
     setLoginFormData((prev) => ({
       ...prev,
       userroles: prev.userroles.includes(roleId)
-        ? prev.userroles.filter(id => id !== roleId)
-        : [...prev.userroles, roleId]
+        ? prev.userroles.filter((id) => id !== roleId)
+        : [...prev.userroles, roleId],
     }));
   };
 
   const removeRole = (roleId) => {
     setLoginFormData((prev) => ({
       ...prev,
-      userroles: prev.userroles.filter(id => id !== roleId)
+      userroles: prev.userroles.filter((id) => id !== roleId),
     }));
   };
- 
 
   const closeLoginModal = () => {
     setShowLoginModal(false);
     setShowRolesDropdown(false);
+    setLoginModalKey(prev => prev + 1); // Reset modal key
     setLoginFormData({
       username: "",
       password: "",
@@ -1143,7 +1182,7 @@ const AgentReg = () => {
     const value = e.target.value;
 
     // Check if Agent Classification is selected first
-    if (!formData.agentClassification) {
+    if (!formData.agentGSTDetailsDTO.agentClassification) {
       setGstinError("Please select Agent Classification first.");
       return; // Don't update the form data
     }
@@ -1151,10 +1190,13 @@ const AgentReg = () => {
     // Clear the error if classification is selected
     setGstinError("");
 
-    // Update the form data
+    // Update the form data with nested structure
     setFormData({
       ...formData,
-      agentGstIn: value,
+      agentGSTDetailsDTO: {
+        ...formData.agentGSTDetailsDTO,
+        agentGstIn: value,
+      },
     });
   };
 
@@ -1164,7 +1206,10 @@ const AgentReg = () => {
 
     setFormData({
       ...formData,
-      agentClassification: value,
+      agentGSTDetailsDTO: {
+        ...formData.agentGSTDetailsDTO,
+        agentClassification: value,
+      },
     });
 
     // Clear GSTIN error when classification is selected
@@ -1938,8 +1983,16 @@ const AgentReg = () => {
                                   </Form.Label>
                                   <Form.Select
                                     name="agentClassification"
-                                    value={formData.agentClassification}
-                                    onChange={handleAgentClassificationChange}
+                                    value={formData.agentGSTDetailsDTO.agentClassification}
+                                    onChange={(e) =>
+                                      setFormData({
+                                        ...formData,
+                                        agentGSTDetailsDTO: {
+                                          ...formData.agentGSTDetailsDTO,
+                                          agentClassification: e.target.value,
+                                        },
+                                      })
+                                    }
                                     className="form-input"
                                   >
                                     <option value="">
@@ -1963,27 +2016,27 @@ const AgentReg = () => {
                                   <Form.Control
                                     type="text"
                                     name="agentGstIn"
-                                    value={formData.agentGstIn}
+                                    value={formData.agentGSTDetailsDTO.agentGstIn}
                                     onChange={handleGstinChange}
                                     placeholder="Enter 15-digit GSTIN"
                                     className={`form-input ${
-                                      validationErrors.agentGstIn || gstinError
+                                      validationErrors["agentGSTDetailsDTO.agentGstIn"] || gstinError
                                         ? "is-invalid"
                                         : ""
                                     }`}
                                     isInvalid={
                                       !!(
-                                        validationErrors.agentGstIn ||
+                                        validationErrors["agentGSTDetailsDTO.agentGstIn"] ||
                                         gstinError
                                       )
                                     }
                                     maxLength={15}
                                   />
-                                  {(validationErrors.agentGstIn ||
+                                  {(validationErrors["agentGSTDetailsDTO.agentGstIn"] ||
                                     gstinError) && (
                                     <Form.Control.Feedback type="invalid">
                                       {gstinError ||
-                                        validationErrors.agentGstIn}
+                                        validationErrors["agentGSTDetailsDTO.agentGstIn"]}
                                     </Form.Control.Feedback>
                                   )}
                                 </Form.Group>
@@ -1997,11 +2050,14 @@ const AgentReg = () => {
                                   <Form.Control
                                     type="text"
                                     name="agentProvisionalGstno"
-                                    value={formData.agentProvisionalGstno}
+                                    value={formData.agentGSTDetailsDTO.agentProvisionalGstno}
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
-                                        agentProvisionalGstno: e.target.value,
+                                        agentGSTDetailsDTO: {
+                                          ...formData.agentGSTDetailsDTO,
+                                          agentProvisionalGstno: e.target.value,
+                                        },
                                       })
                                     }
                                     placeholder="Enter provisional GST number"
@@ -2019,26 +2075,29 @@ const AgentReg = () => {
                                   <Form.Control
                                     type="email"
                                     name="agentCorrespondmail"
-                                    value={formData.agentCorrespondmail}
+                                    value={formData.agentGSTDetailsDTO.agentCorrespondmail}
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
-                                        agentCorrespondmail: e.target.value,
+                                        agentGSTDetailsDTO: {
+                                          ...formData.agentGSTDetailsDTO,
+                                          agentCorrespondmail: e.target.value,
+                                        },
                                       })
                                     }
                                     placeholder="Enter correspondence email"
                                     className={`form-input ${
-                                      validationErrors.agentCorrespondmail
+                                      validationErrors["agentGSTDetailsDTO.agentCorrespondmail"]
                                         ? "is-invalid"
                                         : ""
                                     }`}
                                     isInvalid={
-                                      !!validationErrors.agentCorrespondmail
+                                      !!validationErrors["agentGSTDetailsDTO.agentCorrespondmail"]
                                     }
                                   />
-                                  {validationErrors.agentCorrespondmail && (
+                                  {validationErrors["agentGSTDetailsDTO.agentCorrespondmail"] && (
                                     <Form.Control.Feedback type="invalid">
-                                      {validationErrors.agentCorrespondmail}
+                                      {validationErrors["agentGSTDetailsDTO.agentCorrespondmail"]}
                                     </Form.Control.Feedback>
                                   )}
                                 </Form.Group>
@@ -2052,11 +2111,14 @@ const AgentReg = () => {
                                   <Form.Control
                                     type="text"
                                     name="agentRegisterstatus"
-                                    value={formData.agentRegisterstatus}
+                                    value={formData.agentGSTDetailsDTO.agentRegisterstatus}
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
-                                        agentRegisterstatus: e.target.value,
+                                        agentGSTDetailsDTO: {
+                                          ...formData.agentGSTDetailsDTO,
+                                          agentRegisterstatus: e.target.value,
+                                        },
                                       })
                                     }
                                     placeholder="Enter registration status"
@@ -2074,17 +2136,47 @@ const AgentReg = () => {
                                   <Form.Control
                                     type="text"
                                     name="agentHsncode"
-                                    value={formData.agentHsncode}
+                                    value={formData.agentGSTDetailsDTO.agentHsncode}
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
-                                        agentHsncode: e.target.value,
+                                        agentGSTDetailsDTO: {
+                                          ...formData.agentGSTDetailsDTO,
+                                          agentHsncode: e.target.value,
+                                        },
                                       })
                                     }
                                     placeholder="Enter HSN/SAC code"
                                     className="form-input"
                                     maxLength={30}
                                   />
+                                </Form.Group>
+                              </Col>
+
+                              <Col md={6}>
+                                <Form.Group>
+                                  <Form.Label className="form-label">
+                                    Agent Status
+                                  </Form.Label>
+                                  <Form.Select
+                                    name="agentStatus"
+                                    value={formData.agentGSTDetailsDTO.agentStatus}
+                                    onChange={(e) =>
+                                      setFormData({
+                                        ...formData,
+                                        agentGSTDetailsDTO: {
+                                          ...formData.agentGSTDetailsDTO,
+                                          agentStatus: e.target.value,
+                                        },
+                                      })
+                                    }
+                                    className="form-input"
+                                  >
+                                    <option value="">Select Status</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="suspended">Suspended</option>
+                                  </Form.Select>
                                 </Form.Group>
                               </Col>
                             </Row>
@@ -2223,18 +2315,20 @@ const AgentReg = () => {
             </Modal.Footer>
           </Modal>
 
-          <Modal show={showLoginModal} onHide={closeLoginModal}  centered>
+          <Modal show={showLoginModal} onHide={closeLoginModal} centered key={loginModalKey}>
             <Modal.Header closeButton>
               <Modal.Title>
-                {loginFormData.username ? 'Update' : 'Create'} Login for Agent: {editing?.companyName || editing?.agentName}
+                {loginFormData.username && loginFormData.username.trim() !== "" ? "Update" : "Create"} Login for Agent:{" "}
+                {editing?.companyName || editing?.agentName}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              {loginFormData.username && (
+              {loginFormData.username && loginFormData.username.trim() !== "" && (
                 <div className="alert alert-info mb-3">
                   <small>
                     <i className="fas fa-info-circle me-2"></i>
-                    Existing login credentials found. You can update the username and password.
+                    Existing login credentials found. You can update the
+                    username and password.
                   </small>
                 </div>
               )}
@@ -2243,13 +2337,15 @@ const AgentReg = () => {
                   <Form.Label>Username</Form.Label>
                   <Form.Control
                     type="text"
-                    name="username"
+                    name="login-username"
                     value={loginFormData.username}
                     onChange={handleLoginChange}
                     isInvalid={!!loginErrors.username}
                     placeholder="Enter username"
+                    autoComplete="new-password"
+                    autoFill="off"
                   />
-                 
+
                   <Form.Control.Feedback type="invalid">
                     {loginErrors.username}
                   </Form.Control.Feedback>
@@ -2258,11 +2354,13 @@ const AgentReg = () => {
                   <Form.Label>Password</Form.Label>
                   <Form.Control
                     type="password"
-                    name="password"
+                    name="login-password"
                     value={loginFormData.password}
                     onChange={handleLoginChange}
                     isInvalid={!!loginErrors.password}
                     placeholder="Enter password"
+                    autoComplete="new-password"
+                    autoFill="off"
                   />
                   <Form.Control.Feedback type="invalid">
                     {loginErrors.password}
@@ -2272,11 +2370,13 @@ const AgentReg = () => {
                   <Form.Label>Re-enter Password</Form.Label>
                   <Form.Control
                     type="password"
-                    name="repassword"
+                    name="login-repassword"
                     value={loginFormData.repassword}
                     onChange={handleLoginChange}
                     isInvalid={!!loginErrors.repassword}
                     placeholder="Re-enter password"
+                    autoComplete="new-password"
+                    autoFill="off"
                   />
                   <Form.Control.Feedback type="invalid">
                     {loginErrors.repassword}
@@ -2285,29 +2385,36 @@ const AgentReg = () => {
                 <Form.Group className="mb-3">
                   <Form.Label>User Roles</Form.Label>
                   <div className="position-relative">
-                    <div 
-                      className="form-control d-flex flex-wrap align-items-center" 
-                      style={{ minHeight: '38px', padding: '4px 8px', cursor: 'pointer' }}
+                    <div
+                      className="form-control d-flex flex-wrap align-items-center"
+                      style={{
+                        minHeight: "38px",
+                        padding: "4px 8px",
+                        cursor: "pointer",
+                      }}
                       onClick={() => {
-                        console.log('Clicking dropdown, current state:', showRolesDropdown);
+                        console.log(
+                          "Clicking dropdown, current state:",
+                          showRolesDropdown
+                        );
                         setShowRolesDropdown(!showRolesDropdown);
                       }}
                     >
-                      {console.log("rolesList length:::" , rolesList.length)}
+                      {console.log("rolesList length:::", rolesList.length)}
                       {loginFormData.userroles.length > 0 ? (
                         loginFormData.userroles.map((roleId) => {
-                          const role = rolesList.find(r => r.id === roleId);
+                          const role = rolesList.find((r) => r.id === roleId);
                           return role ? (
-                            <span 
+                            <span
                               key={roleId}
                               className="badge bg-primary me-1 mb-1 d-flex align-items-center"
-                              style={{ fontSize: '12px' }}
+                              style={{ fontSize: "12px" }}
                             >
                               {role.roleName}
                               <button
                                 type="button"
                                 className="btn-close btn-close-white ms-1"
-                                style={{ fontSize: '8px' }}
+                                style={{ fontSize: "8px" }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   removeRole(roleId);
@@ -2320,46 +2427,57 @@ const AgentReg = () => {
                         <span className="text-muted">Select roles...</span>
                       )}
                     </div>
-                    
+
                     {showRolesDropdown && (
-                      <div 
+                      <div
                         className="position-absolute w-100 bg-white border rounded shadow-lg"
-                        style={{ 
-                          bottom: '100%', 
-                          left: 0, 
+                        style={{
+                          bottom: "100%",
+                          left: 0,
                           zIndex: 9999,
-                          maxHeight: '200px',
-                          overflowY: 'auto',
-                          minHeight: '120px',
-                          border: '2px solid #007bff',
-                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                          marginBottom: '2px'
+                          maxHeight: "200px",
+                          overflowY: "auto",
+                          minHeight: "120px",
+                          border: "2px solid #007bff",
+                          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                          marginBottom: "2px",
                         }}
                       >
-                        {console.log('Rendering dropdown with rolesList:', rolesList)}
+                        {console.log(
+                          "Rendering dropdown with rolesList:",
+                          rolesList
+                        )}
                         {rolesList.map((role) => {
-                          const isSelected = loginFormData.userroles.includes(role.id);
-                          console.log('Rendering role:', role.id, role.roleName);
+                          const isSelected = loginFormData.userroles.includes(
+                            role.id
+                          );
+                          console.log(
+                            "Rendering role:",
+                            role.id,
+                            role.roleName
+                          );
                           return (
                             <div
                               key={role.id}
-                              className={`px-3 py-2 ${isSelected ? 'bg-light text-muted' : ''}`}
+                              className={`px-3 py-2 ${
+                                isSelected ? "bg-light text-muted" : ""
+                              }`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 toggleRole(role.id);
                               }}
-                              style={{ 
-                                cursor: 'pointer',
-                                borderBottom: '1px solid #eee'
+                              style={{
+                                cursor: "pointer",
+                                borderBottom: "1px solid #eee",
                               }}
                               onMouseEnter={(e) => {
                                 if (!isSelected) {
-                                  e.target.style.backgroundColor = '#f8f9fa';
+                                  e.target.style.backgroundColor = "#f8f9fa";
                                 }
                               }}
                               onMouseLeave={(e) => {
                                 if (!isSelected) {
-                                  e.target.style.backgroundColor = '';
+                                  e.target.style.backgroundColor = "";
                                 }
                               }}
                             >
@@ -2556,8 +2674,8 @@ const AgentReg = () => {
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              <Form>
-                <Row>
+              <Form className="agent-exclude-form">
+                {/* <Row>
                   <Col md={12}>
                     <Form.Group className="mb-3">
                       <Form.Label>
@@ -2587,7 +2705,7 @@ const AgentReg = () => {
                       )}
                     </Form.Group>
                   </Col>
-                </Row>
+                </Row> */}
 
                 <Row>
                   <Col md={12}>
@@ -2623,9 +2741,8 @@ const AgentReg = () => {
                 <div className="alert alert-info">
                   <small>
                     <strong>Note:</strong> This will exclude the selected
-                    nationality and external API for this agent. The agent will
-                    not be able to access bookings through the selected API for
-                    the specified nationality.
+                    external API for this agent. The agent will
+                    not be able to access bookings through the selected API.
                   </small>
                 </div>
               </Form>
