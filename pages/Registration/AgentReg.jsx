@@ -97,6 +97,8 @@ const AgentReg = () => {
   });
 
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
+  const [creditLimitType, setCreditLimitType] = useState("initial"); // "initial" or "update"
+  const [hasInitialCredit, setHasInitialCredit] = useState(false);
   const [creditLimitFormData, setCreditLimitFormData] = useState({
     addCreditLimit: "",
     remarks: "",
@@ -214,13 +216,28 @@ const AgentReg = () => {
       agentLogo: null,
       // GST Details as nested object to match AgentGSTDetailsDTO
       agentGSTDetailsDTO: {
-        agentClassification: item.agentClassification || item.agentGSTDetailsDTO?.agentClassification || "",
-        agentGstIn: item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
-        agentProvisionalGstno: item.agentProvisionalGstno || item.agentGSTDetailsDTO?.agentProvisionalGstno || "",
-        agentCorrespondmail: item.agentCorrespondmail || item.agentGSTDetailsDTO?.agentCorrespondmail || "",
-        agentRegisterstatus: item.agentRegisterstatus || item.agentGSTDetailsDTO?.agentRegisterstatus || "",
-        agentHsncode: item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
-        agentStatus: item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
+        agentClassification:
+          item.agentClassification ||
+          item.agentGSTDetailsDTO?.agentClassification ||
+          "",
+        agentGstIn:
+          item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
+        agentProvisionalGstno:
+          item.agentProvisionalGstno ||
+          item.agentGSTDetailsDTO?.agentProvisionalGstno ||
+          "",
+        agentCorrespondmail:
+          item.agentCorrespondmail ||
+          item.agentGSTDetailsDTO?.agentCorrespondmail ||
+          "",
+        agentRegisterstatus:
+          item.agentRegisterstatus ||
+          item.agentGSTDetailsDTO?.agentRegisterstatus ||
+          "",
+        agentHsncode:
+          item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
+        agentStatus:
+          item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
       },
     });
 
@@ -631,19 +648,27 @@ const AgentReg = () => {
         data.agentGSTDetailsDTO?.agentClassification
       );
 
-      if (data.agentGSTDetailsDTO?.agentClassification === "registered" && !gstInValue) {
+      if (
+        data.agentGSTDetailsDTO?.agentClassification === "registered" &&
+        !gstInValue
+      ) {
         console.log("Adding GSTIN required error");
-        newErrors["agentGSTDetailsDTO.agentGstIn"] = "GSTIN is required for registered agencies";
+        newErrors["agentGSTDetailsDTO.agentGstIn"] =
+          "GSTIN is required for registered agencies";
       }
       if (gstInValue && !/^[A-Z0-9]{15}$/.test(gstInValue)) {
         console.log("Adding GSTIN format error");
-        newErrors["agentGSTDetailsDTO.agentGstIn"] = "GSTIN must be 15 alphanumeric characters";
+        newErrors["agentGSTDetailsDTO.agentGstIn"] =
+          "GSTIN must be 15 alphanumeric characters";
       }
       if (
         data.agentGSTDetailsDTO?.agentCorrespondmail &&
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.agentGSTDetailsDTO.agentCorrespondmail)
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          data.agentGSTDetailsDTO.agentCorrespondmail
+        )
       )
-        newErrors["agentGSTDetailsDTO.agentCorrespondmail"] = "Invalid correspondence email format";
+        newErrors["agentGSTDetailsDTO.agentCorrespondmail"] =
+          "Invalid correspondence email format";
     } else {
       console.log(
         "GST validation skipped - country is not India:",
@@ -809,13 +834,28 @@ const AgentReg = () => {
       agentLogo: null,
       // GST Details as nested object to match AgentGSTDetailsDTO
       agentGSTDetailsDTO: {
-        agentClassification: item.agentClassification || item.agentGSTDetailsDTO?.agentClassification || "",
-        agentGstIn: item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
-        agentProvisionalGstno: item.agentProvisionalGstno || item.agentGSTDetailsDTO?.agentProvisionalGstno || "",
-        agentCorrespondmail: item.agentCorrespondmail || item.agentGSTDetailsDTO?.agentCorrespondmail || "",
-        agentRegisterstatus: item.agentRegisterstatus || item.agentGSTDetailsDTO?.agentRegisterstatus || "",
-        agentHsncode: item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
-        agentStatus: item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
+        agentClassification:
+          item.agentClassification ||
+          item.agentGSTDetailsDTO?.agentClassification ||
+          "",
+        agentGstIn:
+          item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
+        agentProvisionalGstno:
+          item.agentProvisionalGstno ||
+          item.agentGSTDetailsDTO?.agentProvisionalGstno ||
+          "",
+        agentCorrespondmail:
+          item.agentCorrespondmail ||
+          item.agentGSTDetailsDTO?.agentCorrespondmail ||
+          "",
+        agentRegisterstatus:
+          item.agentRegisterstatus ||
+          item.agentGSTDetailsDTO?.agentRegisterstatus ||
+          "",
+        agentHsncode:
+          item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
+        agentStatus:
+          item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
       },
     });
 
@@ -843,177 +883,193 @@ const AgentReg = () => {
     setShowModal(true);
   };
 
- const handleLogin = async (item) => {
-  console.log("=== LOGIN MODAL OPENED ===");
-  console.log("Agent clicked:", item);
-  console.log("Timestamp:", new Date().toISOString());
-  
-  setEditing(item);
+  const handleLogin = async (item) => {
+    console.log("=== LOGIN MODAL OPENED ===");
+    console.log("Agent clicked:", item);
+    console.log("Timestamp:", new Date().toISOString());
 
-  // Reset form data first
-  setLoginFormData({
-    username: "",
-    password: "",
-    repassword: "",
-    userroles: [],
-  });
-  
-  setLoginErrors({
-    username: "",
-    password: "",
-    repassword: "",
-    userroles: "",
-  });
-  
-  setShowRolesDropdown(false);
-  setShowPassword(false);
-  setShowRePassword(false);
-  
-  // Fetch existing login data for this agent
-  try {
-    console.log("Fetching existing login data for agent:", item.id);
-    const response = await axiosInstance.get(`/auth/checkRegisteredUserExist/${item.id}`);
-    
-    if (response.data) {
-      console.log("Existing login data found:", response.data);
-      
-      // Populate form with existing data
-      // Note: userName field appears to contain password hash based on response format
-      setLoginFormData({
-        username: "", // No username field in response, keeping empty
-        password: response.data.userName || "", // userName contains the password hash
-        repassword: response.data.userName || "", // Same for repassword field
-        userroles: [], // You may need to fetch roles separately if needed
-      });
-      
-      console.log("Form populated with existing data");
-    } else {
-      console.log("No existing login data found for agent:", item.id);
-    }
-  } catch (error) {
-    console.log("No existing login data found or error fetching:", error);
-    // This is normal for agents with no existing login credentials
-  }
-  
-  // Force modal re-render with new key
-  setLoginModalKey(prev => prev + 1);
-  
-  // Show modal
-  setShowLoginModal(true);
-  
-  console.log("Modal opened with data loaded");
-};
+    setEditing(item);
 
-const handleLoginSubmit = async () => {
-  let isValid = true;
-  const errors = {
-    username: "",
-    password: "",
-    repassword: "",
-    userroles: "",
-  };
+    // Reset form data first
+    setLoginFormData({
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: [],
+    });
 
-  if (!loginFormData.username.trim()) {
-    errors.username = "Username is required";
-    isValid = false;
-  } else if (loginFormData.username.length < 4) {
-    errors.username = "Username must be at least 4 characters long";
-    isValid = false;
-  } else if (!/^[a-zA-Z0-9_]+$/.test(loginFormData.username)) {
-    errors.username = "Username can only contain letters, numbers, and underscores";
-    isValid = false;
-  }
+    setLoginErrors({
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: "",
+    });
 
-  if (!loginFormData.password) {
-    errors.password = "Password is required";
-    isValid = false;
-  } else if (loginFormData.password.length < 8) {
-    errors.password = "Password must be at least 8 characters long";
-    isValid = false;
-  } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(loginFormData.password)) {
-    errors.password = "Password must contain at least one uppercase letter and one number";
-    isValid = false;
-  }
+    setShowRolesDropdown(false);
+    setShowPassword(false);
+    setShowRePassword(false);
 
-  if (!loginFormData.repassword) {
-    errors.repassword = "Please confirm your password";
-    isValid = false;
-  } else if (loginFormData.password !== loginFormData.repassword) {
-    errors.repassword = "Passwords do not match";
-    isValid = false;
-  }
-
-  if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
-    errors.userroles = "At least one user role is required";
-    isValid = false;
-  }
-
-  setLoginErrors(errors);
-
-  if (isValid) {
+    // Fetch existing login data for this agent
     try {
-      setIsLoading(true);
-
-      let activeUserRole = localStorage.getItem("currentActiveRole");
-      console.log("currentActiveRole::", activeUserRole);
-      console.log("roleslist::", rolesList);
-
-      let activeRoleObj = rolesList.find((role) => role.roleName === "AGENT");
-
-      let loginPayload = null;
-
-      if (activeRoleObj) {
-        console.log("Active role exists in rolesList:", activeUserRole);
-        console.log("activeRoleObj:", activeRoleObj);
-        
-
-        loginPayload = {
-          userId: editing.id,
-          userTypeId: activeRoleObj.id,
-          userName: loginFormData.username,
-          userRoleIds: loginFormData.userroles,
-        };
-
-        if (loginFormData.password) {
-          loginPayload.password = loginFormData.password;
-        }
-
-        console.log("Login payload for agent:", editing.companyName, loginPayload);
-      } else {
-        console.log("Active role not found in rolesList");
-      }
-
-      const response = await axiosInstance.post("/auth/register", loginPayload);
-      console.log("login register success::" , response)
+      console.log("Fetching existing login data for agent:", item.id);
+      const response = await axiosInstance.get(
+        `/auth/checkRegisteredUserExist/${item.id}`
+      );
 
       if (response.data) {
-        toast.success("Login credentials saved successfully!");
-        setLoginErrors({});
-        closeLoginModal();
-        await fetchAgentList(page, search);
-      }else{
-        toast.error("Something went wrong!!Failed to save login credentials.");
+        console.log("Existing login data found:", response.data);
+
+        // Populate form with existing data
+        // Note: userName field appears to contain password hash based on response format
+        setLoginFormData({
+          username: "", // No username field in response, keeping empty
+          password: response.data.userName || "", // userName contains the password hash
+          repassword: response.data.userName || "", // Same for repassword field
+          userroles: [], // You may need to fetch roles separately if needed
+        });
+
+        console.log("Form populated with existing data");
+      } else {
+        console.log("No existing login data found for agent:", item.id);
       }
     } catch (error) {
-      console.error("Login submission failed:", error);
-      toast.error(`Failed to save login credentials: ${error.response?.data?.message || error.message}`);
-    } finally {
-      setIsLoading(false);
+      console.log("No existing login data found or error fetching:", error);
+      // This is normal for agents with no existing login credentials
     }
-  } else {
-    toast.error("Please fix the errors in the form");
-  }
-};
+
+    // Force modal re-render with new key
+    setLoginModalKey((prev) => prev + 1);
+
+    // Show modal
+    setShowLoginModal(true);
+
+    console.log("Modal opened with data loaded");
+  };
+
+  const handleLoginSubmit = async () => {
+    let isValid = true;
+    const errors = {
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: "",
+    };
+
+    if (!loginFormData.username.trim()) {
+      errors.username = "Username is required";
+      isValid = false;
+    } else if (loginFormData.username.length < 4) {
+      errors.username = "Username must be at least 4 characters long";
+      isValid = false;
+    } else if (!/^[a-zA-Z0-9_]+$/.test(loginFormData.username)) {
+      errors.username =
+        "Username can only contain letters, numbers, and underscores";
+      isValid = false;
+    }
+
+    if (!loginFormData.password) {
+      errors.password = "Password is required";
+      isValid = false;
+    } else if (loginFormData.password.length < 8) {
+      errors.password = "Password must be at least 8 characters long";
+      isValid = false;
+    } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(loginFormData.password)) {
+      errors.password =
+        "Password must contain at least one uppercase letter and one number";
+      isValid = false;
+    }
+
+    if (!loginFormData.repassword) {
+      errors.repassword = "Please confirm your password";
+      isValid = false;
+    } else if (loginFormData.password !== loginFormData.repassword) {
+      errors.repassword = "Passwords do not match";
+      isValid = false;
+    }
+
+    if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
+      errors.userroles = "At least one user role is required";
+      isValid = false;
+    }
+
+    setLoginErrors(errors);
+
+    if (isValid) {
+      try {
+        setIsLoading(true);
+
+        let activeUserRole = localStorage.getItem("currentActiveRole");
+        console.log("currentActiveRole::", activeUserRole);
+        console.log("roleslist::", rolesList);
+
+        let activeRoleObj = rolesList.find((role) => role.roleName === "AGENT");
+
+        let loginPayload = null;
+
+        if (activeRoleObj) {
+          console.log("Active role exists in rolesList:", activeUserRole);
+          console.log("activeRoleObj:", activeRoleObj);
+
+          loginPayload = {
+            userId: editing.id,
+            userTypeId: activeRoleObj.id,
+            userName: loginFormData.username,
+            userRoleIds: loginFormData.userroles,
+          };
+
+          if (loginFormData.password) {
+            loginPayload.password = loginFormData.password;
+          }
+
+          console.log(
+            "Login payload for agent:",
+            editing.companyName,
+            loginPayload
+          );
+        } else {
+          console.log("Active role not found in rolesList");
+        }
+
+        const response = await axiosInstance.post(
+          "/auth/register",
+          loginPayload
+        );
+        console.log("login register success::", response);
+
+        if (response.data) {
+          toast.success("Login credentials saved successfully!");
+          setLoginErrors({});
+          closeLoginModal();
+          await fetchAgentList(page, search);
+        } else {
+          toast.error(
+            "Something went wrong!!Failed to save login credentials."
+          );
+        }
+      } catch (error) {
+        console.error("Login submission failed:", error);
+        toast.error(
+          `Failed to save login credentials: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      toast.error("Please fix the errors in the form");
+    }
+  };
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
-    
+
     // Map the new field names back to the original state properties
     let fieldName = name;
-    if (name === 'login-username') fieldName = 'username';
-    else if (name === 'login-password') fieldName = 'password';
-    else if (name === 'login-repassword') fieldName = 'repassword';
-    
+    if (name === "login-username") fieldName = "username";
+    else if (name === "login-password") fieldName = "password";
+    else if (name === "login-repassword") fieldName = "repassword";
+
     setLoginFormData((prev) => ({
       ...prev,
       [fieldName]: value,
@@ -1053,7 +1109,7 @@ const handleLoginSubmit = async () => {
     setShowRolesDropdown(false);
     setShowPassword(false);
     setShowRePassword(false);
-    setLoginModalKey(prev => prev + 1); // Reset modal key
+    setLoginModalKey((prev) => prev + 1); // Reset modal key
     setLoginFormData({
       username: "",
       password: "",
@@ -1093,34 +1149,48 @@ const handleLoginSubmit = async () => {
       );
       if (response.data) {
         const creditData = response.data;
+        setHasInitialCredit(true);
+        setCreditLimitType("update"); // Default to update if credit exists
         setCreditLimitFormData((prev) => ({
           ...prev,
           totalCreditLimit: creditData.totalCreditLimit || "0",
           availableCreditLimit: creditData.availableCreditLimit || "0",
           usedCreditLimit: creditData.usedCreditLimit || "0",
         }));
+      } else {
+        setHasInitialCredit(false);
+        setCreditLimitType("initial"); // Default to initial if no credit exists
       }
     } catch (error) {
       console.error("Failed to fetch credit limit data:", error);
       // If no credit limit exists, we'll create one when adding credit
+      setHasInitialCredit(false);
+      setCreditLimitType("initial");
     }
 
     setShowCreditLimitModal(true);
   };
 
-  const validateCreditLimitForm = (data) => {
+  const validateCreditLimitForm = (data, type) => {
     const newErrors = {};
 
     if (!data.addCreditLimit.trim()) {
-      newErrors.addCreditLimit = "Add Credit Limit is required";
+      newErrors.addCreditLimit =
+        type === "initial"
+          ? "Add Credit Limit is required"
+          : "Add-on Credit Limit is required";
     } else if (
       isNaN(data.addCreditLimit) ||
       parseFloat(data.addCreditLimit) <= 0
     ) {
-      newErrors.addCreditLimit = "Add Credit Limit must be a positive number";
+      newErrors.addCreditLimit =
+        type === "initial"
+          ? "Add Credit Limit must be a positive number"
+          : "Add-on Credit Limit must be a positive number";
     }
 
-    if (!data.remarks.trim()) {
+    // Only require remarks for update type
+    if (type === "update" && !data.remarks.trim()) {
       newErrors.remarks = "Remarks is required";
     }
 
@@ -1128,7 +1198,10 @@ const handleLoginSubmit = async () => {
   };
 
   const handleCreditLimitSubmit = async () => {
-    const errors = validateCreditLimitForm(creditLimitFormData);
+    const errors = validateCreditLimitForm(
+      creditLimitFormData,
+      creditLimitType
+    );
     if (Object.keys(errors).length > 0) {
       setCreditLimitErrors(errors);
       return;
@@ -1138,12 +1211,9 @@ const handleLoginSubmit = async () => {
       setIsLoading(true);
 
       const addAmount = parseFloat(creditLimitFormData.addCreditLimit);
-      const currentTotal =
-        parseFloat(creditLimitFormData.totalCreditLimit) || 0;
-
       let response;
 
-      if (currentTotal === 0) {
+      if (creditLimitType === "initial") {
         // Create initial credit limit
         const createPayload = {
           agentId: editing.id,
@@ -1159,10 +1229,10 @@ const handleLoginSubmit = async () => {
           }
         );
       } else {
-        // Add additional credit
+        // Add to existing credit limit
         const addCreditPayload = {
           agentId: editing.id,
-          amount: addAmount,
+          additionalCredit: addAmount,
           remarks: creditLimitFormData.remarks,
         };
 
@@ -1174,8 +1244,13 @@ const handleLoginSubmit = async () => {
       }
 
       if (response.data) {
-        toast.success("Credit limit updated successfully!");
+        const successMessage =
+          creditLimitType === "initial"
+            ? "Initial credit limit created successfully!"
+            : "Credit limit updated successfully!";
+        toast.success(successMessage);
         setCreditLimitErrors({});
+        setHasInitialCredit(true); // Mark that initial credit now exists
         closeCreditLimitModal();
         // Refresh the agent list to show updated credit information
         await fetchAgentList(page, search);
@@ -1190,6 +1265,7 @@ const handleLoginSubmit = async () => {
 
   const closeCreditLimitModal = () => {
     setShowCreditLimitModal(false);
+    setCreditLimitType("initial");
     setCreditLimitFormData({
       addCreditLimit: "",
       remarks: "",
@@ -1217,6 +1293,21 @@ const handleLoginSubmit = async () => {
         [name]: "",
       }));
     }
+  };
+
+  const handleCreditLimitTypeChange = (e) => {
+    setCreditLimitType(e.target.value);
+    // Clear form data when switching types
+    setCreditLimitFormData((prev) => ({
+      ...prev,
+      addCreditLimit: "",
+      remarks: "",
+    }));
+    // Clear errors
+    setCreditLimitErrors({
+      addCreditLimit: "",
+      remarks: "",
+    });
   };
 
   // Ensure countryId is always treated as a string
@@ -1282,7 +1373,7 @@ const handleLoginSubmit = async () => {
     console.log("Exclude agent:", item.companyName);
     console.log("item:", item);
     setEditing(item);
-    
+
     // Reset form data first
     setExclusionFormData({
       nationality: "",
@@ -1292,18 +1383,22 @@ const handleLoginSubmit = async () => {
       nationality: "",
       externalApi: "",
     });
-    
+
     // Fetch existing exclusions for this agent
     try {
       console.log("Fetching existing exclusions for agent:", item.id);
-      const response = await axiosInstance.get(`/api/agent-api-exclusion/agent/${item.id}`);
-      
+      const response = await axiosInstance.get(
+        `/api/agent-api-exclusion/agent/${item.id}`
+      );
+
       if (response.data && Array.isArray(response.data)) {
         // Extract API codes from existing exclusions
-        const existingApiCodes = response.data.map(exclusion => exclusion.apiCode).filter(Boolean);
+        const existingApiCodes = response.data
+          .map((exclusion) => exclusion.apiCode)
+          .filter(Boolean);
         console.log("Existing API exclusions found:", existingApiCodes);
-        
-        setExclusionFormData(prev => ({
+
+        setExclusionFormData((prev) => ({
           ...prev,
           externalApi: existingApiCodes,
         }));
@@ -1314,7 +1409,7 @@ const handleLoginSubmit = async () => {
       console.log("No existing exclusions found or error fetching:", error);
       // This is normal for agents with no existing exclusions
     }
-    
+
     setShowExclusionModal(true);
   };
 
@@ -1340,8 +1435,8 @@ const handleLoginSubmit = async () => {
     setExclusionFormData((prev) => ({
       ...prev,
       externalApi: prev.externalApi.includes(apiCode)
-        ? prev.externalApi.filter(code => code !== apiCode)
-        : [...prev.externalApi, apiCode]
+        ? prev.externalApi.filter((code) => code !== apiCode)
+        : [...prev.externalApi, apiCode],
     }));
 
     // Clear error when user selects an API
@@ -1360,16 +1455,21 @@ const handleLoginSubmit = async () => {
     // Remove from form data
     setExclusionFormData((prev) => ({
       ...prev,
-      externalApi: prev.externalApi.filter(code => code !== apiCode)
+      externalApi: prev.externalApi.filter((code) => code !== apiCode),
     }));
 
     // Also remove from backend if it exists
     try {
       console.log("Removing exclusion for API:", apiCode);
-      await axiosInstance.delete(`/api/agent-api-exclusion/agent/${editing.id}/api/${apiCode}`);
+      await axiosInstance.delete(
+        `/api/agent-api-exclusion/agent/${editing.id}/api/${apiCode}`
+      );
       console.log("Exclusion removed successfully");
     } catch (error) {
-      console.log("Error removing exclusion or exclusion doesn't exist:", error);
+      console.log(
+        "Error removing exclusion or exclusion doesn't exist:",
+        error
+      );
       // This is normal if the exclusion doesn't exist in the backend
     }
   };
@@ -1382,9 +1482,9 @@ const handleLoginSubmit = async () => {
     //   newErrors.nationality = "Nationality is required";
     // }
 
-    if (!data.externalApi || data.externalApi.length === 0) {
-      newErrors.externalApi = "At least one External API is required";
-    }
+    // if (!data.externalApi || data.externalApi.length === 0) {
+    //   newErrors.externalApi = "At least one External API is required";
+    // }
 
     return newErrors;
   };
@@ -1403,17 +1503,23 @@ const handleLoginSubmit = async () => {
       // First, fetch existing exclusions to avoid duplicates
       let existingApiCodes = [];
       try {
-        const existingResponse = await axiosInstance.get(`/api/agent-api-exclusion/agent/${editing.id}`);
+        const existingResponse = await axiosInstance.get(
+          `/api/agent-api-exclusion/agent/${editing.id}`
+        );
         if (existingResponse.data && Array.isArray(existingResponse.data)) {
-          existingApiCodes = existingResponse.data.map(exclusion => exclusion.apiCode).filter(Boolean);
+          existingApiCodes = existingResponse.data
+            .map((exclusion) => exclusion.apiCode)
+            .filter(Boolean);
         }
       } catch (error) {
         console.log("No existing exclusions found");
       }
 
       // Filter out APIs that are already excluded
-      const newApiCodes = exclusionFormData.externalApi.filter(apiCode => !existingApiCodes.includes(apiCode));
-      
+      const newApiCodes = exclusionFormData.externalApi.filter(
+        (apiCode) => !existingApiCodes.includes(apiCode)
+      );
+
       if (newApiCodes.length === 0) {
         toast.info("All selected APIs are already excluded for this agent.");
         setIsLoading(false);
@@ -1424,15 +1530,15 @@ const handleLoginSubmit = async () => {
       console.log("Already excluded:", existingApiCodes);
 
       // Send multiple requests for each new API (avoiding duplicates)
-      const promises = newApiCodes.map(apiCode => {
+      const promises = newApiCodes.map((apiCode) => {
         const exclusionPayload = {
           agentId: editing.id,
           nationality: exclusionFormData.nationality,
           apiCode: apiCode,
         };
-        
+
         console.log("Exclusion payload:", exclusionPayload);
-        
+
         return axiosInstance.post(
           "/api/agent-api-exclusion/exclude",
           exclusionPayload
@@ -1442,10 +1548,12 @@ const handleLoginSubmit = async () => {
       const responses = await Promise.all(promises);
 
       // Check if all responses were successful
-      const allSuccessful = responses.every(response => response.data);
-      
+      const allSuccessful = responses.every((response) => response.data);
+
       if (allSuccessful) {
-        toast.success(`${newApiCodes.length} new API exclusion(s) added successfully!`);
+        toast.success(
+          `${newApiCodes.length} new API exclusion(s) added successfully!`
+        );
         setExclusionErrors({});
         closeExclusionModal();
         // Refresh the agent list
@@ -2138,7 +2246,10 @@ const handleLoginSubmit = async () => {
                                   </Form.Label>
                                   <Form.Select
                                     name="agentClassification"
-                                    value={formData.agentGSTDetailsDTO.agentClassification}
+                                    value={
+                                      formData.agentGSTDetailsDTO
+                                        .agentClassification
+                                    }
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
@@ -2171,27 +2282,36 @@ const handleLoginSubmit = async () => {
                                   <Form.Control
                                     type="text"
                                     name="agentGstIn"
-                                    value={formData.agentGSTDetailsDTO.agentGstIn}
+                                    value={
+                                      formData.agentGSTDetailsDTO.agentGstIn
+                                    }
                                     onChange={handleGstinChange}
                                     placeholder="Enter 15-digit GSTIN"
                                     className={`form-input ${
-                                      validationErrors["agentGSTDetailsDTO.agentGstIn"] || gstinError
+                                      validationErrors[
+                                        "agentGSTDetailsDTO.agentGstIn"
+                                      ] || gstinError
                                         ? "is-invalid"
                                         : ""
                                     }`}
                                     isInvalid={
                                       !!(
-                                        validationErrors["agentGSTDetailsDTO.agentGstIn"] ||
-                                        gstinError
+                                        validationErrors[
+                                          "agentGSTDetailsDTO.agentGstIn"
+                                        ] || gstinError
                                       )
                                     }
                                     maxLength={15}
                                   />
-                                  {(validationErrors["agentGSTDetailsDTO.agentGstIn"] ||
+                                  {(validationErrors[
+                                    "agentGSTDetailsDTO.agentGstIn"
+                                  ] ||
                                     gstinError) && (
                                     <Form.Control.Feedback type="invalid">
                                       {gstinError ||
-                                        validationErrors["agentGSTDetailsDTO.agentGstIn"]}
+                                        validationErrors[
+                                          "agentGSTDetailsDTO.agentGstIn"
+                                        ]}
                                     </Form.Control.Feedback>
                                   )}
                                 </Form.Group>
@@ -2205,7 +2325,10 @@ const handleLoginSubmit = async () => {
                                   <Form.Control
                                     type="text"
                                     name="agentProvisionalGstno"
-                                    value={formData.agentGSTDetailsDTO.agentProvisionalGstno}
+                                    value={
+                                      formData.agentGSTDetailsDTO
+                                        .agentProvisionalGstno
+                                    }
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
@@ -2230,7 +2353,10 @@ const handleLoginSubmit = async () => {
                                   <Form.Control
                                     type="email"
                                     name="agentCorrespondmail"
-                                    value={formData.agentGSTDetailsDTO.agentCorrespondmail}
+                                    value={
+                                      formData.agentGSTDetailsDTO
+                                        .agentCorrespondmail
+                                    }
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
@@ -2242,17 +2368,27 @@ const handleLoginSubmit = async () => {
                                     }
                                     placeholder="Enter correspondence email"
                                     className={`form-input ${
-                                      validationErrors["agentGSTDetailsDTO.agentCorrespondmail"]
+                                      validationErrors[
+                                        "agentGSTDetailsDTO.agentCorrespondmail"
+                                      ]
                                         ? "is-invalid"
                                         : ""
                                     }`}
                                     isInvalid={
-                                      !!validationErrors["agentGSTDetailsDTO.agentCorrespondmail"]
+                                      !!validationErrors[
+                                        "agentGSTDetailsDTO.agentCorrespondmail"
+                                      ]
                                     }
                                   />
-                                  {validationErrors["agentGSTDetailsDTO.agentCorrespondmail"] && (
+                                  {validationErrors[
+                                    "agentGSTDetailsDTO.agentCorrespondmail"
+                                  ] && (
                                     <Form.Control.Feedback type="invalid">
-                                      {validationErrors["agentGSTDetailsDTO.agentCorrespondmail"]}
+                                      {
+                                        validationErrors[
+                                          "agentGSTDetailsDTO.agentCorrespondmail"
+                                        ]
+                                      }
                                     </Form.Control.Feedback>
                                   )}
                                 </Form.Group>
@@ -2266,7 +2402,10 @@ const handleLoginSubmit = async () => {
                                   <Form.Control
                                     type="text"
                                     name="agentRegisterstatus"
-                                    value={formData.agentGSTDetailsDTO.agentRegisterstatus}
+                                    value={
+                                      formData.agentGSTDetailsDTO
+                                        .agentRegisterstatus
+                                    }
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
@@ -2291,7 +2430,9 @@ const handleLoginSubmit = async () => {
                                   <Form.Control
                                     type="text"
                                     name="agentHsncode"
-                                    value={formData.agentGSTDetailsDTO.agentHsncode}
+                                    value={
+                                      formData.agentGSTDetailsDTO.agentHsncode
+                                    }
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
@@ -2315,7 +2456,9 @@ const handleLoginSubmit = async () => {
                                   </Form.Label>
                                   <Form.Select
                                     name="agentStatus"
-                                    value={formData.agentGSTDetailsDTO.agentStatus}
+                                    value={
+                                      formData.agentGSTDetailsDTO.agentStatus
+                                    }
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
@@ -2470,23 +2613,31 @@ const handleLoginSubmit = async () => {
             </Modal.Footer>
           </Modal>
 
-          <Modal show={showLoginModal} onHide={closeLoginModal} centered key={loginModalKey}>
+          <Modal
+            show={showLoginModal}
+            onHide={closeLoginModal}
+            centered
+            key={loginModalKey}
+          >
             <Modal.Header closeButton>
               <Modal.Title>
-                {loginFormData.username && loginFormData.username.trim() !== "" ? "Update" : "Create"} Login for Agent:{" "}
-                {editing?.companyName || editing?.agentName}
+                {loginFormData.username && loginFormData.username.trim() !== ""
+                  ? "Update"
+                  : "Create"}{" "}
+                Login for Agent: {editing?.companyName || editing?.agentName}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              {loginFormData.username && loginFormData.username.trim() !== "" && (
-                <div className="alert alert-info mb-3">
-                  <small>
-                    <i className="fas fa-info-circle me-2"></i>
-                    Existing login credentials found. You can update the
-                    username and password.
-                  </small>
-                </div>
-              )}
+              {loginFormData.username &&
+                loginFormData.username.trim() !== "" && (
+                  <div className="alert alert-info mb-3">
+                    <small>
+                      <i className="fas fa-info-circle me-2"></i>
+                      Existing login credentials found. You can update the
+                      username and password.
+                    </small>
+                  </div>
+                )}
               <Form className="loginForm">
                 <Form.Group className="mb-3">
                   <Form.Label>Username</Form.Label>
@@ -2739,94 +2890,167 @@ const handleLoginSubmit = async () => {
             </Modal.Header>
             <Modal.Body>
               <Form>
-                <Row>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        <span className="text-danger">*</span>Add Credit Limit{" "}
-                      </Form.Label>
-                      <Form.Control
-                        type="number"
-                        name="addCreditLimit"
-                        value={creditLimitFormData.addCreditLimit}
-                        onChange={handleCreditLimitChange}
-                        placeholder="Enter amount to add"
-                        className={`form-input ${
-                          creditLimitErrors.addCreditLimit ? "is-invalid" : ""
-                        }`}
-                        isInvalid={!!creditLimitErrors.addCreditLimit}
-                        min="0"
-                        step="0.01"
+                {/* Radio Buttons for Credit Limit Type */}
+                <Form.Group className="mb-4">
+                  <Form.Label className="fw-bold">Select Action:</Form.Label>
+                  <Row>
+                    <Col xs="auto">
+                      <Form.Check
+                        type="radio"
+                        id="initial-credit"
+                        name="creditLimitType"
+                        value="initial"
+                        label="Add Initial Credit Limit"
+                        checked={creditLimitType === "initial"}
+                        onChange={handleCreditLimitTypeChange}
+                        disabled={hasInitialCredit}
+                        className="mb-2"
                       />
-                      {creditLimitErrors.addCreditLimit && (
-                        <Form.Control.Feedback type="invalid">
-                          {creditLimitErrors.addCreditLimit}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        <span className="text-danger">*</span>Remarks{" "}
-                      </Form.Label>
-                      <Form.Control
-                        type="text"
-                        name="remarks"
-                        value={creditLimitFormData.remarks}
-                        onChange={handleCreditLimitChange}
-                        placeholder="Enter remarks"
-                        className={`form-input ${
-                          creditLimitErrors.remarks ? "is-invalid" : ""
-                        }`}
-                        isInvalid={!!creditLimitErrors.remarks}
+                    </Col>
+                    <Col xs="auto">
+                      <Form.Check
+                        type="radio"
+                        id="update-credit"
+                        name="creditLimitType"
+                        value="update"
+                        label="Update Credit Limit"
+                        checked={creditLimitType === "update"}
+                        onChange={handleCreditLimitTypeChange}
+                        className="mb-2"
                       />
-                      {creditLimitErrors.remarks && (
-                        <Form.Control.Feedback type="invalid">
-                          {creditLimitErrors.remarks}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                </Row>
+                    </Col>
+                  </Row>
+                </Form.Group>
 
                 <hr className="my-3" />
 
-                <Row>
-                  <Col md={4}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Total Credit Limit</Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={creditLimitFormData.totalCreditLimit}
-                        readOnly
-                        className="form-control-plaintext bg-light"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={4}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Available Credit Limit</Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={creditLimitFormData.availableCreditLimit}
-                        readOnly
-                        className="form-control-plaintext bg-light"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={4}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Used Credit Limit</Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={creditLimitFormData.usedCreditLimit}
-                        readOnly
-                        className="form-control-plaintext bg-light"
-                      />
-                    </Form.Group>
-                  </Col>
-                </Row>
+                {/* Conditional Fields based on selected type */}
+                {creditLimitType === "initial" ? (
+                  // Add Initial Credit Limit Fields
+                  <Row>
+                    <Col md={12}>
+                      <Form.Group className="mb-3">
+                        <Form.Label>
+                          <span className="text-danger">*</span>Add Credit Limit
+                        </Form.Label>
+                        <Form.Control
+                          type="number"
+                          name="addCreditLimit"
+                          value={creditLimitFormData.addCreditLimit}
+                          onChange={handleCreditLimitChange}
+                          placeholder="Enter initial credit limit amount"
+                          className={`form-input ${
+                            creditLimitErrors.addCreditLimit ? "is-invalid" : ""
+                          }`}
+                          isInvalid={!!creditLimitErrors.addCreditLimit}
+                          min="0"
+                          step="0.01"
+                        />
+                        {creditLimitErrors.addCreditLimit && (
+                          <Form.Control.Feedback type="invalid">
+                            {creditLimitErrors.addCreditLimit}
+                          </Form.Control.Feedback>
+                        )}
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                ) : (
+                  // Update Credit Limit Fields
+                  <>
+                    <Row>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            <span className="text-danger">*</span>Add-on Credit
+                            Limit
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            name="addCreditLimit"
+                            value={creditLimitFormData.addCreditLimit}
+                            onChange={handleCreditLimitChange}
+                            placeholder="Enter amount to add"
+                            className={`form-input ${
+                              creditLimitErrors.addCreditLimit
+                                ? "is-invalid"
+                                : ""
+                            }`}
+                            isInvalid={!!creditLimitErrors.addCreditLimit}
+                            min="0"
+                            step="0.01"
+                          />
+                          {creditLimitErrors.addCreditLimit && (
+                            <Form.Control.Feedback type="invalid">
+                              {creditLimitErrors.addCreditLimit}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            <span className="text-danger">*</span>Remarks
+                          </Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            name="remarks"
+                            value={creditLimitFormData.remarks}
+                            onChange={handleCreditLimitChange}
+                            placeholder="Enter remarks"
+                            className={`form-input ${
+                              creditLimitErrors.remarks ? "is-invalid" : ""
+                            }`}
+                            isInvalid={!!creditLimitErrors.remarks}
+                          />
+                          {creditLimitErrors.remarks && (
+                            <Form.Control.Feedback type="invalid">
+                              {creditLimitErrors.remarks}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                    </Row>
+
+                    <hr className="my-3" />
+
+                    <Row>
+                      <Col md={4}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Total Credit Limit</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={creditLimitFormData.totalCreditLimit}
+                            readOnly
+                            className="form-control-plaintext bg-light"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={4}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Available Credit Limit</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={creditLimitFormData.availableCreditLimit}
+                            readOnly
+                            className="form-control-plaintext bg-light"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={4}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Used Credit Limit</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={creditLimitFormData.usedCreditLimit}
+                            readOnly
+                            className="form-control-plaintext bg-light"
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </>
+                )}
               </Form>
             </Modal.Body>
             <Modal.Footer>
@@ -2849,10 +3073,14 @@ const handleLoginSubmit = async () => {
                       role="status"
                       aria-hidden="true"
                     ></span>
-                    Updating...
+                    {creditLimitType === "initial"
+                      ? "Creating..."
+                      : "Updating..."}
                   </>
+                ) : creditLimitType === "initial" ? (
+                  "Save"
                 ) : (
-                  "Update Credit Limit"
+                  "Update"
                 )}
               </Button>
             </Modal.Footer>
@@ -2919,15 +3147,21 @@ const handleLoginSubmit = async () => {
                           style={{
                             minHeight: "38px",
                             cursor: "pointer",
-                            border: exclusionErrors.externalApi ? "1px solid #dc3545" : "1px solid #ced4da",
+                            border: exclusionErrors.externalApi
+                              ? "1px solid #dc3545"
+                              : "1px solid #ced4da",
                           }}
                           onClick={() => setShowApiDropdown(!showApiDropdown)}
                         >
                           {exclusionFormData.externalApi.length === 0 ? (
-                            <span className="text-muted">Select APIs to exclude</span>
+                            <span className="text-muted">
+                              Select APIs to exclude
+                            </span>
                           ) : (
                             exclusionFormData.externalApi.map((apiCode) => {
-                              const api = externalApis.find(a => a.code === apiCode);
+                              const api = externalApis.find(
+                                (a) => a.code === apiCode
+                              );
                               return (
                                 <span
                                   key={apiCode}
@@ -2965,21 +3199,27 @@ const handleLoginSubmit = async () => {
                             }}
                           >
                             {externalApis.map((api) => {
-                              const isSelected = exclusionFormData.externalApi.includes(api.code);
+                              const isSelected =
+                                exclusionFormData.externalApi.includes(
+                                  api.code
+                                );
                               return (
                                 <div
                                   key={api.code}
                                   className="px-3 py-2"
                                   style={{
                                     borderBottom: "1px solid #eee",
-                                    cursor: isSelected ? "not-allowed" : "pointer",
+                                    cursor: isSelected
+                                      ? "not-allowed"
+                                      : "pointer",
                                     backgroundColor: "white",
                                     opacity: isSelected ? 0.5 : 1,
                                     color: isSelected ? "#6c757d" : "inherit",
                                   }}
                                   onMouseEnter={(e) => {
                                     if (!isSelected) {
-                                      e.target.style.backgroundColor = "#f8f9fa";
+                                      e.target.style.backgroundColor =
+                                        "#f8f9fa";
                                     }
                                   }}
                                   onMouseLeave={(e) => {
@@ -2994,7 +3234,6 @@ const handleLoginSubmit = async () => {
                                   }}
                                 >
                                   <div className="fw-small">{api.name}</div>
-                                 
                                 </div>
                               );
                             })}
@@ -3014,8 +3253,8 @@ const handleLoginSubmit = async () => {
                 <div className="alert alert-info">
                   <small>
                     <strong>Note:</strong> This will exclude the selected
-                    external API for this agent. The agent will
-                    not be able to access bookings through the selected API.
+                    external API for this agent. The agent will not be able to
+                    access bookings through the selected API.
                   </small>
                 </div>
               </Form>
