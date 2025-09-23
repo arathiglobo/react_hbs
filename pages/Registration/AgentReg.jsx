@@ -1688,9 +1688,11 @@ const AgentReg = () => {
       });
 
       const responses = await Promise.all(promises);
+       console.log("allSuccessful:::" , responses)
 
       // Check if all responses were successful
       const allSuccessful = responses.every((response) => response.data);
+     
 
       if (allSuccessful) {
         toast.success(
@@ -1700,6 +1702,8 @@ const AgentReg = () => {
         closeExclusionModal();
         // Refresh the agent list
         await fetchAgentList(page, search);
+      }else{
+          toast.error("Exclusions removed successfully");
       }
     } catch (error) {
       console.error("Exclusion submission failed:", error);
