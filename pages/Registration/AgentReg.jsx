@@ -24,10 +24,152 @@ import {
   FaBan,
 } from "react-icons/fa";
 
+// SearchableSelect Component
+const SearchableSelect = ({ 
+  options, 
+  value, 
+  onChange, 
+  placeholder, 
+  className, 
+  isInvalid,
+  name,
+  disabled = false 
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredOptions, setFilteredOptions] = useState(options || []);
+
+  useEffect(() => {
+    if (!options || !Array.isArray(options)) {
+      setFilteredOptions([]);
+      return;
+    }
+
+    if (searchTerm) {
+      const filtered = options.filter(option => {
+        // Handle different possible data structures
+        const optionName = option.name || option.countryName || option.stateName || option.placeName || String(option);
+        return optionName.toLowerCase().includes(searchTerm.toLowerCase());
+      });
+      setFilteredOptions(filtered);
+    } else {
+      setFilteredOptions(options);
+    }
+  }, [searchTerm, options]);
+
+  const handleSelect = (option) => {
+    try {
+      onChange({
+        target: {
+          name: name,
+          value: option.id
+        }
+      });
+      setIsOpen(false);
+      setSearchTerm("");
+    } catch (error) {
+      console.error("Error in handleSelect:", error);
+    }
+  };
+
+  const selectedOption = options?.find(option => String(option.id) === String(value));
+
+  return (
+    <div className="position-relative">
+      <Form.Control
+        type="text"
+        value={isOpen ? searchTerm : (selectedOption?.name || selectedOption?.countryName || selectedOption?.stateName || selectedOption?.placeName || "")}
+        onChange={(e) => {
+          if (disabled) return;
+          if (isOpen) {
+            setSearchTerm(e.target.value);
+          } else {
+            // If not open, open dropdown and set search term
+            setIsOpen(true);
+            setSearchTerm(e.target.value);
+          }
+        }}
+        onFocus={() => !disabled && setIsOpen(true)}
+        placeholder={placeholder}
+        className={`form-input ${isInvalid ? "is-invalid" : ""}`}
+        disabled={disabled}
+        readOnly={disabled}
+        autoComplete="off"
+      />
+      
+      {isOpen && !disabled && (
+        <div
+          className="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-lg"
+          style={{ 
+            zIndex: 1050, 
+            maxHeight: "200px", 
+            overflowY: "auto",
+            top: "100%"
+          }}
+        >
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <div
+                key={option.id}
+                className="px-3 py-2 cursor-pointer"
+                style={{
+                  cursor: "pointer",
+                  borderBottom: "1px solid #eee"
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.backgroundColor = "#f8f9fa";
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.backgroundColor = "white";
+                }}
+                onClick={() => handleSelect(option)}
+              >
+                {option.name || option.countryName || option.stateName || option.placeName || String(option)}
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-muted">No options found</div>
+          )}
+        </div>
+      )}
+      
+      {/* Overlay to close dropdown when clicking outside */}
+      {isOpen && (
+        <div
+          className="position-fixed"
+          style={{
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1040
+          }}
+          onClick={() => {
+            setIsOpen(false);
+            setSearchTerm("");
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 const AgentReg = () => {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [isViewMode, setIsViewMode] = useState(false);
+
+  // Helper function to get form control props based on view mode
+  const getFormControlProps = (fieldName, onChangeHandler, additionalProps = {}) => {
+    return {
+      ...additionalProps,
+      readOnly: isViewMode,
+      onChange: isViewMode ? undefined : onChangeHandler,
+      className: `${additionalProps.className || ""} ${isViewMode ? "bg-light" : ""}`.trim(),
+      autoFocus: isViewMode ? false : additionalProps.autoFocus,
+    };
+  };
   const [agentCategoryies, setAgentCategoryies] = useState([]);
   const [countries, setCountries] = useState([]);
   const [provinces, setProvinces] = useState([]);
@@ -190,6 +332,7 @@ const AgentReg = () => {
   const openEdit = async (item) => {
     console.log("edit item:::", item);
     setEditing(item);
+    setIsViewMode(false); // Set to edit mode
 
     // Set form data first
     setFormData({
@@ -462,6 +605,7 @@ const AgentReg = () => {
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
+    setIsViewMode(false); // Reset view mode
     setFormData({
       companyName: "",
       shortName: "",
@@ -572,20 +716,6 @@ const AgentReg = () => {
     };
   }, [showApiDropdown]);
 
-  // Force reset form data when modal opens
-  useEffect(() => {
-    if (showLoginModal) {
-      console.log("useEffect: Modal opened, forcing form reset");
-      const emptyFormData = {
-        username: "",
-        password: "",
-        repassword: "",
-        userroles: [],
-      };
-      setLoginFormData(emptyFormData);
-      console.log("useEffect: Form reset to empty:", emptyFormData);
-    }
-  }, [showLoginModal]);
 
   // Validation function
   const validateAgentForm = (data) => {
@@ -808,6 +938,7 @@ const AgentReg = () => {
 
   const handleView = async (item) => {
     setEditing(item);
+    setIsViewMode(true); // Set to view mode
 
     // Set form data first
     setFormData({
@@ -912,20 +1043,24 @@ const AgentReg = () => {
     // Fetch existing login data for this agent
     try {
       console.log("Fetching existing login data for agent:", item.id);
-      const response = await axiosInstance.get(
+      const response = await axiosInstance.post(
         `/auth/checkRegisteredUserExist/${item.id}`
       );
 
       if (response.data) {
         console.log("Existing login data found:", response.data);
 
+        // Safely check both key variations
+        const userNameValue = response.data.userName || response.data.username || "";
+
+        console.log("username:", userNameValue);
+
         // Populate form with existing data
-        // Note: userName field appears to contain password hash based on response format
         setLoginFormData({
-          username: "", // No username field in response, keeping empty
-          password: response.data.userName || "", // userName contains the password hash
-          repassword: response.data.userName || "", // Same for repassword field
-          userroles: [], // You may need to fetch roles separately if needed
+          username: userNameValue,     // actual username
+          password: "",                // don't set this from username
+          repassword: "",              // same here
+          userroles: [],               // fetch separately if needed
         });
 
         console.log("Form populated with existing data");
@@ -942,7 +1077,6 @@ const AgentReg = () => {
 
     // Show modal
     setShowLoginModal(true);
-
     console.log("Modal opened with data loaded");
   };
 
@@ -1312,19 +1446,27 @@ const AgentReg = () => {
 
   // Ensure countryId is always treated as a string
   const handleCountryChange = (e) => {
-    const value = e.target.value;
-    console.log(
-      "Country selected:",
-      value,
-      "Country name:",
-      e.target.options[e.target.selectedIndex].text
-    );
-    setFormData((prev) => ({
-      ...prev,
-      countryId: String(value), // Explicitly convert to string
-      provinceId: "", // Reset province when country changes
-      placeId: "", // Reset city when country changes
-    }));
+    try {
+      const value = e.target.value;
+      const selectedCountry = countries.find(country => String(country.id) === String(value));
+      const countryName = selectedCountry?.name || selectedCountry?.countryName || "Unknown";
+      
+      console.log(
+        "Country selected:",
+        value,
+        "Country name:",
+        countryName
+      );
+      
+      setFormData((prev) => ({
+        ...prev,
+        countryId: String(value), // Explicitly convert to string
+        provinceId: "", // Reset province when country changes
+        placeId: "", // Reset city when country changes
+      }));
+    } catch (error) {
+      console.error("Error in handleCountryChange:", error);
+    }
   };
 
   // Handle GSTIN input validation
@@ -1731,7 +1873,7 @@ const AgentReg = () => {
           <Modal show={showModal} onHide={closeModal} centered size="lg">
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
-                {editing ? "Update Agent" : "Create Agent"}
+                {isViewMode ? "View Details" : (editing ? "Update Agent" : "Create Agent")}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -1745,18 +1887,22 @@ const AgentReg = () => {
                           <Form.Label>Company Name</Form.Label>
                           <Form.Control
                             value={formData.companyName}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                companyName: e.target.value,
-                              })
-                            }
                             placeholder="Enter company name"
-                            className={`form-input ${
-                              validationErrors.companyName ? "is-invalid" : ""
-                            }`}
                             isInvalid={!!validationErrors.companyName}
-                            autoFocus
+                            {...getFormControlProps(
+                              "companyName",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  companyName: e.target.value,
+                                }),
+                              {
+                                className: `form-input ${
+                                  validationErrors.companyName ? "is-invalid" : ""
+                                }`,
+                                autoFocus: true,
+                              }
+                            )}
                           />
                           {validationErrors.companyName && (
                             <Form.Control.Feedback type="invalid">
@@ -1770,17 +1916,21 @@ const AgentReg = () => {
                           <Form.Label>Short Name</Form.Label>
                           <Form.Control
                             value={formData.shortName}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                shortName: e.target.value,
-                              })
-                            }
                             placeholder="Enter short name"
-                            className={`form-input ${
-                              validationErrors.shortName ? "is-invalid" : ""
-                            }`}
                             isInvalid={!!validationErrors.shortName}
+                            {...getFormControlProps(
+                              "shortName",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  shortName: e.target.value,
+                                }),
+                              {
+                                className: `form-input ${
+                                  validationErrors.shortName ? "is-invalid" : ""
+                                }`,
+                              }
+                            )}
                           />
                           {validationErrors.shortName && (
                             <Form.Control.Feedback type="invalid">
@@ -1794,17 +1944,21 @@ const AgentReg = () => {
                           <Form.Label>Business Type</Form.Label>
                           <Form.Control
                             value={formData.businessType}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                businessType: e.target.value,
-                              })
-                            }
                             placeholder="Enter business name"
-                            className={`form-input ${
-                              validationErrors.businessType ? "is-invalid" : ""
-                            }`}
                             isInvalid={!!validationErrors.businessType}
+                            {...getFormControlProps(
+                              "businessType",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  businessType: e.target.value,
+                                }),
+                              {
+                                className: `form-input ${
+                                  validationErrors.businessType ? "is-invalid" : ""
+                                }`,
+                              }
+                            )}
                           />
                           {validationErrors.businessType && (
                             <Form.Control.Feedback type="invalid">
@@ -1818,7 +1972,7 @@ const AgentReg = () => {
                           <Form.Label>Company Type</Form.Label>
                           <Form.Select
                             value={formData.agentCategoryId}
-                            onChange={(e) =>
+                            onChange={isViewMode ? undefined : (e) =>
                               setFormData({
                                 ...formData,
                                 agentCategoryId: e.target.value,
@@ -1828,8 +1982,9 @@ const AgentReg = () => {
                               validationErrors.agentCategoryId
                                 ? "is-invalid"
                                 : ""
-                            }`}
+                            } ${isViewMode ? "bg-light" : ""}`}
                             isInvalid={!!validationErrors.agentCategoryId}
+                            disabled={isViewMode}
                           >
                             <option value="">Select company type</option>
                             {agentCategoryies.map((agent) => (
@@ -1855,17 +2010,21 @@ const AgentReg = () => {
                           <Form.Label>Company Code</Form.Label>
                           <Form.Control
                             value={formData.companyCode}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                companyCode: e.target.value,
-                              })
-                            }
                             placeholder="Enter company code"
-                            className={`form-input ${
-                              validationErrors.companyCode ? "is-invalid" : ""
-                            }`}
                             isInvalid={!!validationErrors.companyCode}
+                            {...getFormControlProps(
+                              "companyCode",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  companyCode: e.target.value,
+                                }),
+                              {
+                                className: `form-input ${
+                                  validationErrors.companyCode ? "is-invalid" : ""
+                                }`,
+                              }
+                            )}
                           />
                           {validationErrors.companyCode && (
                             <Form.Control.Feedback type="invalid">
@@ -1879,17 +2038,21 @@ const AgentReg = () => {
                           <Form.Label>Agent URL</Form.Label>
                           <Form.Control
                             value={formData.agentUrl}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                agentUrl: e.target.value,
-                              })
-                            }
                             placeholder="Enter agent URL"
-                            className={`form-input ${
-                              validationErrors.agentUrl ? "is-invalid" : ""
-                            }`}
                             isInvalid={!!validationErrors.agentUrl}
+                            {...getFormControlProps(
+                              "agentUrl",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  agentUrl: e.target.value,
+                                }),
+                              {
+                                className: `form-input ${
+                                  validationErrors.agentUrl ? "is-invalid" : ""
+                                }`,
+                              }
+                            )}
                           />
                           {validationErrors.agentUrl && (
                             <Form.Control.Feedback type="invalid">
@@ -1904,12 +2067,14 @@ const AgentReg = () => {
                           <Form.Control
                             type="file"
                             accept="image/*"
-                            onChange={(e) =>
+                            onChange={isViewMode ? undefined : (e) =>
                               setFormData({
                                 ...formData,
                                 agentLogo: e.target.files[0],
                               })
                             }
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                           />
                         </Form.Group>
                       </Col>
@@ -1918,17 +2083,21 @@ const AgentReg = () => {
                           <Form.Label>First Name</Form.Label>
                           <Form.Control
                             value={formData.firstName}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                firstName: e.target.value,
-                              })
-                            }
                             placeholder="Enter first name"
-                            className={`form-input ${
-                              validationErrors.firstName ? "is-invalid" : ""
-                            }`}
                             isInvalid={!!validationErrors.firstName}
+                            {...getFormControlProps(
+                              "firstName",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  firstName: e.target.value,
+                                }),
+                              {
+                                className: `form-input ${
+                                  validationErrors.firstName ? "is-invalid" : ""
+                                }`,
+                              }
+                            )}
                           />
                           {validationErrors.firstName && (
                             <Form.Control.Feedback type="invalid">
@@ -1942,17 +2111,21 @@ const AgentReg = () => {
                           <Form.Label>Last Name</Form.Label>
                           <Form.Control
                             value={formData.lastName}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                lastName: e.target.value,
-                              })
-                            }
                             placeholder="Enter last name"
-                            className={`form-input ${
-                              validationErrors.lastName ? "is-invalid" : ""
-                            }`}
                             isInvalid={!!validationErrors.lastName}
+                            {...getFormControlProps(
+                              "lastName",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  lastName: e.target.value,
+                                }),
+                              {
+                                className: `form-input ${
+                                  validationErrors.lastName ? "is-invalid" : ""
+                                }`,
+                              }
+                            )}
                           />
                           {validationErrors.lastName && (
                             <Form.Control.Feedback type="invalid">
@@ -1976,19 +2149,23 @@ const AgentReg = () => {
                               <Form.Label>Agent Email</Form.Label>
                               <Form.Control
                                 value={formData.personalEmail}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    personalEmail: e.target.value,
-                                  })
-                                }
                                 placeholder="Enter email"
-                                className={`form-input ${
-                                  validationErrors.personalEmail
-                                    ? "is-invalid"
-                                    : ""
-                                }`}
                                 isInvalid={!!validationErrors.personalEmail}
+                                {...getFormControlProps(
+                                  "personalEmail",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      personalEmail: e.target.value,
+                                    }),
+                                  {
+                                    className: `form-input ${
+                                      validationErrors.personalEmail
+                                        ? "is-invalid"
+                                        : ""
+                                    }`,
+                                  }
+                                )}
                               />
 
                               {validationErrors.personalEmail && (
@@ -2003,13 +2180,16 @@ const AgentReg = () => {
                               <Form.Label>Zip Code</Form.Label>
                               <Form.Control
                                 value={formData.zipCode}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    zipCode: e.target.value,
-                                  })
-                                }
                                 placeholder="Enter zip code"
+                                {...getFormControlProps(
+                                  "zipCode",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      zipCode: e.target.value,
+                                    }),
+                                  {}
+                                )}
                               />
                             </Form.Group>
                           </Col>
@@ -2021,19 +2201,23 @@ const AgentReg = () => {
                               <Form.Label>Mobile Number</Form.Label>
                               <Form.Control
                                 value={formData.mobileNumber}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    mobileNumber: e.target.value,
-                                  })
-                                }
                                 placeholder="Enter mobile number"
-                                className={`form-input ${
-                                  validationErrors.mobileNumber
-                                    ? "is-invalid"
-                                    : ""
-                                }`}
                                 isInvalid={!!validationErrors.mobileNumber}
+                                {...getFormControlProps(
+                                  "mobileNumber",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      mobileNumber: e.target.value,
+                                    }),
+                                  {
+                                    className: `form-input ${
+                                      validationErrors.mobileNumber
+                                        ? "is-invalid"
+                                        : ""
+                                    }`,
+                                  }
+                                )}
                               />
 
                               {validationErrors.mobileNumber && (
@@ -2048,13 +2232,16 @@ const AgentReg = () => {
                               <Form.Label>Telephone Number</Form.Label>
                               <Form.Control
                                 value={formData.telephoneNumber}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    telephoneNumber: e.target.value,
-                                  })
-                                }
                                 placeholder="Enter telephone number"
+                                {...getFormControlProps(
+                                  "telephoneNumber",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      telephoneNumber: e.target.value,
+                                    }),
+                                  {}
+                                )}
                               />
                             </Form.Group>
                           </Col>
@@ -2065,38 +2252,31 @@ const AgentReg = () => {
                               <Form.Label>Contact Person</Form.Label>
                               <Form.Control
                                 value={formData.contactPerson}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    contactPerson: e.target.value,
-                                  })
-                                }
                                 placeholder="Enter contact person"
+                                {...getFormControlProps(
+                                  "contactPerson",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      contactPerson: e.target.value,
+                                    }),
+                                  {}
+                                )}
                               />
                             </Form.Group>
                           </Col>
                           <Col md={6}>
                             <Form.Group className="mb-3">
                               <Form.Label>Country</Form.Label>
-                              <Form.Select
+                              <SearchableSelect
                                 name="countryId"
                                 value={formData.countryId}
-                                onChange={handleCountryChange} // Use the new handler
-                                className={`form-input ${
-                                  validationErrors.countryId ? "is-invalid" : ""
-                                }`}
+                                onChange={handleCountryChange}
+                                placeholder="Search and select country"
+                                options={countries}
                                 isInvalid={!!validationErrors.countryId}
-                              >
-                                <option value="">Select country</option>
-                                {countries.map((country) => (
-                                  <option
-                                    key={country.id}
-                                    value={String(country.id)}
-                                  >
-                                    {country.name}
-                                  </option>
-                                ))}
-                              </Form.Select>
+                                disabled={isViewMode}
+                              />
                               {validationErrors.countryId && (
                                 <Form.Control.Feedback type="invalid">
                                   {validationErrors.countryId}
@@ -2109,7 +2289,7 @@ const AgentReg = () => {
                           <Col md={6}>
                             <Form.Group className="mb-3">
                               <Form.Label>Province</Form.Label>
-                              <Form.Select
+                              <SearchableSelect
                                 name="provinceId"
                                 value={formData.provinceId}
                                 onChange={(e) =>
@@ -2118,25 +2298,11 @@ const AgentReg = () => {
                                     provinceId: e.target.value,
                                   })
                                 }
-                                disabled={!formData.countryId}
-                                className={`form-input ${
-                                  validationErrors.provinceId
-                                    ? "is-invalid"
-                                    : ""
-                                }`}
+                                placeholder="Search and select province/state"
+                                options={Array.isArray(provinces) ? provinces.map(province => ({ id: province.id, name: province.stateName })) : []}
                                 isInvalid={!!validationErrors.provinceId}
-                              >
-                                <option value="">Select province/state</option>
-                                {Array.isArray(provinces) &&
-                                  provinces.map((province) => (
-                                    <option
-                                      key={province.id}
-                                      value={province.id}
-                                    >
-                                      {province.stateName}
-                                    </option>
-                                  ))}
-                              </Form.Select>
+                                disabled={isViewMode || !formData.countryId}
+                              />
                               {validationErrors.provinceId && (
                                 <Form.Control.Feedback type="invalid">
                                   {validationErrors.provinceId}
@@ -2147,7 +2313,7 @@ const AgentReg = () => {
                           <Col md={6}>
                             <Form.Group className="mb-3">
                               <Form.Label>City</Form.Label>
-                              <Form.Select
+                              <SearchableSelect
                                 name="placeId"
                                 value={formData.placeId}
                                 onChange={(e) =>
@@ -2156,20 +2322,11 @@ const AgentReg = () => {
                                     placeId: e.target.value,
                                   })
                                 }
-                                disabled={!formData.provinceId}
-                                className={`form-input ${
-                                  validationErrors.placeId ? "is-invalid" : ""
-                                }`}
+                                placeholder="Search and select city"
+                                options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name })) : []}
                                 isInvalid={!!validationErrors.placeId}
-                              >
-                                <option value="">Select city</option>
-                                {Array.isArray(places) &&
-                                  places.map((place) => (
-                                    <option key={place.id} value={place.id}>
-                                      {place.name}
-                                    </option>
-                                  ))}
-                              </Form.Select>
+                                disabled={isViewMode || !formData.provinceId}
+                              />
                               {validationErrors.placeId && (
                                 <Form.Control.Feedback type="invalid">
                                   {validationErrors.placeId}
@@ -2185,17 +2342,21 @@ const AgentReg = () => {
                               as="textarea"
                               rows={3}
                               value={formData.address}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  address: e.target.value,
-                                })
-                              }
                               placeholder="Enter address"
-                              className={`form-input ${
-                                validationErrors.address ? "is-invalid" : ""
-                              }`}
                               isInvalid={!!validationErrors.address}
+                              {...getFormControlProps(
+                                "address",
+                                (e) =>
+                                  setFormData({
+                                    ...formData,
+                                    address: e.target.value,
+                                  }),
+                                {
+                                  className: `form-input ${
+                                    validationErrors.address ? "is-invalid" : ""
+                                  }`,
+                                }
+                              )}
                             />
                             {validationErrors.address && (
                               <Form.Control.Feedback type="invalid">
@@ -2250,7 +2411,7 @@ const AgentReg = () => {
                                       formData.agentGSTDetailsDTO
                                         .agentClassification
                                     }
-                                    onChange={(e) =>
+                                    onChange={isViewMode ? undefined : (e) =>
                                       setFormData({
                                         ...formData,
                                         agentGSTDetailsDTO: {
@@ -2259,7 +2420,8 @@ const AgentReg = () => {
                                         },
                                       })
                                     }
-                                    className="form-input"
+                                    className={`form-input ${isViewMode ? "bg-light" : ""}`}
+                                    disabled={isViewMode}
                                   >
                                     <option value="">
                                       Select classification
@@ -2285,7 +2447,7 @@ const AgentReg = () => {
                                     value={
                                       formData.agentGSTDetailsDTO.agentGstIn
                                     }
-                                    onChange={handleGstinChange}
+                                    onChange={isViewMode ? undefined : handleGstinChange}
                                     placeholder="Enter 15-digit GSTIN"
                                     className={`form-input ${
                                       validationErrors[
@@ -2293,7 +2455,7 @@ const AgentReg = () => {
                                       ] || gstinError
                                         ? "is-invalid"
                                         : ""
-                                    }`}
+                                    } ${isViewMode ? "bg-light" : ""}`}
                                     isInvalid={
                                       !!(
                                         validationErrors[
@@ -2302,6 +2464,7 @@ const AgentReg = () => {
                                       )
                                     }
                                     maxLength={15}
+                                    readOnly={isViewMode}
                                   />
                                   {(validationErrors[
                                     "agentGSTDetailsDTO.agentGstIn"
@@ -2329,7 +2492,7 @@ const AgentReg = () => {
                                       formData.agentGSTDetailsDTO
                                         .agentProvisionalGstno
                                     }
-                                    onChange={(e) =>
+                                    onChange={isViewMode ? undefined : (e) =>
                                       setFormData({
                                         ...formData,
                                         agentGSTDetailsDTO: {
@@ -2339,8 +2502,9 @@ const AgentReg = () => {
                                       })
                                     }
                                     placeholder="Enter provisional GST number"
-                                    className="form-input"
+                                    className={`form-input ${isViewMode ? "bg-light" : ""}`}
                                     maxLength={30}
+                                    readOnly={isViewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -2357,7 +2521,7 @@ const AgentReg = () => {
                                       formData.agentGSTDetailsDTO
                                         .agentCorrespondmail
                                     }
-                                    onChange={(e) =>
+                                    onChange={isViewMode ? undefined : (e) =>
                                       setFormData({
                                         ...formData,
                                         agentGSTDetailsDTO: {
@@ -2373,12 +2537,13 @@ const AgentReg = () => {
                                       ]
                                         ? "is-invalid"
                                         : ""
-                                    }`}
+                                    } ${isViewMode ? "bg-light" : ""}`}
                                     isInvalid={
                                       !!validationErrors[
                                         "agentGSTDetailsDTO.agentCorrespondmail"
                                       ]
                                     }
+                                    readOnly={isViewMode}
                                   />
                                   {validationErrors[
                                     "agentGSTDetailsDTO.agentCorrespondmail"
@@ -2406,7 +2571,7 @@ const AgentReg = () => {
                                       formData.agentGSTDetailsDTO
                                         .agentRegisterstatus
                                     }
-                                    onChange={(e) =>
+                                    onChange={isViewMode ? undefined : (e) =>
                                       setFormData({
                                         ...formData,
                                         agentGSTDetailsDTO: {
@@ -2416,8 +2581,9 @@ const AgentReg = () => {
                                       })
                                     }
                                     placeholder="Enter registration status"
-                                    className="form-input"
+                                    className={`form-input ${isViewMode ? "bg-light" : ""}`}
                                     maxLength={30}
+                                    readOnly={isViewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -2433,7 +2599,7 @@ const AgentReg = () => {
                                     value={
                                       formData.agentGSTDetailsDTO.agentHsncode
                                     }
-                                    onChange={(e) =>
+                                    onChange={isViewMode ? undefined : (e) =>
                                       setFormData({
                                         ...formData,
                                         agentGSTDetailsDTO: {
@@ -2443,8 +2609,9 @@ const AgentReg = () => {
                                       })
                                     }
                                     placeholder="Enter HSN/SAC code"
-                                    className="form-input"
+                                    className={`form-input ${isViewMode ? "bg-light" : ""}`}
                                     maxLength={30}
+                                    readOnly={isViewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -2459,7 +2626,7 @@ const AgentReg = () => {
                                     value={
                                       formData.agentGSTDetailsDTO.agentStatus
                                     }
-                                    onChange={(e) =>
+                                    onChange={isViewMode ? undefined : (e) =>
                                       setFormData({
                                         ...formData,
                                         agentGSTDetailsDTO: {
@@ -2468,7 +2635,8 @@ const AgentReg = () => {
                                         },
                                       })
                                     }
-                                    className="form-input"
+                                    className={`form-input ${isViewMode ? "bg-light" : ""}`}
+                                    disabled={isViewMode}
                                   >
                                     <option value="">Select Status</option>
                                     <option value="active">Active</option>
@@ -2494,13 +2662,14 @@ const AgentReg = () => {
                             value={formData.markup}
                             className={`form-input ${
                               validationErrors.markup ? "is-invalid" : ""
-                            }`}
-                            onChange={(e) =>
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) =>
                               setFormData({
                                 ...formData,
                                 markup: e.target.value,
                               })
                             }
+                            disabled={isViewMode}
                           >
                             <option value="">Select Markup</option>
                             {Array.isArray(markup) &&
@@ -2522,13 +2691,14 @@ const AgentReg = () => {
                             value={formData.currency}
                             className={`form-input ${
                               validationErrors.currency ? "is-invalid" : ""
-                            }`}
-                            onChange={(e) =>
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) =>
                               setFormData({
                                 ...formData,
                                 currency: e.target.value,
                               })
                             }
+                            disabled={isViewMode}
                           >
                             <option value="">Select Currency</option>
                             {Array.isArray(currency) &&
@@ -2553,13 +2723,14 @@ const AgentReg = () => {
                             value={formData.status}
                             className={`form-input ${
                               validationErrors.status ? "is-invalid" : ""
-                            }`}
-                            onChange={(e) =>
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) =>
                               setFormData({
                                 ...formData,
                                 status: e.target.value,
                               })
                             }
+                            disabled={isViewMode}
                           >
                             <option value="">SELECT</option>
                             <option value="Active">Active</option>
@@ -2588,28 +2759,30 @@ const AgentReg = () => {
                 onClick={closeModal}
                 disabled={isLoading}
               >
-                Cancel
+                {isViewMode ? "Close" : "Cancel"}
               </Button>
-              <Button
-                className="btn-indigo"
-                onClick={editing ? handleEdit : saveAgent}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <span
-                      className="spinner-border spinner-border-sm me-2"
-                      role="status"
-                      aria-hidden="true"
-                    ></span>
-                    {editing ? "Updating..." : "Saving..."}
-                  </>
-                ) : editing ? (
-                  "Update"
-                ) : (
-                  "Save"
-                )}
-              </Button>
+              {!isViewMode && (
+                <Button
+                  className="btn-indigo"
+                  onClick={editing ? handleEdit : saveAgent}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      {editing ? "Updating..." : "Saving..."}
+                    </>
+                  ) : editing ? (
+                    "Update"
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+              )}
             </Modal.Footer>
           </Modal>
 
