@@ -273,8 +273,7 @@ const EmployeeReg = () => {
         zipcode: "",
       },
     });
-    setProvinces([]);
-    setPlaces([]);
+    
     setValidationErrors({});
     setError("");
     setShowModal(true);
