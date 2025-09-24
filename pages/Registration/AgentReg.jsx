@@ -1464,6 +1464,14 @@ const AgentReg = () => {
         provinceId: "", // Reset province when country changes
         placeId: "", // Reset city when country changes
       }));
+      
+      // Clear validation error when user makes selection
+      if (validationErrors.countryId) {
+        setValidationErrors(prev => ({
+          ...prev,
+          countryId: ""
+        }));
+      }
     } catch (error) {
       console.error("Error in handleCountryChange:", error);
     }
@@ -1490,6 +1498,14 @@ const AgentReg = () => {
         agentGstIn: value,
       },
     });
+
+    // Clear validation error when user starts typing
+    if (validationErrors["agentGSTDetailsDTO.agentGstIn"]) {
+      setValidationErrors(prev => ({
+        ...prev,
+        "agentGSTDetailsDTO.agentGstIn": ""
+      }));
+    }
   };
 
   // Handle Agent Classification change
@@ -1895,11 +1911,19 @@ const AgentReg = () => {
                             isInvalid={!!validationErrors.companyName}
                             {...getFormControlProps(
                               "companyName",
-                              (e) =>
+                              (e) => {
                                 setFormData({
                                   ...formData,
                                   companyName: e.target.value,
-                                }),
+                                });
+                                // Clear validation error when user starts typing
+                                if (validationErrors.companyName) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    companyName: ""
+                                  }));
+                                }
+                              },
                               {
                                 className: `form-input ${
                                   validationErrors.companyName ? "is-invalid" : ""
@@ -1952,11 +1976,19 @@ const AgentReg = () => {
                             isInvalid={!!validationErrors.businessType}
                             {...getFormControlProps(
                               "businessType",
-                              (e) =>
+                              (e) => {
                                 setFormData({
                                   ...formData,
                                   businessType: e.target.value,
-                                }),
+                                });
+                                // Clear validation error when user starts typing
+                                if (validationErrors.businessType) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    businessType: ""
+                                  }));
+                                }
+                              },
                               {
                                 className: `form-input ${
                                   validationErrors.businessType ? "is-invalid" : ""
@@ -1976,12 +2008,19 @@ const AgentReg = () => {
                           <Form.Label>Company Type</Form.Label>
                           <Form.Select
                             value={formData.agentCategoryId}
-                            onChange={isViewMode ? undefined : (e) =>
+                            onChange={isViewMode ? undefined : (e) => {
                               setFormData({
                                 ...formData,
                                 agentCategoryId: e.target.value,
-                              })
-                            }
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.agentCategoryId) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  agentCategoryId: ""
+                                }));
+                              }
+                            }}
                             className={`form-input ${
                               validationErrors.agentCategoryId
                                 ? "is-invalid"
@@ -2091,11 +2130,19 @@ const AgentReg = () => {
                             isInvalid={!!validationErrors.firstName}
                             {...getFormControlProps(
                               "firstName",
-                              (e) =>
+                              (e) => {
                                 setFormData({
                                   ...formData,
                                   firstName: e.target.value,
-                                }),
+                                });
+                                // Clear validation error when user starts typing
+                                if (validationErrors.firstName) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    firstName: ""
+                                  }));
+                                }
+                              },
                               {
                                 className: `form-input ${
                                   validationErrors.firstName ? "is-invalid" : ""
@@ -2119,11 +2166,19 @@ const AgentReg = () => {
                             isInvalid={!!validationErrors.lastName}
                             {...getFormControlProps(
                               "lastName",
-                              (e) =>
+                              (e) => {
                                 setFormData({
                                   ...formData,
                                   lastName: e.target.value,
-                                }),
+                                });
+                                // Clear validation error when user starts typing
+                                if (validationErrors.lastName) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    lastName: ""
+                                  }));
+                                }
+                              },
                               {
                                 className: `form-input ${
                                   validationErrors.lastName ? "is-invalid" : ""
@@ -2157,11 +2212,19 @@ const AgentReg = () => {
                                 isInvalid={!!validationErrors.personalEmail}
                                 {...getFormControlProps(
                                   "personalEmail",
-                                  (e) =>
+                                  (e) => {
                                     setFormData({
                                       ...formData,
                                       personalEmail: e.target.value,
-                                    }),
+                                    });
+                                    // Clear validation error when user starts typing
+                                    if (validationErrors.personalEmail) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        personalEmail: ""
+                                      }));
+                                    }
+                                  },
                                   {
                                     className: `form-input ${
                                       validationErrors.personalEmail
@@ -2209,11 +2272,19 @@ const AgentReg = () => {
                                 isInvalid={!!validationErrors.mobileNumber}
                                 {...getFormControlProps(
                                   "mobileNumber",
-                                  (e) =>
+                                  (e) => {
                                     setFormData({
                                       ...formData,
                                       mobileNumber: e.target.value,
-                                    }),
+                                    });
+                                    // Clear validation error when user starts typing
+                                    if (validationErrors.mobileNumber) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        mobileNumber: ""
+                                      }));
+                                    }
+                                  },
                                   {
                                     className: `form-input ${
                                       validationErrors.mobileNumber
@@ -2296,12 +2367,19 @@ const AgentReg = () => {
                               <SearchableSelect
                                 name="provinceId"
                                 value={formData.provinceId}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setFormData({
                                     ...formData,
                                     provinceId: e.target.value,
-                                  })
-                                }
+                                  });
+                                  // Clear validation error when user makes selection
+                                  if (validationErrors.provinceId) {
+                                    setValidationErrors(prev => ({
+                                      ...prev,
+                                      provinceId: ""
+                                    }));
+                                  }
+                                }}
                                 placeholder="Search and select province/state"
                                 options={Array.isArray(provinces) ? provinces.map(province => ({ id: province.id, name: province.stateName })) : []}
                                 isInvalid={!!validationErrors.provinceId}
@@ -2320,12 +2398,19 @@ const AgentReg = () => {
                               <SearchableSelect
                                 name="placeId"
                                 value={formData.placeId}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setFormData({
                                     ...formData,
                                     placeId: e.target.value,
-                                  })
-                                }
+                                  });
+                                  // Clear validation error when user makes selection
+                                  if (validationErrors.placeId) {
+                                    setValidationErrors(prev => ({
+                                      ...prev,
+                                      placeId: ""
+                                    }));
+                                  }
+                                }}
                                 placeholder="Search and select city"
                                 options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name })) : []}
                                 isInvalid={!!validationErrors.placeId}
@@ -2350,11 +2435,19 @@ const AgentReg = () => {
                               isInvalid={!!validationErrors.address}
                               {...getFormControlProps(
                                 "address",
-                                (e) =>
+                                (e) => {
                                   setFormData({
                                     ...formData,
                                     address: e.target.value,
-                                  }),
+                                  });
+                                  // Clear validation error when user starts typing
+                                  if (validationErrors.address) {
+                                    setValidationErrors(prev => ({
+                                      ...prev,
+                                      address: ""
+                                    }));
+                                  }
+                                },
                                 {
                                   className: `form-input ${
                                     validationErrors.address ? "is-invalid" : ""
@@ -2525,15 +2618,22 @@ const AgentReg = () => {
                                       formData.agentGSTDetailsDTO
                                         .agentCorrespondmail
                                     }
-                                    onChange={isViewMode ? undefined : (e) =>
+                                    onChange={isViewMode ? undefined : (e) => {
                                       setFormData({
                                         ...formData,
                                         agentGSTDetailsDTO: {
                                           ...formData.agentGSTDetailsDTO,
                                           agentCorrespondmail: e.target.value,
                                         },
-                                      })
-                                    }
+                                      });
+                                      // Clear validation error when user starts typing
+                                      if (validationErrors["agentGSTDetailsDTO.agentCorrespondmail"]) {
+                                        setValidationErrors(prev => ({
+                                          ...prev,
+                                          "agentGSTDetailsDTO.agentCorrespondmail": ""
+                                        }));
+                                      }
+                                    }}
                                     placeholder="Enter correspondence email"
                                     className={`form-input ${
                                       validationErrors[
@@ -2667,12 +2767,19 @@ const AgentReg = () => {
                             className={`form-input ${
                               validationErrors.markup ? "is-invalid" : ""
                             } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) =>
+                            onChange={isViewMode ? undefined : (e) => {
                               setFormData({
                                 ...formData,
                                 markup: e.target.value,
-                              })
-                            }
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.markup) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  markup: ""
+                                }));
+                              }
+                            }}
                             disabled={isViewMode}
                           >
                             <option value="">Select Markup</option>
@@ -2696,12 +2803,19 @@ const AgentReg = () => {
                             className={`form-input ${
                               validationErrors.currency ? "is-invalid" : ""
                             } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) =>
+                            onChange={isViewMode ? undefined : (e) => {
                               setFormData({
                                 ...formData,
                                 currency: e.target.value,
-                              })
-                            }
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.currency) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  currency: ""
+                                }));
+                              }
+                            }}
                             disabled={isViewMode}
                           >
                             <option value="">Select Currency</option>
@@ -2728,12 +2842,19 @@ const AgentReg = () => {
                             className={`form-input ${
                               validationErrors.status ? "is-invalid" : ""
                             } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) =>
+                            onChange={isViewMode ? undefined : (e) => {
                               setFormData({
                                 ...formData,
                                 status: e.target.value,
-                              })
-                            }
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.status) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  status: ""
+                                }));
+                              }
+                            }}
                             disabled={isViewMode}
                           >
                             <option value="">SELECT</option>

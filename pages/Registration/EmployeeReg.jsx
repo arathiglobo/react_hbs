@@ -1229,11 +1229,19 @@ const EmployeeReg = () => {
                             isInvalid={!!validationErrors.employeeCode}
                             {...getFormControlProps(
                               "employeeCode",
-                              (e) =>
+                              (e) => {
                                 setFormData({
                                   ...formData,
                                   employeeCode: e.target.value,
-                                }),
+                                });
+                                // Clear validation error when user starts typing
+                                if (validationErrors.employeeCode) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    employeeCode: ""
+                                  }));
+                                }
+                              },
                               {
                                 className: `form-input ${
                                   validationErrors.employeeCode
@@ -1260,11 +1268,19 @@ const EmployeeReg = () => {
                             isInvalid={!!validationErrors.firstName}
                             {...getFormControlProps(
                               "firstName",
-                              (e) =>
+                              (e) => {
                                 setFormData({
                                   ...formData,
                                   firstName: e.target.value,
-                                }),
+                                });
+                                // Clear validation error when user starts typing
+                                if (validationErrors.firstName) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    firstName: ""
+                                  }));
+                                }
+                              },
                               {
                                 className: `form-input ${
                                   validationErrors.firstName ? "is-invalid" : ""
@@ -1288,11 +1304,19 @@ const EmployeeReg = () => {
                             isInvalid={!!validationErrors.lastName}
                             {...getFormControlProps(
                               "lastName",
-                              (e) =>
+                              (e) => {
                                 setFormData({
                                   ...formData,
                                   lastName: e.target.value,
-                                }),
+                                });
+                                // Clear validation error when user starts typing
+                                if (validationErrors.lastName) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    lastName: ""
+                                  }));
+                                }
+                              },
                               {
                                 className: `form-input ${
                                   validationErrors.lastName ? "is-invalid" : ""
@@ -1318,11 +1342,19 @@ const EmployeeReg = () => {
                             isInvalid={!!validationErrors.designation}
                             {...getFormControlProps(
                               "designation",
-                              (e) =>
+                              (e) => {
                                 setFormData({
                                   ...formData,
                                   designation: e.target.value,
-                                }),
+                                });
+                                // Clear validation error when user starts typing
+                                if (validationErrors.designation) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    designation: ""
+                                  }));
+                                }
+                              },
                               {
                                 className: `form-input ${
                                   validationErrors.designation
@@ -1403,11 +1435,19 @@ const EmployeeReg = () => {
                                 isInvalid={!!validationErrors.email}
                                 {...getFormControlProps(
                                   "email",
-                                  (e) =>
+                                  (e) => {
                                     setFormData({
                                       ...formData,
                                       email: e.target.value,
-                                    }),
+                                    });
+                                    // Clear validation error when user starts typing
+                                    if (validationErrors.email) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        email: ""
+                                      }));
+                                    }
+                                  },
                                   {
                                     className: `form-input ${
                                       validationErrors.email ? "is-invalid" : ""
@@ -1453,11 +1493,19 @@ const EmployeeReg = () => {
                                 isInvalid={!!validationErrors.mobileNumber}
                                 {...getFormControlProps(
                                   "mobileNumber",
-                                  (e) =>
+                                  (e) => {
                                     setFormData({
                                       ...formData,
                                       mobileNumber: e.target.value,
-                                    }),
+                                    });
+                                    // Clear validation error when user starts typing
+                                    if (validationErrors.mobileNumber) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        mobileNumber: ""
+                                      }));
+                                    }
+                                  },
                                   {
                                     className: `form-input ${
                                       validationErrors.mobileNumber
@@ -1525,11 +1573,19 @@ const EmployeeReg = () => {
                               isInvalid={!!validationErrors.address}
                               {...getFormControlProps(
                                 "address",
-                                (e) =>
+                                (e) => {
                                   setFormData({
                                     ...formData,
                                     address: e.target.value,
-                                  }),
+                                  });
+                                  // Clear validation error when user starts typing
+                                  if (validationErrors.address) {
+                                    setValidationErrors(prev => ({
+                                      ...prev,
+                                      address: ""
+                                    }));
+                                  }
+                                },
                                 {
                                   className: `form-input ${
                                     validationErrors.address ? "is-invalid" : ""
