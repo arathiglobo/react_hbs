@@ -195,12 +195,7 @@ const EmployeeReg = () => {
       autoFocus: isViewMode ? false : additionalProps.autoFocus,
     };
   };
-  const [agentCategoryies, setAgentCategoryies] = useState([]);
-  const [countries, setCountries] = useState([]);
-  const [provinces, setProvinces] = useState([]);
-  const [places, setPlaces] = useState([]);
-  const [markup, setMarkup] = useState([]);
-  const [currency, setCurrency] = useState([]);
+ 
   const [formData, setFormData] = useState({
     employeeCode: "",
     firstName: "",
@@ -220,8 +215,6 @@ const EmployeeReg = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
-  const [gstinError, setGstinError] = useState("");
-  const [currentStep, setCurrentStep] = useState(1);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
@@ -306,33 +299,8 @@ const EmployeeReg = () => {
       faxNumber: item.contactDetails?.faxNumber || "",
       address: item.contactDetails?.address || "",
       zipcode: item.contactDetails?.zipcode || "",
-      contactDetails: {
-        email: item.contactDetails?.email || "",
-        telexNumber: item.contactDetails?.telexNumber || "",
-        mobileNumber: item.contactDetails?.mobileNumber || "",
-        faxNumber: item.contactDetails?.faxNumber || "",
-        address: item.contactDetails?.address || "",
-        zipcode: item.contactDetails?.zipcode || "",
-      },
+    
     });
-
-    // Clear existing provinces and places first
-    setProvinces([]);
-    setPlaces([]);
-
-    // Fetch provinces and cities for the selected country and province
-    if (item.countryId) {
-      try {
-        await provinceList(item.countryId);
-
-        // After provinces are loaded, fetch cities if provinceId exists
-        if (item.provinceId) {
-          await cityList(item.provinceId);
-        }
-      } catch (error) {
-        console.error("Error loading provinces/cities:", error);
-      }
-    }
 
     setValidationErrors({});
     setShowModal(true);
@@ -347,109 +315,6 @@ const EmployeeReg = () => {
       console.log("User roles  api call error::", error);
     }
   };
-
-  const agentCategoryList = async () => {
-    try {
-      const agentCatResponse = await axios.get("/api/agentCategory");
-      setAgentCategoryies(agentCatResponse.data);
-    } catch (error) {
-      console.log("agent category api call error::", error);
-    }
-  };
-
-  const countryList = async () => {
-    try {
-      const response = await axios.get("/api/country");
-
-      setCountries(response.data);
-    } catch (error) {
-      console.log("error for country list :", error);
-    }
-  };
-
-  const provinceList = async (countryId) => {
-    try {
-      const response = await axios.get(
-        `/api/province/getByCountryId/${countryId}`
-      );
-      setProvinces(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.log("axios call error for province list : ", error);
-    }
-  };
-
-  const cityList = async (stateId) => {
-    try {
-      const response = await axios.get(`/api/destination/getplaces/${stateId}`);
-      setPlaces(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.log("axios call error for city list : ", error);
-    }
-  };
-
-  const markupList = async () => {
-    try {
-      const response = await axiosInstance.get(`/api/markupType`);
-      setMarkup(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.log("axios call error for markup list : ", error);
-    }
-  };
-
-  const currencyList = async () => {
-    try {
-      const response = await axiosInstance.get(`/api/currency`);
-      setCurrency(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.log("axios call error for currency list : ", error);
-    }
-  };
-
-  useEffect(() => {
-    // Only clear provinces/cities if we're not in edit mode or if country actually changed
-    if (formData.countryId) {
-      // Don't clear if we're in edit mode and just opened the modal
-      if (!editing) {
-        setProvinces([]);
-        setPlaces([]);
-        setFormData((prev) => ({
-          ...prev,
-          provinceId: "",
-          placeId: "",
-        }));
-      }
-      provinceList(formData.countryId);
-    } else {
-      setProvinces([]);
-      setPlaces([]);
-      setFormData((prev) => ({
-        ...prev,
-        provinceId: "",
-        placeId: "",
-      }));
-    }
-  }, [formData.countryId]);
-
-  useEffect(() => {
-    // Only clear cities if we're not in edit mode or if province actually changed
-    if (formData.provinceId) {
-      // Don't clear if we're in edit mode and just opened the modal
-      if (!editing) {
-        setPlaces([]);
-        setFormData((prev) => ({
-          ...prev,
-          placeId: "",
-        }));
-      }
-      cityList(formData.provinceId);
-    } else {
-      setPlaces([]);
-      setFormData((prev) => ({
-        ...prev,
-        placeId: "",
-      }));
-    }
-  }, [formData.provinceId]);
 
   const handleEdit = async () => {
   const errors = validateEmployeeForm(formData);
@@ -533,10 +398,8 @@ const EmployeeReg = () => {
         zipcode: "",
       },
     });
-    setProvinces([]);
-    setPlaces([]);
+   
     setValidationErrors({});
-    setGstinError("");
     setError("");
   };
 
@@ -724,14 +587,10 @@ const EmployeeReg = () => {
       clearTimeout(searchTimeout);
     }
 
-    if (search !== "") {
-      const timeout = setTimeout(() => {
-        fetchEmployeeList(0, search);
-      }, 500);
-      setSearchTimeout(timeout);
-    } else if (search === "") {
-      fetchEmployeeList(0, "");
-    }
+    const timeout = setTimeout(() => {
+      fetchEmployeeList(0, search);
+    }, 500);
+    setSearchTimeout(timeout);
 
     return () => {
       if (searchTimeout) {
@@ -788,33 +647,8 @@ const EmployeeReg = () => {
       faxNumber: item.contactDetails?.faxNumber || "",
       address: item.contactDetails?.address || "",
       zipcode: item.contactDetails?.zipcode || "",
-      contactDetails: {
-        email: item.contactDetails?.email || "",
-        telexNumber: item.contactDetails?.telexNumber || "",
-        mobileNumber: item.contactDetails?.mobileNumber || "",
-        faxNumber: item.contactDetails?.faxNumber || "",
-        address: item.contactDetails?.address || "",
-        zipcode: item.contactDetails?.zipcode || "",
-      },
+    
     });
-
-    // Clear existing provinces and places first
-    setProvinces([]);
-    setPlaces([]);
-
-    // Fetch provinces and cities for the selected country and province
-    if (item.countryId) {
-      try {
-        await provinceList(item.countryId);
-
-        // After provinces are loaded, fetch cities if provinceId exists
-        if (item.provinceId) {
-          await cityList(item.provinceId);
-        }
-      } catch (error) {
-        console.error("Error loading provinces/cities:", error);
-      }
-    }
 
     setValidationErrors({});
     setShowModal(true);
@@ -1055,7 +889,7 @@ const EmployeeReg = () => {
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
               <span className="fw-semibold">Employee</span>
-              <Form.Group className="hotel-search-bar">
+              <Form.Group className="hotel-search-bar position-relative">
                 <Form.Control
                   type="text"
                   placeholder="Search employee by name..."
@@ -1065,8 +899,31 @@ const EmployeeReg = () => {
                     const value = e.target.value;
                     setSearchTerm(value);
                     setSearch(value);
+                    // Reset to first page when searching
+                    setPage(0);
                   }}
                 />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                    style={{
+                      border: "none",
+                      background: "none",
+                      color: "#6c757d",
+                      padding: "0 12px",
+                      zIndex: 10,
+                    }}
+                    onClick={() => {
+                      setSearchTerm("");
+                      setSearch("");
+                      setPage(0);
+                    }}
+                    title="Clear search"
+                  >
+                    <i className="fas fa-times"></i>
+                  </button>
+                )}
               </Form.Group>
               <Button className="btn-green" onClick={openCreate}>
                 + Create
