@@ -291,21 +291,28 @@ const EmployeeReg = () => {
     setEditing(item);
     setIsViewMode(false); // Set to edit mode
 
-    // Set form data first
+    // Set form data first - map from API response structure
     setFormData({
       employeeCode: item.employeeCode || "",
       firstName: item.firstName || "",
       lastName: item.lastName || "",
       designation: item.designation || "",
-      profileImage: item.employeeProfile || "",
-      dob: item.employeeCode || "",
+      profileImage: item.employeeProfile || null,
+      dob: item.dob || "",
+      // Map contact details from nested object
+      email: item.contactDetails?.email || "",
+      telexNumber: item.contactDetails?.telexNumber || "",
+      mobileNumber: item.contactDetails?.mobileNumber || "",
+      faxNumber: item.contactDetails?.faxNumber || "",
+      address: item.contactDetails?.address || "",
+      zipcode: item.contactDetails?.zipcode || "",
       contactDetails: {
-        email: item.email || "",
-        telexNumber: item.telexNumber || "",
-        mobileNumber: item.mobileNumber || "",
-        faxNumber: item.faxNumber || "",
-        address: item.address || "",
-        zipcode: item.zipcode || "",
+        email: item.contactDetails?.email || "",
+        telexNumber: item.contactDetails?.telexNumber || "",
+        mobileNumber: item.contactDetails?.mobileNumber || "",
+        faxNumber: item.contactDetails?.faxNumber || "",
+        address: item.contactDetails?.address || "",
+        zipcode: item.contactDetails?.zipcode || "",
       },
     });
 
@@ -445,113 +452,86 @@ const EmployeeReg = () => {
   }, [formData.provinceId]);
 
   const handleEdit = async () => {
-    const errors = validateEmployeeForm(formData);
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      return;
+  const errors = validateEmployeeForm(formData);
+  if (Object.keys(errors).length > 0) {
+    setValidationErrors(errors);
+    return;
+  }
+
+  if (!editing) return;
+
+  try {
+    setIsLoading(true);
+
+    // Build JSON payload for backend (@RequestBody expects JSON)
+    const payload = {
+      employeeCode: formData.employeeCode,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      designation: formData.designation,
+      dob: formData.dob || null, // keep yyyy-MM-dd format
+      contactDetails: {
+        email: formData.email,
+        telexNumber: formData.telexNumber || "",
+        mobileNumber: formData.mobileNumber,
+        faxNumber: formData.faxNumber || "",
+        address: formData.address,
+        zipcode: formData.zipcode || "",
+      },
+    };
+
+    console.log("Payload prepared for edit:", payload);
+
+    const editRes = await axiosInstance.put(
+      `/api/employee/${editing.employeeId}`,
+      payload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (editRes.data) {
+      toast.success("Employee Updated Successfully!");
+      setValidationErrors({});
+      await fetchEmployeeList(page, search);
+      closeModal();
     }
+  } catch (error) {
+    console.error("Edit employee error:", error);
+    console.error("Error details:", error.response?.data);
+    setError("Failed to update employee");
+    toast.error(
+      `Failed to update employee: ${
+        error.response?.data?.message || error.message
+      }`
+    );
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-    if (!editing) return;
-
-    try {
-      setIsLoading(true);
-
-      // Prepare the payload - convert image to base64 if present
-      const employeePayload = { ...formData };
-
-      // Handle image upload - convert to base64 if present
-      if (employeePayload.agentLogo && employeePayload.agentLogo instanceof File) {
-        try {
-          const base64 = await convertToBase64(employeePayload.agentLogo);
-          employeePayload.agentLogo = base64;
-        } catch (error) {
-          console.error("Error converting image to base64:", error);
-          toast.error("Error processing image file");
-          return;
-        }
-      } else {
-        // If no new image is selected, remove the agentLogo field
-        // The backend will keep the existing image
-        delete employeePayload.agentLogo;
-      }
-
-      // Ensure numeric fields are properly converted
-      if (employeePayload.countryId) {
-        employeePayload.countryId = parseInt(employeePayload.countryId);
-      }
-      if (employeePayload.provinceId) {
-        employeePayload.provinceId = parseInt(employeePayload.provinceId);
-      }
-      if (employeePayload.placeId) {
-        employeePayload.placeId = parseInt(employeePayload.placeId);
-      }
-      if (employeePayload.agentCategoryId) {
-        employeePayload.agentCategoryId = parseInt(employeePayload.agentCategoryId);
-      }
-      if (employeePayload.markup) {
-        employeePayload.markup = parseInt(employeePayload.markup);
-      }
-      if (employeePayload.currency) {
-        employeePayload.currency = parseInt(employeePayload.currency);
-      }
-
-      const editRes = await axiosInstance.put(
-        `/api/agent/${editing.id}`,
-        employeePayload
-      );
-
-      if (editRes.data) {
-        toast.success("Agent Updated Successfully!");
-        setValidationErrors({});
-        await fetchEmployeeList(page, search);
-        closeModal();
-      }
-    } catch (error) {
-      console.error("Edit agent error:", error);
-      console.error("Error details:", error.response?.data);
-      setError("Failed to update agent");
-      toast.error(
-        `Failed to update agent: ${
-          error.response?.data?.message || error.message
-        }`
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
     setIsViewMode(false); // Reset view mode
     setFormData({
-      companyName: "",
-      shortName: "",
-      businessType: "",
-      agentCategoryId: "",
-      companyCode: "",
-      agentUrl: "",
+       employeeCode: "",
       firstName: "",
       lastName: "",
-      personalEmail: "",
-      zipCode: "",
-      mobileNumber: "",
-      telephoneNumber: "",
-      contactPerson: "",
-      countryId: "",
-      provinceId: "",
-      placeId: "",
-      address: "",
-      markup: "",
-      currency: "",
-      status: "",
-      agentClassification: "",
-      agentGstIn: "",
-      agentProvisionalGstno: "",
-      agentCorrespondmail: "",
-      agentRegisterstatus: "",
-      agentHsncode: "",
-      agentLogo: null,
+      designation: "",
+      profileImage: null,
+      dob: "",
+      contactDetails: {
+        email: "",
+        telexNumber: "",
+        mobileNumber: "",
+        faxNumber: "",
+        address: "",
+        zipcode: "",
+      },
     });
     setProvinces([]);
     setPlaces([]);
@@ -599,11 +579,7 @@ const EmployeeReg = () => {
 
   useEffect(() => {
     fetchEmployeeList();
-    countryList();
-    userRolesList();
-    agentCategoryList();
-    markupList();
-    currencyList();
+     userRolesList();
   }, []);
 
   // Close roles dropdown when clicking outside
@@ -680,28 +656,47 @@ const EmployeeReg = () => {
     try {
       setIsLoading(true);
 
-      // Prepare the payload - convert image to base64 if present
-      const employeePayload = { ...formData };
-
-      // Handle image upload - convert to base64 if present
-      if (employeePayload.profileImage && employeePayload.profileImage instanceof File) {
-        try {
-          const base64 = await convertToBase64(employeePayload.profileImage);
-          employeePayload.profileImage = base64;
-        } catch (error) {
-          console.error("Error converting image to base64:", error);
-          toast.error("Error processing image file");
-          return;
-        }
-      } else {
-        // Remove the file object if no file is selected
-        delete employeePayload.profileImage;
+      // Prepare FormData payload
+      const formDataPayload = new FormData();
+      
+      // Add basic employee fields
+      formDataPayload.append('employeeCode', formData.employeeCode);
+      formDataPayload.append('firstName', formData.firstName);
+      formDataPayload.append('lastName', formData.lastName);
+      formDataPayload.append('designation', formData.designation);
+      
+      // Convert date from yyyy-MM-dd to dd/MM/yyyy format
+      if (formData.dob) {
+        const dateObj = new Date(formData.dob);
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const year = dateObj.getFullYear();
+        const formattedDate = `${day}/${month}/${year}`;
+        formDataPayload.append('dob', formattedDate);
+      }
+      
+      // Add contact details as individual fields (matching EmployeeContactDetailsDTO)
+      formDataPayload.append('contactDetails.email', formData.email);
+      formDataPayload.append('contactDetails.telexNumber', formData.telexNumber || '');
+      formDataPayload.append('contactDetails.mobileNumber', formData.mobileNumber);
+      formDataPayload.append('contactDetails.faxNumber', formData.faxNumber || '');
+      formDataPayload.append('contactDetails.address', formData.address);
+      formDataPayload.append('contactDetails.zipcode', formData.zipcode || '');
+      
+      // Add profile image if present
+      if (formData.profileImage && formData.profileImage instanceof File) {
+        formDataPayload.append('employeeProfile', formData.profileImage);
       }
 
-      console.log("employeePayload:::" , employeePayload)
+      console.log("FormData payload prepared");
       const employeeSaveResponse = await axiosInstance.post(
         "/api/employee/register",
-        employeePayload
+        formDataPayload,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
       );
 
       if (employeeSaveResponse.data !== 0) {
@@ -747,7 +742,8 @@ const EmployeeReg = () => {
 
   const handleDelete = (item) => {
     Swal.fire({
-      title: `Are you sure? You want to delete ${item.companyName}`,
+    title: `Are you sure? You want to delete ${item.firstName} ${item.lastName}`,
+
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -761,13 +757,13 @@ const EmployeeReg = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/agent/${item.id}`)
+          .delete(`/api/employee/${item.id}`)
           .then(() => {
-            toast.success("Agent deleted successfully");
+            toast.success("Employee deleted successfully");
             fetchEmployeeList(page, search);
           })
           .catch(() => {
-            toast.error("Sorry!! Agent not deleted");
+            toast.error("Sorry!! Employee not deleted");
           });
       }
     });
@@ -777,53 +773,28 @@ const EmployeeReg = () => {
     setEditing(item);
     setIsViewMode(true); // Set to view mode
 
-    // Set form data first
+    // Set form data first - map from API response structure
     setFormData({
-      companyName: item.companyName || "",
-      shortName: item.shortName || "",
-      businessType: item.businessType || "",
-      agentCategoryId: String(item.agentCategoryId || ""),
-      companyCode: item.companyCode || "",
-      agentUrl: item.agentUrl || "",
+      employeeCode: item.employeeCode || "",
       firstName: item.firstName || "",
       lastName: item.lastName || "",
-      personalEmail: item.personalEmail || "",
-      zipCode: item.zipCode || "",
-      mobileNumber: item.mobileNumber || "",
-      telephoneNumber: item.telephoneNumber || "",
-      contactPerson: item.contactPerson || "",
-      countryId: String(item.countryId || ""),
-      provinceId: String(item.provinceId || ""),
-      placeId: String(item.placeId || ""),
-      address: item.address || "",
-      markup: String(item.markup || ""),
-      currency: String(item.currency || ""),
-      status: item.status || "",
-      agentLogo: null,
-      // GST Details as nested object to match AgentGSTDetailsDTO
-      agentGSTDetailsDTO: {
-        agentClassification:
-          item.agentClassification ||
-          item.agentGSTDetailsDTO?.agentClassification ||
-          "",
-        agentGstIn:
-          item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
-        agentProvisionalGstno:
-          item.agentProvisionalGstno ||
-          item.agentGSTDetailsDTO?.agentProvisionalGstno ||
-          "",
-        agentCorrespondmail:
-          item.agentCorrespondmail ||
-          item.agentGSTDetailsDTO?.agentCorrespondmail ||
-          "",
-        agentRegisterstatus:
-          item.agentRegisterstatus ||
-          item.agentGSTDetailsDTO?.agentRegisterstatus ||
-          "",
-        agentHsncode:
-          item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
-        agentStatus:
-          item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
+      designation: item.designation || "",
+      profileImage: item.employeeProfile || null,
+      dob: item.dob || "",
+      // Map contact details from nested object
+      email: item.contactDetails?.email || "",
+      telexNumber: item.contactDetails?.telexNumber || "",
+      mobileNumber: item.contactDetails?.mobileNumber || "",
+      faxNumber: item.contactDetails?.faxNumber || "",
+      address: item.contactDetails?.address || "",
+      zipcode: item.contactDetails?.zipcode || "",
+      contactDetails: {
+        email: item.contactDetails?.email || "",
+        telexNumber: item.contactDetails?.telexNumber || "",
+        mobileNumber: item.contactDetails?.mobileNumber || "",
+        faxNumber: item.contactDetails?.faxNumber || "",
+        address: item.contactDetails?.address || "",
+        zipcode: item.contactDetails?.zipcode || "",
       },
     });
 
@@ -874,7 +845,7 @@ const EmployeeReg = () => {
     // Fetch existing login data for this agent
     try {
       const response = await axiosInstance.post(
-        `/auth/checkRegisteredUserExist/${item.id}`
+        `/auth/checkRegisteredUserExist/${item.employeeId}`
       );
 
       if (response.data) {
@@ -889,7 +860,7 @@ const EmployeeReg = () => {
           userroles: [], // fetch separately if needed
         });
       } else {
-        console.log("No existing login data found for agent:", item.id);
+        console.log("No existing login data found for agent:", item.employeeId);
       }
     } catch (error) {
       console.log("No existing login data found or error fetching:", error);
@@ -957,14 +928,16 @@ const EmployeeReg = () => {
         setIsLoading(true);
 
         let activeUserRole = localStorage.getItem("currentActiveRole");
+         console.log("rolesList::" , rolesList)
 
-        let activeRoleObj = rolesList.find((role) => role.roleName === "AGENT");
+        let activeRoleObj = rolesList.find((role) => role.roleName === "STAFF");
+        console.log("activeRoleObj::" , activeRoleObj)
 
         let loginPayload = null;
 
         if (activeRoleObj) {
           loginPayload = {
-            userId: editing.id,
+            userId: editing.employeeId,
             userTypeId: activeRoleObj.id,
             userName: loginFormData.username,
             userRoleIds: loginFormData.userroles,
@@ -976,6 +949,8 @@ const EmployeeReg = () => {
         } else {
           console.log("Active role not found in rolesList");
         }
+
+        console.log("login payload::" , loginPayload)
 
         const response = await axiosInstance.post(
           "/auth/register",
@@ -1545,14 +1520,14 @@ const EmployeeReg = () => {
                             <Form.Group className="mb-3">
                               <Form.Label>Telephone Number</Form.Label>
                               <Form.Control
-                                value={formData.telephoneNumber}
+                                value={formData.telexNumber}
                                 placeholder="Enter telephone number"
                                 {...getFormControlProps(
-                                  "telephoneNumber",
+                                  "telexNumber",
                                   (e) =>
                                     setFormData({
                                       ...formData,
-                                      telephoneNumber: e.target.value,
+                                      telexNumber: e.target.value,
                                     }),
                                   {}
                                 )}
@@ -1654,8 +1629,8 @@ const EmployeeReg = () => {
               <Modal.Title>
                 {loginFormData.username && loginFormData.username.trim() !== ""
                   ? "Update"
-                  : "Create"}{" "}
-                Login for Agent: {editing?.companyName || editing?.agentName}
+                  : ""}{" "}
+                 Register Employee here..
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -1775,6 +1750,8 @@ const EmployeeReg = () => {
                         setShowRolesDropdown(!showRolesDropdown);
                       }}
                     >
+
+                        {console.log("rolesList length:::", rolesList.length)}
                       {loginFormData.userroles.length > 0 ? (
                         loginFormData.userroles.map((roleId) => {
                           const role = rolesList.find((r) => r.id === roleId);
