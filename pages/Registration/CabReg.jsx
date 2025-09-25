@@ -22,7 +22,7 @@ import {
   FaPlus,
 } from "react-icons/fa";
 
-// SearchableSelect Component (reused from AgentReg.jsx)
+// Enhanced SearchableSelect Component with loading support
 const SearchableSelect = ({
   options,
   value,
@@ -32,6 +32,7 @@ const SearchableSelect = ({
   isInvalid,
   name,
   disabled = false,
+  isLoading = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,9 +49,6 @@ const SearchableSelect = ({
         // Handle different possible data structures
         const optionName =
           option.name ||
-          option.countryName ||
-          option.stateName ||
-          option.placeName ||
           String(option);
         return optionName.toLowerCase().includes(searchTerm.toLowerCase());
       });
@@ -62,10 +60,13 @@ const SearchableSelect = ({
 
   const handleSelect = (option) => {
     try {
+      console.log("Selecting option:", option);
+      // Ensure we pass a proper value
+      const value = option.id !== undefined ? option.id : option;
       onChange({
         target: {
           name: name,
-          value: option.id,
+          value: value,
         },
       });
       setIsOpen(false);
@@ -87,10 +88,7 @@ const SearchableSelect = ({
           isOpen
             ? searchTerm
             : selectedOption?.name ||
-              selectedOption?.countryName ||
-              selectedOption?.stateName ||
-              selectedOption?.placeName ||
-              ""
+             ""
         }
         onChange={(e) => {
           if (disabled) return;
@@ -120,7 +118,17 @@ const SearchableSelect = ({
             top: "100%",
           }}
         >
-          {filteredOptions.length > 0 ? (
+          {isLoading ? (
+            <div className="px-3 py-2 text-center">
+              <div
+                className="spinner-border spinner-border-sm me-2"
+                role="status"
+              >
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              Loading...
+            </div>
+          ) : filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <div
                 key={option.id}
@@ -179,6 +187,9 @@ const CabReg = () => {
   const [countries, setCountries] = useState([]);
   const [places, setPlaces] = useState([]);
   const [cabList, setCabList] = useState([]);
+  const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
+  const [pickupDropoffList, setPickupDropoffList] = useState([]);
+  const [editingCab, setEditingCab] = useState(null);
   const [formData, setFormData] = useState({
     cabProviderName: "",
     contactPerson: "",
@@ -233,74 +244,154 @@ const CabReg = () => {
     });
     setCabList([]);
     setPlaces([]);
+    setPickupDropoffList([]);
+    setIsLoadingPlaces(false);
     setValidationErrors({});
     setError("");
     setShowModal(true);
   };
 
   const openEdit = async (item) => {
+    console.log("Editing item:", item); // Debug log to see the structure
+    console.log("Item keys:", Object.keys(item)); // Debug log to see available keys
     setEditing(item);
     setIsViewMode(false);
 
     setFormData({
-      cabProviderName: item.cabProviderName || "",
-      contactPerson: item.contactPerson || "",
-      contactNumber: item.contactNumber || "",
-      email: item.email || "",
-      cabCode: item.cabCode || "",
-      cabName: item.cabName || "",
-      countryId: String(item.countryId || ""),
-      placeId: String(item.placeId || ""),
-      pickup: item.pickup || "",
-      dropOff: item.dropOff || "",
+      cabProviderName: item.providername || "",
+      contactPerson: item.contactperson || "",
+      contactNumber: item.phonenumber || "",
+      email: item.emailid || "",
+      cabCode: "",
+      cabName: "",
+      countryId: "",
+      placeId: "",
+      pickup: "",
+      dropOff: "",
     });
 
-    setCabList(item.cabList || []);
-    setPlaces([]);
-
-    // Fetch cities for the selected country
-    if (item.countryId) {
+    // First, try to use existing cab data from the item
+    if (item.cabList && Array.isArray(item.cabList) && item.cabList.length > 0) {
+      console.log("Loading existing cab list from item:", item.cabList);
+      setCabList(item.cabList);
+    } else {
+      console.log("No cab list found in item, attempting to fetch detailed data");
+      // Try to fetch detailed cab data for this provider
       try {
-        await cityList(item.countryId);
+        console.log("Attempting to fetch detailed cab data for ID:", item.cabprovider || item.id);
+        const detailedResponse = await axiosInstance.get(`/api/cabProvider/${item.cabprovider || item.id}`);
+        console.log("Detailed cab provider data:", detailedResponse.data);
+        
+        if (detailedResponse.data && detailedResponse.data.cabList && Array.isArray(detailedResponse.data.cabList)) {
+          console.log("Loading detailed cab list:", detailedResponse.data.cabList);
+          setCabList(detailedResponse.data.cabList);
+        } else if (detailedResponse.data && Array.isArray(detailedResponse.data)) {
+          console.log("Loading cab list from array response:", detailedResponse.data);
+          setCabList(detailedResponse.data);
+        } else {
+          console.log("No cab list found in detailed response, setting empty array");
+          setCabList([]);
+        }
       } catch (error) {
-        console.error("Error loading cities:", error);
+        console.log("Error fetching detailed data:", error);
+        setCabList([]);
       }
     }
+    
+    setPlaces([]);
+    setPickupDropoffList([]);
+    setEditingCab(null); // Clear any previous editing cab
 
     setValidationErrors({});
     setShowModal(true);
+    
+    // Debug log to show final cabList state
+    setTimeout(() => {
+      console.log("Final cabList state after opening edit:", cabList);
+    }, 100);
   };
 
   const handleView = async (item) => {
+    console.log("Viewing item:", item); // Debug log to see the structure
+    console.log("Item keys:", Object.keys(item)); // Debug log to see available keys
     setEditing(item);
     setIsViewMode(true);
 
+    // Get the first cab's data to populate form fields
+    const firstCab = item.cabList && item.cabList.length > 0 ? item.cabList[0] : null;
+    const firstLocation = firstCab && firstCab.cabLocationDTOList && firstCab.cabLocationDTOList.length > 0 ? firstCab.cabLocationDTOList[0] : null;
+    
     setFormData({
-      cabProviderName: item.cabProviderName || "",
-      contactPerson: item.contactPerson || "",
-      contactNumber: item.contactNumber || "",
-      email: item.email || "",
-      cabCode: item.cabCode || "",
-      cabName: item.cabName || "",
-      countryId: String(item.countryId || ""),
-      placeId: String(item.placeId || ""),
-      pickup: item.pickup || "",
-      dropOff: item.dropOff || "",
+      cabProviderName: item.providername || "",
+      contactPerson: item.contactperson || "",
+      contactNumber: item.phonenumber || "",
+      email: item.emailid || "",
+      cabCode: firstCab ? firstCab.cabCode || "" : "",
+      cabName: firstCab ? firstCab.name || "" : "",
+      countryId: firstCab ? String(firstCab.countryid || "") : "",
+      placeId: firstCab ? String(firstCab.placeid || "") : "",
+      pickup: firstLocation ? firstLocation.pickup || "" : "",
+      dropOff: firstLocation ? firstLocation.dropoff || "" : "",
     });
 
-    setCabList(item.cabList || []);
-    setPlaces([]);
+    // Populate pickup/dropoff locations from the first cab
+    if (firstCab && firstCab.cabLocationDTOList && firstCab.cabLocationDTOList.length > 0) {
+      const locations = firstCab.cabLocationDTOList.map((location, index) => ({
+        id: location.cablocationId || Date.now() + index,
+        pickup: location.pickup || "",
+        dropOff: location.dropoff || "",
+      }));
+      console.log("Setting pickup/dropoff locations for view:", locations);
+      setPickupDropoffList(locations);
+    } else {
+      console.log("No pickup/dropoff locations found for view");
+      setPickupDropoffList([]);
+    }
 
-    if (item.countryId) {
+    // Load places for the selected country if available
+    if (firstCab && firstCab.countryid) {
+      cityList(firstCab.countryid);
+    }
+
+    // First, try to use existing cab data from the item
+    if (item.cabList && Array.isArray(item.cabList) && item.cabList.length > 0) {
+      console.log("Loading existing cab list from item for view:", item.cabList);
+      setCabList(item.cabList);
+    } else {
+      console.log("No cab list found in item for view, attempting to fetch detailed data");
+      // Try to fetch detailed cab data for this provider
       try {
-        await cityList(item.countryId);
+        console.log("Attempting to fetch detailed cab data for view, ID:", item.cabprovider || item.id);
+        const detailedResponse = await axiosInstance.get(`/api/cabProvider/${item.cabprovider || item.id}`);
+        console.log("Detailed cab provider data for view:", detailedResponse.data);
+        
+        if (detailedResponse.data && detailedResponse.data.cabList && Array.isArray(detailedResponse.data.cabList)) {
+          console.log("Loading detailed cab list for view:", detailedResponse.data.cabList);
+          setCabList(detailedResponse.data.cabList);
+        } else if (detailedResponse.data && Array.isArray(detailedResponse.data)) {
+          console.log("Loading cab list from array response for view:", detailedResponse.data);
+          setCabList(detailedResponse.data);
+        } else {
+          console.log("No cab list found in detailed response for view, setting empty array");
+          setCabList([]);
+        }
       } catch (error) {
-        console.error("Error loading cities:", error);
+        console.log("Error fetching detailed data for view:", error);
+        setCabList([]);
       }
     }
+    
+    setPlaces([]);
+    // Don't clear pickupDropoffList here - it's set above
 
     setValidationErrors({});
     setShowModal(true);
+    
+    // Debug log to show final cabList state for view
+    setTimeout(() => {
+      console.log("Final cabList state after opening view:", cabList);
+      console.log("Final pickupDropoffList state after opening view:", pickupDropoffList);
+    }, 100);
   };
 
   const countryList = async () => {
@@ -315,10 +406,14 @@ const CabReg = () => {
 
   const cityList = async (countryId) => {
     try {
+      setIsLoadingPlaces(true);
       const response = await axiosInstance.post(`/api/destination/getCitiesByCountryId/${countryId}`);
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.log("axios call error for city list : ", error);
+      setPlaces([]);
+    } finally {
+      setIsLoadingPlaces(false);
     }
   };
 
@@ -326,6 +421,7 @@ const CabReg = () => {
   const handleCountryChange = (e) => {
     try {
       const value = e.target.value;
+      const stringValue = String(value); // Convert to string to avoid trim error
       const selectedCountry = countries.find(country => String(country.id) === String(value));
       const countryName = selectedCountry?.name || selectedCountry?.countryName || "Unknown";
       
@@ -336,23 +432,32 @@ const CabReg = () => {
         countryName
       );
       
+      // Clear places and place selection when country changes
+      setPlaces([]);
+      setIsLoadingPlaces(false);
+      
       setFormData((prev) => ({
         ...prev,
-        countryId: String(value),
-        placeId: "",
+        countryId: stringValue,
+        placeId: "", // Clear place selection
       }));
       
-      setPlaces([]);
-      
-      if (value) {
+      // Fetch cities for the selected country
+      if (value && stringValue.trim() !== "") {
         cityList(value);
       }
       
-      // Clear validation error when user makes selection
+      // Clear validation errors
       if (validationErrors.countryId) {
         setValidationErrors(prev => ({
           ...prev,
           countryId: ""
+        }));
+      }
+      if (validationErrors.placeId) {
+        setValidationErrors(prev => ({
+          ...prev,
+          placeId: ""
         }));
       }
     } catch (error) {
@@ -362,10 +467,15 @@ const CabReg = () => {
 
   // Handle place change
   const handlePlaceChange = (e) => {
-    setFormData({
-      ...formData,
-      placeId: e.target.value,
-    });
+    const value = e.target.value;
+    const stringValue = String(value); // Convert to string for consistency
+    console.log("Place selected:", value);
+    
+    setFormData(prev => ({
+      ...prev,
+      placeId: stringValue,
+    }));
+    
     // Clear validation error when user makes selection
     if (validationErrors.placeId) {
       setValidationErrors(prev => ({
@@ -375,64 +485,44 @@ const CabReg = () => {
     }
   };
 
-  useEffect(() => {
-    if (formData.countryId) {
-      if (!editing) {
-        setPlaces([]);
-        setFormData((prev) => ({
-          ...prev,
-          placeId: "",
-        }));
-      }
-      cityList(formData.countryId);
-    } else {
-      setPlaces([]);
-      setFormData((prev) => ({
-        ...prev,
-        placeId: "",
-      }));
-    }
-  }, [formData.countryId]);
-
-  useEffect(() => {
-    if (formData.placeId) {
-      if (!editing) {
-        setPlaces([]);
-        setFormData((prev) => ({
-          ...prev,
-          placeId: "",
-        }));
-      }
-      cityList(formData.placeId);
-    } else {
-      setPlaces([]);
-      setFormData((prev) => ({
-        ...prev,
-        placeId: "",
-      }));
-    }
-  }, [formData.placeId]);
+  // Remove duplicate useEffect hooks - country change is handled in handleCountryChange
 
   // Add cab to list
   const addCabToList = () => {
-    if (!formData.cabCode || !formData.cabName || !formData.countryId || !formData.placeId || !formData.pickup || !formData.dropOff) {
-      toast.error("Please fill all cab details before adding to list");
+    if (!formData.cabCode || !formData.cabName || !formData.countryId || !formData.placeId) {
+      toast.error("Please fill cab code, name, country and place before adding to list");
+      return;
+    }
+
+    if (pickupDropoffList.length === 0) {
+      toast.error("Please add at least one pickup and dropoff location");
+      return;
+    }
+
+    // Validate all pickup/dropoff locations
+    const invalidLocations = pickupDropoffList.filter(location => !location.pickup.trim() || !location.dropOff.trim());
+    if (invalidLocations.length > 0) {
+      toast.error("Please fill all pickup and dropoff locations");
       return;
     }
 
     const newCab = {
-      id: Date.now(),
+      cabId: editingCab ? editingCab.cabId : Date.now(), // Keep existing ID if editing
       cabCode: formData.cabCode,
-      cabName: formData.cabName,
-      countryId: formData.countryId,
-      placeId: formData.placeId,
-      pickup: formData.pickup,
-      dropOff: formData.dropOff,
+      name: formData.cabName, // Use 'name' to match your data structure
+      countryid: formData.countryId, // Use 'countryid' to match your data structure
+      placeid: formData.placeId, // Use 'placeid' to match your data structure
+      cabLocationDTOList: pickupDropoffList.map((location, index) => ({
+        cablocationId: location.id || Date.now() + index,
+        cabid: null,
+        pickup: location.pickup,
+        dropoff: location.dropOff
+      }))
     };
 
     setCabList([...cabList, newCab]);
     
-    // Clear cab form fields
+    // Clear cab form fields and pickup/dropoff list
     setFormData(prev => ({
       ...prev,
       cabCode: "",
@@ -443,11 +533,74 @@ const CabReg = () => {
       dropOff: "",
     }));
     setPlaces([]);
+    setPickupDropoffList([]); // Clear pickup/dropoff list
+    setEditingCab(null); // Clear editing cab
   };
 
   // Remove cab from list
   const removeCabFromList = (cabId) => {
-    setCabList(cabList.filter(cab => cab.id !== cabId));
+    setCabList(cabList.filter(cab => (cab.cabId || cab.id) !== cabId));
+  };
+
+  // Edit existing cab - populate form fields with cab data
+  const editCabFromList = (cab) => {
+    console.log("Editing cab:", cab);
+    
+    // Store the cab being edited
+    setEditingCab(cab);
+    
+    // Populate form fields with existing cab data
+    setFormData(prev => ({
+      ...prev,
+      cabCode: cab.cabCode || "",
+      cabName: cab.name || "",
+      countryId: String(cab.countryid || ""),
+      placeId: String(cab.placeid || ""),
+    }));
+
+    // Set pickup/dropoff locations for editing
+    if (cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0) {
+      const locations = cab.cabLocationDTOList.map((location, index) => ({
+        id: location.cablocationId || Date.now() + index,
+        pickup: location.pickup || "",
+        dropOff: location.dropoff || "",
+      }));
+      setPickupDropoffList(locations);
+    } else {
+      setPickupDropoffList([]);
+    }
+
+    // Load places for the selected country
+    if (cab.countryid) {
+      cityList(cab.countryid);
+    }
+
+    // Remove the cab from the list temporarily while editing
+    setCabList(cabList.filter(c => (c.cabId || c.id) !== (cab.cabId || cab.id)));
+  };
+
+  // Add pickup/dropoff location
+  const addPickupDropoff = () => {
+    const newLocation = {
+      id: Date.now(),
+      pickup: "",
+      dropOff: "",
+    };
+    setPickupDropoffList([...pickupDropoffList, newLocation]);
+  };
+
+  // Remove pickup/dropoff location
+  const removePickupDropoff = (locationId) => {
+    setPickupDropoffList(pickupDropoffList.filter(location => location.id !== locationId));
+  };
+
+  // Update pickup/dropoff location
+  const updatePickupDropoff = (locationId, field, value) => {
+    setPickupDropoffList(pickupDropoffList.map(location => 
+      location.id === locationId 
+        ? { ...location, [field]: value }
+        : location
+    ));
   };
 
   // Validation function
@@ -494,17 +647,41 @@ const CabReg = () => {
     try {
       setIsLoading(true);
 
+      // Ensure cabList is an array before mapping
+      const safeCabList = Array.isArray(cabList) ? cabList : [];
+      console.log("cabList in saveCab:", cabList);
+      console.log("safeCabList:", safeCabList);
+
       const cabPayload = {
-        cabProviderName: formData.cabProviderName,
-        contactPerson: formData.contactPerson,
-        contactNumber: formData.contactNumber,
-        email: formData.email,
-        cabList: cabList,
+        cabprovider: "", 
+        providername: formData.cabProviderName,
+        phonenumber: formData.contactNumber,
+        emailid: formData.email,
+        contactperson: formData.contactPerson,
+        cabList: safeCabList.map(cab => ({
+          cabId:  "", 
+          name: cab.name || cab.cabName || "",
+          cabprovider: "", 
+          cabCode: cab.cabCode || "",
+          cabpic: null,
+          countryid: cab.countryid || cab.countryId || "",
+          placeid: parseInt(cab.placeid || cab.placeId || 0),
+          providername: null,
+          cabLocationDTOList: (cab.cabLocationDTOList || []).map((location, index) => ({
+            cablocationId:  "", 
+            cabid: "",
+            pickup: location.pickup || "",
+            dropoff: location.dropoff || location.dropOff || ""
+          })),
+         
+        })),
+       
       };
 
       console.log("cabPayload:::", cabPayload);
+      console.log("cabPayload JSON:::", JSON.stringify(cabPayload, null, 2));
       const cabSaveResponse = await axiosInstance.post(
-        "/api/cab/register",
+        "/api/cabProvider/register",
         cabPayload
       );
 
@@ -539,25 +716,62 @@ const CabReg = () => {
   try {
     setIsLoading(true);
 
+    console.log("Current cabList when saving:", cabList); // Debug log
+    console.log("Editing item:", editing); // Debug log to see the editing item
+    
+    // Ensure cabList is an array before mapping
+    const safeCabList = Array.isArray(cabList) ? cabList : [];
+    console.log("safeCabList for edit:", safeCabList);
+    
+   
     const payload = {
-        cabProviderName: formData.cabProviderName,
-        contactPerson: formData.contactPerson,
-        contactNumber: formData.contactNumber,
-        email: formData.email,
-        cabList: cabList,
-    };
+    cabprovider: editing.cabprovider || "", // Use cabprovider ID from editing item
+    providername: formData.cabProviderName,
+    phonenumber: formData.contactNumber,
+    emailid: formData.email,
+    contactperson: formData.contactPerson,
+    cabList: safeCabList.map((cab, index) => {
+        // Find the corresponding cab in editing.cabList by cabId or index
+        const editingCab = (editing.cabList || []).find(c => c.cabId === cab.cabId) || (editing.cabList || [])[index] || {};
+
+        return {
+            cabId: editingCab.cabId ||  "", // Use cabId from editing.cabList if available, else fallback to cab.cabId
+            name: cab.name || cab.cabName || "",
+            cabprovider: "", // Empty as per your payload
+            cabCode: cab.cabCode || "",
+            cabpic: null,
+            countryid: cab.countryid || cab.countryId || "",
+            placeid: parseInt(cab.placeid || cab.placeId || 0),
+            providername: null,
+            cabLocationDTOList: (cab.cabLocationDTOList || []).map((location, locIndex) => {
+                // Find the corresponding location in editingCab.cabLocationDTOList by cablocationId or index
+                const editingLocation = (editingCab.cabLocationDTOList || [])[locIndex] || {};
+
+                return {
+                    cablocationId: editingLocation.cablocationId ||  "", // Use cablocationId from editing.cabLocationDTOList
+                    cabid: "",
+                    pickup: location.pickup || "",
+                    dropoff: location.dropoff || location.dropOff || ""
+                };
+            }),
+        };
+    }),
+};
 
     console.log("Payload prepared for edit:", payload);
+    console.log("Edit payload JSON:", JSON.stringify(payload, null, 2));
 
-    const editRes = await axiosInstance.put(
-        `/api/cab/${editing.id}`,
-      payload,
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    // const editRes = await axiosInstance.put(
+    //     `/api/cabProvider/${editing.id}`,
+    //   payload,
+    //   {
+    //     headers: {
+    //       "Content-Type": "application/json",
+    //     },
+    //   }
+    // );
+
+    const editRes = await axiosInstance.put(`/api/cabProvider/${editing.cabprovider}`,payload);
 
     if (editRes.data) {
         toast.success("Cab Provider Updated Successfully!");
@@ -596,8 +810,11 @@ const CabReg = () => {
     });
     setCabList([]);
     setPlaces([]);
+    setPickupDropoffList([]);
+    setIsLoadingPlaces(false);
     setValidationErrors({});
     setError("");
+    setEditingCab(null);
   };
 
   const fetchCabList = async (pageNum = 0, searchTerm = search) => {
@@ -612,7 +829,8 @@ const CabReg = () => {
         params.append("search", searchTerm.trim());
       }
 
-      const res = await axiosInstance.get(`/api/cab?${params.toString()}`);
+      const res = await axiosInstance.get(`/api/cabProvider?${params.toString()}`);
+      console.log("cab list :::" , res)
 
       if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
@@ -661,7 +879,7 @@ const CabReg = () => {
 
   const handleDelete = (item) => {
     Swal.fire({
-      title: `Are you sure? You want to delete ${item.cabProviderName}`,
+      title: `Are you sure? You want to delete ${item.providername}`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -675,13 +893,14 @@ const CabReg = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/cab/${item.id}`)
+          .delete(`/api/cabProvider/${item.id}`)
           .then(() => {
             toast.success("Cab Provider deleted successfully");
             fetchCabList(page, search);
           })
-          .catch(() => {
-            toast.error("Sorry!! Cab Provider not deleted");
+          .catch((error) => {
+            console.error("Delete error:", error);
+            toast.error(`Failed to delete cab provider: ${error.response?.data?.message || error.message}`);
           });
       }
     });
@@ -751,10 +970,10 @@ const CabReg = () => {
                   {items.map((item, index) => (
                     <tr key={item.id}>
                       <td>{index + 1 + page * 10}</td>
-                      <td>{item.cabProviderName}</td>
-                      <td>{item.contactPerson}</td>
-                      <td>{item.contactNumber}</td>
-                      <td>{item.email}</td>
+                      <td>{item.providername}</td>
+                      <td>{item.contactperson}</td>
+                      <td>{item.phonenumber}</td>
+                      <td>{item.emailid}</td>
                       <td>
                         <div className="d-flex gap-2">
                           <FaEdit
@@ -1061,10 +1280,11 @@ const CabReg = () => {
                             name="placeId"
                             value={formData.placeId}
                             onChange={handlePlaceChange}
-                            placeholder="Search and select place"
+                            placeholder={isLoadingPlaces ? "Loading places..." : "Search and select place"}
                             options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name })) : []}
                             isInvalid={!!validationErrors.placeId}
-                            disabled={isViewMode || !formData.countryId}
+                            disabled={isViewMode || !formData.countryId || isLoadingPlaces}
+                            isLoading={isLoadingPlaces}
                           />
                           {validationErrors.placeId && (
                                 <Form.Control.Feedback type="invalid">
@@ -1074,48 +1294,88 @@ const CabReg = () => {
                             </Form.Group>
                           </Col>
                     </Row>
-                    <Row>
-                          <Col md={6}>
-                            <Form.Group className="mb-3">
-                          <Form.Label>
-                            <span style={{ color: 'red' }}>*</span>Pickup
-                          </Form.Label>
-                              <Form.Control
-                            value={formData.pickup}
-                            placeholder="Enter pickup location"
-                                {...getFormControlProps(
-                              "pickup",
-                                  (e) =>
-                                    setFormData({
-                                      ...formData,
-                                  pickup: e.target.value,
-                                    }),
-                                  {}
-                                )}
-                              />
-                            </Form.Group>
-                          </Col>
-                          <Col md={6}>
-                            <Form.Group className="mb-3">
-                          <Form.Label>
-                            <span style={{ color: 'red' }}>*</span>Drop Off
-                          </Form.Label>
-                              <Form.Control
-                            value={formData.dropOff}
-                            placeholder="Enter drop off location"
-                                {...getFormControlProps(
-                              "dropOff",
-                                  (e) =>
-                                    setFormData({
-                                      ...formData,
-                                  dropOff: e.target.value,
-                                    }),
-                                  {}
-                                )}
-                              />
-                            </Form.Group>
-                          </Col>
-                        </Row>
+                    {/* Pickup and Dropoff Locations */}
+                    <div className="mb-3">
+                       <div className="d-flex justify-content-between align-items-center mb-3">
+                        <h6 className="mb-0">
+                          <span style={{ color: 'red' }}>*</span>Pickup & Dropoff Locations
+                        </h6>
+                        {!isViewMode && (
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={addPickupDropoff}
+                            className="d-flex align-items-center gap-1"
+                          >
+                            <FaPlus size={12} />
+                            Add Location
+                          </Button>
+                        )}
+                      </div>
+
+                      {pickupDropoffList.length === 0 && !isViewMode && (
+                        <div className="alert alert-info">
+                          <small>
+                            <i className="fas fa-info-circle me-2"></i>
+                            No pickup/dropoff locations added yet. Click "Add Location" to add your first location.
+                          </small>
+                        </div>
+                      )}
+
+                      {pickupDropoffList.map((location, index) => (
+                        <Card key={location.id} className="mb-3">
+                          <Card.Header className="d-flex justify-content-between align-items-center py-2">
+                            <small className="fw-semibold">Location {index + 1}</small>
+                            {!isViewMode && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => removePickupDropoff(location.id)}
+                              >
+                                <FaTrash size={10} />
+                              </Button>
+                            )}
+                          </Card.Header>
+                          <Card.Body className="py-2">
+                            <Row>
+                              <Col md={6}>
+                                <Form.Group className="mb-2">
+                                  <Form.Label>
+                                    <span style={{ color: 'red' }}>*</span>Pickup
+                                  </Form.Label>
+                                  <Form.Control
+                                    value={location.pickup}
+                                    placeholder="Enter pickup location"
+                                    {...getFormControlProps(
+                                      "pickup",
+                                      (e) => updatePickupDropoff(location.id, 'pickup', e.target.value),
+                                      {}
+                                    )}
+                                  />
+                                </Form.Group>
+                              </Col>
+                              <Col md={6}>
+                                <Form.Group className="mb-2">
+                                  <Form.Label>
+                                    <span style={{ color: 'red' }}>*</span>Drop Off
+                                  </Form.Label>
+                                  <Form.Control
+                                    value={location.dropOff}
+                                    placeholder="Enter drop off location"
+                                    {...getFormControlProps(
+                                      "dropOff",
+                                      (e) => updatePickupDropoff(location.id, 'dropOff', e.target.value),
+                                      {}
+                                    )}
+                                  />
+                                </Form.Group>
+                              </Col>
+                            </Row>
+                          </Card.Body>
+                        </Card>
+                      ))}
+                    </div>
+                    {!isViewMode && (
                     <div className="d-flex justify-content-end">
                       <Button
                         variant="primary"
@@ -1127,6 +1387,7 @@ const CabReg = () => {
                         Add Cab
                       </Button>
                     </div>
+                    )}
 
                     {/* Display added cabs */}
                     {cabList.length > 0 && (
@@ -1140,33 +1401,58 @@ const CabReg = () => {
                                 <th>Cab Name</th>
                                 <th>Country</th>
                                 <th>Place</th>
-                                <th>Pickup</th>
-                                <th>Drop Off</th>
+                                <th>Pickup & Dropoff Locations</th>
                                 <th>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
                               {cabList.map((cab) => (
-                                <tr key={cab.id}>
+                                <tr key={cab.cabId || cab.id}>
                                   <td>{cab.cabCode}</td>
-                                  <td>{cab.cabName}</td>
+                                  <td>{cab.name}</td>
                                   <td>
-                                    {countries.find(c => String(c.id) === String(cab.countryId))?.name || cab.countryId}
+                                    {countries.find(c => String(c.id) === String(cab.countryid))?.name || cab.countryid}
                                   </td>
                                   <td>
-                                    {places.find(p => String(p.id) === String(cab.placeId))?.name || cab.placeId}
+                                    {places.find(p => String(p.id) === String(cab.placeid))?.name || cab.placeid}
                                   </td>
-                                  <td>{cab.pickup}</td>
-                                  <td>{cab.dropOff}</td>
+                                  <td>
+                                    <div style={{ maxHeight: '100px', overflowY: 'auto' }}>
+                                      {cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0 ? (
+                                        cab.cabLocationDTOList.map((location, index) => (
+                                          <div key={location.cablocationId || index} className="mb-1 p-2 border rounded bg-light">
+                                            <small>
+                                              <strong>Location {index + 1}:</strong><br/>
+                                              <span className="text-primary">From:</span> {location.pickup}<br/>
+                                              <span className="text-success">To:</span> {location.dropoff}
+                                            </small>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <small className="text-muted">No locations added</small>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td>
                                     {!isViewMode && (
-                                      <Button
-                                        variant="danger"
-                                        size="sm"
-                                        onClick={() => removeCabFromList(cab.id)}
-                                      >
-                                        <FaTrash />
-                                      </Button>
+                                      <div className="d-flex gap-1">
+                                        <Button
+                                          variant="outline-primary"
+                                          size="sm"
+                                          onClick={() => editCabFromList(cab)}
+                                          title="Edit Cab"
+                                        >
+                                          <FaEdit size={10} />
+                                        </Button>
+                                        <Button
+                                          variant="danger"
+                                          size="sm"
+                                          onClick={() => removeCabFromList(cab.cabId || cab.id)}
+                                          title="Delete Cab"
+                                        >
+                                          <FaTrash size={10} />
+                                        </Button>
+                                      </div>
                                     )}
                                   </td>
                                 </tr>
