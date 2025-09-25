@@ -138,7 +138,7 @@ export default function Sidebar() {
         { label: "Hotel", to: "/registration/hotel" },
         { label: "Agent", to: "/registration/agent" },
         { label: "Employee", to: "/registration/employee" },
-        { label: "Cab", to: "/registration/cab" },
+        { label: "Cab", to: "/registration/cabProvider" },
         { label: "Activity", to: "/registration/activity" },
         { label: "Package", to: "/registration/package" },
         { label: "Supplier", to: "/registration/supplier" },

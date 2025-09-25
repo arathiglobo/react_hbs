@@ -32,7 +32,8 @@ import AgentReg from "./pages/Registration/AgentReg";
 import HotelReg from "./pages/Registration/HotelReg";
 import HotelList from "./pages/Registration/HotelList";
 import EmployeeReg from "./pages/Registration/EmployeeReg";
-import CabReg from "./pages/Registration/CabReg";
+import CabProviderReg from "./pages/Registration/CabProviderReg";
+import CabRates from "./pages/Registration/CabRates";
 
 
 
@@ -121,7 +122,8 @@ export default function App() {
        <Route path="/hotel-booking-page" element={<HotelBookingPage/>} />
        <Route path="/registration/agent" element={<AgentReg />} />
        <Route path="/registration/employee" element={<EmployeeReg />} />
-       <Route path="/registration/cab" element={<CabReg />} />
+       <Route path="/registration/cabProvider" element={<CabProviderReg />} />
+       <Route path="/cab-rates" element={<CabRates />} />
        <Route path="/registration/hotel" element={<HotelList />} />
        <Route path="/registration/hotel/create" element={<HotelReg />} />
        <Route path="/registration/hotel/create/:id" element={<HotelReg />} />

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Card,
   Button,
@@ -20,6 +21,7 @@ import {
   FaTrash,
   FaEye,
   FaPlus,
+  FaDollarSign,
 } from "react-icons/fa";
 
 // Enhanced SearchableSelect Component with loading support
@@ -179,7 +181,8 @@ const SearchableSelect = ({
   );
 };
 
-const CabReg = () => {
+const CabProviderReg = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -906,6 +909,17 @@ const CabReg = () => {
     });
   };
 
+  const handleCabRates = (item) => {
+    // Navigate to CabRates page with the cab provider data
+    navigate('/cab-rates', { 
+      state: { 
+        cabProvider: item,
+        cabProviderId: item.cabprovider || item.id,
+        cabProviderName: item.providername 
+      } 
+    });
+  };
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
@@ -987,6 +1001,12 @@ const CabReg = () => {
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => handleView(item)}
                             title="View"
+                          />
+                          <FaDollarSign
+                            className="text-success"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleCabRates(item)}
+                            title="Cab Rates"
                           />
                           <FaTrash
                             className="text-danger delete"
@@ -1509,4 +1529,4 @@ const CabReg = () => {
   );
 };
 
-export default CabReg;
+export default CabProviderReg;
