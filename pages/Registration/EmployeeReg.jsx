@@ -238,6 +238,7 @@ const EmployeeReg = () => {
     repassword: "",
     userroles: "",
   });
+  const [isUserRegistered, setIsUserRegistered] = useState(false);
 
   const [showApiDropdown, setShowApiDropdown] = useState(false);
   const nextId = useMemo(
@@ -675,14 +676,15 @@ const EmployeeReg = () => {
     setShowPassword(false);
     setShowRePassword(false);
 
-    // Fetch existing login data for this agent
+    // Fetch existing login data for this employee
     try {
       const response = await axiosInstance.post(
         `/auth/checkRegisteredUserExist/${item.employeeId}`
       );
 
       if (response.data) {
-        // Safely check both key variations
+        // User is registered, populate form with existing data
+        setIsUserRegistered(true);
         const userNameValue =
           response.data.userName || response.data.username || "";
         // Populate form with existing data
@@ -693,11 +695,21 @@ const EmployeeReg = () => {
           userroles: [], // fetch separately if needed
         });
       } else {
-        console.log("No existing login data found for agent:", item.employeeId);
+        console.log("No existing login data found for employee:", item.employeeId);
+        setIsUserRegistered(false);
       }
     } catch (error) {
-      console.log("No existing login data found or error fetching:", error);
-      // This is normal for agents with no existing login credentials
+      console.log("Error fetching login data:", error);
+      
+      // Check if the error is "User is not Registered"
+      if (error.response?.data?.message?.includes("User is not Registered")) {
+        setIsUserRegistered(false);
+        console.log("User is not registered, showing registration form");
+      } else {
+        // For other errors, assume user is not registered
+        setIsUserRegistered(false);
+        console.log("Assuming user is not registered due to error");
+      }
     }
 
     // Force modal re-render with new key
@@ -792,7 +804,11 @@ const EmployeeReg = () => {
         console.log("login register success::", response);
 
         if (response.data) {
-          toast.success("Login credentials saved successfully!");
+          toast.success(
+            isUserRegistered 
+              ? "Login credentials updated successfully!" 
+              : "Login credentials created successfully!"
+          );
           setLoginErrors({});
           closeLoginModal();
           await fetchEmployeeList(page, search);
@@ -865,6 +881,7 @@ const EmployeeReg = () => {
     setShowPassword(false);
     setShowRePassword(false);
     setLoginModalKey((prev) => prev + 1); // Reset modal key
+    setIsUserRegistered(false); // Reset registration status
     setLoginFormData({
       username: "",
       password: "",
@@ -1483,23 +1500,30 @@ const EmployeeReg = () => {
           >
             <Modal.Header closeButton>
               <Modal.Title>
-                {loginFormData.username && loginFormData.username.trim() !== ""
-                  ? "Update"
-                  : ""}{" "}
-                 Register Employee here..
+                {isUserRegistered 
+                  ? "Edit user registration details"
+                  : "New user? Register here"
+                }
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              {loginFormData.username &&
-                loginFormData.username.trim() !== "" && (
-                  <div className="alert alert-info mb-3">
-                    <small>
-                      <i className="fas fa-info-circle me-2"></i>
-                      Existing login credentials found. You can update the
-                      username and password.
-                    </small>
-                  </div>
-                )}
+              {isUserRegistered && (
+                <div className="alert alert-info mb-3">
+                  <small>
+                    <i className="fas fa-info-circle me-2"></i>
+                    Existing login credentials found. You can update the
+                    username and password.
+                  </small>
+                </div>
+              )}
+              {!isUserRegistered && (
+                <div className="alert alert-warning mb-3">
+                  <small>
+                    <i className="fas fa-exclamation-triangle me-2"></i>
+                    This employee is not registered yet. Please create login credentials.
+                  </small>
+                </div>
+              )}
               <Form className="loginForm">
                 <Form.Group className="mb-3">
                   <Form.Label>Username</Form.Label>
