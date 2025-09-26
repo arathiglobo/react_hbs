@@ -268,11 +268,12 @@ const ActivityProviderReg = () => {
   };
 
   const handleActivityRates = (item) => {
-    navigate('/activity-rates', {
+    console.log("activity rates click with item::" , item)
+     navigate('/activity-rates', {
       state: {
         activityProvider: item,
-        activityProviderId: item.id,
-        activityProviderName: item.activityName
+        activityProviderId: item.providerId,
+        activityProviderName: item.providerName
       }
     });
   };

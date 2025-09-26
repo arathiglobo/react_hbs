@@ -22,6 +22,7 @@ import {
   FaPlus,
   FaDollarSign,
   FaBackward,
+  FaCog,
 } from "react-icons/fa";
 
 const ActivityRates = () => {
@@ -29,8 +30,11 @@ const ActivityRates = () => {
   const location = useLocation();
 
   // Get providerId from navigation state
-  const providerId = location.state?.providerId || "";
-  const providerName = location.state?.providerName || "";
+  const providerId = location.state?.activityProviderId || "";
+  const providerName = location.state?.activityProviderName || "";
+
+  console.log("providerId::" , providerId)
+  console.log("providerName::" , providerName)
   const [rates, setRates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -567,10 +571,7 @@ const ActivityRates = () => {
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Activity Name</th>
                     <th>Activity Code</th>
-                    <th>Activity Rate</th>
-                    <th>Max Pax</th>
-                    <th>Duration</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 200 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
