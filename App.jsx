@@ -34,6 +34,8 @@ import HotelList from "./pages/Registration/HotelList";
 import EmployeeReg from "./pages/Registration/EmployeeReg";
 import CabProviderReg from "./pages/Registration/CabProviderReg";
 import CabRates from "./pages/Registration/CabRates";
+import ActivityProviderReg from "./pages/Registration/ActivityProviderReg";
+import ActivityRates from "./pages/Registration/ActivityRates";
 
 
 
@@ -124,6 +126,8 @@ export default function App() {
        <Route path="/registration/employee" element={<EmployeeReg />} />
        <Route path="/registration/cabProvider" element={<CabProviderReg />} />
        <Route path="/cab-rates" element={<CabRates />} />
+       <Route path="/registration/activityProvider" element={<ActivityProviderReg />} />
+       <Route path="activity-rates" element={<ActivityRates />} />
        <Route path="/registration/hotel" element={<HotelList />} />
        <Route path="/registration/hotel/create" element={<HotelReg />} />
        <Route path="/registration/hotel/create/:id" element={<HotelReg />} />
