@@ -204,6 +204,7 @@ const CabProviderReg = () => {
     placeId: "",
     pickup: "",
     dropOff: "",
+    cabImage: null,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -515,6 +516,7 @@ const CabProviderReg = () => {
       name: formData.cabName, // Use 'name' to match your data structure
       countryid: formData.countryId, // Use 'countryid' to match your data structure
       placeid: formData.placeId, // Use 'placeid' to match your data structure
+      cabImage: formData.cabImage, // Include the uploaded image
       cabLocationDTOList: pickupDropoffList.map((location, index) => ({
         cablocationId: location.id || Date.now() + index,
         cabid: null,
@@ -534,6 +536,7 @@ const CabProviderReg = () => {
       placeId: "",
       pickup: "",
       dropOff: "",
+      cabImage: null,
     }));
     setPlaces([]);
     setPickupDropoffList([]); // Clear pickup/dropoff list
@@ -559,6 +562,7 @@ const CabProviderReg = () => {
       cabName: cab.name || "",
       countryId: String(cab.countryid || ""),
       placeId: String(cab.placeid || ""),
+      cabImage: cab.cabImage || null,
     }));
 
     // Set pickup/dropoff locations for editing
@@ -655,37 +659,51 @@ const CabProviderReg = () => {
       console.log("cabList in saveCab:", cabList);
       console.log("safeCabList:", safeCabList);
 
-      const cabPayload = {
-        cabprovider: "", 
-        providername: formData.cabProviderName,
-        phonenumber: formData.contactNumber,
-        emailid: formData.email,
-        contactperson: formData.contactPerson,
-        cabList: safeCabList.map(cab => ({
-          cabId:  "", 
-          name: cab.name || cab.cabName || "",
-          cabprovider: "", 
-          cabCode: cab.cabCode || "",
-          cabpic: null,
-          countryid: cab.countryid || cab.countryId || "",
-          placeid: parseInt(cab.placeid || cab.placeId || 0),
-          providername: null,
-          cabLocationDTOList: (cab.cabLocationDTOList || []).map((location, index) => ({
-            cablocationId:  "", 
-            cabid: "",
-            pickup: location.pickup || "",
-            dropoff: location.dropoff || location.dropOff || ""
-          })),
-         
-        })),
-       
-      };
+      // Create FormData for file upload
+      const formDataPayload = new FormData();
+      formDataPayload.append('cabprovider', '');
+      formDataPayload.append('providername', formData.cabProviderName);
+      formDataPayload.append('phonenumber', formData.contactNumber);
+      formDataPayload.append('emailid', formData.email);
+      formDataPayload.append('contactperson', formData.contactPerson);
+      
+      // Add cab list data
+      safeCabList.forEach((cab, index) => {
+        formDataPayload.append(`cabList[${index}][cabId]`, '');
+        formDataPayload.append(`cabList[${index}][name]`, cab.name || cab.cabName || '');
+        formDataPayload.append(`cabList[${index}][cabprovider]`, '');
+        formDataPayload.append(`cabList[${index}][cabCode]`, cab.cabCode || '');
+        formDataPayload.append(`cabList[${index}][countryid]`, cab.countryid || cab.countryId || '');
+        formDataPayload.append(`cabList[${index}][placeid]`, parseInt(cab.placeid || cab.placeId || 0));
+        formDataPayload.append(`cabList[${index}][providername]`, '');
+        
+        // Add cab image if exists
+        if (cab.cabImage) {
+          formDataPayload.append(`cabList[${index}][cabpic]`, cab.cabImage);
+        } else {
+          formDataPayload.append(`cabList[${index}][cabpic]`, '');
+        }
+        
+        // Add location data
+        if (cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0) {
+          cab.cabLocationDTOList.forEach((location, locIndex) => {
+            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][cablocationId]`, '');
+            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][cabid]`, '');
+            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][pickup]`, location.pickup || '');
+            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][dropoff]`, location.dropoff || location.dropOff || '');
+          });
+        }
+      });
 
-      console.log("cabPayload:::", cabPayload);
-      console.log("cabPayload JSON:::", JSON.stringify(cabPayload, null, 2));
+      console.log("formDataPayload:::", formDataPayload);
       const cabSaveResponse = await axiosInstance.post(
         "/api/cabProvider/register",
-        cabPayload
+        formDataPayload,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
       );
 
       if (cabSaveResponse.data) {
@@ -727,54 +745,53 @@ const CabProviderReg = () => {
     console.log("safeCabList for edit:", safeCabList);
     
    
-    const payload = {
-    cabprovider: editing.cabprovider || "", // Use cabprovider ID from editing item
-    providername: formData.cabProviderName,
-    phonenumber: formData.contactNumber,
-    emailid: formData.email,
-    contactperson: formData.contactPerson,
-    cabList: safeCabList.map((cab, index) => {
+    // Create FormData for file upload
+    const formDataPayload = new FormData();
+    formDataPayload.append('cabprovider', editing.cabprovider || '');
+    formDataPayload.append('providername', formData.cabProviderName);
+    formDataPayload.append('phonenumber', formData.contactNumber);
+    formDataPayload.append('emailid', formData.email);
+    formDataPayload.append('contactperson', formData.contactPerson);
+    
+    // Add cab list data
+    safeCabList.forEach((cab, index) => {
         // Find the corresponding cab in editing.cabList by cabId or index
         const editingCab = (editing.cabList || []).find(c => c.cabId === cab.cabId) || (editing.cabList || [])[index] || {};
+        
+        formDataPayload.append(`cabList[${index}][cabId]`, editingCab.cabId || '');
+        formDataPayload.append(`cabList[${index}][name]`, cab.name || cab.cabName || '');
+        formDataPayload.append(`cabList[${index}][cabprovider]`, '');
+        formDataPayload.append(`cabList[${index}][cabCode]`, cab.cabCode || '');
+        formDataPayload.append(`cabList[${index}][countryid]`, cab.countryid || cab.countryId || '');
+        formDataPayload.append(`cabList[${index}][placeid]`, parseInt(cab.placeid || cab.placeId || 0));
+        formDataPayload.append(`cabList[${index}][providername]`, '');
+        
+        // Add cab image if exists
+        if (cab.cabImage) {
+          formDataPayload.append(`cabList[${index}][cabpic]`, cab.cabImage);
+        } else {
+          formDataPayload.append(`cabList[${index}][cabpic]`, '');
+        }
+        
+        // Add location data
+        if (cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0) {
+          cab.cabLocationDTOList.forEach((location, locIndex) => {
+            const editingLocation = (editingCab.cabLocationDTOList || [])[locIndex] || {};
+            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][cablocationId]`, editingLocation.cablocationId || '');
+            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][cabid]`, '');
+            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][pickup]`, location.pickup || '');
+            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][dropoff]`, location.dropoff || location.dropOff || '');
+          });
+        }
+    });
 
-        return {
-            cabId: editingCab.cabId ||  "", // Use cabId from editing.cabList if available, else fallback to cab.cabId
-            name: cab.name || cab.cabName || "",
-            cabprovider: "", // Empty as per your payload
-            cabCode: cab.cabCode || "",
-            cabpic: null,
-            countryid: cab.countryid || cab.countryId || "",
-            placeid: parseInt(cab.placeid || cab.placeId || 0),
-            providername: null,
-            cabLocationDTOList: (cab.cabLocationDTOList || []).map((location, locIndex) => {
-                // Find the corresponding location in editingCab.cabLocationDTOList by cablocationId or index
-                const editingLocation = (editingCab.cabLocationDTOList || [])[locIndex] || {};
+    console.log("FormData prepared for edit:", formDataPayload);
 
-                return {
-                    cablocationId: editingLocation.cablocationId ||  "", // Use cablocationId from editing.cabLocationDTOList
-                    cabid: "",
-                    pickup: location.pickup || "",
-                    dropoff: location.dropoff || location.dropOff || ""
-                };
-            }),
-        };
-    }),
-};
-
-    console.log("Payload prepared for edit:", payload);
-    console.log("Edit payload JSON:", JSON.stringify(payload, null, 2));
-
-    // const editRes = await axiosInstance.put(
-    //     `/api/cabProvider/${editing.id}`,
-    //   payload,
-    //   {
-    //     headers: {
-    //       "Content-Type": "application/json",
-    //     },
-    //   }
-    // );
-
-    const editRes = await axiosInstance.put(`/api/cabProvider/${editing.cabprovider}`,payload);
+    const editRes = await axiosInstance.put(`/api/cabProvider/${editing.cabprovider}`, formDataPayload, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
 
     if (editRes.data) {
         toast.success("Cab Provider Updated Successfully!");
@@ -810,6 +827,7 @@ const CabProviderReg = () => {
       placeId: "",
       pickup: "",
       dropOff: "",
+      cabImage: null,
     });
     setCabList([]);
     setPlaces([]);
@@ -1314,6 +1332,55 @@ const CabProviderReg = () => {
                             </Form.Group>
                           </Col>
                     </Row>
+                    
+                    {/* Cab Image Upload */}
+                    <Row>
+                      <Col md={12}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            Cab Image
+                          </Form.Label>
+                          <Form.Control
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                // Validate file size (max 5MB)
+                                if (file.size > 5 * 1024 * 1024) {
+                                  toast.error("Image size should be less than 5MB");
+                                  return;
+                                }
+                                // Validate file type
+                                if (!file.type.startsWith('image/')) {
+                                  toast.error("Please select a valid image file");
+                                  return;
+                                }
+                                setFormData(prev => ({
+                                  ...prev,
+                                  cabImage: file
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          />
+                          {formData.cabImage && (
+                            <div className="mt-2">
+                              <small className="text-muted">Selected: {formData.cabImage.name}</small>
+                              <div className="mt-1">
+                                <img 
+                                  src={URL.createObjectURL(formData.cabImage)} 
+                                  alt="Cab preview" 
+                                  style={{ maxWidth: '150px', maxHeight: '100px', objectFit: 'cover' }}
+                                  className="border rounded"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                    
                     {/* Pickup and Dropoff Locations */}
                     <div className="mb-3">
                        <div className="d-flex justify-content-between align-items-center mb-3">
@@ -1421,6 +1488,7 @@ const CabProviderReg = () => {
                                 <th>Cab Name</th>
                                 <th>Country</th>
                                 <th>Place</th>
+                                <th>Image</th>
                                 <th>Pickup & Dropoff Locations</th>
                                 <th>Actions</th>
                               </tr>
@@ -1435,6 +1503,23 @@ const CabProviderReg = () => {
                                   </td>
                                   <td>
                                     {places.find(p => String(p.id) === String(cab.placeid))?.name || cab.placeid}
+                                  </td>
+                                  <td>
+                                    {cab.cabImage ? (
+                                      <img 
+                                        src={URL.createObjectURL(cab.cabImage)} 
+                                        alt="Cab" 
+                                        style={{ width: '50px', height: '50px', objectFit: 'cover' }}
+                                        className="border rounded"
+                                      />
+                                    ) : (
+                                      <div 
+                                        className="d-flex align-items-center justify-content-center border rounded bg-light"
+                                        style={{ width: '50px', height: '50px' }}
+                                      >
+                                        <small className="text-muted">No Image</small>
+                                      </div>
+                                    )}
                                   </td>
                                   <td>
                                     <div style={{ maxHeight: '100px', overflowY: 'auto' }}>
