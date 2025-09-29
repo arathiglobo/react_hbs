@@ -637,7 +637,7 @@ const ActivityRates = () => {
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
                 {isViewMode
-                  ? "View Activity Rate" 
+                  ? "View Activity Rate"  
                   : editing
                   ? "Edit Activity Rate"
                   : "Create Activity Rate"}
