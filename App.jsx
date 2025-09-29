@@ -36,6 +36,7 @@ import CabProviderReg from "./pages/Registration/CabProviderReg";
 import CabRates from "./pages/Registration/CabRates";
 import ActivityProviderReg from "./pages/Registration/ActivityProviderReg";
 import ActivityRates from "./pages/Registration/ActivityRates";
+import PackageReg from "./pages/Registration/PackageReg";
 
 
 
@@ -127,6 +128,7 @@ export default function App() {
        <Route path="/registration/cabProvider" element={<CabProviderReg />} />
        <Route path="/cab-rates" element={<CabRates />} />
        <Route path="/registration/activityProvider" element={<ActivityProviderReg />} />
+       <Route path="/registration/package" element={<PackageReg />} />
        <Route path="activity-rates" element={<ActivityRates />} />
        <Route path="/registration/hotel" element={<HotelList />} />
        <Route path="/registration/hotel/create" element={<HotelReg />} />

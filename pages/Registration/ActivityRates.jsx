@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Card,
@@ -13,6 +14,7 @@ import {
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import {
@@ -24,6 +26,210 @@ import {
   FaBackward,
   FaCog,
 } from "react-icons/fa";
+
+// Enhanced SearchableSelect Component with loading support
+const SearchableSelect = ({
+  options,
+  value,
+  onChange,
+  placeholder,
+  className,
+  isInvalid,
+  name,
+  disabled = false,
+  isLoading = false,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredOptions, setFilteredOptions] = useState(options || []);
+  const [inputRef, setInputRef] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+
+  useEffect(() => {
+    if (!options || !Array.isArray(options)) {
+      setFilteredOptions([]);
+      return;
+    }
+
+    if (searchTerm) {
+      const filtered = options.filter((option) => {
+        // Handle different possible data structures
+        const optionName =
+          option.name ||
+          String(option);
+        return optionName.toLowerCase().includes(searchTerm.toLowerCase());
+      });
+      setFilteredOptions(filtered);
+    } else {
+      setFilteredOptions(options);
+    }
+  }, [searchTerm, options]);
+
+  useEffect(() => {
+    if (isOpen && inputRef) {
+      const rect = inputRef.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const dropdownHeight = 200; // max height
+      
+      // Check if dropdown would go below viewport
+      let top = rect.bottom + window.scrollY;
+      if (rect.bottom + dropdownHeight > viewportHeight) {
+        // Position above the input if not enough space below
+        top = rect.top + window.scrollY - dropdownHeight;
+      }
+      
+      setDropdownPosition({
+        top: top,
+        left: rect.left + window.scrollX,
+        width: rect.width
+      });
+    }
+  }, [isOpen, inputRef]);
+
+  const handleSelect = (option) => {
+    try {
+      console.log("Selecting option:", option);
+      // Ensure we pass a proper value
+      const value = option.id !== undefined ? option.id : option;
+      onChange({
+        target: {
+          name: name,
+          value: value,
+        },
+      });
+      setIsOpen(false);
+      setSearchTerm("");
+    } catch (error) {
+      console.error("Error in handleSelect:", error);
+    }
+  };
+
+  const selectedOption = options?.find(
+    (option) => String(option.id) === String(value)
+  );
+
+  return (
+    <div className="position-relative" style={{ zIndex: 1, overflow: "visible", isolation: "isolate", position: "relative" }}>
+      <Form.Control
+        ref={setInputRef}
+        type="text"
+        value={
+          isOpen
+            ? searchTerm
+            : selectedOption?.name ||
+             ""
+        }
+        onChange={(e) => {
+          if (disabled) return;
+          if (isOpen) {
+            setSearchTerm(e.target.value);
+          } else {
+            // If not open, open dropdown and set search term
+            setIsOpen(true);
+            setSearchTerm(e.target.value);
+          }
+        }}
+        onFocus={() => !disabled && setIsOpen(true)}
+        placeholder={placeholder}
+        className={`form-input ${isInvalid ? "is-invalid" : ""}`}
+        disabled={disabled}
+        readOnly={disabled}
+        autoComplete="off"
+      />
+
+      {isOpen && !disabled && createPortal(
+        <div
+          className="dropdown-menu show"
+          style={{
+            position: "fixed",
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            width: dropdownPosition.width,
+            zIndex: 999999,
+            maxHeight: "200px",
+            overflowY: "auto",
+            display: "block",
+            backgroundColor: "white",
+            border: "1px solid #dee2e6",
+            borderRadius: "0.375rem",
+            boxShadow: "0 0.5rem 1rem rgba(0, 0, 0, 0.15)",
+            padding: 0,
+            margin: 0,
+            transition: "none",
+            animation: "none",
+          }}
+        >
+          {isLoading ? (
+            <div className="dropdown-item text-center" style={{ padding: "0.75rem 1rem" }}>
+              <div
+                className="spinner-border spinner-border-sm me-2"
+                role="status"
+              >
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              Loading...
+            </div>
+          ) : filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <div
+                key={option.id}
+                className="dropdown-item"
+                style={{
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  lineHeight: "1.4",
+                  color: "#212529",
+                  padding: "0.5rem 1rem",
+                  borderBottom: "1px solid #f8f9fa",
+                  transition: "none",
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.backgroundColor = "#f8f9fa";
+                  e.target.style.color = "#0d6efd";
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.backgroundColor = "white";
+                  e.target.style.color = "#212529";
+                }}
+                onClick={() => handleSelect(option)}
+              >
+                {option.name ||
+                  option.countryName ||
+                  option.stateName ||
+                  option.placeName ||
+                  String(option)}
+              </div>
+            ))
+          ) : (
+            <div className="dropdown-item text-muted" style={{ padding: "0.5rem 1rem", fontStyle: "italic" }}>
+              No options found
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+
+      {/* Overlay to close dropdown when clicking outside */}
+      {isOpen && createPortal(
+        <div
+          className="position-fixed"
+          style={{
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999998,
+          }}
+          onClick={() => {
+            setIsOpen(false);
+            setSearchTerm("");
+          }}
+        />,
+        document.body
+      )}
+    </div>
+  );
+};
 
 const ActivityRates = () => {
   const navigate = useNavigate();
@@ -45,13 +251,15 @@ const ActivityRates = () => {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   // Dropdown data
   const [countries, setCountries] = useState([]);
   const [places, setPlaces] = useState([]);
   const [activityTypes, setActivityTypes] = useState([]);
-  const [ratings, setRatings] = useState([]);
   const [marketTypes, setMarketTypes] = useState([]);
+  const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
 
   // Form state for modal
   const [formData, setFormData] = useState({
@@ -70,7 +278,7 @@ const ActivityRates = () => {
     durationMin: "",
     reportingPoint: "",
     rating: "",
-    marketType: [],
+    marketType: "",
   });
 
   // Validity dates state
@@ -83,60 +291,158 @@ const ActivityRates = () => {
   ]);
 
   // Fetch dropdown data
-  const fetchDropdownData = async () => {
+  // Load countries
+  const countryList = async () => {
     try {
-      const [countriesRes, placesRes, activityTypesRes, ratingsRes, marketTypesRes] = await Promise.all([
-        axiosInstance.get("/api/country"),
-        axiosInstance.get("/api/place"),
-        axiosInstance.get("/api/activityType"),
-        axiosInstance.get("/api/rating"),
-        axiosInstance.get("/api/marketType"),
-      ]);
-      
-      setCountries(countriesRes.data || []);
-      setPlaces(placesRes.data || []);
-      setActivityTypes(activityTypesRes.data || []);
-      setRatings(ratingsRes.data || []);
-      setMarketTypes(marketTypesRes.data || []);
+      const response = await axios.get("/api/country");
+      setCountries(response.data);
     } catch (error) {
-      console.error("Error fetching dropdown data:", error);
+      console.log("error for country list :", error);
+    }
+  };
+
+  // Load market types
+  const loadMarketTypes = async () => {
+    try {
+      const response = await axiosInstance.get("/api/marketType");
+      console.log("Market types response:", response.data);
+      setMarketTypes(response.data || []);
+    } catch (error) {
+      console.error("Error loading market types:", error);
+      toast.error("Failed to load market types");
+    }
+  };
+
+  const cityList = async (countryId) => {
+    try {
+      setIsLoadingPlaces(true);
+      const response = await axiosInstance.post(`/api/destination/getCitiesByCountryId/${countryId}`);
+      setPlaces(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for city list : ", error);
+      setPlaces([]);
+    } finally {
+      setIsLoadingPlaces(false);
+    }
+  };
+
+  // Handle country change
+  const handleCountryChange = (e) => {
+    try {
+      const value = e.target.value;
+      const stringValue = String(value); // Convert to string to avoid trim error
+      const selectedCountry = countries.find(country => String(country.id) === String(value));
+      const countryName = selectedCountry?.name || selectedCountry?.countryName || "Unknown";
+      
+      console.log(
+        "Country selected:",
+        value,
+        "Country name:",
+        countryName
+      );
+      
+      // Clear places and place selection when country changes
+      setPlaces([]);
+      setIsLoadingPlaces(false);
+      
+      setFormData((prev) => ({
+        ...prev,
+        countryId: stringValue,
+        placeId: "", // Clear place selection
+      }));
+      
+      // Fetch cities for the selected country
+      if (value && stringValue.trim() !== "") {
+        cityList(value);
+      }
+      
+      // Clear validation errors
+      if (validationErrors.countryId) {
+        setValidationErrors(prev => ({
+          ...prev,
+          countryId: ""
+        }));
+      }
+      if (validationErrors.placeId) {
+        setValidationErrors(prev => ({
+          ...prev,
+          placeId: ""
+        }));
+      }
+    } catch (error) {
+      console.error("Error in handleCountryChange:", error);
+    }
+  };
+
+  // Handle place change
+  const handlePlaceChange = (e) => {
+    const value = e.target.value;
+    const stringValue = String(value); // Convert to string for consistency
+    console.log("Place selected:", value);
+    
+    setFormData(prev => ({
+      ...prev,
+      placeId: stringValue,
+    }));
+    
+    // Clear validation error when user makes selection
+    if (validationErrors.placeId) {
+      setValidationErrors(prev => ({
+        ...prev,
+        placeId: ""
+      }));
     }
   };
 
   // Fetch activity rates list
-  const fetchActivityRatesList = async () => {
+  const fetchActivityRatesList = async (pageNum = 0, searchTerm = search) => {
     try {
       setIsLoading(true);
-      const response = await axiosInstance.get(`/api/activityRates?providerId=${providerId}`);
-      setRates(response.data || []);
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: "10",
+      });
+
+      if (searchTerm && searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+
+      const response = await axiosInstance.get(`/api/activityProvider/register?${params.toString()}`);
+      console.log("Activity rates list:", response.data);
+
+      if (response.data && Array.isArray(response.data)) {
+        setRates(response.data);
+        if (response.data.length < 10) {
+          setTotalPages(pageNum + 1);
+        } else {
+          setTotalPages(Math.max(totalPages, pageNum + 2));
+        }
+        setPage(pageNum);
+      } else {
+        setRates([]);
+        setTotalPages(0);
+        setPage(0);
+      }
     } catch (error) {
       console.error("Error fetching activity rates:", error);
       toast.error("Failed to fetch activity rates");
+      setRates([]);
+      setTotalPages(0);
+      setPage(0);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Fetch places based on country
-  const fetchPlaces = async (countryId) => {
-    if (!countryId) {
-      setPlaces([]);
-      return;
-    }
-    
-    try {
-      const response = await axiosInstance.get(`/api/place?countryId=${countryId}`);
-      setPlaces(response.data || []);
-    } catch (error) {
-      console.error("Error fetching places:", error);
-      setPlaces([]);
-    }
-  };
 
   useEffect(() => {
     fetchActivityRatesList();
-    fetchDropdownData();
   }, [providerId]);
+
+  useEffect(() => {
+    countryList();
+    loadMarketTypes();
+  }, []);
 
   // Handle search with debounce
   useEffect(() => {
@@ -144,7 +450,7 @@ const ActivityRates = () => {
       clearTimeout(searchTimeout);
     }
     const timeout = setTimeout(() => {
-      fetchActivityRatesList();
+      fetchActivityRatesList(0, search);
     }, 500);
     setSearchTimeout(timeout);
     return () => clearTimeout(timeout);
@@ -170,7 +476,7 @@ const ActivityRates = () => {
       durationMin: "",
       reportingPoint: "",
       rating: "",
-      marketType: [],
+      marketType: "",
     });
     setValidityDates([
       {
@@ -203,7 +509,7 @@ const ActivityRates = () => {
       durationMin: "",
       reportingPoint: "",
       rating: "",
-      marketType: [],
+      marketType: "",
     });
     setValidityDates([
       {
@@ -243,6 +549,12 @@ const ActivityRates = () => {
       },
     ]);
     setValidationErrors({});
+    
+    // Load places for the selected country when editing
+    if (item.countryId) {
+      cityList(item.countryId);
+    }
+    
     setShowModal(true);
   };
 
@@ -275,6 +587,12 @@ const ActivityRates = () => {
       },
     ]);
     setValidationErrors({});
+    
+    // Load places for the selected country when viewing
+    if (item.countryId) {
+      cityList(item.countryId);
+    }
+    
     setShowModal(true);
   };
 
@@ -294,7 +612,7 @@ const ActivityRates = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/activityRates/${item.activityRateId}`)
+          .delete(`/api/activityProvider/register/${item.activityRateId}`)
           .then(() => {
             toast.success("Activity Rate deleted successfully");
             fetchActivityRatesList();
@@ -307,29 +625,12 @@ const ActivityRates = () => {
     });
   };
 
-  const handleCountryChange = (e) => {
-    const countryId = e.target.value;
-    setFormData(prev => ({
-      ...prev,
-      countryId: countryId,
-      placeId: ""
-    }));
-    if (countryId) {
-      fetchPlaces(countryId);
-    } else {
-      setPlaces([]);
-    }
-  };
-
-  const handleMarketChange = (e) => {
+const handleMarketChange = (e) => {
     const value = e.target.value;
-    const checked = e.target.checked;
     
     setFormData(prev => ({
       ...prev,
-      marketType: checked 
-        ? [...prev.marketType, value]
-        : prev.marketType.filter(m => m !== value)
+      marketType: value
     }));
   };
 
@@ -369,7 +670,7 @@ const ActivityRates = () => {
     if (!data.durationMin) errors.durationMin = "Duration Minutes is required";
     if (!data.reportingPoint?.trim()) errors.reportingPoint = "Reporting Point is required";
     if (!data.rating) errors.rating = "Rating is required";
-    if (!data.marketType || data.marketType.length === 0) errors.marketType = "Market Type is required";
+    if (!data.marketType?.trim()) errors.marketType = "Market Type is required";
     
     return errors;
   };
@@ -413,10 +714,14 @@ const ActivityRates = () => {
       formDataPayload.append('reportingPoint', formData.reportingPoint);
       formDataPayload.append('rating', formData.rating);
       
-      // Add market types
-      formData.marketType.forEach((market, index) => {
-        formDataPayload.append('marketType', market);
-      });
+      // Add market type (can be multiple values)
+      if (Array.isArray(formData.marketType)) {
+        formData.marketType.forEach(market => {
+          formDataPayload.append('marketType', market);
+        });
+      } else {
+        formDataPayload.append('marketType', formData.marketType);
+      }
 
       // Add validity dates
       validityDates.forEach((validity, index) => {
@@ -425,7 +730,7 @@ const ActivityRates = () => {
       });
 
       const response = await axiosInstance.post(
-        "/api/activityRates/register",
+        "/api/activityProvider/register",
         formDataPayload,
         {
           headers: {
@@ -480,10 +785,8 @@ const ActivityRates = () => {
       formDataPayload.append('reportingPoint', formData.reportingPoint);
       formDataPayload.append('rating', formData.rating);
       
-      // Add market types
-      formData.marketType.forEach((market, index) => {
-        formDataPayload.append('marketType', market);
-      });
+      // Add market type
+      formDataPayload.append('marketType', formData.marketType);
 
       // Add validity dates
       validityDates.forEach((validity, index) => {
@@ -492,7 +795,7 @@ const ActivityRates = () => {
       });
 
       const response = await axiosInstance.put(
-        `/api/activityRates/${editing.activityRateId}`,
+        `/api/activityProvider/register/${editing.activityRateId}`,
         formDataPayload,
         {
           headers: {
@@ -515,7 +818,7 @@ const ActivityRates = () => {
     }
   };
 
-  return (
+   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
       <div className="d-flex flex-grow-1">
@@ -548,17 +851,42 @@ const ActivityRates = () => {
                 </span>
               </div>
               <div className="d-flex align-items-center gap-3">
-                <div className="position-relative">
-                  <input
+                <Form.Group className="position-relative">
+                  <Form.Control
                     type="text"
-                    className="form-control form-control-sm"
-                    placeholder="Search rates..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search activity rates by name..."
+                    className="form-control-modern-sm"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearchTerm(value);
+                      setSearch(value);
+                      setPage(0);
+                    }}
                     style={{ width: "250px" }}
                   />
-                  <i className="fas fa-search position-absolute top-50 end-0 translate-middle-y me-2 text-muted"></i>
-                </div>
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#6c757d",
+                        padding: "0 12px",
+                        zIndex: 10,
+                      }}
+                      onClick={() => {
+                        setSearchTerm("");
+                        setSearch("");
+                        setPage(0);
+                      }}
+                      title="Clear search"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  )}
+                </Form.Group>
                 <Button className="btn-green" onClick={openCreate}>
                   + Create
                 </Button>
@@ -629,6 +957,37 @@ const ActivityRates = () => {
                   )}
                 </tbody>
               </Table>
+
+              {totalPages > 1 && (
+                <div className="d-flex justify-content-between align-items-center p-3 border-top">
+                  <div>
+                    <small className="text-muted">
+                      Showing {rates.length} of {totalPages * 10} activity rates
+                    </small>
+                  </div>
+                  <div>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={page === 0}
+                        onClick={() => fetchActivityRatesList(page - 1, search)}
+                      />
+                      {[...Array(totalPages).keys()].map((num) => (
+                        <Pagination.Item
+                          key={num}
+                          active={num === page}
+                          onClick={() => fetchActivityRatesList(num, search)}
+                        >
+                          {num + 1}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={page === totalPages - 1}
+                        onClick={() => fetchActivityRatesList(page + 1, search)}
+                      />
+                    </Pagination>
+                  </div>
+                </div>
+              )}
             </Card.Body>
           </Card>
 
@@ -637,10 +996,10 @@ const ActivityRates = () => {
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
                 {isViewMode
-                  ? "View Activity Rate"  
+                  ? "View Activity"  
                   : editing
-                  ? "Edit Activity Rate"
-                  : "Create Activity Rate"}
+                  ? "Edit Activity"
+                  : "Create Activity"}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -785,11 +1144,9 @@ const ActivityRates = () => {
                         isInvalid={!!validationErrors.activityType}
                       >
                         <option value="">SELECT</option>
-                        {activityTypes.map((type) => (
-                          <option key={type.id} value={type.id}>
-                            {type.name}
-                          </option>
-                        ))}
+                        <option value="1">Private</option>
+                        <option value="2">SIC</option>
+                       
                       </Form.Select>
                       {validationErrors.activityType && (
                         <Form.Control.Feedback type="invalid">
@@ -800,21 +1157,17 @@ const ActivityRates = () => {
 
                     <Form.Group className="mb-3">
                       <Form.Label>
-                        Country <span className="text-danger">*</span>
+                        <span style={{ color: 'red' }}>*</span>Country
                       </Form.Label>
-                      <Form.Select
+                      <SearchableSelect
+                        name="countryId"
                         value={formData.countryId}
                         onChange={handleCountryChange}
-                        disabled={isViewMode}
+                        placeholder="Search and select country"
+                        options={countries}
                         isInvalid={!!validationErrors.countryId}
-                      >
-                        <option value="">SELECT</option>
-                        {countries.map((country) => (
-                          <option key={country.id} value={country.id}>
-                            {country.name}
-                          </option>
-                        ))}
-                      </Form.Select>
+                        disabled={isViewMode}
+                      />
                       {validationErrors.countryId && (
                         <Form.Control.Feedback type="invalid">
                           {validationErrors.countryId}
@@ -824,21 +1177,18 @@ const ActivityRates = () => {
 
                     <Form.Group className="mb-3">
                       <Form.Label>
-                        Place <span className="text-danger">*</span>
+                        <span style={{ color: 'red' }}>*</span>Place
                       </Form.Label>
-                      <Form.Select
+                      <SearchableSelect
+                        name="placeId"
                         value={formData.placeId}
-                        onChange={(e) => setFormData(prev => ({ ...prev, placeId: e.target.value }))}
-                        disabled={isViewMode || !formData.countryId}
+                        onChange={handlePlaceChange}
+                        placeholder={isLoadingPlaces ? "Loading places..." : "Search and select place"}
+                        options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name })) : []}
                         isInvalid={!!validationErrors.placeId}
-                      >
-                        <option value="">SELECT</option>
-                        {places.map((place) => (
-                          <option key={place.id} value={place.id}>
-                            {place.name}
-                          </option>
-                        ))}
-                      </Form.Select>
+                        disabled={isViewMode || !formData.countryId || isLoadingPlaces}
+                        isLoading={isLoadingPlaces}
+                      />
                       {validationErrors.placeId && (
                         <Form.Control.Feedback type="invalid">
                           {validationErrors.placeId}
@@ -927,11 +1277,12 @@ const ActivityRates = () => {
                         isInvalid={!!validationErrors.rating}
                       >
                         <option value="">SELECT</option>
-                        {ratings.map((rating) => (
-                          <option key={rating.id} value={rating.id}>
-                            {rating.name}
-                          </option>
-                        ))}
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                       
                       </Form.Select>
                       {validationErrors.rating && (
                         <Form.Control.Feedback type="invalid">
@@ -944,26 +1295,27 @@ const ActivityRates = () => {
                       <Form.Label>
                         Market Type <span className="text-danger">*</span>
                       </Form.Label>
-                      <div className="border rounded p-2" style={{ maxHeight: '120px', overflowY: 'auto' }}>
+                      <Form.Select
+                        value={formData.marketType || ""}
+                        onChange={handleMarketChange}
+                        disabled={isViewMode}
+                        isInvalid={!!validationErrors.marketType}
+                      >
+                        <option value="">Select Market Type</option>
                         {marketTypes.map((market) => (
-                          <Form.Check
-                            key={market.id}
-                            type="checkbox"
-                            id={`market-${market.id}`}
-                            label={market.name}
-                            value={market.id}
-                            checked={formData.marketType.includes(String(market.id))}
-                            onChange={handleMarketChange}
-                            disabled={isViewMode}
-                          />
+                          <option key={market.id} value={market.id}>
+                            {market.name}
+                          </option>
                         ))}
-                      </div>
+                      </Form.Select>
                       {validationErrors.marketType && (
                         <Form.Control.Feedback type="invalid">
                           {validationErrors.marketType}
                         </Form.Control.Feedback>
                       )}
                     </Form.Group>
+
+                    
 
                     <Form.Group className="mb-3">
                       <Form.Label>Validity Periods</Form.Label>
