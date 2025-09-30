@@ -549,7 +549,7 @@ const ActivityRates = () => {
       durationMin: item.durationMin || item.duration_min || "",
       reportingPoint: item.reportingPoint || item.reporting_point || "",
       rating: item.rating || "",
-      marketType: item.marketType || item.market_type || "",
+      marketType: item.marketType || item.market_type || "", 
     });
     
     // Handle validity dates - check for different possible field names
