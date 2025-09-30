@@ -407,7 +407,7 @@ const ActivityRates = () => {
         params.append("search", searchTerm.trim());
       }
 
-      const response = await axiosInstance.get(`/api/activityProvider/register?${params.toString()}`);
+      const response = await axiosInstance.get(`/api/activityRate?${params.toString()}`);
       console.log("Activity rates list:", response.data);
 
       if (response.data && Array.isArray(response.data)) {
@@ -425,7 +425,7 @@ const ActivityRates = () => {
       }
     } catch (error) {
       console.error("Error fetching activity rates:", error);
-      toast.error("Failed to fetch activity rates");
+      // toast.error("Failed to fetch activity rates");
       setRates([]);
       setTotalPages(0);
       setPage(0);
@@ -521,33 +521,59 @@ const ActivityRates = () => {
   };
 
   const handleEdit = (item) => {
+    console.log("Edit item data:", item);
+    console.log("All item keys:", Object.keys(item));
+    console.log("Child Age Min:", item.childAgeMin);
+    console.log("Child Age Max:", item.childAgeMax);
+    console.log("Child age min (snake):", item.child_age_min);
+    console.log("Child age max (snake):", item.child_age_max);
+    console.log("Validity data:", item.validity);
+    console.log("Validity periods:", item.validity_periods);
+    console.log("Validity dates:", item.validityDates);
+    
     setEditing(item);
     setIsViewMode(false);
     setFormData({
       activityName: item.activityName || "",
       activityCode: item.activityCode || "",
       activityDetails: item.activityDetails || "",
-      childAgeMin: item.childAgeMin || "",
-      childAgeMax: item.childAgeMax || "",
-      totalUsersAllowed: item.totalUsersAllowed || "",
-      activityRate: item.activityRate || "",
-      maxPax: item.maxPax || "",
-      activityType: item.activityType || "",
-      countryId: item.countryId || "",
-      placeId: item.placeId || "",
-      durationHr: item.durationHr || "",
-      durationMin: item.durationMin || "",
-      reportingPoint: item.reportingPoint || "",
+      childAgeMin: item.childAgeMin !== undefined && item.childAgeMin !== null ? item.childAgeMin : "",
+      childAgeMax: item.childAgeMax !== undefined && item.childAgeMax !== null ? item.childAgeMax : "",
+      totalUsersAllowed: item.totalUsersAllowed || item.total_users_allowed || "",
+      activityRate: item.activityRate || item.activity_rate || "",
+      maxPax: item.maxPax || item.max_pax || "",
+      activityType: item.activityType || item.activity_type || "",
+      countryId: item.countryId || item.country_id || "",
+      placeId: item.placeId || item.place_id || "",
+      durationHr: item.durationHr || item.duration_hr || "",
+      durationMin: item.durationMin || item.duration_min || "",
+      reportingPoint: item.reportingPoint || item.reporting_point || "",
       rating: item.rating || "",
-      marketType: item.marketType || [],
+      marketType: item.marketType || item.market_type || "",
     });
-    setValidityDates(item.validity || [
-      {
-        id: 1,
-        validityFrom: "",
-        validityTo: "",
-      },
-    ]);
+    
+    // Handle validity dates - check for different possible field names
+    const validityData = item.validity || item.validityDates || item.validity_periods || item.validityPeriods || [];
+    console.log("Validity data found:", validityData);
+    
+    if (validityData && Array.isArray(validityData) && validityData.length > 0) {
+      console.log("Processing validity data:", validityData);
+      setValidityDates(validityData.map((validity, index) => ({
+        id: validity.validityId || validity.id || Date.now() + index,
+        validityFrom: formatDateForInput(validity.validityFrom) || "",
+        validityTo: formatDateForInput(validity.validityTo) || "",
+      })));
+    } else {
+      console.log("No validity data found, using default");
+      setValidityDates([
+        {
+          id: 1,
+          validityFrom: "",
+          validityTo: "",
+        },
+      ]);
+    }
+    
     setValidationErrors({});
     
     // Load places for the selected country when editing
@@ -559,33 +585,59 @@ const ActivityRates = () => {
   };
 
   const handleView = (item) => {
+    console.log("View item data:", item);
+    console.log("All item keys:", Object.keys(item));
+    console.log("Child Age Min:", item.childAgeMin);
+    console.log("Child Age Max:", item.childAgeMax);
+    console.log("Child age min (snake):", item.child_age_min);
+    console.log("Child age max (snake):", item.child_age_max);
+    console.log("Validity data:", item.validity);
+    console.log("Validity periods:", item.validity_periods);
+    console.log("Validity dates:", item.validityDates);
+    
     setEditing(item);
     setIsViewMode(true);
     setFormData({
       activityName: item.activityName || "",
       activityCode: item.activityCode || "",
       activityDetails: item.activityDetails || "",
-      childAgeMin: item.childAgeMin || "",
-      childAgeMax: item.childAgeMax || "",
-      totalUsersAllowed: item.totalUsersAllowed || "",
-      activityRate: item.activityRate || "",
-      maxPax: item.maxPax || "",
-      activityType: item.activityType || "",
-      countryId: item.countryId || "",
-      placeId: item.placeId || "",
-      durationHr: item.durationHr || "",
-      durationMin: item.durationMin || "",
-      reportingPoint: item.reportingPoint || "",
+      childAgeMin: item.childAgeMin !== undefined && item.childAgeMin !== null ? item.childAgeMin : "",
+      childAgeMax: item.childAgeMax !== undefined && item.childAgeMax !== null ? item.childAgeMax : "",
+      totalUsersAllowed: item.totalUsersAllowed || item.total_users_allowed || "",
+      activityRate: item.activityRate || item.activity_rate || "",
+      maxPax: item.maxPax || item.max_pax || "",
+      activityType: item.activityType || item.activity_type || "",
+      countryId: item.countryId || item.country_id || "",
+      placeId: item.placeId || item.place_id || "",
+      durationHr: item.durationHr || item.duration_hr || "",
+      durationMin: item.durationMin || item.duration_min || "",
+      reportingPoint: item.reportingPoint || item.reporting_point || "",
       rating: item.rating || "",
-      marketType: item.marketType || [],
+      marketType: item.marketType || item.market_type || "",
     });
-    setValidityDates(item.validity || [
-      {
-        id: 1,
-        validityFrom: "",
-        validityTo: "",
-      },
-    ]);
+    
+    // Handle validity dates - check for different possible field names
+    const validityData = item.validity || item.validityDates || item.validity_periods || item.validityPeriods || [];
+    console.log("Validity data found:", validityData);
+    
+    if (validityData && Array.isArray(validityData) && validityData.length > 0) {
+      console.log("Processing validity data:", validityData);
+      setValidityDates(validityData.map((validity, index) => ({
+        id: validity.validityId || validity.id || Date.now() + index,
+        validityFrom: formatDateForInput(validity.validityFrom) || "",
+        validityTo: formatDateForInput(validity.validityTo) || "",
+      })));
+    } else {
+      console.log("No validity data found, using default");
+      setValidityDates([
+        {
+          id: 1,
+          validityFrom: "",
+          validityTo: "",
+        },
+      ]);
+    }
+    
     setValidationErrors({});
     
     // Load places for the selected country when viewing
@@ -612,7 +664,7 @@ const ActivityRates = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/activityProvider/register/${item.activityRateId}`)
+          .delete(`/api/activityRate/${item.activityRateId}`)
           .then(() => {
             toast.success("Activity Rate deleted successfully");
             fetchActivityRatesList();
@@ -625,14 +677,39 @@ const ActivityRates = () => {
     });
   };
 
-const handleMarketChange = (e) => {
+  const handleMarketChange = (e) => {
     const value = e.target.value;
     
     setFormData(prev => ({
       ...prev,
       marketType: value
     }));
+
+    // Clear validation error when user starts typing
+    if (validationErrors.marketType) {
+      setValidationErrors(prev => ({
+        ...prev,
+        marketType: ""
+      }));
+    }
   };
+
+  // Generic function to handle form field changes and clear validation errors
+  const handleFieldChange = (fieldName, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [fieldName]: value
+    }));
+
+    // Clear validation error for this field when user starts typing
+    if (validationErrors[fieldName]) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [fieldName]: ""
+      }));
+    }
+  };
+
 
   const addValidityDate = () => {
     const newDate = {
@@ -684,6 +761,18 @@ const handleMarketChange = (e) => {
     return `${day}/${month}/${year}`;
   };
 
+  // Convert DD/MM/YYYY to YYYY-MM-DD for date input
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return "";
+    // Check if date is in DD/MM/YYYY format
+    const parts = dateString.split('/');
+    if (parts.length === 3) {
+      const [day, month, year] = parts;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return dateString;
+  };
+
   const saveActivityRate = async (e) => {
     e.preventDefault();
     const errors = validateForm(formData);
@@ -714,14 +803,8 @@ const handleMarketChange = (e) => {
       formDataPayload.append('reportingPoint', formData.reportingPoint);
       formDataPayload.append('rating', formData.rating);
       
-      // Add market type (can be multiple values)
-      if (Array.isArray(formData.marketType)) {
-        formData.marketType.forEach(market => {
-          formDataPayload.append('marketType', market);
-        });
-      } else {
-        formDataPayload.append('marketType', formData.marketType);
-      }
+      // Add market type
+      formDataPayload.append('marketType', formData.marketType);
 
       // Add validity dates
       validityDates.forEach((validity, index) => {
@@ -729,8 +812,9 @@ const handleMarketChange = (e) => {
         formDataPayload.append(`validity[${index}].validityTo`, formatDateForAPI(validity.validityTo));
       });
 
+      console.log("formDataPayload:::" , formDataPayload)
       const response = await axiosInstance.post(
-        "/api/activityProvider/register",
+        "/api/activityRate/save",
         formDataPayload,
         {
           headers: {
@@ -739,6 +823,7 @@ const handleMarketChange = (e) => {
         }
       );
 
+      console.log("response data for save ::" , response.data)
       if (response.data) {
         toast.success("Activity Rate added successfully!");
         setValidationErrors({});
@@ -795,7 +880,7 @@ const handleMarketChange = (e) => {
       });
 
       const response = await axiosInstance.put(
-        `/api/activityProvider/register/${editing.activityRateId}`,
+        `/api/activityRate/${editing.activityRateId}`,
         formDataPayload,
         {
           headers: {
@@ -899,6 +984,9 @@ const handleMarketChange = (e) => {
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Activity Name</th>
                     <th>Activity Code</th>
+                    <th>Rate</th>
+                    <th>Allowed Users</th>
+                    <th>Duration</th>
                     <th style={{ width: 200 }}>Actions</th>
                   </tr>
                 </thead>
@@ -1014,7 +1102,7 @@ const handleMarketChange = (e) => {
                       <Form.Control
                         type="text"
                         value={formData.activityName}
-                        onChange={(e) => setFormData(prev => ({ ...prev, activityName: e.target.value }))}
+                        onChange={(e) => handleFieldChange('activityName', e.target.value)}
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.activityName}
                       />
@@ -1032,7 +1120,7 @@ const handleMarketChange = (e) => {
                       <Form.Control
                         type="text"
                         value={formData.activityCode}
-                        onChange={(e) => setFormData(prev => ({ ...prev, activityCode: e.target.value }))}
+                        onChange={(e) => handleFieldChange('activityCode', e.target.value)}
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.activityCode}
                       />
@@ -1051,7 +1139,7 @@ const handleMarketChange = (e) => {
                         as="textarea"
                         rows={3}
                         value={formData.activityDetails}
-                        onChange={(e) => setFormData(prev => ({ ...prev, activityDetails: e.target.value }))}
+                        onChange={(e) => handleFieldChange('activityDetails', e.target.value)}
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.activityDetails}
                       />
@@ -1069,7 +1157,7 @@ const handleMarketChange = (e) => {
                           <Form.Control
                             type="number"
                             value={formData.childAgeMin}
-                            onChange={(e) => setFormData(prev => ({ ...prev, childAgeMin: e.target.value }))}
+                            onChange={(e) => handleFieldChange('childAgeMin', e.target.value)}
                             disabled={isViewMode}
                           />
                         </Form.Group>
@@ -1080,7 +1168,7 @@ const handleMarketChange = (e) => {
                           <Form.Control
                             type="number"
                             value={formData.childAgeMax}
-                            onChange={(e) => setFormData(prev => ({ ...prev, childAgeMax: e.target.value }))}
+                            onChange={(e) => handleFieldChange('childAgeMax', e.target.value)}
                             disabled={isViewMode}
                           />
                         </Form.Group>
@@ -1092,7 +1180,7 @@ const handleMarketChange = (e) => {
                       <Form.Control
                         type="number"
                         value={formData.totalUsersAllowed}
-                        onChange={(e) => setFormData(prev => ({ ...prev, totalUsersAllowed: e.target.value }))}
+                        onChange={(e) => handleFieldChange('totalUsersAllowed', e.target.value)}
                         disabled={isViewMode}
                       />
                     </Form.Group>
@@ -1104,7 +1192,7 @@ const handleMarketChange = (e) => {
                       <Form.Control
                         type="number"
                         value={formData.activityRate}
-                        onChange={(e) => setFormData(prev => ({ ...prev, activityRate: e.target.value }))}
+                        onChange={(e) => handleFieldChange('activityRate', e.target.value)}
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.activityRate}
                       />
@@ -1122,7 +1210,7 @@ const handleMarketChange = (e) => {
                       <Form.Control
                         type="number"
                         value={formData.maxPax}
-                        onChange={(e) => setFormData(prev => ({ ...prev, maxPax: e.target.value }))}
+                        onChange={(e) => handleFieldChange('maxPax', e.target.value)}
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.maxPax}
                       />
@@ -1139,7 +1227,7 @@ const handleMarketChange = (e) => {
                       </Form.Label>
                       <Form.Select
                         value={formData.activityType}
-                        onChange={(e) => setFormData(prev => ({ ...prev, activityType: e.target.value }))}
+                        onChange={(e) => handleFieldChange('activityType', e.target.value)}
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.activityType}
                       >
@@ -1207,7 +1295,7 @@ const handleMarketChange = (e) => {
                           </Form.Label>
                           <Form.Select
                             value={formData.durationHr}
-                            onChange={(e) => setFormData(prev => ({ ...prev, durationHr: e.target.value }))}
+                            onChange={(e) => handleFieldChange('durationHr', e.target.value)}
                             disabled={isViewMode}
                             isInvalid={!!validationErrors.durationHr}
                           >
@@ -1230,7 +1318,7 @@ const handleMarketChange = (e) => {
                           </Form.Label>
                           <Form.Select
                             value={formData.durationMin}
-                            onChange={(e) => setFormData(prev => ({ ...prev, durationMin: e.target.value }))}
+                            onChange={(e) => handleFieldChange('durationMin', e.target.value)}
                             disabled={isViewMode}
                             isInvalid={!!validationErrors.durationMin}
                           >
@@ -1255,7 +1343,7 @@ const handleMarketChange = (e) => {
                       <Form.Control
                         type="text"
                         value={formData.reportingPoint}
-                        onChange={(e) => setFormData(prev => ({ ...prev, reportingPoint: e.target.value }))}
+                        onChange={(e) => handleFieldChange('reportingPoint', e.target.value)}
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.reportingPoint}
                       />
@@ -1272,7 +1360,7 @@ const handleMarketChange = (e) => {
                       </Form.Label>
                       <Form.Select
                         value={formData.rating}
-                        onChange={(e) => setFormData(prev => ({ ...prev, rating: e.target.value }))}
+                        onChange={(e) => handleFieldChange('rating', e.target.value)}
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.rating}
                       >
@@ -1301,9 +1389,9 @@ const handleMarketChange = (e) => {
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.marketType}
                       >
-                        <option value="">Select Market Type</option>
+                       <option value="">Select Market Type</option>
                         {marketTypes.map((market) => (
-                          <option key={market.id} value={market.id}>
+                          <option key={market.marketTypeId} value={market.marketTypeId}>
                             {market.name}
                           </option>
                         ))}
