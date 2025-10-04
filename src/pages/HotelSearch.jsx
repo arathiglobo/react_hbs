@@ -236,6 +236,7 @@ export default function HotelSearch() {
   const [clickedHotelIds, setClickedHotelIds] = useState([]); // New state to track clicked hotels
 
   const [allResults, setAllResults] = useState([]);
+  const [agents, setAgents] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [view, setView] = useState("card");
@@ -465,8 +466,20 @@ export default function HotelSearch() {
     }
   };
 
+   const agentList = async () => {
+    try {
+      const response = await axiosInstance.get("/api/agent");
+     
+      setAgents(response.data);
+    } catch (error) {
+      console.log("error for agent axios list:", error);
+      setAgents([]);
+    }
+  };
+
   useEffect(() => {
     countryList();
+    agentList();
   }, []);
 
   useEffect(() => {
@@ -1418,8 +1431,12 @@ export default function HotelSearch() {
                         }}
                       >
                         <option value="">Select Agent</option>
-                        <option value="1">Agent 101</option>
-                        <option value="2">Agent 102</option>
+                        {console.log("agents:::" , agents)}
+                         {agents.map((agent) => (
+                              <option key={agent.id} value={agent.id}>
+                                {agent.firstName} {agent.lastName}
+                              </option>
+                            ))}
                       </Form.Select>
                       {errors.agent && (
                         <div className="text-danger small mt-1">
@@ -1902,8 +1919,8 @@ export default function HotelSearch() {
                                       ratehawk: 14,
                                       darina: 16,
                                     };
-                                    const apiId =
-                                      apiIdMapping[hotel.channelType] || 0; // Default to 0 if not found
+                                    
+                                    const apiId = apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
 
                                     console.log("apiId:::", apiId);
                                     console.log(
