@@ -1,0 +1,106 @@
+.hotel-booking-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-wrapper {
+  background-color: #f8f9fa;
+}
+
+.card {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 1rem 1.5rem;
+}
+
+.form-label {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.input-group-text {
+  background-color: #e9ecef;
+}
+
+.btn-confirm-booking {
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+}
+
+.guest-form {
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 991px) {
+  .hotel-booking-container {
+    flex-direction: column;
+  }
+
+  .main-content {
+    width: 100%;
+  }
+
+  .content-wrapper {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .card {
+    margin-bottom: 1.5rem;
+  }
+
+  .btn-confirm-booking {
+    width: 100%;
+  }
+
+  .guest-form {
+    padding: 1rem;
+  }
+}
+
+.booking-summary-card {
+  border: none;
+  border-radius: 16px;
+}
+
+.booking-summary-card .card-header {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.booking-summary-card .card-body {
+  font-size: 0.95rem;
+}
+
+.booking-summary-card h5 {
+  font-size: 1.1rem;
+}
+.custom-accordion .accordion-button {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: background-color 0.3s ease;
+}
+
+.custom-accordion .accordion-button:hover {
+  background-color: #e9ecef;
+}
+
+.custom-accordion .accordion-body {
+  padding: 20px;
+  background: #fdfdfd;
+  border-radius: 8px;
+}
+
+
