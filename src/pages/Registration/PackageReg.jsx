@@ -611,10 +611,10 @@ const PackageReg = () => {
   const loadCurrencies = async () => {
     try {
       const response = await axiosInstance.get("/api/currency");
-      console.log("Currencies response:", response.data);
+     
       setCurrencies(response.data || []);
     } catch (error) {
-      console.error("Error loading currencies:", error);
+     
       toast.error("Failed to load currencies");
     }
   };
@@ -636,7 +636,6 @@ const PackageReg = () => {
     try {
       setIsLoadingTerms(true);
       const response = await axiosInstance.get(`/api/master/termsAndCondition`);
-      console.log("Terms and conditions response:", response.data);
       const termsData = Array.isArray(response.data) ? response.data : [];
       setTermsAndConditions(termsData);
 

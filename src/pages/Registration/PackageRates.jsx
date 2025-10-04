@@ -16,7 +16,7 @@ import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash, FaPlus, FaBackward, FaCopy } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaBackward, FaCopy, FaEye } from "react-icons/fa";
 
 const PackageRates = () => {
   const navigate = useNavigate();
@@ -32,114 +32,308 @@ const PackageRates = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [countries, setCountries] = useState([]);
   const [places, setPlaces] = useState([]);
+  const [marketTypes, setMarketTypes] = useState([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [validityList, setValidityList] = useState([
     {
       id: Date.now(),
       validityFrom: "",
-      validityTo: ""
-    }
+      validityTo: "",
+    },
   ]);
   const [occupancyList, setOccupancyList] = useState([
     {
       id: Date.now(),
       minimumPax: "",
-      maximumPax: ""
-    }
+      maximumPax: "",
+    },
   ]);
   const [selectedSharingTypes, setSelectedSharingTypes] = useState([]);
   const [packageCategories, setPackageCategories] = useState([]);
-  const [isLoadingPackageCategories, setIsLoadingPackageCategories] = useState(false);
+  const [isLoadingPackageCategories, setIsLoadingPackageCategories] =
+    useState(false);
   const [isAddingValidity, setIsAddingValidity] = useState(false);
   const [isAddingOccupancy, setIsAddingOccupancy] = useState(false);
-  
+
   // Refs to track last execution time
   const lastValidityAddTime = useRef(0);
   const lastOccupancyAddTime = useRef(0);
-
-  const [formData, setFormData] = useState({
-    rateCode: "",
-    market: "",
-    countryId: "",
-    placeId: "",
-    noOfNights: "",
-    sharingTypes: {},
-    rates: {}
-  });
 
   // Get package info from navigation state
   const packageInfo = location.state || {};
   const packageId = packageInfo.packageId || 0;
   const packageName = packageInfo.packageName || "Unknown Package";
   const packageCode = packageInfo.packageCode || "Unknown";
-  
-  // Debug logging
-  //console.log("PackageRates - Navigation state:", location.state);
-  //console.log("PackageRates - Package info:", packageInfo);
-  //console.log("PackageRates - Package ID:", packageId);
+
+  const [formData, setFormData] = useState({
+    packageratesId: "",
+    package_id: packageId,
+    markettypeId: null,
+    packagerateCode: "",
+    packageRateValidityDTO: [],
+    packageAccommodationrateDTO: [],
+    rates: {},
+    countryId: "",
+    placeId: "",
+    noOfNights: "",
+  });
+
+  const SearchableSelect = ({
+    options,
+    value,
+    onChange,
+    placeholder,
+    className,
+    isInvalid,
+    name,
+    disabled = false,
+    isLoading = false,
+  }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [filteredOptions, setFilteredOptions] = useState(options || []);
+
+    useEffect(() => {
+      if (!options || !Array.isArray(options)) {
+        setFilteredOptions([]);
+        return;
+      }
+
+      if (searchTerm) {
+        const filtered = options.filter((option) => {
+          const optionName =
+            option.name ||
+            option.countryName ||
+            option.placeName ||
+            option.marketTypeName ||
+            String(option);
+          return optionName.toLowerCase().includes(searchTerm.toLowerCase());
+        });
+        setFilteredOptions(filtered);
+      } else {
+        setFilteredOptions(options);
+      }
+    }, [searchTerm, options]);
+
+    const handleSelect = (option) => {
+      try {
+        console.log("Selecting option:", option);
+        const optionValue = option.id !== undefined ? option.id : option;
+        onChange({
+          target: {
+            name: name,
+            value: optionValue,
+          },
+        });
+        setIsOpen(false);
+        setSearchTerm("");
+      } catch (error) {
+        console.error("Error in handleSelect:", error);
+      }
+    };
+
+    const selectedOption = options?.find(
+      (option) => String(option.id) === String(value)
+    );
+
+    if (name === "marketTypeId") {
+      console.log("MarketType SearchableSelect - value:", value);
+      console.log("MarketType SearchableSelect - options:", options);
+      console.log(
+        "MarketType SearchableSelect - selectedOption:",
+        selectedOption
+      );
+    }
+
+    const displayValue =
+      selectedOption?.name ||
+      selectedOption?.countryName ||
+      selectedOption?.placeName ||
+      selectedOption?.marketTypeName ||
+      "";
+
+    return (
+      <div className="position-relative">
+        <Form.Control
+          type="text"
+          value={isOpen ? searchTerm : displayValue}
+          onChange={(e) => {
+            if (disabled) return;
+            if (isOpen) {
+              setSearchTerm(e.target.value);
+            } else {
+              setIsOpen(true);
+              setSearchTerm(e.target.value);
+            }
+          }}
+          onFocus={() => !disabled && setIsOpen(true)}
+          placeholder={placeholder}
+          className={`${className || ""} ${isInvalid ? "is-invalid" : ""}`}
+          disabled={disabled}
+          readOnly={disabled}
+          autoComplete="off"
+        />
+
+        <div
+          className="position-absolute top-50 end-0 translate-middle-y pe-3"
+          style={{ pointerEvents: "none" }}
+        >
+          {isLoading ? (
+            <div
+              className="spinner-border spinner-border-sm text-muted"
+              role="status"
+            >
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          ) : (
+            <i
+              className={`fas fa-chevron-down text-muted ${
+                isOpen ? "fa-rotate-180" : ""
+              }`}
+            ></i>
+          )}
+        </div>
+
+        {isOpen && !disabled && (
+          <div
+            className="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-lg"
+            style={{
+              zIndex: 1050,
+              maxHeight: "200px",
+              overflowY: "auto",
+              top: "100%",
+            }}
+          >
+            {isLoading ? (
+              <div className="px-3 py-2 text-center">
+                <div
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                >
+                  <span className="visually-hidden">Loading...</span>
+                </div>
+                Loading...
+              </div>
+            ) : filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <div
+                  key={option.id}
+                  className="px-3 py-2 cursor-pointer"
+                  style={{
+                    cursor: "pointer",
+                    borderBottom: "1px solid #eee",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = "#f8f9fa";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = "white";
+                  }}
+                  onClick={() => handleSelect(option)}
+                >
+                  {option.name ||
+                    option.countryName ||
+                    option.placeName ||
+                    option.marketTypeName ||
+                    String(option)}
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-muted">No options found</div>
+            )}
+          </div>
+        )}
+
+        {isOpen && (
+          <div
+            className="position-fixed"
+            style={{
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 1040,
+            }}
+            onClick={() => {
+              setIsOpen(false);
+              setSearchTerm("");
+            }}
+          />
+        )}
+      </div>
+    );
+  };
 
   const validateForm = (data) => {
     const errors = {};
-    
-    if (!data.rateCode?.trim()) errors.rateCode = "Rate code is required";
-    if (!data.market?.trim()) errors.market = "Market is required";
-    if (!data.countryId?.trim()) errors.countryId = "Country is required";
-    if (!data.placeId?.trim()) errors.placeId = "Place is required";
-    if (!data.noOfNights?.trim()) errors.noOfNights = "No of nights is required";
-    
-    // Validate validity list
-    const invalidValidity = validityList.some(v => !v.validityFrom || !v.validityTo);
-    if (invalidValidity) errors.validityList = "All validity periods must have from and to dates";
-    
-    // Validate occupancy list
-    const invalidOccupancy = occupancyList.some(o => !o.minimumPax || !o.maximumPax);
-    if (invalidOccupancy) errors.occupancyList = "All occupancy must have minimum and maximum pax";
-    
-    // Validate at least one sharing type is selected
-    const hasSelectedSharingType = Object.values(data.sharingTypes).some(selected => selected === true);
-    if (!hasSelectedSharingType) {
-      errors.sharingTypes = "At least one sharing type must be selected";
+
+    if (!data.packagerateCode?.trim())
+      errors.packagerateCode = "Rate code is required";
+    if (!data.markettypeId) errors.markettypeId = "Market type is required";
+
+    const invalidValidity = validityList.some(
+      (v) => !v.validityFrom || !v.validityTo
+    );
+    if (invalidValidity)
+      errors.validityList = "All validity periods must have from and to dates";
+
+    const invalidOccupancy = occupancyList.some(
+      (o) => !o.minimumPax || !o.maximumPax
+    );
+    if (invalidOccupancy)
+      errors.occupancyList = "All occupancy must have minimum and maximum pax";
+
+    const hasEnabledCategory = Object.values(data.rates || {}).some(
+      (rate) => rate.enabled === true
+    );
+    if (!hasEnabledCategory) {
+      errors.packageAccommodationrateDTO =
+        "At least one package category must be selected";
     }
-    
+
     return errors;
   };
 
   const handleCreate = () => {
     setEditing(null);
-    
-    // Initialize dynamic sharing types based on package categories
-    const dynamicSharingTypes = {};
-    const dynamicRates = {};
-    
-    packageCategories.forEach(category => {
-      const key = category.packageCategoryId.toString();
-      dynamicSharingTypes[key] = false;
-      dynamicRates[key] = {
+
+    const rates = {};
+    packageCategories.forEach((category) => {
+      const key = category.packageCategoryId || category.id;
+      rates[key] = {
+        enabled: false,
         adultRate: "",
         childWithBed: "",
-        childWithoutBed: ""
+        childWithoutBed: "",
       };
     });
-    
+
     setFormData({
-      rateCode: "",
-      market: "",
+      packageratesId: "",
+      package_id: packageId,
+      markettypeId: null,
+      packagerateCode: "",
+      packageRateValidityDTO: [],
+      packageAccommodationrateDTO: [],
+      rates: rates,
       countryId: "",
       placeId: "",
       noOfNights: "",
-      sharingTypes: dynamicSharingTypes,
-      rates: dynamicRates
     });
-    setValidityList([{
-      id: Date.now(),
-      validityFrom: "",
-      validityTo: ""
-    }]);
-    setOccupancyList([{
-      id: Date.now(),
-      minimumPax: "",
-      maximumPax: ""
-    }]);
+    setValidityList([
+      {
+        id: Date.now(),
+        validityFrom: "",
+        validityTo: "",
+      },
+    ]);
+    setOccupancyList([
+      {
+        id: Date.now(),
+        minimumPax: "",
+        maximumPax: "",
+      },
+    ]);
     setValidationErrors({});
     setShowModal(true);
   };
@@ -150,15 +344,16 @@ const PackageRates = () => {
       const params = new URLSearchParams({
         page: pageNum.toString(),
         limit: "10",
-        packageId: packageId.toString()
       });
 
       if (searchTerm && searchTerm.trim()) {
         params.append("search", searchTerm.trim());
       }
 
-      const res = await axiosInstance.get(`/api/PackageRates?${params.toString()}`);
-      //console.log("package rates list :::", res);
+      const res = await axiosInstance.get(
+        `/api/TravelPackageRate/${packageId}?${params.toString()}`
+      );
+      console.log("package rates list :::", res);
 
       if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
@@ -188,76 +383,46 @@ const PackageRates = () => {
       const response = await axiosInstance.get("/api/country");
       setCountries(response.data);
     } catch (error) {
-      //console.log("error for country list :", error);
+      console.log("error for country list :", error);
     }
   };
 
   const cityList = async (countryId) => {
     try {
       setIsLoadingPlaces(true);
-      const response = await axiosInstance.post(`/api/destination/getCitiesByCountryId/${countryId}`);
+      const response = await axiosInstance.post(
+        `/api/destination/getCitiesByCountryId/${countryId}`
+      );
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      //console.log("axios call error for city list : ", error);
+      console.log("axios call error for city list : ", error);
       setPlaces([]);
     } finally {
       setIsLoadingPlaces(false);
     }
   };
 
-  const fetchPackageDetails = async () => {
-    if (!packageId) {
-      //console.log("No packageId provided");
-      return;
+  const marketTypeList = async () => {
+    try {
+      const response = await axiosInstance.get("/api/marketType");
+      console.log("Market types API response:", response.data);
+      setMarketTypes(response.data);
+    } catch (error) {
+      console.log("error for market type list :", error);
     }
-    
+  };
+
+  const fetchPackageDetails = async () => {
     try {
       setIsLoadingPackageCategories(true);
-      //console.log("Fetching package details for packageId:", packageId);
-      
-      const response = await axiosInstance.get(`/api/TravelPackage/${packageId}`);
-      //console.log("Package details response:", response.data);
-      
-      if (response.data) {
-        //console.log("Full package data:", response.data);
-        
-        // Check for packageCategory in different possible formats
-        let categoryData = response.data.packageCategory || response.data.packageCategories;
-        //console.log("Package category data found:", categoryData);
-        
-        if (categoryData) {
-          // If packageCategory is an array of IDs, we need to fetch the actual category details
-          if (Array.isArray(categoryData)) {
-            //console.log("Package categories is an array, fetching category details...");
-            
-            // Fetch all package categories to get their details
-            const categoriesResponse = await axiosInstance.get("/api/packageCategory");
-            const allCategories = categoriesResponse.data || [];
-            //console.log("All available categories:", allCategories);
-            
-            // Filter to only include categories that belong to this package
-            const packageCategories = allCategories.filter(category => {
-              // Handle both string and number comparisons
-              const categoryId = category.packageCategoryId || category.id;
-              return categoryData.includes(categoryId) || categoryData.includes(String(categoryId));
-            });
-            
-            //console.log("Filtered package categories:", packageCategories);
-            setPackageCategories(packageCategories);
-          } else {
-            //console.log("Package categories is not an array:", categoryData);
-            setPackageCategories([]);
-          }
-        } else {
-          //console.log("No package category data found in response");
-          setPackageCategories([]);
-        }
-      } else {
-        //console.log("No response data found");
-        setPackageCategories([]);
-      }
+      const categoriesResponse = await axiosInstance.get(
+        "/api/packageCategory"
+      );
+      const allCategories = categoriesResponse.data || [];
+      console.log("All available package categories:", allCategories);
+      setPackageCategories(allCategories);
     } catch (error) {
-      //console.log("Error fetching package details:", error);
+      console.log("Error fetching package categories:", error);
       setPackageCategories([]);
       toast.error("Failed to load package categories");
     } finally {
@@ -265,47 +430,42 @@ const PackageRates = () => {
     }
   };
 
-  // Handle country change
   const handleCountryChange = (e) => {
     const value = e.target.value;
     const stringValue = String(value);
-    
+
     setFormData((prev) => ({
       ...prev,
       countryId: stringValue,
-      placeId: "", // Clear place selection
+      placeId: "",
     }));
-    
-    // Clear places and fetch new ones
+
     setPlaces([]);
     setIsLoadingPlaces(false);
-    
+
     if (value && stringValue.trim() !== "") {
       cityList(value);
     }
-    
-    // Clear validation errors
+
     if (validationErrors.countryId) {
-      setValidationErrors(prev => ({ ...prev, countryId: "" }));
+      setValidationErrors((prev) => ({ ...prev, countryId: "" }));
     }
     if (validationErrors.placeId) {
-      setValidationErrors(prev => ({ ...prev, placeId: "" }));
+      setValidationErrors((prev) => ({ ...prev, placeId: "" }));
     }
   };
 
-  // Handle place change
   const handlePlaceChange = (e) => {
     const value = e.target.value;
     const stringValue = String(value);
-    
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
       placeId: stringValue,
     }));
-    
-    // Clear validation error when user makes selection
+
     if (validationErrors.placeId) {
-      setValidationErrors(prev => ({ ...prev, placeId: "" }));
+      setValidationErrors((prev) => ({ ...prev, placeId: "" }));
     }
   };
 
@@ -319,41 +479,154 @@ const PackageRates = () => {
 
     try {
       setIsLoading(true);
+
+      const packageRateValidityDTO = validityList.map((validity) => ({
       
+        validityfrom: validity.validityFrom,
+        validityto: validity.validityTo,
+      }));
+
+      const packageAccommodationrateDTO = occupancyList.map((occupancy) => {
+        const enabledCategories = packageCategories.filter((category) => {
+          const categoryKey = category.packageCategoryId || category.id;
+          return formData.rates?.[categoryKey]?.enabled === true;
+        });
+
+        return {
+         
+          countryId: formData.countryId || "",
+          placeId: formData.placeId ? [parseInt(formData.placeId)] : [],
+          noofnight: formData.noOfNights || "",
+          packageAccommodationrateDetailsDTO: enabledCategories.map(
+            (category) => {
+              const categoryKey = category.packageCategoryId || category.id;
+              return {
+                packagecategoryId: categoryKey.toString(),
+                minpax: occupancy.minimumPax,
+                maxpax: occupancy.maximumPax,
+                hotelId: [],
+                adultRate: formData.rates?.[categoryKey]?.adultRate || "",
+                childRate: formData.rates?.[categoryKey]?.childWithBed || "",
+                childRateWithoutbed:
+                  formData.rates?.[categoryKey]?.childWithoutBed || "",
+              };
+            }
+          ),
+        };
+      });
+
       const payload = {
-        rateCode: formData.rateCode,
-        market: formData.market,
-        packageId: packageId,
-        countryId: formData.countryId,
-        placeId: formData.placeId,
-        noOfNights: formData.noOfNights,
-        validityList: validityList,
-        occupancyList: occupancyList,
-        sharingTypes: formData.sharingTypes,
-        rates: formData.rates
+        packageratesId: "",
+        package_id: packageId,
+        markettypeId: formData.markettypeId ? [formData.markettypeId] : [],
+        packagerateCode: formData.packagerateCode,
+        packageRateValidityDTO: packageRateValidityDTO,
+        packageAccommodationrateDTO: packageAccommodationrateDTO,
       };
 
-      //console.log("package rates save payload::", payload);
-      
-      let response;
-      if (editing) {
-        response = await axiosInstance.put(`/api/PackageRates/${editing.id}`, payload);
-      } else {
-        response = await axiosInstance.post("/api/PackageRates/save", payload);
-      }
-      
+      console.log("package rates save payload::", payload);
+
+      const response = await axiosInstance.post(
+        "/api/TravelPackageRate/save",
+        payload
+      );
+
       if (response.data) {
-        toast.success(editing ? "Package rate updated successfully!" : "Package rate added successfully!");
+        toast.success("Package rate added successfully!");
         setValidationErrors({});
-        setEditing(null);
         await fetchPackageRatesList(page, search);
         closeModal();
       } else {
         toast.error("Failed to save data!!");
       }
-      
-    } catch(error) {
-      toast.error(`Error!! Something went wrong: ${error.response?.data?.message || error.message}`);
+    } catch (error) {
+      toast.error(
+        `Error!! Something went wrong: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    const errors = validateForm(formData);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const packageRateValidityDTO = validityList.map((validity) => ({
+        packagerateValidityId: validity.id || "",
+        validityfrom: validity.validityFrom,
+        validityto: validity.validityTo,
+      }));
+
+      const packageAccommodationrateDTO = occupancyList.map((occupancy) => {
+        const enabledCategories = packageCategories.filter((category) => {
+          const categoryKey = category.packageCategoryId || category.id;
+          return formData.rates?.[categoryKey]?.enabled === true;
+        });
+
+        return {
+          packageaccommodationrateId: occupancy.id || "",
+          countryId: formData.countryId || "",
+          placeId: formData.placeId ? [parseInt(formData.placeId)] : [],
+          noofnight: formData.noOfNights || "",
+          packageAccommodationrateDetailsDTO: enabledCategories.map(
+            (category) => {
+              const categoryKey = category.packageCategoryId || category.id;
+              return {
+                packagecategoryId: categoryKey.toString(),
+                minpax: occupancy.minimumPax,
+                maxpax: occupancy.maximumPax,
+                hotelId: [],
+                adultRate: formData.rates?.[categoryKey]?.adultRate || "",
+                childRate: formData.rates?.[categoryKey]?.childWithBed || "",
+                childRateWithoutbed:
+                  formData.rates?.[categoryKey]?.childWithoutBed || "",
+              };
+            }
+          ),
+        };
+      });
+
+      const payload = {
+        packageratesId: editing.packageratesId,
+        package_id: packageId,
+        markettypeId: formData.markettypeId ? [formData.markettypeId] : [],
+        packagerateCode: formData.packagerateCode,
+        packageRateValidityDTO: packageRateValidityDTO,
+        packageAccommodationrateDTO: packageAccommodationrateDTO,
+      };
+
+      console.log("package rates edit payload::", payload);
+
+      const response = await axiosInstance.put(
+        `/api/TravelPackageRate/${editing.packageratesId}`,
+        payload
+      );
+
+      if (response.data) {
+        toast.success("Package rate updated successfully!");
+        setValidationErrors({});
+        setEditing(null);
+        await fetchPackageRatesList(page, search);
+        closeModal();
+      } else {
+        toast.error("Failed to update data!!");
+      }
+    } catch (error) {
+      toast.error(
+        `Error!! Something went wrong: ${
+          error.response?.data?.message || error.message
+        }`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -367,251 +640,341 @@ const PackageRates = () => {
     setIsAddingOccupancy(false);
   };
 
-  // CRUD Operations
   const openEdit = (item) => {
     setEditing(item);
-    
-    // Initialize dynamic sharing types based on package categories
-    const dynamicSharingTypes = {};
-    const dynamicRates = {};
-    
-    packageCategories.forEach(category => {
-      const key = category.packageCategoryId.toString();
-      dynamicSharingTypes[key] = item.sharingTypes?.[key] || false;
-      dynamicRates[key] = item.rates?.[key] || {
+
+    const rates = {};
+    packageCategories.forEach((category) => {
+      const key = category.packageCategoryId || category.id;
+      rates[key] = {
+        enabled: false,
         adultRate: "",
         childWithBed: "",
-        childWithoutBed: ""
+        childWithoutBed: "",
       };
     });
-    
+
+    if (
+      item.packageAccommodationrateDTO &&
+      item.packageAccommodationrateDTO.length > 0
+    ) {
+      const firstAccommodation = item.packageAccommodationrateDTO[0];
+      if (firstAccommodation.packageAccommodationrateDetailsDTO) {
+        firstAccommodation.packageAccommodationrateDetailsDTO.forEach(
+          (detail) => {
+            const categoryKey = detail.packagecategoryId;
+            if (rates[categoryKey]) {
+              rates[categoryKey] = {
+                enabled: true,
+                adultRate: detail.adultRate || "",
+                childWithBed: detail.childRate || "",
+                childWithoutBed: detail.childRateWithoutbed || "",
+              };
+            }
+          }
+        );
+      }
+    }
+
     setFormData({
-      rateCode: item.rateCode || "",
-      market: item.market || "",
-      countryId: item.countryId || "",
-      placeId: item.placeId || "",
-      noOfNights: item.noOfNights || "",
-      sharingTypes: dynamicSharingTypes,
-      rates: dynamicRates
+      packageratesId: item.packageratesId || "",
+      package_id: item.package_id || packageId,
+      markettypeId: item.markettypeId?.[0] || null,
+      packagerateCode: item.packagerateCode || "",
+      packageRateValidityDTO: item.packageRateValidityDTO || [],
+      packageAccommodationrateDTO: item.packageAccommodationrateDTO || [],
+      rates: rates,
+      countryId: item.packageAccommodationrateDTO?.[0]?.countryId || "",
+      placeId: item.packageAccommodationrateDTO?.[0]?.placeId?.[0] || "",
+      noOfNights: item.packageAccommodationrateDTO?.[0]?.noofnight || "",
     });
-    setValidityList(item.validityList || []);
-    setOccupancyList(item.occupancyList || []);
+
+    const validityList = item.packageRateValidityDTO?.map((validity) => ({
+      id: validity.packagerateValidityId,
+      validityFrom: validity.validityfrom,
+      validityTo: validity.validityto,
+    })) || [{ id: Date.now(), validityFrom: "", validityTo: "" }];
+
+    const occupancyList = item.packageAccommodationrateDTO?.map(
+      (accommodation) => ({
+        id: accommodation.packageaccommodationrateId,
+        minimumPax:
+          accommodation.packageAccommodationrateDetailsDTO?.[0]?.minpax || "",
+        maximumPax:
+          accommodation.packageAccommodationrateDetailsDTO?.[0]?.maxpax || "",
+      })
+    ) || [{ id: Date.now(), minimumPax: "", maximumPax: "" }];
+
+    setValidityList(validityList);
+    setOccupancyList(occupancyList);
     setValidationErrors({});
     setShowModal(true);
   };
 
   const handleDelete = async (item) => {
     const result = await Swal.fire({
-      title: 'Are you sure?',
-      text: `Do you want to delete rate code "${item.rateCode}"?`,
-      icon: 'warning',
+      title: "Are you sure?",
+      text: `Do you want to delete rate code "${item.packagerateCode}"?`,
+      icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Yes, delete it!'
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
     });
 
     if (result.isConfirmed) {
       try {
         setIsLoading(true);
-        const response = await axiosInstance.delete(`/api/PackageRates/${item.id}`);
+        const response = await axiosInstance.delete(
+          `/api/TravelPackageRate/${item.packageratesId}`
+        );
         if (response.data) {
-          toast.success('Package rate deleted successfully!');
+          toast.success("Package rate deleted successfully!");
           await fetchPackageRatesList(page, search);
         }
       } catch (error) {
-        toast.error(`Failed to delete package rate: ${error.response?.data?.message || error.message}`);
+        toast.error(
+          `Failed to delete package rate: ${
+            error.response?.data?.message || error.message
+          }`
+        );
       } finally {
         setIsLoading(false);
       }
     }
   };
 
+  const handleView = async (item) => {
+    try {
+      setIsLoading(true);
+      const response = await axiosInstance.get(
+        `/api/TravelPackageRate/${item.packageratesId}`
+      );
+
+      if (response.data) {
+        openEdit(item);
+        toast.success("Package rate details loaded successfully!");
+      }
+    } catch (error) {
+      toast.error(
+        `Failed to fetch package rate details: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleCopy = (item) => {
     setEditing(null);
-    
-    // Initialize dynamic sharing types based on package categories
-    const dynamicSharingTypes = {};
-    const dynamicRates = {};
-    
-    packageCategories.forEach(category => {
-      const key = category.packageCategoryId.toString();
-      dynamicSharingTypes[key] = item.sharingTypes?.[key] || false;
-      dynamicRates[key] = item.rates?.[key] || {
+
+    const rates = {};
+    packageCategories.forEach((category) => {
+      const key = category.packageCategoryId || category.id;
+      rates[key] = {
+        enabled: false,
         adultRate: "",
         childWithBed: "",
-        childWithoutBed: ""
+        childWithoutBed: "",
       };
     });
-    
+
+    if (
+      item.packageAccommodationrateDTO &&
+      item.packageAccommodationrateDTO.length > 0
+    ) {
+      const firstAccommodation = item.packageAccommodationrateDTO[0];
+      if (firstAccommodation.packageAccommodationrateDetailsDTO) {
+        firstAccommodation.packageAccommodationrateDetailsDTO.forEach(
+          (detail) => {
+            const categoryKey = detail.packagecategoryId;
+            if (rates[categoryKey]) {
+              rates[categoryKey] = {
+                enabled: true,
+                adultRate: detail.adultRate || "",
+                childWithBed: detail.childRate || "",
+                childWithoutBed: detail.childRateWithoutbed || "",
+              };
+            }
+          }
+        );
+      }
+    }
+
     setFormData({
-      rateCode: `${item.rateCode}_COPY`,
-      market: item.market || "",
-      countryId: item.countryId || "",
-      placeId: item.placeId || "",
-      noOfNights: item.noOfNights || "",
-      sharingTypes: dynamicSharingTypes,
-      rates: dynamicRates
+      packageratesId: "",
+      package_id: packageId,
+      markettypeId: item.markettypeId?.[0] || null,
+      packagerateCode: `${item.packagerateCode}_COPY`,
+      packageRateValidityDTO: [],
+      packageAccommodationrateDTO: [],
+      rates: rates,
+      countryId: item.packageAccommodationrateDTO?.[0]?.countryId || "",
+      placeId: item.packageAccommodationrateDTO?.[0]?.placeId?.[0] || "",
+      noOfNights: item.packageAccommodationrateDTO?.[0]?.noofnight || "",
     });
-    setValidityList(item.validityList || []);
-    setOccupancyList(item.occupancyList || []);
+
+    const validityList = item.packageRateValidityDTO?.map((validity) => ({
+      id: Date.now() + Math.random(),
+      validityFrom: validity.validityfrom,
+      validityTo: validity.validityto,
+    })) || [{ id: Date.now(), validityFrom: "", validityTo: "" }];
+
+    const occupancyList = item.packageAccommodationrateDTO?.map(
+      (accommodation) => ({
+        id: Date.now() + Math.random(),
+        minimumPax:
+          accommodation.packageAccommodationrateDetailsDTO?.[0]?.minpax || "",
+        maximumPax:
+          accommodation.packageAccommodationrateDetailsDTO?.[0]?.maxpax || "",
+      })
+    ) || [{ id: Date.now(), minimumPax: "", maximumPax: "" }];
+
+    setValidityList(validityList);
+    setOccupancyList(occupancyList);
     setValidationErrors({});
     setShowModal(true);
   };
 
-  // Validity list management
-  const addValidityPeriod = useCallback((e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    // Prevent multiple rapid clicks
-    if (isAddingValidity) {
-      //console.log("Already adding validity period, ignoring click");
-      return;
-    }
-    
-    const currentTime = Date.now();
-    const timeSinceLastAdd = currentTime - lastValidityAddTime.current;
-    
-    // Prevent execution if called within 1000ms of last execution
-    if (timeSinceLastAdd < 1000) {
-      //console.log("Debouncing validity add - too soon:", timeSinceLastAdd, "ms");
-      return;
-    }
-    
-    lastValidityAddTime.current = currentTime;
-    setIsAddingValidity(true);
-    
-    //console.log("Adding validity period");
-    
-    const newValidity = {
-      id: `validity_${currentTime}_${Math.random().toString(36).substr(2, 9)}`,
-      validityFrom: "",
-      validityTo: ""
-    };
-    
-    setValidityList(prevList => {
-      //console.log("Previous validity list length:", prevList.length);
-      const newList = [...prevList, newValidity];
-      //console.log("New validity list length:", newList.length);
-      
-      // Reset adding state after a short delay
-      setTimeout(() => {
-        setIsAddingValidity(false);
-      }, 100);
-      
-      return newList;
-    });
-  }, [isAddingValidity]);
+  const addValidityPeriod = useCallback(
+    (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      if (isAddingValidity) {
+        return;
+      }
+
+      const currentTime = Date.now();
+      const timeSinceLastAdd = currentTime - lastValidityAddTime.current;
+
+      if (timeSinceLastAdd < 1000) {
+        return;
+      }
+
+      lastValidityAddTime.current = currentTime;
+      setIsAddingValidity(true);
+
+      const newValidity = {
+        id: `validity_${currentTime}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`,
+        validityFrom: "",
+        validityTo: "",
+      };
+
+      setValidityList((prevList) => {
+        const newList = [...prevList, newValidity];
+        setTimeout(() => {
+          setIsAddingValidity(false);
+        }, 100);
+        return newList;
+      });
+    },
+    [isAddingValidity]
+  );
 
   const removeValidityPeriod = (id) => {
     if (validityList.length > 1) {
-      setValidityList(validityList.filter(v => v.id !== id));
+      setValidityList(validityList.filter((v) => v.id !== id));
     }
   };
 
   const updateValidityPeriod = (id, field, value) => {
-    setValidityList(validityList.map(v => 
-      v.id === id ? { ...v, [field]: value } : v
-    ));
+    setValidityList(
+      validityList.map((v) => (v.id === id ? { ...v, [field]: value } : v))
+    );
   };
 
-  // Occupancy list management
-  const addOccupancy = useCallback((e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    // Prevent multiple rapid clicks
-    if (isAddingOccupancy) {
-      //console.log("Already adding occupancy, ignoring click");
-      return;
-    }
-    
-    const currentTime = Date.now();
-    const timeSinceLastAdd = currentTime - lastOccupancyAddTime.current;
-    
-    // Prevent execution if called within 1000ms of last execution
-    if (timeSinceLastAdd < 1000) {
-      //console.log("Debouncing occupancy add - too soon:", timeSinceLastAdd, "ms");
-      return;
-    }
-    
-    lastOccupancyAddTime.current = currentTime;
-    setIsAddingOccupancy(true);
-    
-    //console.log("Adding occupancy");
-    
-    const newOccupancy = {
-      id: `occupancy_${currentTime}_${Math.random().toString(36).substr(2, 9)}`,
-      minimumPax: "",
-      maximumPax: ""
-    };
-    
-    setOccupancyList(prevList => {
-      //console.log("Previous occupancy list length:", prevList.length);
-      const newList = [...prevList, newOccupancy];
-      //console.log("New occupancy list length:", newList.length);
-      
-      // Reset adding state after a short delay
-      setTimeout(() => {
-        setIsAddingOccupancy(false);
-      }, 100);
-      
-      return newList;
-    });
-  }, [isAddingOccupancy]);
+  const addOccupancy = useCallback(
+    (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      if (isAddingOccupancy) {
+        return;
+      }
+
+      const currentTime = Date.now();
+      const timeSinceLastAdd = currentTime - lastOccupancyAddTime.current;
+
+      if (timeSinceLastAdd < 1000) {
+        return;
+      }
+
+      lastOccupancyAddTime.current = currentTime;
+      setIsAddingOccupancy(true);
+
+      const newOccupancy = {
+        id: `occupancy_${currentTime}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`,
+        minimumPax: "",
+        maximumPax: "",
+      };
+
+      setOccupancyList((prevList) => {
+        const newList = [...prevList, newOccupancy];
+        setTimeout(() => {
+          setIsAddingOccupancy(false);
+        }, 100);
+        return newList;
+      });
+    },
+    [isAddingOccupancy]
+  );
 
   const removeOccupancy = (id) => {
     if (occupancyList.length > 1) {
-      setOccupancyList(occupancyList.filter(o => o.id !== id));
+      setOccupancyList(occupancyList.filter((o) => o.id !== id));
     }
   };
 
   const updateOccupancy = (id, field, value) => {
-    setOccupancyList(occupancyList.map(o => 
-      o.id === id ? { ...o, [field]: value } : o
-    ));
+    setOccupancyList(
+      occupancyList.map((o) => (o.id === id ? { ...o, [field]: value } : o))
+    );
   };
 
-  // Sharing type change
-  const handleSharingTypeChange = (type, checked) => {
-    setFormData(prev => ({
-      ...prev,
-      sharingTypes: {
-        ...prev.sharingTypes,
-        [type]: checked
-      }
-    }));
-  };
-
-  // Rate change
-  const handleRateChange = (sharingType, rateType, value) => {
-    setFormData(prev => ({
+  const handleSharingTypeChange = (categoryId, checked) => {
+    setFormData((prev) => ({
       ...prev,
       rates: {
         ...prev.rates,
-        [sharingType]: {
-          ...prev.rates[sharingType],
-          [rateType]: value
-        }
-      }
+        [categoryId]: {
+          ...prev.rates[categoryId],
+          enabled: checked,
+        },
+      },
+    }));
+  };
+
+  const handleRateChange = (categoryId, rateType, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      rates: {
+        ...prev.rates,
+        [categoryId]: {
+          ...prev.rates[categoryId],
+          [rateType]: value,
+        },
+      },
     }));
   };
 
   useEffect(() => {
-    //console.log("PackageRates useEffect - Component mounted");
     fetchPackageRatesList();
     countryList();
+    marketTypeList();
     fetchPackageDetails();
   }, []);
 
-  // Debug useEffect to track packageId changes
   useEffect(() => {
-    //console.log("PackageRates useEffect - packageId changed:", packageId);
     if (packageId && packageId !== 0) {
       fetchPackageDetails();
     }
@@ -633,6 +996,26 @@ const PackageRates = () => {
       }
     };
   }, [search]);
+
+  useEffect(() => {
+    if (packageCategories.length > 0 && !editing && !showModal) {
+      const rates = {};
+      packageCategories.forEach((category) => {
+        const key = category.packageCategoryId || category.id;
+        rates[key] = {
+          enabled: false,
+          adultRate: "",
+          childWithBed: "",
+          childWithoutBed: "",
+        };
+      });
+
+      setFormData((prev) => ({
+        ...prev,
+        rates: rates,
+      }));
+    }
+  }, [packageCategories, editing, showModal]);
 
   const [searchTimeout, setSearchTimeout] = useState(null);
 
@@ -677,18 +1060,33 @@ const PackageRates = () => {
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
-                    <tr key={item.id}>
+                    <tr key={item.packageratesId}>
                       <td>{index + 1 + page * 10}</td>
-                      <td>{item.rateCode || 'N/A'}</td>
-                      <td>{item.market || 'N/A'}</td>
-                      <td>{item.noOfNights || 'N/A'}</td>
+                      <td>{item.packagerateCode || "N/A"}</td>
+                      <td>{item.markettypeId?.join(", ") || "N/A"}</td>
                       <td>
-                        <span className={`badge ${item.status === 'Active' ? 'bg-success' : 'bg-danger'}`}>
-                          {item.status || 'N/A'}
+                        {item.packageAccommodationrateDTO?.[0]?.noofnight ||
+                          "N/A"}
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${
+                            item.status === "Active"
+                              ? "bg-success"
+                              : "bg-danger"
+                          }`}
+                        >
+                          {item.status || "N/A"}
                         </span>
                       </td>
                       <td>
                         <div className="d-flex gap-2">
+                          <FaEye
+                            className="text-info view"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleView(item)}
+                            title="View"
+                          />
                           <FaEdit
                             className="text-primary edit"
                             style={{ cursor: "pointer", fontSize: "18px" }}
@@ -766,70 +1164,103 @@ const PackageRates = () => {
             </Card.Body>
           </Card>
 
-          <Modal show={showModal} onHide={closeModal} centered size="xl" backdrop="static" keyboard={false}>
+          <Modal
+            show={showModal}
+            onHide={closeModal}
+            centered
+            size="xl"
+            backdrop="static"
+            keyboard={false}
+          >
             <Modal.Header closeButton>
-              <Modal.Title>{editing ? 'Edit Package Rate' : 'Create Package Rate'}</Modal.Title>
+              <Modal.Title>
+                {editing ? "Edit Package Rate" : "Create Package Rate"}
+              </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              <Form onSubmit={handleSave}>
-                {/* Top Section - Rate Code and Market */}
+              <Form onSubmit={editing ? handleEdit : handleSave}>
                 <Row>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Rate Code <span className="text-danger">*</span></Form.Label>
-                      <Form.Control 
-                        type="text" 
+                      <Form.Label>
+                        Rate Code <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
                         placeholder="Enter rate code"
-                        value={formData.rateCode}
+                        value={formData.packagerateCode}
                         onChange={(e) => {
-                          setFormData(prev => ({ ...prev, rateCode: e.target.value }));
-                          if (validationErrors.rateCode) {
-                            setValidationErrors(prev => ({ ...prev, rateCode: undefined }));
+                          setFormData((prev) => ({
+                            ...prev,
+                            packagerateCode: e.target.value,
+                          }));
+                          if (validationErrors.packagerateCode) {
+                            setValidationErrors((prev) => ({
+                              ...prev,
+                              packagerateCode: undefined,
+                            }));
                           }
                         }}
-                        isInvalid={!!validationErrors.rateCode}
+                        isInvalid={!!validationErrors.packagerateCode}
                       />
-                      {validationErrors.rateCode && (
+                      {validationErrors.packagerateCode && (
                         <Form.Control.Feedback type="invalid">
-                          {validationErrors.rateCode}
+                          {validationErrors.packagerateCode}
                         </Form.Control.Feedback>
                       )}
                     </Form.Group>
                   </Col>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Market <span className="text-danger">*</span></Form.Label>
-                      <Form.Control 
-                        type="text" 
-                        placeholder="Click to Choose..."
-                        value={formData.market}
+                      <Form.Label>
+                        Market Type <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Select
+                        value={formData.markettypeId}
                         onChange={(e) => {
-                          setFormData(prev => ({ ...prev, market: e.target.value }));
-                          if (validationErrors.market) {
-                            setValidationErrors(prev => ({ ...prev, market: undefined }));
+                          const selectedValue = parseInt(e.target.value);
+                          console.log("Market type selected:", selectedValue);
+                          console.log("Available market types:", marketTypes);
+                          setFormData((prev) => ({
+                            ...prev,
+                            markettypeId: selectedValue,
+                          }));
+                          if (validationErrors.markettypeId) {
+                            setValidationErrors((prev) => ({
+                              ...prev,
+                              markettypeId: undefined,
+                            }));
                           }
                         }}
-                        isInvalid={!!validationErrors.market}
-                      />
-                      {validationErrors.market && (
+                        isInvalid={!!validationErrors.markettypeId}
+                      >
+                        <option value="">Select Market</option>
+                        {marketTypes.map((market) => (
+                          <option
+                            key={market.marketTypeId}
+                            value={market.marketTypeId}
+                          >
+                            {market.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {validationErrors.markettypeId && (
                         <Form.Control.Feedback type="invalid">
-                          {validationErrors.market}
+                          {validationErrors.markettypeId}
                         </Form.Control.Feedback>
                       )}
                     </Form.Group>
                   </Col>
                 </Row>
 
-                {/* Middle Section - Validity Dates (Left) and Occupancy (Right) */}
                 <Row>
-                  {/* Left Side - Validity Dates Clone */}
                   <Col md={6}>
                     <div className="mb-3">
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <h6>Validity List</h6>
-                        <Button 
-                          variant="outline-primary" 
-                          size="sm" 
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
                           onClick={addValidityPeriod}
                           disabled={isAddingValidity}
                         >
@@ -840,12 +1271,16 @@ const PackageRates = () => {
                       {validityList.map((validity, index) => (
                         <Card key={validity.id} className="mb-3">
                           <Card.Header className="d-flex justify-content-between align-items-center">
-                            <h6 className="mb-0">Validity Period {index + 1}</h6>
+                            <h6 className="mb-0">
+                              Validity Period {index + 1}
+                            </h6>
                             {validityList.length > 1 && (
-                              <Button 
-                                variant="outline-danger" 
-                                size="sm" 
-                                onClick={() => removeValidityPeriod(validity.id)}
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() =>
+                                  removeValidityPeriod(validity.id)
+                                }
                               >
                                 <FaTrash className="me-1" />
                                 Remove
@@ -857,20 +1292,32 @@ const PackageRates = () => {
                               <Col md={6}>
                                 <Form.Group className="mb-3">
                                   <Form.Label>Validity From</Form.Label>
-                                  <Form.Control 
+                                  <Form.Control
                                     type="date"
                                     value={validity.validityFrom}
-                                    onChange={(e) => updateValidityPeriod(validity.id, 'validityFrom', e.target.value)}
+                                    onChange={(e) =>
+                                      updateValidityPeriod(
+                                        validity.id,
+                                        "validityFrom",
+                                        e.target.value
+                                      )
+                                    }
                                   />
                                 </Form.Group>
                               </Col>
                               <Col md={6}>
                                 <Form.Group className="mb-3">
                                   <Form.Label>Validity To</Form.Label>
-                                  <Form.Control 
+                                  <Form.Control
                                     type="date"
                                     value={validity.validityTo}
-                                    onChange={(e) => updateValidityPeriod(validity.id, 'validityTo', e.target.value)}
+                                    onChange={(e) =>
+                                      updateValidityPeriod(
+                                        validity.id,
+                                        "validityTo",
+                                        e.target.value
+                                      )
+                                    }
                                   />
                                 </Form.Group>
                               </Col>
@@ -879,19 +1326,20 @@ const PackageRates = () => {
                         </Card>
                       ))}
                       {validationErrors.validityList && (
-                        <div className="text-danger small">{validationErrors.validityList}</div>
+                        <div className="text-danger small">
+                          {validationErrors.validityList}
+                        </div>
                       )}
                     </div>
                   </Col>
 
-                  {/* Right Side - Occupancy */}
                   <Col md={6}>
                     <div className="mb-3">
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <h6>Occupancy List</h6>
-                        <Button 
-                          variant="outline-primary" 
-                          size="sm" 
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
                           onClick={addOccupancy}
                           disabled={isAddingOccupancy}
                         >
@@ -904,9 +1352,9 @@ const PackageRates = () => {
                           <Card.Header className="d-flex justify-content-between align-items-center">
                             <h6 className="mb-0">Occupancy {index + 1}</h6>
                             {occupancyList.length > 1 && (
-                              <Button 
-                                variant="outline-danger" 
-                                size="sm" 
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
                                 onClick={() => removeOccupancy(occupancy.id)}
                               >
                                 <FaTrash className="me-1" />
@@ -919,22 +1367,34 @@ const PackageRates = () => {
                               <Col md={6}>
                                 <Form.Group className="mb-3">
                                   <Form.Label>Minimum Pax</Form.Label>
-                                  <Form.Control 
+                                  <Form.Control
                                     type="number"
                                     placeholder="Enter minimum pax"
                                     value={occupancy.minimumPax}
-                                    onChange={(e) => updateOccupancy(occupancy.id, 'minimumPax', e.target.value)}
+                                    onChange={(e) =>
+                                      updateOccupancy(
+                                        occupancy.id,
+                                        "minimumPax",
+                                        e.target.value
+                                      )
+                                    }
                                   />
                                 </Form.Group>
                               </Col>
                               <Col md={6}>
                                 <Form.Group className="mb-3">
                                   <Form.Label>Maximum Pax</Form.Label>
-                                  <Form.Control 
+                                  <Form.Control
                                     type="number"
                                     placeholder="Enter maximum pax"
                                     value={occupancy.maximumPax}
-                                    onChange={(e) => updateOccupancy(occupancy.id, 'maximumPax', e.target.value)}
+                                    onChange={(e) =>
+                                      updateOccupancy(
+                                        occupancy.id,
+                                        "maximumPax",
+                                        e.target.value
+                                      )
+                                    }
                                   />
                                 </Form.Group>
                               </Col>
@@ -943,36 +1403,30 @@ const PackageRates = () => {
                         </Card>
                       ))}
                       {validationErrors.occupancyList && (
-                        <div className="text-danger small">{validationErrors.occupancyList}</div>
+                        <div className="text-danger small">
+                          {validationErrors.occupancyList}
+                        </div>
                       )}
-                      {/* <div className="d-flex justify-content-end mb-3">
-                        <Button variant="primary" size="sm">
-                          Show Grid
-                        </Button>
-                      </div> */}
                     </div>
                   </Col>
                 </Row>
 
-                {/* Bottom Section - Rate Details */}
                 <div className="mb-3">
                   <h6 className="border-bottom pb-2 mb-3">RATE DETAILS</h6>
                   <Row>
                     <Col md={4}>
                       <Form.Group className="mb-3">
-                        <Form.Label>Country <span className="text-danger">*</span></Form.Label>
-                        <Form.Select
+                        <Form.Label>
+                          Country <span className="text-danger">*</span>
+                        </Form.Label>
+                        <SearchableSelect
+                          name="countryId"
                           value={formData.countryId}
                           onChange={handleCountryChange}
+                          placeholder="Search and select country"
+                          options={countries}
                           isInvalid={!!validationErrors.countryId}
-                        >
-                          <option value="">SELECT</option>
-                          {countries.map(country => (
-                            <option key={country.id} value={country.id}>
-                              {country.name}
-                            </option>
-                          ))}
-                        </Form.Select>
+                        />
                         {validationErrors.countryId && (
                           <Form.Control.Feedback type="invalid">
                             {validationErrors.countryId}
@@ -982,20 +1436,23 @@ const PackageRates = () => {
                     </Col>
                     <Col md={4}>
                       <Form.Group className="mb-3">
-                        <Form.Label>Place <span className="text-danger">*</span></Form.Label>
-                        <Form.Select
+                        <Form.Label>
+                          Place <span className="text-danger">*</span>
+                        </Form.Label>
+                        <SearchableSelect
+                          name="placeId"
                           value={formData.placeId}
                           onChange={handlePlaceChange}
-                          disabled={!formData.countryId || isLoadingPlaces}
+                          placeholder={
+                            !formData.countryId
+                              ? "Select country first"
+                              : "Search and select place"
+                          }
+                          options={places}
+                          disabled={!formData.countryId}
+                          isLoading={isLoadingPlaces}
                           isInvalid={!!validationErrors.placeId}
-                        >
-                          <option value="">SELECT</option>
-                          {places.map(place => (
-                            <option key={place.id} value={place.id}>
-                              {place.name}
-                            </option>
-                          ))}
-                        </Form.Select>
+                        />
                         {validationErrors.placeId && (
                           <Form.Control.Feedback type="invalid">
                             {validationErrors.placeId}
@@ -1005,20 +1462,30 @@ const PackageRates = () => {
                     </Col>
                     <Col md={4}>
                       <Form.Group className="mb-3">
-                        <Form.Label>No of nights <span className="text-danger">*</span></Form.Label>
+                        <Form.Label>
+                          No of nights <span className="text-danger">*</span>
+                        </Form.Label>
                         <Form.Select
                           value={formData.noOfNights}
                           onChange={(e) => {
-                            setFormData(prev => ({ ...prev, noOfNights: e.target.value }));
+                            setFormData((prev) => ({
+                              ...prev,
+                              noOfNights: e.target.value,
+                            }));
                             if (validationErrors.noOfNights) {
-                              setValidationErrors(prev => ({ ...prev, noOfNights: undefined }));
+                              setValidationErrors((prev) => ({
+                                ...prev,
+                                noOfNights: undefined,
+                              }));
                             }
                           }}
                           isInvalid={!!validationErrors.noOfNights}
                         >
                           <option value="">SELECT</option>
                           {[...Array(15)].map((_, i) => (
-                            <option key={i + 1} value={i + 1}>{i + 1}</option>
+                            <option key={i + 1} value={i + 1}>
+                              {i + 1}
+                            </option>
                           ))}
                         </Form.Select>
                         {validationErrors.noOfNights && (
@@ -1031,81 +1498,148 @@ const PackageRates = () => {
                   </Row>
                 </div>
 
-                {/* Sharing Options */}
                 <div className="mb-3">
                   <h6>Sharing Options</h6>
                   {isLoadingPackageCategories ? (
                     <div className="text-center py-3">
-                      <div className="spinner-border spinner-border-sm me-2" role="status">
+                      <div
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                      >
                         <span className="visually-hidden">Loading...</span>
                       </div>
                       Loading package categories...
                     </div>
-                  ) : packageCategories.length > 0 ? (
-                      packageCategories.map((category) => {
-                      const categoryKey = category.packageCategoryId.toString();
+                  ) : Array.isArray(packageCategories) &&
+                    packageCategories.length > 0 ? (
+                    packageCategories.map((category) => {
+                      const categoryKey = (
+                        category.packageCategoryId ||
+                        category.id ||
+                        ""
+                      ).toString();
                       return (
-                        <Card key={category.packageCategoryId} className="mb-3">
-                    <Card.Header>
-                      <FormCheck 
-                        type="checkbox" 
-                              label={category.name.toUpperCase()} 
-                              checked={formData.sharingTypes[categoryKey] || false}
-                              onChange={(e) => handleSharingTypeChange(categoryKey, e.target.checked)}
-                      />
-                    </Card.Header>
-                    <Card.Body>
-                      <Row>
-                        <Col md={12}>
-                          <p className="mb-2">Occupancy Type: Select Hotel or Similar</p>
-                        </Col>
-                      </Row>
-                      <Row>
-                        <Col md={4}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Adult Rate per person</Form.Label>
-                            <Form.Control 
-                              type="number"
-                              placeholder="Enter rate"
-                                    value={formData.rates[categoryKey]?.adultRate || ""}
-                                    onChange={(e) => handleRateChange(categoryKey, 'adultRate', e.target.value)}
-                                    disabled={!formData.sharingTypes[categoryKey]}
+                        <Card
+                          key={
+                            category.packageCategoryId ||
+                            category.id ||
+                            Math.random()
+                          }
+                          className="mb-3"
+                        >
+                          <Card.Header>
+                            <FormCheck
+                              type="checkbox"
+                              label={(
+                                category.name ||
+                                category.categoryName ||
+                                "Unknown"
+                              ).toUpperCase()}
+                              checked={
+                                formData.rates?.[categoryKey]?.enabled || false
+                              }
+                              onChange={(e) =>
+                                handleSharingTypeChange(
+                                  categoryKey,
+                                  e.target.checked
+                                )
+                              }
                             />
-                          </Form.Group>
-                        </Col>
-                        <Col md={4}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Child With Bed Rate per person</Form.Label>
-                            <Form.Control 
-                              type="number"
-                              placeholder="Enter rate"
-                                    value={formData.rates[categoryKey]?.childWithBed || ""}
-                                    onChange={(e) => handleRateChange(categoryKey, 'childWithBed', e.target.value)}
-                                    disabled={!formData.sharingTypes[categoryKey]}
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col md={4}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Child Without Bed Rate per person</Form.Label>
-                            <Form.Control 
-                              type="number"
-                              placeholder="Enter rate"
-                                    value={formData.rates[categoryKey]?.childWithoutBed || ""}
-                                    onChange={(e) => handleRateChange(categoryKey, 'childWithoutBed', e.target.value)}
-                                    disabled={!formData.sharingTypes[categoryKey]}
-                            />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                    </Card.Body>
-                  </Card>
+                          </Card.Header>
+                          <Card.Body>
+                            <Row>
+                              <Col md={12}>
+                                <p className="mb-2">
+                                  Occupancy Type: Select Hotel or Similar
+                                </p>
+                              </Col>
+                            </Row>
+                            <Row>
+                              <Col md={4}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>Adult Rate per person</Form.Label>
+                                  <Form.Control
+                                    type="number"
+                                    placeholder="Enter rate"
+                                    value={
+                                      formData.rates?.[categoryKey]
+                                        ?.adultRate || ""
+                                    }
+                                    onChange={(e) =>
+                                      handleRateChange(
+                                        categoryKey,
+                                        "adultRate",
+                                        e.target.value
+                                      )
+                                    }
+                                    disabled={
+                                      !formData.rates?.[categoryKey]?.enabled
+                                    }
+                                  />
+                                </Form.Group>
+                              </Col>
+                              <Col md={4}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>
+                                    Child With Bed Rate per person
+                                  </Form.Label>
+                                  <Form.Control
+                                    type="number"
+                                    placeholder="Enter rate"
+                                    value={
+                                      formData.rates?.[categoryKey]
+                                        ?.childWithBed || ""
+                                    }
+                                    onChange={(e) =>
+                                      handleRateChange(
+                                        categoryKey,
+                                        "childWithBed",
+                                        e.target.value
+                                      )
+                                    }
+                                    disabled={
+                                      !formData.rates?.[categoryKey]?.enabled
+                                    }
+                                  />
+                                </Form.Group>
+                              </Col>
+                              <Col md={4}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>
+                                    Child Without Bed Rate per person
+                                  </Form.Label>
+                                  <Form.Control
+                                    type="number"
+                                    placeholder="Enter rate"
+                                    value={
+                                      formData.rates?.[categoryKey]
+                                        ?.childWithoutBed || ""
+                                    }
+                                    onChange={(e) =>
+                                      handleRateChange(
+                                        categoryKey,
+                                        "childWithoutBed",
+                                        e.target.value
+                                      )
+                                    }
+                                    disabled={
+                                      !formData.rates?.[categoryKey]?.enabled
+                                    }
+                                  />
+                                </Form.Group>
+                              </Col>
+                            </Row>
+                          </Card.Body>
+                        </Card>
                       );
                     })
                   ) : (
                     <div className="text-center py-3 text-muted">
                       <p>No package categories found for this package.</p>
-                      <small>Please ensure the package has categories defined in Package Registration.</small>
+                      <small>
+                        Please ensure the package has categories defined in
+                        Package Registration.
+                      </small>
                     </div>
                   )}
                   {validationErrors.sharingTypes && (
@@ -1121,9 +1655,9 @@ const PackageRates = () => {
                 <i className="fas fa-times me-2"></i>
                 Cancel
               </Button>
-              <Button variant="success" onClick={handleSave}>
+              <Button variant="success" onClick={editing ? handleEdit : handleSave}>
                 <i className="fas fa-arrow-right me-2"></i>
-                {editing ? 'Update' : 'Create'}
+                {editing ? "Update" : "Create"}
               </Button>
             </Modal.Footer>
           </Modal>
