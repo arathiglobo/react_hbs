@@ -91,11 +91,11 @@ const HotelRegistrationActions = () => {
   const actions = [
     { label: 'Mail center', icon: FaAt, status: 'success', count: null },
     { label: 'Login Details', icon: FaArrowRight, status: 'success', count: null },
-    { label: 'Occupancy & Minimum length', icon: FaUsers, status: 'count', count: 1 },
-    { label: 'Hotel Availability', icon: FaBullhorn, status: 'count', count: 1 },
-    { label: 'Contract Rate', icon: FaMoneyBill, status: 'count', count: 1 },
+    { label: 'Occupancy & Minimum length', icon: FaUsers, status: 'count', count: 0 },
+    { label: 'Hotel Availability', icon: FaBullhorn, status: 'count', count: 0},
+    { label: 'Contract Rate', icon: FaMoneyBill, status: 'count', count: 0 },
     { label: 'Promotion', icon: FaGift, status: 'count', count: 0 },
-    { label: 'Policy', icon: FaFileAlt, status: 'count', count: 1 },
+    { label: 'Policy', icon: FaFileAlt, status: 'count', count: 0 },
     { label: 'Compulsory Events', icon: FaCheckSquare, status: 'count', count: 0 },
     { label: 'Image Upload', icon: FaImage, status: 'count', count: 0 },
     { label: 'Hotel Edit', icon: FaEdit, status: 'none', count: null },
@@ -361,7 +361,9 @@ const HotelRegistrationActions = () => {
       setShowLoginDetailsModal(true);
     } else if (actionLabel === 'Hotel Edit') {
       navigate(`/registration/hotel/create/${id}`);
-    }
+    } else if (actionLabel === 'Compulsory Events') {
+      navigate(`/registration/hotel/${id}/compulsory-events`);
+    } 
   };
 
   const handleMailTypeChange = (id, newMailType) => {

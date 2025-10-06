@@ -61,6 +61,7 @@ const HotelReg = () => {
     hotelName: "",
     hotelDescription: "",
     image360: "",
+    image360File: null,
     address: "",
     zipcode: "",
     latitude: "",
@@ -383,10 +384,10 @@ const HotelReg = () => {
   };
 
   const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, type, checked, files } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value
+      [name]: type === "checkbox" ? checked : type === "file" ? files[0] : value
     }));
   };
 
@@ -491,97 +492,108 @@ const HotelReg = () => {
     }));
   };
 
-  // Rooms Management
-  const addRoom = () => {
+  // Room Category and Types Management
+  const [selectedRoomCategory, setSelectedRoomCategory] = useState("");
+  const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
+  const [availableRoomTypes, setAvailableRoomTypes] = useState([]);
+
+  // Load room types when room category is selected
+  const handleRoomCategoryChange = async (roomCategoryId) => {
+    setSelectedRoomCategory(roomCategoryId);
+    setSelectedRoomTypes([]);
+    
+    if (roomCategoryId) {
+      try {
+        const response = await axiosInstance.get(`/api/roomType?roomCategoryId=${roomCategoryId}`);
+        setAvailableRoomTypes(response.data || []);
+      } catch (error) {
+        console.error("Error loading room types for category:", error);
+        toast.error("Failed to load room types for selected category");
+        setAvailableRoomTypes([]);
+      }
+    } else {
+      setAvailableRoomTypes([]);
+    }
+  };
+
+  // Handle room type selection (multiple selection)
+  const handleRoomTypeSelection = (roomTypeId) => {
+    const stringId = String(roomTypeId);
+    console.log("=== ROOM TYPE SELECTION ===");
+    console.log("Room Type ID:", stringId, "Type:", typeof stringId);
+    console.log("Current selected array:", selectedRoomTypes);
+    
+    setSelectedRoomTypes(prev => {
+      // Create a new array to avoid mutation issues
+      const currentArray = [...prev];
+      const index = currentArray.indexOf(stringId);
+      
+      if (index > -1) {
+        // Remove if exists
+        currentArray.splice(index, 1);
+        console.log("REMOVED room type:", stringId);
+      } else {
+        // Add if doesn't exist
+        currentArray.push(stringId);
+        console.log("ADDED room type:", stringId);
+      }
+      
+      console.log("Final selected array:", currentArray);
+      return currentArray;
+    });
+  };
+
+  // Add selected room category and types to the rooms array
+  const addRoomCategoryAndTypes = () => {
+    if (!selectedRoomCategory) {
+      toast.error("Please select a room category");
+      return;
+    }
+    
+    if (selectedRoomTypes.length === 0) {
+      toast.error("Please select at least one room type");
+      return;
+    }
+
+    
+      
+      // Find category by converting both to numbers for comparison
+      const selectedCategory = roomCategories.find(cat => 
+        Number(cat.roomCategoryId) === Number(selectedRoomCategory)
+      );
+          
+    const selectedTypes = availableRoomTypes.filter((type, index) => {
+      const uniqueId = type.roomtypeId || `index-${index}`;
+      return selectedRoomTypes.includes(String(uniqueId));
+    });
+   
+
+    const newRoom = {
+      roomCategoryId: selectedRoomCategory,
+      roomCategoryName: selectedCategory?.roomCategory || "",
+      roomTypes: selectedTypes.map(type => ({
+        roomTypeId: type.roomtypeId,
+        roomTypeName: type.name || ""
+      }))
+    };
+    
+    console.log("New room object:", newRoom);
+
     setFormData(prev => ({
       ...prev,
-      rooms: [
-        ...prev.rooms,
-        {
-          roomCategoryId: "",
-          roomTypes: [],
-          roomName: "",
-        }
-      ]
+      rooms: [...prev.rooms, newRoom]
     }));
+
+    // Reset selection
+    setSelectedRoomCategory("");
+    setSelectedRoomTypes([]);
+    setAvailableRoomTypes([]);
   };
 
   const removeRoom = (index) => {
     setFormData(prev => ({
       ...prev,
       rooms: prev.rooms.filter((_, i) => i !== index)
-    }));
-  };
-
-  const updateRoom = (index, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      rooms: prev.rooms.map((room, i) => {
-        if (i === index) {
-          const updatedRoom = { ...room, [field]: value };
-          
-          if (field === 'roomCategoryId' && value) {
-            loadRoomTypesForCategory(value, index);
-            updatedRoom.roomTypes = [];
-          }
-          
-          return updatedRoom;
-        }
-        return room;
-      })
-    }));
-  };
-
-  // Load room types for a specific room category
-  const loadRoomTypesForCategory = async (roomCategoryId, roomIndex) => {
-    try {
-      const response = await axiosInstance.get(`/api/roomType?roomCategoryId=${roomCategoryId}`);
-      setFilteredRoomTypes(prev => ({
-        ...prev,
-        [roomIndex]: response.data || []
-      }));
-    } catch (error) {
-      console.error("Error loading room types for category:", error);
-      toast.error("Failed to load room types for selected category");
-    }
-  };
-
-  // Room Type Management within a room category
-  const addRoomType = (roomIndex) => {
-    setFormData(prev => ({
-      ...prev,
-      rooms: prev.rooms.map((room, i) =>
-        i === roomIndex 
-          ? { ...room, roomTypes: [...room.roomTypes, { roomTypeId: "", roomName: "" }] }
-          : room
-      )
-    }));
-  };
-
-  const removeRoomType = (roomIndex, roomTypeIndex) => {
-    setFormData(prev => ({
-      ...prev,
-      rooms: prev.rooms.map((room, i) =>
-        i === roomIndex 
-          ? { ...room, roomTypes: room.roomTypes.filter((_, j) => j !== roomTypeIndex) }
-          : room
-      )
-    }));
-  };
-
-  const updateRoomType = (roomIndex, roomTypeIndex, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      rooms: prev.rooms.map((room, i) =>
-        i === roomIndex 
-          ? { 
-              ...room, 
-              roomTypes: room.roomTypes.map((roomType, j) =>
-                j === roomTypeIndex ? { ...roomType, [field]: value } : roomType
-              )
-            }
-          : room
-      )
     }));
   };
 
@@ -646,8 +658,8 @@ const HotelReg = () => {
         if (!bank.bankId) {
           errors[`bank_${index}_bankId`] = "Bank name is required";
         }
-        if (!bank.bankAddress) {
-          errors[`bank_${index}_bankAddress`] = "Bank address is required";
+        if (!bank.accountNo) {
+          errors[`bank_${index}_accountNo`] = "Bank Account is required";
         }
       });
     }
@@ -660,14 +672,16 @@ const HotelReg = () => {
         if (!room.roomCategoryId) {
           errors[`room_${roomIndex}_category`] = "Room category is required";
         }
-        if (room.roomTypes.length === 0) {
+        if (!room.roomTypes || room.roomTypes.length === 0) {
           errors[`room_${roomIndex}_types`] = "At least one room type is required for this category";
         }
+        if (room.roomTypes) {
         room.roomTypes.forEach((roomType, typeIndex) => {
           if (!roomType.roomTypeId) {
             errors[`room_${roomIndex}_type_${typeIndex}`] = "Room type is required";
           }
         });
+        }
       });
     }
 
@@ -681,100 +695,240 @@ const HotelReg = () => {
   };
 
   // Submit form
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      toast.error("Please fix the validation errors");
-      return;
-    }
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    try {
-      setIsLoading(true);
-      
-      const payload = {
-        ...formData,
-        childComAgeMin: parseInt(formData.childComAgeMin),
-        childComAgeMax: parseInt(formData.childComAgeMax),
-        childChargeableAgeMin: parseInt(formData.childChargeableAgeMin),
-        childChargeableAgeMax: parseInt(formData.childChargeableAgeMax),
-        hotelCurrencyId: parseInt(formData.hotelCurrencyId),
-        hotelCategoryId: parseInt(formData.hotelCategoryId),
-        hotelTypeId: parseInt(formData.hotelTypeId),
-        markupTypeId: parseInt(formData.markupTypeId),
-        regionId: parseInt(formData.regionId),
-        countryId: parseInt(formData.countryId),
-        stateId: parseInt(formData.stateId),
-        placeId: parseInt(formData.placeId),
-        latitude: parseFloat(formData.latitude) || 0,
-        longitude: parseFloat(formData.longitude) || 0,
+  if (!validateForm()) {
+    toast.error("Please fix the validation errors");
+    return;
+  }
+
+  try {
+    setIsLoading(true);
+
+    // Transform rooms data to match API structure
+    const roomCategories = formData.rooms.map((room, index) => ({
+      hotelRoomCategoryId: null, // Will be set by backend
+      hotelId: null, // Will be set by backend
+      roomCategoryId: parseInt(room.roomCategoryId),
+      name: room.roomCategoryName,
+      noOfRooms: 10, // Default value, adjust if needed
+    }));
+
+    // Transform room types data
+    const roomTypes = [];
+    formData.rooms.forEach((room, roomIndex) => {
+      room.roomTypes.forEach(roomType => {
+        roomTypes.push({
+          hotelRoomTypeId: null, // Will be set by backend
+          hotelRoomCategoryId: null, // Will be set by backend after room category is created
+          hotelId: null, // Will be set by backend
+          roomTypeId: parseInt(roomType.roomTypeId),
+        });
+      });
+    });
+
+    // Transform terms and conditions
+    const termsAndConditions = formData.termsAndConditions.map(term => ({
+      id: null, // Will be set by backend
+      hotelId: null, // Will be set by backend
+      description: term,
+    }));
+
+    // Transform amenities data
+    const hotelAmenities = formData.amenityIds.map(amenityId => {
+      const amenity = amenities.find(a => a.amenitiesId === parseInt(amenityId));
+      return {
+        amenityId: parseInt(amenityId),
+        amenityName: amenity?.amenityName || "",
       };
+    });
 
-      let response;
-      if (isEditMode) {
-        response = await axiosInstance.put(`/api/hotels/${id}`, payload);
-        toast.success("Hotel updated successfully!");
-      } else {
-        response = await axiosInstance.post("/api/hotels", payload);
-        toast.success("Hotel registered successfully!");
+    // Create FormData object
+    const formDataToSend = new FormData();
+
+    // Basic hotel information
+    formDataToSend.append('hotelName', formData.hotelName);
+    formDataToSend.append('hotelCurrencyId', parseInt(formData.hotelCurrencyId));
+    formDataToSend.append('hotelCategoryId', parseInt(formData.hotelCategoryId));
+    formDataToSend.append('hotelTypeId', parseInt(formData.hotelTypeId));
+    formDataToSend.append('markupTypeId', parseInt(formData.markupTypeId));
+    formDataToSend.append('hotelDescription', formData.hotelDescription);
+    formDataToSend.append('childComAgeMin', parseInt(formData.childComAgeMin));
+    formDataToSend.append('childComAgeMax', parseInt(formData.childComAgeMax));
+    formDataToSend.append('childChargeableAgeMin', parseInt(formData.childChargeableAgeMin));
+    formDataToSend.append('childChargeableAgeMax', parseInt(formData.childChargeableAgeMax));
+    formDataToSend.append('regionId', parseInt(formData.regionId));
+    formDataToSend.append('countryId', parseInt(formData.countryId));
+    formDataToSend.append('stateId', parseInt(formData.stateId));
+    formDataToSend.append('placeId', parseInt(formData.placeId));
+    formDataToSend.append('address', formData.address);
+    formDataToSend.append('zipcode', formData.zipcode);
+    formDataToSend.append('latitude', parseFloat(formData.latitude) || 0);
+    formDataToSend.append('longitude', parseFloat(formData.longitude) || 0);
+    formDataToSend.append('isDeleted', formData.isDeleted.toString());
+
+    // Contact details
+    formData.contactDetails.forEach((contact, index) => {
+      formDataToSend.append(`contactDetails[${index}].id`, contact.id || '');
+      formDataToSend.append(`contactDetails[${index}].hotelId`, contact.hotelId || '');
+      formDataToSend.append(`contactDetails[${index}].contactTypeId`, parseInt(contact.contactTypeId));
+      formDataToSend.append(`contactDetails[${index}].contactPerson`, contact.contactPerson || '');
+      formDataToSend.append(`contactDetails[${index}].personalEmail`, contact.personalEmail || '');
+      formDataToSend.append(`contactDetails[${index}].teleNumber`, contact.teleNumber || '');
+      formDataToSend.append(`contactDetails[${index}].mobileNumber`, contact.mobileNumber || '');
+      // Omit mailTyIds if it's empty or not used, or send as an array if populated
+      if (contact.mailTyIds && Array.isArray(contact.mailTyIds) && contact.mailTyIds.length > 0) {
+        contact.mailTyIds.forEach((mailTyId, mailIndex) => {
+          formDataToSend.append(`contactDetails[${index}].mailTyIds[${mailIndex}]`, mailTyId);
+        });
       }
-      
-      if (response.data) {
-        if (!isEditMode) {
-          setFormData({
-            hotelName: "",
-            hotelDescription: "",
-            image360: "",
-            address: "",
-            zipcode: "",
-            latitude: "",
-            longitude: "",
-            childComAgeMin: "",
-            childComAgeMax: "",
-            childChargeableAgeMin: "",
-            childChargeableAgeMax: "",
-            hotelCurrencyId: "",
-            hotelCategoryId: "",
-            hotelTypeId: "",
-            markupTypeId: "",
-            regionId: "",
-            countryId: "",
-            stateId: "",
-            placeId: "",
-            isDeleted: false,
-            contactDetails: [],
-            bankDetails: [],
-            weekDays: {
-              wdSunday: false,
-              wdMonday: false,
-              wdTuesday: false,
-              wdWednesday: false,
-              wdThursday: false,
-              wdFriday: false,
-              wdSaturday: false,
-              wedSunday: false,
-              wedMonday: false,
-              wedTuesday: false,
-              wedWednesday: false,
-              wedThursday: false,
-              wedFriday: false,
-              wedSaturday: false,
-            },
-            rooms: [],
-            termsAndConditions: [],
-            amenityIds: [],
-          });
-        }
-        setValidationErrors({});
-        navigate("/registration/hotel");
-      }
-    } catch (error) {
-      console.error("Error submitting hotel:", error);
-      toast.error(isEditMode ? "Failed to update hotel" : "Failed to register hotel");
-    } finally {
-      setIsLoading(false);
+    });
+
+    // Bank details
+    formData.bankDetails.forEach((bank, index) => {
+      formDataToSend.append(`bankDetails[${index}].id`, bank.id || '');
+      formDataToSend.append(`bankDetails[${index}].hotelId`, bank.hotelId || '');
+      formDataToSend.append(`bankDetails[${index}].bankId`, parseInt(bank.bankId));
+      formDataToSend.append(`bankDetails[${index}].accountNo`, bank.accountNo || '');
+      formDataToSend.append(`bankDetails[${index}].iban`, bank.iban || '');
+      formDataToSend.append(`bankDetails[${index}].swiftCode`, bank.swiftCode || '');
+      formDataToSend.append(`bankDetails[${index}].bankAddress`, bank.bankAddress || '');
+      formDataToSend.append(`bankDetails[${index}].telephone`, bank.telephone || '');
+      formDataToSend.append(`bankDetails[${index}].faxNumber`, bank.faxNumber || '');
+      formDataToSend.append(`bankDetails[${index}].contactPerson`, bank.contactPerson || '');
+    });
+
+    // Week days
+    formDataToSend.append('weekDays.id', formData.weekDays.id || '');
+    Object.keys(formData.weekDays).forEach(key => {
+      formDataToSend.append(`weekDays.${key}`, formData.weekDays[key].toString());
+    });
+
+    // Room categories
+    roomCategories.forEach((room, index) => {
+      formDataToSend.append(`roomCategories[${index}].hotelRoomCategoryId`, room.hotelRoomCategoryId || '');
+      formDataToSend.append(`roomCategories[${index}].hotelId`, room.hotelId || '');
+      formDataToSend.append(`roomCategories[${index}].roomCategoryId`, parseInt(room.roomCategoryId));
+      formDataToSend.append(`roomCategories[${index}].name`, room.name);
+      formDataToSend.append(`roomCategories[${index}].noOfRooms`, room.noOfRooms);
+    });
+
+    // Room types - Map to the correct roomCategoryId index
+    roomTypes.forEach((roomType, index) => {
+      // Find the index of the room category that this room type belongs to
+      const roomCategoryIndex = roomCategories.findIndex(
+        room => parseInt(room.roomCategoryId) === parseInt(roomType.roomCategoryId)
+      );
+      formDataToSend.append(`roomTypes[${index}].hotelRoomTypeId`, roomType.hotelRoomTypeId || '');
+      formDataToSend.append(`roomTypes[${index}].hotelRoomCategoryId`, roomCategoryIndex >= 0 ? roomCategoryIndex : '');
+      formDataToSend.append(`roomTypes[${index}].hotelId`, roomType.hotelId || '');
+      formDataToSend.append(`roomTypes[${index}].roomTypeId`, parseInt(roomType.roomTypeId));
+    });
+
+    // Terms and conditions
+    termsAndConditions.forEach((term, index) => {
+      formDataToSend.append(`termsAndConditions[${index}].id`, term.id || '');
+      formDataToSend.append(`termsAndConditions[${index}].hotelId`, term.hotelId || '');
+      formDataToSend.append(`termsAndConditions[${index}].description`, term.description);
+    });
+
+    // Amenities
+    formData.amenityIds.forEach((amenityId, index) => {
+      const amenity = amenities.find(a => a.amenitiesId === parseInt(amenityId));
+      formDataToSend.append(`amenities[${index}].amenityId`, parseInt(amenityId));
+      formDataToSend.append(`amenities[${index}].amenityName`, amenity?.amenityName || '');
+    });
+
+    // Image file (if selected)
+    if (formData.image360File) {
+      formDataToSend.append('image360File', formData.image360File);
     }
-  };
+
+    // Log FormData for debugging
+    console.log("FormData being sent:");
+    for (let [key, value] of formDataToSend.entries()) {
+      console.log(`${key}: ${value}`);
+    }
+
+    let response;
+    if (isEditMode) {
+      response = await axiosInstance.put(`/api/hotels/${id}`, formDataToSend, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      toast.success("Hotel updated successfully!");
+    } else {
+      response = await axiosInstance.post("/api/hotels", formDataToSend, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      toast.success("Hotel registered successfully!");
+    }
+
+    if (response.data) {
+      if (!isEditMode) {
+        // Reset form data
+        setFormData({
+          hotelName: "",
+          hotelDescription: "",
+          image360: "",
+          image360File: null,
+          address: "",
+          zipcode: "",
+          latitude: "",
+          longitude: "",
+          childComAgeMin: "",
+          childComAgeMax: "",
+          childChargeableAgeMin: "",
+          childChargeableAgeMax: "",
+          hotelCurrencyId: "",
+          hotelCategoryId: "",
+          hotelTypeId: "",
+          markupTypeId: "",
+          regionId: "",
+          countryId: "",
+          stateId: "",
+          placeId: "",
+          isDeleted: false,
+          contactDetails: [],
+          bankDetails: [],
+          weekDays: {
+            wdSunday: false,
+            wdMonday: false,
+            wdTuesday: false,
+            wdWednesday: false,
+            wdThursday: false,
+            wdFriday: false,
+            wdSaturday: false,
+            wedSunday: false,
+            wedMonday: false,
+            wedTuesday: false,
+            wedWednesday: false,
+            wedThursday: false,
+            wedFriday: false,
+            wedSaturday: false,
+          },
+          rooms: [],
+          termsAndConditions: [],
+          amenityIds: [],
+        });
+        setSelectedRoomCategory("");
+        setSelectedRoomTypes([]);
+        setAvailableRoomTypes([]);
+      }
+      setValidationErrors({});
+      navigate("/registration/hotel");
+    }
+  } catch (error) {
+    console.error("Error submitting hotel:", error);
+    toast.error(isEditMode ? "Failed to update hotel" : "Failed to register hotel");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // Calculate form completion percentage
   const calculateCompletion = () => {
@@ -839,10 +993,11 @@ const HotelReg = () => {
             border: 1px solid #dee2e6;
             border-bottom: none;
             margin-right: 4px;
-            border-radius: 0.375rem 0.375rem 0 0;
+            border-radius: 0.25rem 0.25rem 0 0;
             color: #495057;
             font-weight: 500;
-            padding: 0.75rem 1.5rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
           }
           .nav-tabs .nav-link.active {
             background-color: #fff;
@@ -920,11 +1075,11 @@ const HotelReg = () => {
               </Card.Header>
               <Card.Body>
                 <Form onSubmit={handleSubmit}>
-                  <Tabs defaultActiveKey="hotel-info" id="hotel-tabs" className="mb-2">
+                  <Tabs defaultActiveKey="hotel-info" id="hotel-tabs" className="mb-3">
                     {/* Hotel Information Tab */}
                     <Tab eventKey="hotel-info" title={
                       <span>
-                        <FaHotel className="me-1" /> Hotel Information
+                        <FaHotel className="me-2" /> Hotel Info
                       </span>
                     }>
                       <div className="p-4">
@@ -947,14 +1102,16 @@ const HotelReg = () => {
                           </Col>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>360° Image URL</Form.Label>
+                              <Form.Label>360° Image</Form.Label>
                               <Form.Control
-                                type="url"
-                                name="image360"
-                                value={formData.image360}
+                                type="file"
+                                name="image360File"
                                 onChange={handleInputChange}
-                                placeholder="https://example.com/hotel360.jpg"
+                                accept="image/*"
                               />
+                              <Form.Text className="text-muted">
+                                Upload a 360° image file for the hotel
+                              </Form.Text>
                             </Form.Group>
                           </Col>
                         </Row>
@@ -1134,7 +1291,7 @@ const HotelReg = () => {
                     {/* Location Information Tab */}
                     <Tab eventKey="location-info" title={
                       <span>
-                        <FaMapMarkerAlt className="me-2" /> Location Information
+                        <FaMapMarkerAlt className="me-2" /> Location Info
                       </span>
                     }>
                       <div className="p-4">
@@ -1293,8 +1450,8 @@ const HotelReg = () => {
                     {/* Contact Details Tab */}
                     <Tab eventKey="contact-details" title={
                       <span>
-                        <FaPhone className="me-2" /> Contact Details
-                        <Badge bg="info" className="ms-2">{formData.contactDetails.length}</Badge>
+                        <FaPhone className="me-2" /> Contact
+                        <Badge bg="info" className="ms-1">{formData.contactDetails.length}</Badge>
                       </span>
                     }>
                       <div className="p-4">
@@ -1398,8 +1555,8 @@ const HotelReg = () => {
                     {/* Bank Details Tab */}
                     <Tab eventKey="bank-details" title={
                       <span>
-                        <FaUniversity className="me-2" /> Bank Details
-                        <Badge bg="dark" className="ms-2">{formData.bankDetails.length}</Badge>
+                        <FaUniversity className="me-2" /> Bank
+                        <Badge bg="dark" className="ms-1">{formData.bankDetails.length}</Badge>
                       </span>
                     }>
                       <div className="p-4">
@@ -1545,7 +1702,7 @@ const HotelReg = () => {
                     {/* Week Days Tab */}
                     <Tab eventKey="week-days" title={
                       <span>
-                        <FaCalendarAlt className="me-2" /> Working Days
+                        <FaCalendarAlt className="me-2" /> Week Days
                       </span>
                     }>
                       <div className="p-4">
@@ -1609,7 +1766,7 @@ const HotelReg = () => {
                     <Tab eventKey="amenities" title={
                       <span>
                         <FaSwimmingPool className="me-2" /> Amenities
-                        <Badge bg="info" className="ms-2">{formData.amenityIds.length}</Badge>
+                        <Badge bg="info" className="ms-1">{formData.amenityIds.length}</Badge>
                       </span>
                     }>
                       <div className="p-4">
@@ -1633,8 +1790,8 @@ const HotelReg = () => {
                     {/* Rooms Tab */}
                     <Tab eventKey="rooms" title={
                       <span>
-                        <FaBed className="me-2" /> Room Configuration
-                        <Badge bg="warning" className="ms-2">{formData.rooms.length}</Badge>
+                        <FaBed className="me-2" /> Rooms
+                        <Badge bg="warning" className="ms-1">{formData.rooms.length}</Badge>
                       </span>
                     }>
                       <div className="p-4">
@@ -1645,146 +1802,172 @@ const HotelReg = () => {
                           </Alert>
                         )}
                         
-                        {formData.rooms && formData.rooms.map((room, roomIndex) => (
-                          <Card key={roomIndex} className="mb-4 border-0 shadow-sm">
+                        {/* Room Category Selection Section */}
+                        <Card className="mb-4 border-0 shadow-sm">
                             <Card.Header className="bg-light border-0">
-                              <div className="d-flex justify-content-between align-items-center">
-                                <div className="d-flex align-items-center">
-                                  <div className="bg-warning text-white rounded-circle p-2 me-3">
-                                    <FaBed size={16} />
-                                  </div>
-                                  <div>
-                                    <h6 className="mb-0 text-primary">Room Category {roomIndex + 1}</h6>
-                                    <small className="text-muted">Configure room types for this category</small>
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => removeRoom(roomIndex)}
-                                  className="rounded-pill"
-                                >
-                                  <FaTrash className="me-1" />
-                                  Remove Category
-                                </Button>
-                              </div>
+                            <h5 className="mb-0 text-primary">
+                              <FaBed className="me-2" />
+                              Room Category
+                            </h5>
                             </Card.Header>
                             <Card.Body>
-                              <Row className="mb-3">
-                                <Col md={6}>
-                                  <Form.Group>
-                                    <Form.Label>Room Category <span className="text-danger">*</span></Form.Label>
+                            <Row className="align-items-end">
+                              <Col md={4}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label className="fw-bold">
+                                    <span className="text-danger">*</span> Room Category
+                                  </Form.Label>
+                                  <div className="d-flex align-items-center">
                                     <Form.Select
-                                      value={room.roomCategoryId}
-                                      onChange={(e) => updateRoom(roomIndex, 'roomCategoryId', e.target.value)}
-                                      isInvalid={!!validationErrors[`room_${roomIndex}_category`]}
+                                      value={selectedRoomCategory}
+                                      onChange={(e) => handleRoomCategoryChange(e.target.value)}
+                                      className="me-2"
                                     >
-                                      <option value="">Select Room Category (e.g., Junior Suite)</option>
+                                      <option value="">SELECT</option>
                                       {roomCategories.map(category => (
                                         <option key={category.roomCategoryId} value={category.roomCategoryId}>
                                           {category.roomCategory}
                                         </option>
                                       ))}
                                     </Form.Select>
-                                    <Form.Control.Feedback type="invalid">
-                                      {validationErrors[`room_${roomIndex}_category`]}
-                                    </Form.Control.Feedback>
+                                  </div>
                                   </Form.Group>
                                 </Col>
-                                <Col md={6}>
-                                  <Form.Group>
-                                    <Form.Label>Category Name</Form.Label>
-                                    <Form.Control
-                                      type="text"
-                                      value={room.roomName}
-                                      onChange={(e) => updateRoom(roomIndex, 'roomName', e.target.value)}
-                                      placeholder="Enter category name (optional)"
-                                    />
+                              <Col md={8}>
+                                {availableRoomTypes.length > 0 && (
+                                  <Form.Group className="mb-3">
+                                    <Form.Label className="fw-bold text-success">
+                                      <FaBed className="me-2" />
+                                      Room Type
+                                    </Form.Label>
+                                    <div className="d-flex flex-wrap gap-3">
+                                      {console.log("available roomtypes ::" , availableRoomTypes)}
+                                      {console.log("selectedRoomTypes ::" , selectedRoomTypes)}
+                                      {availableRoomTypes.map((roomType, index) => {
+                                        {console.log("roomType:::::::::::" , roomType)}
+                                         const uniqueId = roomType.roomtypeId;
+                                          const isChecked = selectedRoomTypes.includes(String(uniqueId));
+                                          console.log(`RoomType ${roomType.name} (ID: ${uniqueId}) - Checked: ${isChecked}`);
+                                          return (
+                                            <div key={`${uniqueId}-${index}`} className="form-check">
+                                              <input
+                                                className="form-check-input"
+                                                type="checkbox"
+                                                id={`roomType-${uniqueId}-${index}`}
+                                                checked={isChecked}
+                                                onChange={(e) => {
+                                                  console.log(`Checkbox clicked for ${roomType.name}, current checked: ${e.target.checked}`);
+                                                  handleRoomTypeSelection(uniqueId);
+                                                }}
+                                              />
+                                              <label className="form-check-label" htmlFor={`roomType-${uniqueId}-${index}`}>
+                                                {roomType.name}
+                                              </label>
+                                            </div>
+                                          );
+                                        })
+                                      }
+                                    </div>
                                   </Form.Group>
+                                )}
                                 </Col>
                               </Row>
 
-                              <div className="border-top pt-3">
-                                <div className="d-flex justify-content-between align-items-center mb-3">
-                                  <h6 className="mb-0 text-secondary">
-                                    <FaBed className="me-2" />
-                                    Room Types for this Category
-                                  </h6>
+                            <div className="text-center mt-3">
+                              <div className="d-flex gap-2 justify-content-center">
                                   <Button
-                                    variant="outline-primary"
-                                    size="sm"
-                                    onClick={() => addRoomType(roomIndex)}
-                                    className="rounded-pill"
-                                  >
-                                    <FaPlus className="me-1" />
-                                    Add Room Type
+                                  variant="outline-secondary"
+                                  onClick={() => {
+                                    console.log("Clearing all selections");
+                                    setSelectedRoomTypes([]);
+                                  }}
+                                  className="d-flex align-items-center gap-2 px-3 py-2"
+                                >
+                                  Clear All
+                                </Button>
+                                <Button
+                                  variant="success"
+                                  onClick={addRoomCategoryAndTypes}
+                                  disabled={!selectedRoomCategory || selectedRoomTypes.length === 0}
+                                  className="d-flex align-items-center gap-2 px-4 py-2"
+                                >
+                                  <FaPlus />
+                                  Add
                                   </Button>
                                 </div>
+                            </div>
+                          </Card.Body>
+                        </Card>
 
-                                {validationErrors[`room_${roomIndex}_types`] && (
-                                  <Alert variant="warning" className="mb-3">
-                                    <FaExclamationTriangle className="me-2" />
-                                    {validationErrors[`room_${roomIndex}_types`]}
-                                  </Alert>
-                                )}
-
-                                {room.roomTypes && room.roomTypes.map((roomType, typeIndex) => (
-                                  <Card key={typeIndex} className="mb-3 border-start border-primary border-3">
-                                    <Card.Body className="py-3">
-                                      <Row>
-                                        <Col md={8}>
-                                          <Form.Group className="mb-2">
-                                            <Form.Label>Room Type <span className="text-danger">*</span></Form.Label>
-                                            <Form.Select
-                                              value={roomType.roomTypeId}
-                                              onChange={(e) => updateRoomType(roomIndex, typeIndex, 'roomTypeId', e.target.value)}
-                                              isInvalid={!!validationErrors[`room_${roomIndex}_type_${typeIndex}`]}
-                                            >
-                                              <option value="">Select Room Type (e.g., Room Only, Room with Breakfast)</option>
-                                              {(filteredRoomTypes[roomIndex] || []).map(type => (
-                                                <option key={type.roomTypeId} value={type.roomTypeId}>
-                                                  {type.roomTypeName}
-                                                </option>
-                                              ))}
-                                            </Form.Select>
-                                            <Form.Control.Feedback type="invalid">
-                                              {validationErrors[`room_${roomIndex}_type_${typeIndex}`]}
-                                            </Form.Control.Feedback>
-                                          </Form.Group>
-                                        </Col>
-                                        <Col md={3}>
-                                          <Form.Group className="mb-2">
-                                            <Form.Label>Type Name</Form.Label>
-                                            <Form.Control
-                                              type="text"
-                                              value={roomType.roomName}
-                                              onChange={(e) => updateRoomType(roomIndex, typeIndex, 'roomName', e.target.value)}
-                                              placeholder="Enter type name"
-                                            />
-                                          </Form.Group>
-                                        </Col>
-                                        <Col md={1} className="d-flex align-items-end">
+                        {/* Added Room Categories Display */}
+                        {console.log("formadata rooms :::", formData.rooms)}
+                        {formData.rooms && formData.rooms.map((room, roomIndex) => (
+                          
+                          <Card key={roomIndex} className="mb-4 border-0 shadow-sm">
+                            <Card.Header className="bg-light border-0">
+                              <div className="d-flex justify-content-between align-items-center">
+                                <div className="d-flex align-items-center">
+                                  <div className="bg-success text-white rounded-circle p-2 me-3">
+                                    <FaBed size={16} />
+                                  </div>
+                                  <div>
+                                    <h6 className="mb-0 text-primary">
+                                      {(() => {
+                                        console.log("Room data:", room);
+                                        console.log("Room category ID:", room.roomCategoryId, "Type:", typeof room.roomCategoryId);
+                                        console.log("Available room categories:", roomCategories);
+                                        
+                                        // Find the category by matching roomCategoryId (convert to number for comparison)
+                                        const foundCategory = roomCategories.find(cat => 
+                                          Number(cat.roomCategoryId) === Number(room.roomCategoryId)
+                                        );
+                                        
+                                        console.log("Found category:", foundCategory);
+                                        
+                                        const categoryName = foundCategory?.roomCategory || `Room Category ${roomIndex + 1}`;
+                                        
+                                        console.log("Final category name:", categoryName);
+                                        return categoryName;
+                                      })()}
+                                    </h6>
+                                    <small className="text-muted">
+                                      {room.roomTypes?.length || 0} room type(s) configured
+                                    </small>
+                                  </div>
+                                </div>
                                           <Button
                                             variant="outline-danger"
                                             size="sm"
-                                            onClick={() => removeRoomType(roomIndex, typeIndex)}
-                                            className="rounded-circle"
-                                            title="Remove this room type"
+                                  onClick={() => removeRoom(roomIndex)}
+                                  className="rounded-pill"
                                           >
-                                            <FaTrash size={12} />
+                                  <FaTrash className="me-1" />
+                                  Remove
                                           </Button>
-                                        </Col>
-                                      </Row>
-                                    </Card.Body>
-                                  </Card>
-                                ))}
-
-                                {room.roomTypes.length === 0 && (
-                                  <div className="text-center py-4 text-muted">
-                                    <FaBed size={48} className="mb-3 opacity-50" />
-                                    <p className="mb-0">No room types added yet. Click "Add Room Type" to get started.</p>
+                              </div>
+                            </Card.Header>
+                            <Card.Body>
+                              <div className="mb-3">
+                                <h6 className="text-success fw-bold mb-2">
+                                  <FaBed className="me-2" />
+                                  Room Type
+                                </h6>
+                                <div className="d-flex flex-wrap gap-3">
+                                  {room.roomTypes?.map((roomType, typeIndex) => (
+                                    <div key={typeIndex} className="form-check">
+                                      <input
+                                        className="form-check-input"
+                                        type="checkbox"
+                                        id={`room-${roomIndex}-type-${typeIndex}`}
+                                        checked={true}
+                                        readOnly
+                                      />
+                                      <label className="form-check-label" htmlFor={`room-${roomIndex}-type-${typeIndex}`}>
+                                        {roomType.roomTypeName || roomType.name || `Room Type ${typeIndex + 1}`}
+                                      </label>
+                                    </div>
+                                  ))}
                                   </div>
-                                )}
                               </div>
                             </Card.Body>
                           </Card>
@@ -1794,29 +1977,17 @@ const HotelReg = () => {
                           <div className="text-center py-5 text-muted">
                             <FaBed size={64} className="mb-3 opacity-50" />
                             <h5 className="mb-2">No Room Categories Added</h5>
-                            <p className="mb-4">Start by adding a room category and then configure its room types.</p>
+                            <p className="mb-4">Select a room category above and choose room types to get started.</p>
                           </div>
                         )}
-
-                        <div className="text-center">
-                          <Button
-                            variant="outline-primary"
-                            onClick={addRoom}
-                            className="d-flex align-items-center gap-2 mx-auto px-4 py-2 rounded-pill"
-                            size="lg"
-                          >
-                            <FaPlus />
-                            Add Room Category
-                          </Button>
-                        </div>
                       </div>
                     </Tab>
 
                     {/* Terms and Conditions Tab */}
                     <Tab eventKey="terms-conditions" title={
                       <span>
-                        <FaFileContract className="me-2" /> Terms and Conditions
-                        <Badge bg="danger" className="ms-2">{formData.termsAndConditions.length}</Badge>
+                        <FaFileContract className="me-2" /> Terms
+                        <Badge bg="danger" className="ms-1">{formData.termsAndConditions.length}</Badge>
                       </span>
                     }>
                       <div className="p-4">
