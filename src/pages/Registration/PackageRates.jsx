@@ -1507,7 +1507,7 @@ const PackageRates = () => {
                 </div>
 
                 <div className="mb-3">
-                  <h6>Sharing Options</h6>
+                  <h6>Sharing Options</h6> 
                   {isLoadingPackageCategories ? (
                     <div className="text-center py-3">
                       <div
