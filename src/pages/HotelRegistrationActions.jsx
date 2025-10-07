@@ -290,18 +290,19 @@ const HotelRegistrationActions = () => {
         return (
           <div>
             <h4 className="mb-3">Room Details</h4>
-            {hotelData.rooms && hotelData.rooms.length > 0 ? (
-              hotelData.rooms.map((room, index) => (
+             {hotelData.roomCategories && hotelData.roomCategories.length > 0 ? (
+              hotelData.roomCategories.map((room, index) => (
+                console.log("room::##" , room),
                 <div key={index} className="room-item">
                   <div className="content-item">
-                    <strong>Room Name:</strong> {room.roomName}
+                    <strong>Room Name:</strong> {room.name}
                   </div>
-                  <div className="content-item">
+                  {/* <div className="content-item">
                     <strong>Room Category ID:</strong> {room.roomCategoryId}
                   </div>
                   <div className="content-item">
                     <strong>Room Type ID:</strong> {room.roomTypeId}
-                  </div>
+                  </div> */}
                   <div className="content-item">
                     <strong>Status:</strong> 
                     <Badge bg={room.isDeleted ? 'danger' : 'success'} className="ms-2">

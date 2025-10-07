@@ -18,28 +18,28 @@ import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
-import { 
-  FaPlus, 
-  FaTrash, 
-  FaSave, 
-  FaHotel, 
-  FaMapMarkerAlt, 
-  FaPhone, 
-  FaUniversity, 
-  FaCalendarAlt, 
-  FaSwimmingPool, 
-  FaBed, 
+import {
+  FaPlus,
+  FaTrash,
+  FaSave,
+  FaHotel,
+  FaMapMarkerAlt,
+  FaPhone,
+  FaUniversity,
+  FaCalendarAlt,
+  FaSwimmingPool,
+  FaBed,
   FaFileContract,
   FaCheckCircle,
   FaExclamationTriangle,
-  FaInfoCircle
+  FaInfoCircle,
 } from "react-icons/fa";
 
 const HotelReg = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
-  
+
   // Master data states
   const [currencies, setCurrencies] = useState([]);
   const [hotelCategories, setHotelCategories] = useState([]);
@@ -120,14 +120,14 @@ const HotelReg = () => {
   // Load hotel data for edit mode
   const loadHotelData = async () => {
     if (!isEditMode) return;
-    
+
     try {
       setIsLoadingHotelData(true);
       const response = await axiosInstance.get(`/api/hotels/${id}`);
       const hotelData = response.data;
-      
+
       console.log("Loaded hotel data for edit:", hotelData);
-      
+
       // Pre-fill form data
       setFormData({
         hotelName: hotelData.hotelName || "",
@@ -168,14 +168,16 @@ const HotelReg = () => {
           wedFriday: false,
           wedSaturday: false,
         },
-        rooms: hotelData.rooms ? hotelData.rooms.map(room => ({
-          ...room,
-          roomTypes: room.roomTypes || []
-        })) : [],
+        rooms: hotelData.rooms
+          ? hotelData.rooms.map((room) => ({
+              ...room,
+              roomTypes: room.roomTypes || [],
+            }))
+          : [],
         termsAndConditions: hotelData.termsAndConditions || [],
         amenityIds: hotelData.amenityIds || [],
       });
-      
+
       // Load dependent data for location
       if (hotelData.countryId) {
         await loadProvinces(hotelData.countryId);
@@ -183,7 +185,6 @@ const HotelReg = () => {
       if (hotelData.stateId) {
         await loadPlaces(hotelData.stateId);
       }
-      
     } catch (error) {
       console.error("Error loading hotel data:", error);
       toast.error("Failed to load hotel data for editing");
@@ -220,14 +221,14 @@ const HotelReg = () => {
     if (formData.countryId) {
       loadProvinces(formData.countryId);
       setPlaces([]);
-      setFormData(prev => ({ ...prev, stateId: "", placeId: "" }));
+      setFormData((prev) => ({ ...prev, stateId: "", placeId: "" }));
     }
   }, [formData.countryId]);
 
   useEffect(() => {
     if (formData.stateId) {
       loadPlaces(formData.stateId);
-      setFormData(prev => ({ ...prev, placeId: "" }));
+      setFormData((prev) => ({ ...prev, placeId: "" }));
     }
   }, [formData.stateId]);
 
@@ -365,7 +366,9 @@ const HotelReg = () => {
 
   const loadProvinces = async (countryId) => {
     try {
-      const response = await axiosInstance.get(`/api/province/getByCountryId/${countryId}`);
+      const response = await axiosInstance.get(
+        `/api/province/getByCountryId/${countryId}`
+      );
       setProvinces(response.data || []);
     } catch (error) {
       console.error("Error loading provinces:", error);
@@ -375,7 +378,9 @@ const HotelReg = () => {
 
   const loadPlaces = async (stateId) => {
     try {
-      const response = await axiosInstance.get(`/api/destination/getplaces/${stateId}`);
+      const response = await axiosInstance.get(
+        `/api/destination/getplaces/${stateId}`
+      );
       setPlaces(response.data || []);
     } catch (error) {
       console.error("Error loading places:", error);
@@ -385,47 +390,48 @@ const HotelReg = () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked, files } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : type === "file" ? files[0] : value
+      [name]:
+        type === "checkbox" ? checked : type === "file" ? files[0] : value,
     }));
   };
 
   const handleWeekdayChange = (e) => {
     const { name, checked } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       weekDays: {
         ...prev.weekDays,
-        [name]: checked
-      }
+        [name]: checked,
+      },
     }));
   };
 
   const handleWeekEndDayChange = (e) => {
     const { name, checked } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       weekDays: {
         ...prev.weekDays,
-        [name]: checked
-      }
+        [name]: checked,
+      },
     }));
   };
 
   const handleAmenityChange = (e) => {
     const { value, checked } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       amenityIds: checked
         ? [...prev.amenityIds, parseInt(value)]
-        : prev.amenityIds.filter(id => id !== parseInt(value))
+        : prev.amenityIds.filter((id) => id !== parseInt(value)),
     }));
   };
 
   // Contact Details Management
   const addContactDetail = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       contactDetails: [
         ...prev.contactDetails,
@@ -435,30 +441,30 @@ const HotelReg = () => {
           personalEmail: "",
           teleNumber: "",
           mobileNumber: "",
-        }
-      ]
+        },
+      ],
     }));
   };
 
   const removeContactDetail = (index) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      contactDetails: prev.contactDetails.filter((_, i) => i !== index)
+      contactDetails: prev.contactDetails.filter((_, i) => i !== index),
     }));
   };
 
   const updateContactDetail = (index, field, value) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       contactDetails: prev.contactDetails.map((contact, i) =>
         i === index ? { ...contact, [field]: value } : contact
-      )
+      ),
     }));
   };
 
   // Bank Details Management
   const addBankDetail = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       bankDetails: [
         ...prev.bankDetails,
@@ -471,24 +477,24 @@ const HotelReg = () => {
           telephone: "",
           faxNumber: "",
           contactPerson: "",
-        }
-      ]
+        },
+      ],
     }));
   };
 
   const removeBankDetail = (index) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      bankDetails: prev.bankDetails.filter((_, i) => i !== index)
+      bankDetails: prev.bankDetails.filter((_, i) => i !== index),
     }));
   };
 
   const updateBankDetail = (index, field, value) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       bankDetails: prev.bankDetails.map((bank, i) =>
         i === index ? { ...bank, [field]: value } : bank
-      )
+      ),
     }));
   };
 
@@ -501,10 +507,12 @@ const HotelReg = () => {
   const handleRoomCategoryChange = async (roomCategoryId) => {
     setSelectedRoomCategory(roomCategoryId);
     setSelectedRoomTypes([]);
-    
+
     if (roomCategoryId) {
       try {
-        const response = await axiosInstance.get(`/api/roomType?roomCategoryId=${roomCategoryId}`);
+        const response = await axiosInstance.get(
+          `/api/roomType?roomCategoryId=${roomCategoryId}`
+        );
         setAvailableRoomTypes(response.data || []);
       } catch (error) {
         console.error("Error loading room types for category:", error);
@@ -522,12 +530,12 @@ const HotelReg = () => {
     console.log("=== ROOM TYPE SELECTION ===");
     console.log("Room Type ID:", stringId, "Type:", typeof stringId);
     console.log("Current selected array:", selectedRoomTypes);
-    
-    setSelectedRoomTypes(prev => {
+
+    setSelectedRoomTypes((prev) => {
       // Create a new array to avoid mutation issues
       const currentArray = [...prev];
       const index = currentArray.indexOf(stringId);
-      
+
       if (index > -1) {
         // Remove if exists
         currentArray.splice(index, 1);
@@ -537,7 +545,7 @@ const HotelReg = () => {
         currentArray.push(stringId);
         console.log("ADDED room type:", stringId);
       }
-      
+
       console.log("Final selected array:", currentArray);
       return currentArray;
     });
@@ -549,39 +557,36 @@ const HotelReg = () => {
       toast.error("Please select a room category");
       return;
     }
-    
+
     if (selectedRoomTypes.length === 0) {
       toast.error("Please select at least one room type");
       return;
     }
 
-    
-      
-      // Find category by converting both to numbers for comparison
-      const selectedCategory = roomCategories.find(cat => 
-        Number(cat.roomCategoryId) === Number(selectedRoomCategory)
-      );
-          
+    // Find category by converting both to numbers for comparison
+    const selectedCategory = roomCategories.find(
+      (cat) => Number(cat.roomCategoryId) === Number(selectedRoomCategory)
+    );
+
     const selectedTypes = availableRoomTypes.filter((type, index) => {
       const uniqueId = type.roomtypeId || `index-${index}`;
       return selectedRoomTypes.includes(String(uniqueId));
     });
-   
 
     const newRoom = {
       roomCategoryId: selectedRoomCategory,
       roomCategoryName: selectedCategory?.roomCategory || "",
-      roomTypes: selectedTypes.map(type => ({
+      roomTypes: selectedTypes.map((type) => ({
         roomTypeId: type.roomtypeId,
-        roomTypeName: type.name || ""
-      }))
+        roomTypeName: type.name || "",
+      })),
     };
-    
+
     console.log("New room object:", newRoom);
 
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      rooms: [...prev.rooms, newRoom]
+      rooms: [...prev.rooms, newRoom],
     }));
 
     // Reset selection
@@ -591,33 +596,33 @@ const HotelReg = () => {
   };
 
   const removeRoom = (index) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      rooms: prev.rooms.filter((_, i) => i !== index)
+      rooms: prev.rooms.filter((_, i) => i !== index),
     }));
   };
 
   // Terms and Conditions Management
   const addTermAndCondition = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      termsAndConditions: [...prev.termsAndConditions, ""]
+      termsAndConditions: [...prev.termsAndConditions, ""],
     }));
   };
 
   const removeTermAndCondition = (index) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      termsAndConditions: prev.termsAndConditions.filter((_, i) => i !== index)
+      termsAndConditions: prev.termsAndConditions.filter((_, i) => i !== index),
     }));
   };
 
   const updateTermAndCondition = (index, value) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       termsAndConditions: prev.termsAndConditions.map((term, i) =>
         i === index ? value : term
-      )
+      ),
     }));
   };
 
@@ -627,11 +632,14 @@ const HotelReg = () => {
 
     // Basic hotel information validation
     if (!formData.hotelName.trim()) errors.hotelName = "Hotel name is required";
-    if (!formData.hotelDescription.trim()) errors.hotelDescription = "Hotel description is required";
+    if (!formData.hotelDescription.trim())
+      errors.hotelDescription = "Hotel description is required";
     if (!formData.address.trim()) errors.address = "Address is required";
     if (!formData.zipcode.trim()) errors.zipcode = "Zipcode is required";
-    if (!formData.hotelCurrencyId) errors.hotelCurrencyId = "Currency is required";
-    if (!formData.hotelCategoryId) errors.hotelCategoryId = "Hotel category is required";
+    if (!formData.hotelCurrencyId)
+      errors.hotelCurrencyId = "Currency is required";
+    if (!formData.hotelCategoryId)
+      errors.hotelCategoryId = "Hotel category is required";
     if (!formData.hotelTypeId) errors.hotelTypeId = "Hotel type is required";
     if (!formData.markupTypeId) errors.markupTypeId = "Markup type is required";
     if (!formData.regionId) errors.regionId = "Region is required";
@@ -640,10 +648,14 @@ const HotelReg = () => {
     if (!formData.placeId) errors.placeId = "City is required";
 
     // Age validation
-    if (!formData.childComAgeMin) errors.childComAgeMin = "Child complimentary age minimum is required";
-    if (!formData.childComAgeMax) errors.childComAgeMax = "Child complimentary age maximum is required";
-    if (!formData.childChargeableAgeMin) errors.childChargeableAgeMin = "Child chargeable age minimum is required";
-    if (!formData.childChargeableAgeMax) errors.childChargeableAgeMax = "Child chargeable age maximum is required";
+    if (!formData.childComAgeMin)
+      errors.childComAgeMin = "Child complimentary age minimum is required";
+    if (!formData.childComAgeMax)
+      errors.childComAgeMax = "Child complimentary age maximum is required";
+    if (!formData.childChargeableAgeMin)
+      errors.childChargeableAgeMin = "Child chargeable age minimum is required";
+    if (!formData.childChargeableAgeMax)
+      errors.childChargeableAgeMax = "Child chargeable age maximum is required";
 
     // Contact details validation
     if (formData.contactDetails.length === 0) {
@@ -673,14 +685,16 @@ const HotelReg = () => {
           errors[`room_${roomIndex}_category`] = "Room category is required";
         }
         if (!room.roomTypes || room.roomTypes.length === 0) {
-          errors[`room_${roomIndex}_types`] = "At least one room type is required for this category";
+          errors[`room_${roomIndex}_types`] =
+            "At least one room type is required for this category";
         }
         if (room.roomTypes) {
-        room.roomTypes.forEach((roomType, typeIndex) => {
-          if (!roomType.roomTypeId) {
-            errors[`room_${roomIndex}_type_${typeIndex}`] = "Room type is required";
-          }
-        });
+          room.roomTypes.forEach((roomType, typeIndex) => {
+            if (!roomType.roomTypeId) {
+              errors[`room_${roomIndex}_type_${typeIndex}`] =
+                "Room type is required";
+            }
+          });
         }
       });
     }
@@ -695,246 +709,381 @@ const HotelReg = () => {
   };
 
   // Submit form
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  if (!validateForm()) {
-    toast.error("Please fix the validation errors");
-    return;
-  }
+    if (!validateForm()) {
+      toast.error("Please fix the validation errors");
+      return;
+    }
 
-  try {
-    setIsLoading(true);
+    try {
+      setIsLoading(true);
 
-    // Transform rooms data to match API structure
-    const roomCategories = formData.rooms.map((room, index) => ({
-      hotelRoomCategoryId: null, // Will be set by backend
-      hotelId: null, // Will be set by backend
-      roomCategoryId: parseInt(room.roomCategoryId),
-      name: room.roomCategoryName,
-      noOfRooms: 10, // Default value, adjust if needed
-    }));
+      // Transform rooms data to match API structure
+      const roomCategories = formData.rooms.map((room, index) => ({
+        hotelRoomCategoryId: null, // Will be set by backend
+        hotelId: null, // Will be set by backend
+        roomCategoryId: parseInt(room.roomCategoryId),
+        name: room.roomCategoryName,
+        noOfRooms: 10, // Default value, adjust if needed
+      }));
 
-    // Transform room types data
-    const roomTypes = [];
-    formData.rooms.forEach((room, roomIndex) => {
-      room.roomTypes.forEach(roomType => {
-        roomTypes.push({
-          hotelRoomTypeId: null, // Will be set by backend
-          hotelRoomCategoryId: null, // Will be set by backend after room category is created
-          hotelId: null, // Will be set by backend
-          roomTypeId: parseInt(roomType.roomTypeId),
+      // Transform room types data
+      const roomTypes = [];
+      console.log("=== TRANSFORMING ROOM TYPES ===");
+      console.log("formData.rooms::", formData.rooms);
+
+      formData.rooms.forEach((room, roomIndex) => {
+        room.roomTypes.forEach((roomType) => {
+          roomTypes.push({
+            hotelRoomTypeId: null, // Will be set by backend
+            hotelRoomCategoryId: parseInt(room.roomCategoryId), // Set from parent room
+            hotelId: null, // Will be set by backend
+            roomTypeId: parseInt(roomType.roomTypeId), // Set from inner roomType
+          });
         });
       });
-    });
 
-    // Transform terms and conditions
-    const termsAndConditions = formData.termsAndConditions.map(term => ({
-      id: null, // Will be set by backend
-      hotelId: null, // Will be set by backend
-      description: term,
-    }));
+      console.log("Transformed roomTypes::", roomTypes);
 
-    // Transform amenities data
-    const hotelAmenities = formData.amenityIds.map(amenityId => {
-      const amenity = amenities.find(a => a.amenitiesId === parseInt(amenityId));
-      return {
-        amenityId: parseInt(amenityId),
-        amenityName: amenity?.amenityName || "",
-      };
-    });
+      // Transform terms and conditions
+      const termsAndConditions = formData.termsAndConditions.map((term) => ({
+        id: null, // Will be set by backend
+        hotelId: null, // Will be set by backend
+        description: term,
+      }));
 
-    // Create FormData object
-    const formDataToSend = new FormData();
+      // Transform amenities data
+      const hotelAmenities = formData.amenityIds.map((amenityId) => {
+        const amenity = amenities.find(
+          (a) => a.amenitiesId === parseInt(amenityId)
+        );
+        return {
+          amenityId: parseInt(amenityId),
+          amenityName: amenity?.amenityName || "",
+        };
+      });
 
-    // Basic hotel information
-    formDataToSend.append('hotelName', formData.hotelName);
-    formDataToSend.append('hotelCurrencyId', parseInt(formData.hotelCurrencyId));
-    formDataToSend.append('hotelCategoryId', parseInt(formData.hotelCategoryId));
-    formDataToSend.append('hotelTypeId', parseInt(formData.hotelTypeId));
-    formDataToSend.append('markupTypeId', parseInt(formData.markupTypeId));
-    formDataToSend.append('hotelDescription', formData.hotelDescription);
-    formDataToSend.append('childComAgeMin', parseInt(formData.childComAgeMin));
-    formDataToSend.append('childComAgeMax', parseInt(formData.childComAgeMax));
-    formDataToSend.append('childChargeableAgeMin', parseInt(formData.childChargeableAgeMin));
-    formDataToSend.append('childChargeableAgeMax', parseInt(formData.childChargeableAgeMax));
-    formDataToSend.append('regionId', parseInt(formData.regionId));
-    formDataToSend.append('countryId', parseInt(formData.countryId));
-    formDataToSend.append('stateId', parseInt(formData.stateId));
-    formDataToSend.append('placeId', parseInt(formData.placeId));
-    formDataToSend.append('address', formData.address);
-    formDataToSend.append('zipcode', formData.zipcode);
-    formDataToSend.append('latitude', parseFloat(formData.latitude) || 0);
-    formDataToSend.append('longitude', parseFloat(formData.longitude) || 0);
-    formDataToSend.append('isDeleted', formData.isDeleted.toString());
+      // Create FormData object
+      const formDataToSend = new FormData();
 
-    // Contact details
-    formData.contactDetails.forEach((contact, index) => {
-      formDataToSend.append(`contactDetails[${index}].id`, contact.id || '');
-      formDataToSend.append(`contactDetails[${index}].hotelId`, contact.hotelId || '');
-      formDataToSend.append(`contactDetails[${index}].contactTypeId`, parseInt(contact.contactTypeId));
-      formDataToSend.append(`contactDetails[${index}].contactPerson`, contact.contactPerson || '');
-      formDataToSend.append(`contactDetails[${index}].personalEmail`, contact.personalEmail || '');
-      formDataToSend.append(`contactDetails[${index}].teleNumber`, contact.teleNumber || '');
-      formDataToSend.append(`contactDetails[${index}].mobileNumber`, contact.mobileNumber || '');
-      // Omit mailTyIds if it's empty or not used, or send as an array if populated
-      if (contact.mailTyIds && Array.isArray(contact.mailTyIds) && contact.mailTyIds.length > 0) {
-        contact.mailTyIds.forEach((mailTyId, mailIndex) => {
-          formDataToSend.append(`contactDetails[${index}].mailTyIds[${mailIndex}]`, mailTyId);
-        });
-      }
-    });
-
-    // Bank details
-    formData.bankDetails.forEach((bank, index) => {
-      formDataToSend.append(`bankDetails[${index}].id`, bank.id || '');
-      formDataToSend.append(`bankDetails[${index}].hotelId`, bank.hotelId || '');
-      formDataToSend.append(`bankDetails[${index}].bankId`, parseInt(bank.bankId));
-      formDataToSend.append(`bankDetails[${index}].accountNo`, bank.accountNo || '');
-      formDataToSend.append(`bankDetails[${index}].iban`, bank.iban || '');
-      formDataToSend.append(`bankDetails[${index}].swiftCode`, bank.swiftCode || '');
-      formDataToSend.append(`bankDetails[${index}].bankAddress`, bank.bankAddress || '');
-      formDataToSend.append(`bankDetails[${index}].telephone`, bank.telephone || '');
-      formDataToSend.append(`bankDetails[${index}].faxNumber`, bank.faxNumber || '');
-      formDataToSend.append(`bankDetails[${index}].contactPerson`, bank.contactPerson || '');
-    });
-
-    // Week days
-    formDataToSend.append('weekDays.id', formData.weekDays.id || '');
-    Object.keys(formData.weekDays).forEach(key => {
-      formDataToSend.append(`weekDays.${key}`, formData.weekDays[key].toString());
-    });
-
-    // Room categories
-    roomCategories.forEach((room, index) => {
-      formDataToSend.append(`roomCategories[${index}].hotelRoomCategoryId`, room.hotelRoomCategoryId || '');
-      formDataToSend.append(`roomCategories[${index}].hotelId`, room.hotelId || '');
-      formDataToSend.append(`roomCategories[${index}].roomCategoryId`, parseInt(room.roomCategoryId));
-      formDataToSend.append(`roomCategories[${index}].name`, room.name);
-      formDataToSend.append(`roomCategories[${index}].noOfRooms`, room.noOfRooms);
-    });
-
-    // Room types - Map to the correct roomCategoryId index
-    roomTypes.forEach((roomType, index) => {
-      // Find the index of the room category that this room type belongs to
-      const roomCategoryIndex = roomCategories.findIndex(
-        room => parseInt(room.roomCategoryId) === parseInt(roomType.roomCategoryId)
+      // Basic hotel information
+      formDataToSend.append("hotelName", formData.hotelName);
+      formDataToSend.append(
+        "hotelCurrencyId",
+        parseInt(formData.hotelCurrencyId)
       );
-      formDataToSend.append(`roomTypes[${index}].hotelRoomTypeId`, roomType.hotelRoomTypeId || '');
-      formDataToSend.append(`roomTypes[${index}].hotelRoomCategoryId`, roomCategoryIndex >= 0 ? roomCategoryIndex : '');
-      formDataToSend.append(`roomTypes[${index}].hotelId`, roomType.hotelId || '');
-      formDataToSend.append(`roomTypes[${index}].roomTypeId`, parseInt(roomType.roomTypeId));
-    });
+      formDataToSend.append(
+        "hotelCategoryId",
+        parseInt(formData.hotelCategoryId)
+      );
+      formDataToSend.append("hotelTypeId", parseInt(formData.hotelTypeId));
+      formDataToSend.append("markupTypeId", parseInt(formData.markupTypeId));
+      formDataToSend.append("hotelDescription", formData.hotelDescription);
+      formDataToSend.append(
+        "childComAgeMin",
+        parseInt(formData.childComAgeMin)
+      );
+      formDataToSend.append(
+        "childComAgeMax",
+        parseInt(formData.childComAgeMax)
+      );
+      formDataToSend.append(
+        "childChargeableAgeMin",
+        parseInt(formData.childChargeableAgeMin)
+      );
+      formDataToSend.append(
+        "childChargeableAgeMax",
+        parseInt(formData.childChargeableAgeMax)
+      );
+      formDataToSend.append("regionId", parseInt(formData.regionId));
+      formDataToSend.append("countryId", parseInt(formData.countryId));
+      formDataToSend.append("stateId", parseInt(formData.stateId));
+      formDataToSend.append("placeId", parseInt(formData.placeId));
+      formDataToSend.append("address", formData.address);
+      formDataToSend.append("zipcode", formData.zipcode);
+      formDataToSend.append("latitude", parseFloat(formData.latitude) || 0);
+      formDataToSend.append("longitude", parseFloat(formData.longitude) || 0);
+      formDataToSend.append("isDeleted", formData.isDeleted.toString());
 
-    // Terms and conditions
-    termsAndConditions.forEach((term, index) => {
-      formDataToSend.append(`termsAndConditions[${index}].id`, term.id || '');
-      formDataToSend.append(`termsAndConditions[${index}].hotelId`, term.hotelId || '');
-      formDataToSend.append(`termsAndConditions[${index}].description`, term.description);
-    });
-
-    // Amenities
-    formData.amenityIds.forEach((amenityId, index) => {
-      const amenity = amenities.find(a => a.amenitiesId === parseInt(amenityId));
-      formDataToSend.append(`amenities[${index}].amenityId`, parseInt(amenityId));
-      formDataToSend.append(`amenities[${index}].amenityName`, amenity?.amenityName || '');
-    });
-
-    // Image file (if selected)
-    if (formData.image360File) {
-      formDataToSend.append('image360File', formData.image360File);
-    }
-
-    // Log FormData for debugging
-    console.log("FormData being sent:");
-    for (let [key, value] of formDataToSend.entries()) {
-      console.log(`${key}: ${value}`);
-    }
-
-    let response;
-    if (isEditMode) {
-      response = await axiosInstance.put(`/api/hotels/${id}`, formDataToSend, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      // Contact details
+      formData.contactDetails.forEach((contact, index) => {
+        formDataToSend.append(`contactDetails[${index}].id`, contact.id || "");
+        formDataToSend.append(
+          `contactDetails[${index}].hotelId`,
+          contact.hotelId || ""
+        );
+        formDataToSend.append(
+          `contactDetails[${index}].contactTypeId`,
+          parseInt(contact.contactTypeId)
+        );
+        formDataToSend.append(
+          `contactDetails[${index}].contactPerson`,
+          contact.contactPerson || ""
+        );
+        formDataToSend.append(
+          `contactDetails[${index}].personalEmail`,
+          contact.personalEmail || ""
+        );
+        formDataToSend.append(
+          `contactDetails[${index}].teleNumber`,
+          contact.teleNumber || ""
+        );
+        formDataToSend.append(
+          `contactDetails[${index}].mobileNumber`,
+          contact.mobileNumber || ""
+        );
+        // Omit mailTyIds if it's empty or not used, or send as an array if populated
+        if (
+          contact.mailTyIds &&
+          Array.isArray(contact.mailTyIds) &&
+          contact.mailTyIds.length > 0
+        ) {
+          contact.mailTyIds.forEach((mailTyId, mailIndex) => {
+            formDataToSend.append(
+              `contactDetails[${index}].mailTyIds[${mailIndex}]`,
+              mailTyId
+            );
+          });
+        }
       });
-      toast.success("Hotel updated successfully!");
-    } else {
-      response = await axiosInstance.post("/api/hotels", formDataToSend, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      toast.success("Hotel registered successfully!");
-    }
 
-    if (response.data) {
-      if (!isEditMode) {
-        // Reset form data
-        setFormData({
-          hotelName: "",
-          hotelDescription: "",
-          image360: "",
-          image360File: null,
-          address: "",
-          zipcode: "",
-          latitude: "",
-          longitude: "",
-          childComAgeMin: "",
-          childComAgeMax: "",
-          childChargeableAgeMin: "",
-          childChargeableAgeMax: "",
-          hotelCurrencyId: "",
-          hotelCategoryId: "",
-          hotelTypeId: "",
-          markupTypeId: "",
-          regionId: "",
-          countryId: "",
-          stateId: "",
-          placeId: "",
-          isDeleted: false,
-          contactDetails: [],
-          bankDetails: [],
-          weekDays: {
-            wdSunday: false,
-            wdMonday: false,
-            wdTuesday: false,
-            wdWednesday: false,
-            wdThursday: false,
-            wdFriday: false,
-            wdSaturday: false,
-            wedSunday: false,
-            wedMonday: false,
-            wedTuesday: false,
-            wedWednesday: false,
-            wedThursday: false,
-            wedFriday: false,
-            wedSaturday: false,
-          },
-          rooms: [],
-          termsAndConditions: [],
-          amenityIds: [],
-        });
-        setSelectedRoomCategory("");
-        setSelectedRoomTypes([]);
-        setAvailableRoomTypes([]);
+      // Bank details
+      formData.bankDetails.forEach((bank, index) => {
+        // formDataToSend.append(`bankDetails[${index}].id`, bank.id || '');
+        // formDataToSend.append(`bankDetails[${index}].hotelId`, bank.hotelId || '');
+        formDataToSend.append(
+          `bankDetails[${index}].bankId`,
+          parseInt(bank.bankId)
+        );
+        formDataToSend.append(
+          `bankDetails[${index}].accountNo`,
+          bank.accountNo || ""
+        );
+        formDataToSend.append(`bankDetails[${index}].iban`, bank.iban || "");
+        formDataToSend.append(
+          `bankDetails[${index}].swiftCode`,
+          bank.swiftCode || ""
+        );
+        formDataToSend.append(
+          `bankDetails[${index}].bankAddress`,
+          bank.bankAddress || ""
+        );
+        formDataToSend.append(
+          `bankDetails[${index}].telephone`,
+          bank.telephone || ""
+        );
+        formDataToSend.append(
+          `bankDetails[${index}].faxNumber`,
+          bank.faxNumber || ""
+        );
+        formDataToSend.append(
+          `bankDetails[${index}].contactPerson`,
+          bank.contactPerson || ""
+        );
+      });
+
+      // Week days
+      formDataToSend.append("weekDays.id", formData.weekDays.id || "");
+      Object.keys(formData.weekDays).forEach((key) => {
+        formDataToSend.append(
+          `weekDays.${key}`,
+          formData.weekDays[key].toString()
+        );
+      });
+
+      // Room categories
+      roomCategories.forEach((room, index) => {
+        // formDataToSend.append(`roomCategories[${index}].hotelRoomCategoryId`, room.hotelRoomCategoryId || '');
+        // formDataToSend.append(`roomCategories[${index}].hotelId`, room.hotelId || '');
+        formDataToSend.append(
+          `roomCategories[${index}].roomCategoryId`,
+          parseInt(room.roomCategoryId)
+        );
+        formDataToSend.append(`roomCategories[${index}].name`, room.name);
+        formDataToSend.append(
+          `roomCategories[${index}].noOfRooms`,
+          room.noOfRooms
+        );
+      });
+
+      // Room types - Map to the correct roomCategoryId index
+      console.log("=== SUBMITTING ROOM TYPES ===");
+      console.log("Room Categories:", roomCategories);
+      console.log("Room Types:", roomTypes);
+      // roomTypes.forEach((roomType, index) => {
+      //   // Find the index of the room category that this room type belongs to
+      //   const roomCategoryIndex = roomCategories.findIndex(
+      //     (room) =>
+      //       parseInt(room.roomCategoryId) === parseInt(roomType.roomCategoryId)
+      //   );
+      //   // formDataToSend.append(
+      //   //   `roomTypes[${index}].hotelRoomTypeId`,
+      //   //   roomType.hotelRoomTypeId || ""
+      //   // );
+      //   formDataToSend.append(
+      //     `roomTypes[${index}].hotelRoomCategoryId`,
+      //     roomCategoryIndex >= 0 ? roomCategoryIndex : ""
+      //   );
+      //   // formDataToSend.append(
+      //   //   `roomTypes[${index}].hotelId`,
+      //   //   roomType.hotelId || ""
+      //   // );
+      //   formDataToSend.append(
+      //     `roomTypes[${index}].roomTypeId`,
+      //     parseInt(roomType.roomTypeId)
+      //   );
+      // });
+
+      roomTypes.forEach((roomType, index) => {
+  // formDataToSend.append(
+  //   `roomTypes[${index}].hotelRoomTypeId`,
+  //   roomType.hotelRoomTypeId || ""
+  // );
+  formDataToSend.append(
+    `roomTypes[${index}].hotelRoomCategoryId`,
+    parseInt(roomType.hotelRoomCategoryId)
+  );
+  // formDataToSend.append(
+  //   `roomTypes[${index}].hotelId`,
+  //   roomType.hotelId || ""
+  // );
+  formDataToSend.append(
+    `roomTypes[${index}].roomTypeId`,
+    parseInt(roomType.roomTypeId)
+  );
+});
+
+      // Terms and conditions
+      termsAndConditions.forEach((term, index) => {
+        formDataToSend.append(`termsAndConditions[${index}].id`, term.id || "");
+        formDataToSend.append(
+          `termsAndConditions[${index}].hotelId`,
+          term.hotelId || ""
+        );
+        formDataToSend.append(
+          `termsAndConditions[${index}].description`,
+          term.description
+        );
+      });
+
+      // Amenities
+      formData.amenityIds.forEach((amenityId, index) => {
+        const amenity = amenities.find(
+          (a) => a.amenitiesId === parseInt(amenityId)
+        );
+        formDataToSend.append(
+          `amenities[${index}].amenityId`,
+          parseInt(amenityId)
+        );
+        formDataToSend.append(
+          `amenities[${index}].amenityName`,
+          amenity?.amenityName || ""
+        );
+      });
+
+      // Image file (if selected)
+      if (formData.image360File) {
+        formDataToSend.append("image360File", formData.image360File);
       }
-      setValidationErrors({});
-      navigate("/registration/hotel");
+
+      // Log FormData for debugging
+      console.log("FormData being sent:");
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(`${key}: ${value}`);
+      }
+
+      let response;
+      if (isEditMode) {
+        response = await axiosInstance.put(
+          `/api/hotels/${id}`,
+          formDataToSend,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
+        toast.success("Hotel updated successfully!");
+      } else {
+        response = await axiosInstance.post("/api/hotels", formDataToSend, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+        toast.success("Hotel registered successfully!");
+      }
+
+      if (response.data) {
+        if (!isEditMode) {
+          // Reset form data
+          setFormData({
+            hotelName: "",
+            hotelDescription: "",
+            image360: "",
+            image360File: null,
+            address: "",
+            zipcode: "",
+            latitude: "",
+            longitude: "",
+            childComAgeMin: "",
+            childComAgeMax: "",
+            childChargeableAgeMin: "",
+            childChargeableAgeMax: "",
+            hotelCurrencyId: "",
+            hotelCategoryId: "",
+            hotelTypeId: "",
+            markupTypeId: "",
+            regionId: "",
+            countryId: "",
+            stateId: "",
+            placeId: "",
+            isDeleted: false,
+            contactDetails: [],
+            bankDetails: [],
+            weekDays: {
+              wdSunday: false,
+              wdMonday: false,
+              wdTuesday: false,
+              wdWednesday: false,
+              wdThursday: false,
+              wdFriday: false,
+              wdSaturday: false,
+              wedSunday: false,
+              wedMonday: false,
+              wedTuesday: false,
+              wedWednesday: false,
+              wedThursday: false,
+              wedFriday: false,
+              wedSaturday: false,
+            },
+            rooms: [],
+            termsAndConditions: [],
+            amenityIds: [],
+          });
+          setSelectedRoomCategory("");
+          setSelectedRoomTypes([]);
+          setAvailableRoomTypes([]);
+        }
+        setValidationErrors({});
+        navigate("/registration/hotel");
+      }
+    } catch (error) {
+      console.error("Error submitting hotel:", error);
+      toast.error(
+        isEditMode ? "Failed to update hotel" : "Failed to register hotel"
+      );
+    } finally {
+      setIsLoading(false);
     }
-  } catch (error) {
-    console.error("Error submitting hotel:", error);
-    toast.error(isEditMode ? "Failed to update hotel" : "Failed to register hotel");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   // Calculate form completion percentage
   const calculateCompletion = () => {
     const totalFields = 12;
     let completedFields = 0;
-    
+
     if (formData.hotelName) completedFields++;
     if (formData.hotelDescription) completedFields++;
     if (formData.address) completedFields++;
@@ -947,23 +1096,28 @@ const handleSubmit = async (e) => {
     if (formData.countryId) completedFields++;
     if (formData.stateId) completedFields++;
     if (formData.placeId) completedFields++;
-    
+
     return Math.round((completedFields / totalFields) * 100);
   };
 
   // Show loading state when loading hotel data for edit
   if (isLoadingHotelData) {
     return (
-      <div className="min-vh-100 bg-gradient-light d-flex flex-column" style={{
-        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
-      }}>
+      <div
+        className="min-vh-100 bg-gradient-light d-flex flex-column"
+        style={{
+          background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
+        }}
+      >
         <Topbar />
         <div className="d-flex flex-grow-1">
           <Sidebar />
           <main className="flex-grow-1 d-flex justify-content-center align-items-center">
             <div className="text-center">
               <Spinner animation="border" variant="primary" size="lg" />
-              <p className="mt-3 text-muted">Loading hotel data for editing...</p>
+              <p className="mt-3 text-muted">
+                Loading hotel data for editing...
+              </p>
             </div>
           </main>
         </div>
@@ -972,9 +1126,12 @@ const handleSubmit = async (e) => {
   }
 
   return (
-    <div className="min-vh-100 bg-gradient-light d-flex flex-column" style={{
-      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
-    }}>
+    <div
+      className="min-vh-100 bg-gradient-light d-flex flex-column"
+      style={{
+        background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
+      }}
+    >
       <style>
         {`
           .weekday-checkbox .form-check-input:checked {
@@ -1028,38 +1185,52 @@ const handleSubmit = async (e) => {
               <div>
                 <h2 className="text-primary mb-1">
                   <FaHotel className="me-2" />
-                  {isEditMode ? 'Edit Hotel' : 'Hotel Registration'}
+                  {isEditMode ? "Edit Hotel" : "Hotel Registration"}
                 </h2>
                 <p className="text-muted mb-0">
-                  {isEditMode ? 'Update hotel information and details' : 'Register a new hotel with complete details'}
+                  {isEditMode
+                    ? "Update hotel information and details"
+                    : "Register a new hotel with complete details"}
                 </p>
               </div>
               <div className="text-end">
-                <Badge bg={isEditMode ? "info" : "success"} className="fs-6 px-3 py-2">
+                <Badge
+                  bg={isEditMode ? "info" : "success"}
+                  className="fs-6 px-3 py-2"
+                >
                   <FaCheckCircle className="me-1" />
-                  {isEditMode ? 'Edit Mode' : 'New Hotel'}
+                  {isEditMode ? "Edit Mode" : "New Hotel"}
                 </Badge>
                 <div className="mt-2">
                   <small className="text-muted">Form Completion</small>
-                  <ProgressBar 
-                    now={calculateCompletion()} 
-                    variant="success" 
-                    className="mt-1" 
-                    style={{ height: '8px', borderRadius: '4px' }}
+                  <ProgressBar
+                    now={calculateCompletion()}
+                    variant="success"
+                    className="mt-1"
+                    style={{ height: "8px", borderRadius: "4px" }}
                   />
-                  <small className="text-muted d-block mt-1">{calculateCompletion()}% Complete</small>
+                  <small className="text-muted d-block mt-1">
+                    {calculateCompletion()}% Complete
+                  </small>
                 </div>
               </div>
             </div>
 
-            <Card className="shadow-lg border-0 rounded-4" style={{
-              boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
-              backdropFilter: 'blur(10px)',
-              backgroundColor: 'rgba(255,255,255,0.95)'
-            }}>
-              <Card.Header className="text-white border-0 rounded-top-4" style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-              }}>
+            <Card
+              className="shadow-lg border-0 rounded-4"
+              style={{
+                boxShadow: "0 20px 40px rgba(0,0,0,0.1)",
+                backdropFilter: "blur(10px)",
+                backgroundColor: "rgba(255,255,255,0.95)",
+              }}
+            >
+              <Card.Header
+                className="text-white border-0 rounded-top-4"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                }}
+              >
                 <div className="d-flex justify-content-between align-items-center">
                   <h4 className="mb-0">
                     <FaHotel className="me-2" />
@@ -1075,18 +1246,28 @@ const handleSubmit = async (e) => {
               </Card.Header>
               <Card.Body>
                 <Form onSubmit={handleSubmit}>
-                  <Tabs defaultActiveKey="hotel-info" id="hotel-tabs" className="mb-3">
+                  <Tabs
+                    defaultActiveKey="hotel-info"
+                    id="hotel-tabs"
+                    className="mb-3"
+                  >
                     {/* Hotel Information Tab */}
-                    <Tab eventKey="hotel-info" title={
-                      <span>
-                        <FaHotel className="me-2" /> Hotel Info
-                      </span>
-                    }>
+                    <Tab
+                      eventKey="hotel-info"
+                      title={
+                        <span>
+                          <FaHotel className="me-2" /> Hotel Info
+                        </span>
+                      }
+                    >
                       <div className="p-4">
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Hotel Name <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Hotel Name{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Control
                                 type="text"
                                 name="hotelName"
@@ -1117,7 +1298,10 @@ const handleSubmit = async (e) => {
                         </Row>
 
                         <Form.Group className="mb-3">
-                          <Form.Label>Hotel Description <span className="text-danger">*</span></Form.Label>
+                          <Form.Label>
+                            Hotel Description{" "}
+                            <span className="text-danger">*</span>
+                          </Form.Label>
                           <Form.Control
                             as="textarea"
                             rows={3}
@@ -1135,7 +1319,9 @@ const handleSubmit = async (e) => {
                         <Row>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Currency <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Currency <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="hotelCurrencyId"
                                 value={formData.hotelCurrencyId}
@@ -1143,8 +1329,11 @@ const handleSubmit = async (e) => {
                                 isInvalid={!!validationErrors.hotelCurrencyId}
                               >
                                 <option value="">Select Currency</option>
-                                {currencies.map(currency => (
-                                  <option key={currency.currencyId} value={currency.currencyId}>
+                                {currencies.map((currency) => (
+                                  <option
+                                    key={currency.currencyId}
+                                    value={currency.currencyId}
+                                  >
                                     {currency.name}
                                   </option>
                                 ))}
@@ -1156,7 +1345,10 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Hotel Category <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Hotel Category{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="hotelCategoryId"
                                 value={formData.hotelCategoryId}
@@ -1164,8 +1356,11 @@ const handleSubmit = async (e) => {
                                 isInvalid={!!validationErrors.hotelCategoryId}
                               >
                                 <option value="">Select Category</option>
-                                {hotelCategories.map(category => (
-                                  <option key={category.hotelCategoryId} value={category.hotelCategoryId}>
+                                {hotelCategories.map((category) => (
+                                  <option
+                                    key={category.hotelCategoryId}
+                                    value={category.hotelCategoryId}
+                                  >
                                     {category.hotelCategory}
                                   </option>
                                 ))}
@@ -1177,7 +1372,10 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Hotel Type <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Hotel Type{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="hotelTypeId"
                                 value={formData.hotelTypeId}
@@ -1185,8 +1383,11 @@ const handleSubmit = async (e) => {
                                 isInvalid={!!validationErrors.hotelTypeId}
                               >
                                 <option value="">Select Type</option>
-                                {hotelTypes.map(type => (
-                                  <option key={type.hotelTypeId} value={type.hotelTypeId}>
+                                {hotelTypes.map((type) => (
+                                  <option
+                                    key={type.hotelTypeId}
+                                    value={type.hotelTypeId}
+                                  >
                                     {type.name}
                                   </option>
                                 ))}
@@ -1198,7 +1399,10 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Markup Type <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Markup Type{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="markupTypeId"
                                 value={formData.markupTypeId}
@@ -1206,7 +1410,7 @@ const handleSubmit = async (e) => {
                                 isInvalid={!!validationErrors.markupTypeId}
                               >
                                 <option value="">Select Markup Type</option>
-                                {markupTypes.map(markup => (
+                                {markupTypes.map((markup) => (
                                   <option key={markup.id} value={markup.id}>
                                     {markup.name}
                                   </option>
@@ -1222,7 +1426,10 @@ const handleSubmit = async (e) => {
                         <Row>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Child Complimentary Age Min <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Child Complimentary Age Min{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Control
                                 type="number"
                                 name="childComAgeMin"
@@ -1238,7 +1445,10 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Child Complimentary Age Max <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Child Complimentary Age Max{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Control
                                 type="number"
                                 name="childComAgeMax"
@@ -1254,14 +1464,19 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Child Chargeable Age Min <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Child Chargeable Age Min{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Control
                                 type="number"
                                 name="childChargeableAgeMin"
                                 value={formData.childChargeableAgeMin}
                                 onChange={handleInputChange}
                                 placeholder="11"
-                                isInvalid={!!validationErrors.childChargeableAgeMin}
+                                isInvalid={
+                                  !!validationErrors.childChargeableAgeMin
+                                }
                               />
                               <Form.Control.Feedback type="invalid">
                                 {validationErrors.childChargeableAgeMin}
@@ -1270,14 +1485,19 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Child Chargeable Age Max <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Child Chargeable Age Max{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Control
                                 type="number"
                                 name="childChargeableAgeMax"
                                 value={formData.childChargeableAgeMax}
                                 onChange={handleInputChange}
                                 placeholder="17"
-                                isInvalid={!!validationErrors.childChargeableAgeMax}
+                                isInvalid={
+                                  !!validationErrors.childChargeableAgeMax
+                                }
                               />
                               <Form.Control.Feedback type="invalid">
                                 {validationErrors.childChargeableAgeMax}
@@ -1289,16 +1509,21 @@ const handleSubmit = async (e) => {
                     </Tab>
 
                     {/* Location Information Tab */}
-                    <Tab eventKey="location-info" title={
-                      <span>
-                        <FaMapMarkerAlt className="me-2" /> Location Info
-                      </span>
-                    }>
+                    <Tab
+                      eventKey="location-info"
+                      title={
+                        <span>
+                          <FaMapMarkerAlt className="me-2" /> Location Info
+                        </span>
+                      }
+                    >
                       <div className="p-4">
                         <Row>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Region <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Region <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="regionId"
                                 value={formData.regionId}
@@ -1306,7 +1531,7 @@ const handleSubmit = async (e) => {
                                 isInvalid={!!validationErrors.regionId}
                               >
                                 <option value="">Select Region</option>
-                                {regions.map(region => (
+                                {regions.map((region) => (
                                   <option key={region.id} value={region.id}>
                                     {region.name}
                                   </option>
@@ -1319,7 +1544,9 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Country <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Country <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="countryId"
                                 value={formData.countryId}
@@ -1327,7 +1554,7 @@ const handleSubmit = async (e) => {
                                 isInvalid={!!validationErrors.countryId}
                               >
                                 <option value="">Select Country</option>
-                                {countries.map(country => (
+                                {countries.map((country) => (
                                   <option key={country.id} value={country.id}>
                                     {country.name}
                                   </option>
@@ -1340,7 +1567,10 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>State/Province <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                State/Province{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="stateId"
                                 value={formData.stateId}
@@ -1349,7 +1579,7 @@ const handleSubmit = async (e) => {
                                 isInvalid={!!validationErrors.stateId}
                               >
                                 <option value="">Select State/Province</option>
-                                {provinces.map(province => (
+                                {provinces.map((province) => (
                                   <option key={province.id} value={province.id}>
                                     {province.stateName}
                                   </option>
@@ -1362,7 +1592,9 @@ const handleSubmit = async (e) => {
                           </Col>
                           <Col md={3}>
                             <Form.Group className="mb-3">
-                              <Form.Label>City <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                City <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="placeId"
                                 value={formData.placeId}
@@ -1371,7 +1603,7 @@ const handleSubmit = async (e) => {
                                 isInvalid={!!validationErrors.placeId}
                               >
                                 <option value="">Select City</option>
-                                {places.map(place => (
+                                {places.map((place) => (
                                   <option key={place.id} value={place.id}>
                                     {place.name}
                                   </option>
@@ -1385,7 +1617,9 @@ const handleSubmit = async (e) => {
                         </Row>
 
                         <Form.Group className="mb-3">
-                          <Form.Label>Address <span className="text-danger">*</span></Form.Label>
+                          <Form.Label>
+                            Address <span className="text-danger">*</span>
+                          </Form.Label>
                           <Form.Control
                             as="textarea"
                             rows={2}
@@ -1403,7 +1637,9 @@ const handleSubmit = async (e) => {
                         <Row>
                           <Col md={4}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Zipcode <span className="text-danger">*</span></Form.Label>
+                              <Form.Label>
+                                Zipcode <span className="text-danger">*</span>
+                              </Form.Label>
                               <Form.Control
                                 type="text"
                                 name="zipcode"
@@ -1448,99 +1684,140 @@ const handleSubmit = async (e) => {
                     </Tab>
 
                     {/* Contact Details Tab */}
-                    <Tab eventKey="contact-details" title={
-                      <span>
-                        <FaPhone className="me-2" /> Contact
-                        <Badge bg="info" className="ms-1">{formData.contactDetails.length}</Badge>
-                      </span>
-                    }>
+                    <Tab
+                      eventKey="contact-details"
+                      title={
+                        <span>
+                          <FaPhone className="me-2" /> Contact
+                          <Badge bg="info" className="ms-1">
+                            {formData.contactDetails.length}
+                          </Badge>
+                        </span>
+                      }
+                    >
                       <div className="p-4">
                         {validationErrors.contactDetails && (
                           <Alert variant="danger" className="mb-3">
                             {validationErrors.contactDetails}
                           </Alert>
                         )}
-                        
-                        {formData.contactDetails && formData.contactDetails.map((contact, index) => (
-                          <Card key={index} className="mb-3">
-                            <Card.Header className="d-flex justify-content-between align-items-center">
-                              <h6 className="mb-0">Contact {index + 1}</h6>
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                onClick={() => removeContactDetail(index)}
-                              >
-                                <FaTrash />
-                              </Button>
-                            </Card.Header>
-                            <Card.Body>
-                              <Row>
-                                <Col md={6}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Contact Type</Form.Label>
-                                    <Form.Select
-                                      value={contact.contactTypeId}
-                                      onChange={(e) => updateContactDetail(index, 'contactTypeId', e.target.value)}
-                                    >
-                                      <option value="">Select Contact Type</option>
-                                      {contactTypes.map(type => (
-                                        <option key={type.contacttypeId} value={type.contacttypeId}>
-                                          {type.name}
+
+                        {formData.contactDetails &&
+                          formData.contactDetails.map((contact, index) => (
+                            <Card key={index} className="mb-3">
+                              <Card.Header className="d-flex justify-content-between align-items-center">
+                                <h6 className="mb-0">Contact {index + 1}</h6>
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => removeContactDetail(index)}
+                                >
+                                  <FaTrash />
+                                </Button>
+                              </Card.Header>
+                              <Card.Body>
+                                <Row>
+                                  <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Contact Type</Form.Label>
+                                      <Form.Select
+                                        value={contact.contactTypeId}
+                                        onChange={(e) =>
+                                          updateContactDetail(
+                                            index,
+                                            "contactTypeId",
+                                            e.target.value
+                                          )
+                                        }
+                                      >
+                                        <option value="">
+                                          Select Contact Type
                                         </option>
-                                      ))}
-                                    </Form.Select>
-                                  </Form.Group>
-                                </Col>
-                                <Col md={6}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Contact Person</Form.Label>
-                                    <Form.Control
-                                      type="text"
-                                      value={contact.contactPerson}
-                                      onChange={(e) => updateContactDetail(index, 'contactPerson', e.target.value)}
-                                      placeholder="Enter contact person name"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                              </Row>
-                              <Row>
-                                <Col md={6}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Personal Email</Form.Label>
-                                    <Form.Control
-                                      type="email"
-                                      value={contact.personalEmail}
-                                      onChange={(e) => updateContactDetail(index, 'personalEmail', e.target.value)}
-                                      placeholder="Enter email address"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                                <Col md={3}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Telephone</Form.Label>
-                                    <Form.Control
-                                      type="tel"
-                                      value={contact.teleNumber}
-                                      onChange={(e) => updateContactDetail(index, 'teleNumber', e.target.value)}
-                                      placeholder="Enter telephone"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                                <Col md={3}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Mobile</Form.Label>
-                                    <Form.Control
-                                      type="tel"
-                                      value={contact.mobileNumber}
-                                      onChange={(e) => updateContactDetail(index, 'mobileNumber', e.target.value)}
-                                      placeholder="Enter mobile"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                              </Row>
-                            </Card.Body>
-                          </Card>
-                        ))}
+                                        {contactTypes.map((type) => (
+                                          <option
+                                            key={type.contacttypeId}
+                                            value={type.contacttypeId}
+                                          >
+                                            {type.name}
+                                          </option>
+                                        ))}
+                                      </Form.Select>
+                                    </Form.Group>
+                                  </Col>
+                                  <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Contact Person</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={contact.contactPerson}
+                                        onChange={(e) =>
+                                          updateContactDetail(
+                                            index,
+                                            "contactPerson",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter contact person name"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                </Row>
+                                <Row>
+                                  <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Personal Email</Form.Label>
+                                      <Form.Control
+                                        type="email"
+                                        value={contact.personalEmail}
+                                        onChange={(e) =>
+                                          updateContactDetail(
+                                            index,
+                                            "personalEmail",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter email address"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                  <Col md={3}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Telephone</Form.Label>
+                                      <Form.Control
+                                        type="tel"
+                                        value={contact.teleNumber}
+                                        onChange={(e) =>
+                                          updateContactDetail(
+                                            index,
+                                            "teleNumber",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter telephone"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                  <Col md={3}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Mobile</Form.Label>
+                                      <Form.Control
+                                        type="tel"
+                                        value={contact.mobileNumber}
+                                        onChange={(e) =>
+                                          updateContactDetail(
+                                            index,
+                                            "mobileNumber",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter mobile"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                </Row>
+                              </Card.Body>
+                            </Card>
+                          ))}
 
                         <Button
                           variant="outline-primary"
@@ -1553,141 +1830,220 @@ const handleSubmit = async (e) => {
                     </Tab>
 
                     {/* Bank Details Tab */}
-                    <Tab eventKey="bank-details" title={
-                      <span>
-                        <FaUniversity className="me-2" /> Bank
-                        <Badge bg="dark" className="ms-1">{formData.bankDetails.length}</Badge>
-                      </span>
-                    }>
+                    <Tab
+                      eventKey="bank-details"
+                      title={
+                        <span>
+                          <FaUniversity className="me-2" /> Bank
+                          <Badge bg="dark" className="ms-1">
+                            {formData.bankDetails.length}
+                          </Badge>
+                        </span>
+                      }
+                    >
                       <div className="p-4">
                         {validationErrors.bankDetails && (
                           <Alert variant="danger" className="mb-3">
                             {validationErrors.bankDetails}
                           </Alert>
                         )}
-                        
-                        {formData.bankDetails && formData.bankDetails.map((bank, index) => (
-                          <Card key={index} className="mb-3">
-                            <Card.Header className="d-flex justify-content-between align-items-center">
-                              <h6 className="mb-0">Bank {index + 1}</h6>
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                onClick={() => removeBankDetail(index)}
-                              >
-                                <FaTrash />
-                              </Button>
-                            </Card.Header>
-                            <Card.Body>
-                              <Row>
-                                <Col md={6}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Bank <span className="text-danger">*</span></Form.Label>
-                                    <Form.Select
-                                      value={bank.bankId}
-                                      onChange={(e) => updateBankDetail(index, 'bankId', e.target.value)}
-                                      isInvalid={!!validationErrors[`bank_${index}_bankId`]}
-                                    >
-                                      <option value="">Select Bank</option>
-                                      {banks.map(bankItem => (
-                                        <option key={bankItem.bankId} value={bankItem.bankId}>
-                                          {bankItem.name}
-                                        </option>
-                                      ))}
-                                    </Form.Select>
-                                    <Form.Control.Feedback type="invalid">
-                                      {validationErrors[`bank_${index}_bankId`]}
-                                    </Form.Control.Feedback>
-                                  </Form.Group>
-                                </Col>
-                                <Col md={6}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Account Number</Form.Label>
-                                    <Form.Control
-                                      type="text"
-                                      value={bank.accountNo}
-                                      onChange={(e) => updateBankDetail(index, 'accountNo', e.target.value)}
-                                      placeholder="Enter account number"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                              </Row>
-                              <Row>
-                                <Col md={6}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>IBAN</Form.Label>
-                                    <Form.Control
-                                      type="text"
-                                      value={bank.iban}
-                                      onChange={(e) => updateBankDetail(index, 'iban', e.target.value)}
-                                      placeholder="Enter IBAN"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                                <Col md={6}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>SWIFT Code</Form.Label>
-                                    <Form.Control
-                                      type="text"
-                                      value={bank.swiftCode}
-                                      onChange={(e) => updateBankDetail(index, 'swiftCode', e.target.value)}
-                                      placeholder="Enter SWIFT code"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                              </Row>
-                              <Form.Group className="mb-3">
-                                <Form.Label>Bank Address <span className="text-danger">*</span></Form.Label>
-                                <Form.Control
-                                  as="textarea"
-                                  rows={2}
-                                  value={bank.bankAddress}
-                                  onChange={(e) => updateBankDetail(index, 'bankAddress', e.target.value)}
-                                  placeholder="Enter bank address"
-                                  isInvalid={!!validationErrors[`bank_${index}_bankAddress`]}
-                                />
-                                <Form.Control.Feedback type="invalid">
-                                  {validationErrors[`bank_${index}_bankAddress`]}
-                                </Form.Control.Feedback>
-                              </Form.Group>
-                              <Row>
-                                <Col md={4}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Telephone</Form.Label>
-                                    <Form.Control
-                                      type="tel"
-                                      value={bank.telephone}
-                                      onChange={(e) => updateBankDetail(index, 'telephone', e.target.value)}
-                                      placeholder="Enter telephone"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                                <Col md={4}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Fax Number</Form.Label>
-                                    <Form.Control
-                                      type="tel"
-                                      value={bank.faxNumber}
-                                      onChange={(e) => updateBankDetail(index, 'faxNumber', e.target.value)}
-                                      placeholder="Enter fax number"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                                <Col md={4}>
-                                  <Form.Group className="mb-3">
-                                    <Form.Label>Contact Person</Form.Label>
-                                    <Form.Control
-                                      type="text"
-                                      value={bank.contactPerson}
-                                      onChange={(e) => updateBankDetail(index, 'contactPerson', e.target.value)}
-                                      placeholder="Enter contact person"
-                                    />
-                                  </Form.Group>
-                                </Col>
-                              </Row>
-                            </Card.Body>
-                          </Card>
-                        ))}
+
+                        {formData.bankDetails &&
+                          formData.bankDetails.map((bank, index) => (
+                            <Card key={index} className="mb-3">
+                              <Card.Header className="d-flex justify-content-between align-items-center">
+                                <h6 className="mb-0">Bank {index + 1}</h6>
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => removeBankDetail(index)}
+                                >
+                                  <FaTrash />
+                                </Button>
+                              </Card.Header>
+                              <Card.Body>
+                                <Row>
+                                  <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>
+                                        Bank{" "}
+                                        <span className="text-danger">*</span>
+                                      </Form.Label>
+                                      <Form.Select
+                                        value={bank.bankId}
+                                        onChange={(e) =>
+                                          updateBankDetail(
+                                            index,
+                                            "bankId",
+                                            e.target.value
+                                          )
+                                        }
+                                        isInvalid={
+                                          !!validationErrors[
+                                            `bank_${index}_bankId`
+                                          ]
+                                        }
+                                      >
+                                        <option value="">Select Bank</option>
+                                        {banks.map((bankItem) => (
+                                          <option
+                                            key={bankItem.bankId}
+                                            value={bankItem.bankId}
+                                          >
+                                            {bankItem.name}
+                                          </option>
+                                        ))}
+                                      </Form.Select>
+                                      <Form.Control.Feedback type="invalid">
+                                        {
+                                          validationErrors[
+                                            `bank_${index}_bankId`
+                                          ]
+                                        }
+                                      </Form.Control.Feedback>
+                                    </Form.Group>
+                                  </Col>
+                                  <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Account Number</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={bank.accountNo}
+                                        onChange={(e) =>
+                                          updateBankDetail(
+                                            index,
+                                            "accountNo",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter account number"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                </Row>
+                                <Row>
+                                  <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>IBAN</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={bank.iban}
+                                        onChange={(e) =>
+                                          updateBankDetail(
+                                            index,
+                                            "iban",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter IBAN"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                  <Col md={6}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>SWIFT Code</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={bank.swiftCode}
+                                        onChange={(e) =>
+                                          updateBankDetail(
+                                            index,
+                                            "swiftCode",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter SWIFT code"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                </Row>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>
+                                    Bank Address{" "}
+                                    <span className="text-danger">*</span>
+                                  </Form.Label>
+                                  <Form.Control
+                                    as="textarea"
+                                    rows={2}
+                                    value={bank.bankAddress}
+                                    onChange={(e) =>
+                                      updateBankDetail(
+                                        index,
+                                        "bankAddress",
+                                        e.target.value
+                                      )
+                                    }
+                                    placeholder="Enter bank address"
+                                    isInvalid={
+                                      !!validationErrors[
+                                        `bank_${index}_bankAddress`
+                                      ]
+                                    }
+                                  />
+                                  <Form.Control.Feedback type="invalid">
+                                    {
+                                      validationErrors[
+                                        `bank_${index}_bankAddress`
+                                      ]
+                                    }
+                                  </Form.Control.Feedback>
+                                </Form.Group>
+                                <Row>
+                                  <Col md={4}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Telephone</Form.Label>
+                                      <Form.Control
+                                        type="tel"
+                                        value={bank.telephone}
+                                        onChange={(e) =>
+                                          updateBankDetail(
+                                            index,
+                                            "telephone",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter telephone"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                  <Col md={4}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Fax Number</Form.Label>
+                                      <Form.Control
+                                        type="tel"
+                                        value={bank.faxNumber}
+                                        onChange={(e) =>
+                                          updateBankDetail(
+                                            index,
+                                            "faxNumber",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter fax number"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                  <Col md={4}>
+                                    <Form.Group className="mb-3">
+                                      <Form.Label>Contact Person</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={bank.contactPerson}
+                                        onChange={(e) =>
+                                          updateBankDetail(
+                                            index,
+                                            "contactPerson",
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="Enter contact person"
+                                      />
+                                    </Form.Group>
+                                  </Col>
+                                </Row>
+                              </Card.Body>
+                            </Card>
+                          ))}
 
                         <Button
                           variant="outline-primary"
@@ -1700,21 +2056,31 @@ const handleSubmit = async (e) => {
                     </Tab>
 
                     {/* Week Days Tab */}
-                    <Tab eventKey="week-days" title={
-                      <span>
-                        <FaCalendarAlt className="me-2" /> Week Days
-                      </span>
-                    }>
+                    <Tab
+                      eventKey="week-days"
+                      title={
+                        <span>
+                          <FaCalendarAlt className="me-2" /> Week Days
+                        </span>
+                      }
+                    >
                       <div className="p-4">
                         <div className="week-days-container p-4 bg-light rounded-3 border">
-                          <h6 className="text-danger fw-bold mb-3">Week Details</h6>
-                          
+                          <h6 className="text-danger fw-bold mb-3">
+                            Week Details
+                          </h6>
+
                           {/* Week Days Row */}
                           <div className="mb-4">
                             <div className="d-flex align-items-center mb-2">
-                              <span className="text-danger fw-bold me-3" style={{ minWidth: '120px' }}>Week Days</span>
+                              <span
+                                className="text-danger fw-bold me-3"
+                                style={{ minWidth: "120px" }}
+                              >
+                                Week Days
+                              </span>
                               <div className="d-flex gap-4">
-                                {weekdays.map(day => (
+                                {weekdays.map((day) => (
                                   <Form.Check
                                     key={day.key}
                                     type="checkbox"
@@ -1724,9 +2090,11 @@ const handleSubmit = async (e) => {
                                     checked={formData.weekDays[day.key]}
                                     onChange={handleWeekdayChange}
                                     className="weekday-checkbox"
-                                    style={{ 
-                                      '--bs-form-check-input-checked-bg-color': '#fd7e14',
-                                      '--bs-form-check-input-checked-border-color': '#fd7e14'
+                                    style={{
+                                      "--bs-form-check-input-checked-bg-color":
+                                        "#fd7e14",
+                                      "--bs-form-check-input-checked-border-color":
+                                        "#fd7e14",
                                     }}
                                   />
                                 ))}
@@ -1737,21 +2105,38 @@ const handleSubmit = async (e) => {
                           {/* Week End Days Row */}
                           <div>
                             <div className="d-flex align-items-center">
-                              <span className="text-danger fw-bold me-3" style={{ minWidth: '120px' }}>Week End Days</span>
+                              <span
+                                className="text-danger fw-bold me-3"
+                                style={{ minWidth: "120px" }}
+                              >
+                                Week End Days
+                              </span>
                               <div className="d-flex gap-4">
-                                {weekdays.map(day => (
+                                {weekdays.map((day) => (
                                   <Form.Check
                                     key={`wed-${day.key}`}
                                     type="checkbox"
                                     id={`wed-${day.key}`}
-                                    name={`wed${day.key.charAt(0).toUpperCase() + day.key.slice(1)}`}
+                                    name={`wed${
+                                      day.key.charAt(0).toUpperCase() +
+                                      day.key.slice(1)
+                                    }`}
                                     label={day.label}
-                                    checked={formData.weekDays[`wed${day.key.charAt(0).toUpperCase() + day.key.slice(1)}`]}
+                                    checked={
+                                      formData.weekDays[
+                                        `wed${
+                                          day.key.charAt(0).toUpperCase() +
+                                          day.key.slice(1)
+                                        }`
+                                      ]
+                                    }
                                     onChange={handleWeekEndDayChange}
                                     className="weekday-checkbox"
-                                    style={{ 
-                                      '--bs-form-check-input-checked-bg-color': '#fd7e14',
-                                      '--bs-form-check-input-checked-border-color': '#fd7e14'
+                                    style={{
+                                      "--bs-form-check-input-checked-bg-color":
+                                        "#fd7e14",
+                                      "--bs-form-check-input-checked-border-color":
+                                        "#fd7e14",
                                     }}
                                   />
                                 ))}
@@ -1763,22 +2148,33 @@ const handleSubmit = async (e) => {
                     </Tab>
 
                     {/* Amenities Tab */}
-                    <Tab eventKey="amenities" title={
-                      <span>
-                        <FaSwimmingPool className="me-2" /> Amenities
-                        <Badge bg="info" className="ms-1">{formData.amenityIds.length}</Badge>
-                      </span>
-                    }>
+                    <Tab
+                      eventKey="amenities"
+                      title={
+                        <span>
+                          <FaSwimmingPool className="me-2" /> Amenities
+                          <Badge bg="info" className="ms-1">
+                            {formData.amenityIds.length}
+                          </Badge>
+                        </span>
+                      }
+                    >
                       <div className="p-4">
                         <Row>
-                          {amenities.map(amenity => (
-                            <Col md={4} key={amenity.amenitiesId} className="mb-3">
+                          {amenities.map((amenity) => (
+                            <Col
+                              md={4}
+                              key={amenity.amenitiesId}
+                              className="mb-3"
+                            >
                               <Form.Check
                                 type="checkbox"
                                 id={`amenity-${amenity.amenitiesId}`}
                                 value={amenity.amenitiesId}
                                 label={amenity.amenityName}
-                                checked={formData.amenityIds.includes(amenity.amenitiesId)}
+                                checked={formData.amenityIds.includes(
+                                  amenity.amenitiesId
+                                )}
                                 onChange={handleAmenityChange}
                               />
                             </Col>
@@ -1788,12 +2184,17 @@ const handleSubmit = async (e) => {
                     </Tab>
 
                     {/* Rooms Tab */}
-                    <Tab eventKey="rooms" title={
-                      <span>
-                        <FaBed className="me-2" /> Rooms
-                        <Badge bg="warning" className="ms-1">{formData.rooms.length}</Badge>
-                      </span>
-                    }>
+                    <Tab
+                      eventKey="rooms"
+                      title={
+                        <span>
+                          <FaBed className="me-2" /> Rooms
+                          <Badge bg="warning" className="ms-1">
+                            {formData.rooms.length}
+                          </Badge>
+                        </span>
+                      }
+                    >
                       <div className="p-4">
                         {validationErrors.rooms && (
                           <Alert variant="danger" className="mb-3">
@@ -1801,38 +2202,44 @@ const handleSubmit = async (e) => {
                             {validationErrors.rooms}
                           </Alert>
                         )}
-                        
+
                         {/* Room Category Selection Section */}
                         <Card className="mb-4 border-0 shadow-sm">
-                            <Card.Header className="bg-light border-0">
+                          <Card.Header className="bg-light border-0">
                             <h5 className="mb-0 text-primary">
                               <FaBed className="me-2" />
                               Room Category
                             </h5>
-                            </Card.Header>
-                            <Card.Body>
+                          </Card.Header>
+                          <Card.Body>
                             <Row className="align-items-end">
                               <Col md={4}>
                                 <Form.Group className="mb-3">
                                   <Form.Label className="fw-bold">
-                                    <span className="text-danger">*</span> Room Category
+                                    <span className="text-danger">*</span> Room
+                                    Category
                                   </Form.Label>
                                   <div className="d-flex align-items-center">
                                     <Form.Select
                                       value={selectedRoomCategory}
-                                      onChange={(e) => handleRoomCategoryChange(e.target.value)}
+                                      onChange={(e) =>
+                                        handleRoomCategoryChange(e.target.value)
+                                      }
                                       className="me-2"
                                     >
                                       <option value="">SELECT</option>
-                                      {roomCategories.map(category => (
-                                        <option key={category.roomCategoryId} value={category.roomCategoryId}>
+                                      {roomCategories.map((category) => (
+                                        <option
+                                          key={category.roomCategoryId}
+                                          value={category.roomCategoryId}
+                                        >
                                           {category.roomCategory}
                                         </option>
                                       ))}
                                     </Form.Select>
                                   </div>
-                                  </Form.Group>
-                                </Col>
+                                </Form.Group>
+                              </Col>
                               <Col md={8}>
                                 {availableRoomTypes.length > 0 && (
                                   <Form.Group className="mb-3">
@@ -1841,41 +2248,68 @@ const handleSubmit = async (e) => {
                                       Room Type
                                     </Form.Label>
                                     <div className="d-flex flex-wrap gap-3">
-                                      {console.log("available roomtypes ::" , availableRoomTypes)}
-                                      {console.log("selectedRoomTypes ::" , selectedRoomTypes)}
-                                      {availableRoomTypes.map((roomType, index) => {
-                                        {console.log("roomType:::::::::::" , roomType)}
-                                         const uniqueId = roomType.roomtypeId;
-                                          const isChecked = selectedRoomTypes.includes(String(uniqueId));
-                                          console.log(`RoomType ${roomType.name} (ID: ${uniqueId}) - Checked: ${isChecked}`);
+                                      {console.log(
+                                        "available roomtypes ::",
+                                        availableRoomTypes
+                                      )}
+                                      {console.log(
+                                        "selectedRoomTypes ::",
+                                        selectedRoomTypes
+                                      )}
+                                      {availableRoomTypes.map(
+                                        (roomType, index) => {
+                                          {
+                                            console.log(
+                                              "roomType:::::::::::",
+                                              roomType
+                                            );
+                                          }
+                                          const uniqueId = roomType.roomtypeId;
+                                          const isChecked =
+                                            selectedRoomTypes.includes(
+                                              String(uniqueId)
+                                            );
+                                          console.log(
+                                            `RoomType ${roomType.name} (ID: ${uniqueId}) - Checked: ${isChecked}`
+                                          );
                                           return (
-                                            <div key={`${uniqueId}-${index}`} className="form-check">
+                                            <div
+                                              key={`${uniqueId}-${index}`}
+                                              className="form-check"
+                                            >
                                               <input
                                                 className="form-check-input"
                                                 type="checkbox"
                                                 id={`roomType-${uniqueId}-${index}`}
                                                 checked={isChecked}
                                                 onChange={(e) => {
-                                                  console.log(`Checkbox clicked for ${roomType.name}, current checked: ${e.target.checked}`);
-                                                  handleRoomTypeSelection(uniqueId);
+                                                  console.log(
+                                                    `Checkbox clicked for ${roomType.name}, current checked: ${e.target.checked}`
+                                                  );
+                                                  handleRoomTypeSelection(
+                                                    uniqueId
+                                                  );
                                                 }}
                                               />
-                                              <label className="form-check-label" htmlFor={`roomType-${uniqueId}-${index}`}>
+                                              <label
+                                                className="form-check-label"
+                                                htmlFor={`roomType-${uniqueId}-${index}`}
+                                              >
                                                 {roomType.name}
                                               </label>
                                             </div>
                                           );
-                                        })
-                                      }
+                                        }
+                                      )}
                                     </div>
                                   </Form.Group>
                                 )}
-                                </Col>
-                              </Row>
+                              </Col>
+                            </Row>
 
                             <div className="text-center mt-3">
                               <div className="d-flex gap-2 justify-content-center">
-                                  <Button
+                                <Button
                                   variant="outline-secondary"
                                   onClick={() => {
                                     console.log("Clearing all selections");
@@ -1888,141 +2322,191 @@ const handleSubmit = async (e) => {
                                 <Button
                                   variant="success"
                                   onClick={addRoomCategoryAndTypes}
-                                  disabled={!selectedRoomCategory || selectedRoomTypes.length === 0}
+                                  disabled={
+                                    !selectedRoomCategory ||
+                                    selectedRoomTypes.length === 0
+                                  }
                                   className="d-flex align-items-center gap-2 px-4 py-2"
                                 >
                                   <FaPlus />
                                   Add
-                                  </Button>
-                                </div>
+                                </Button>
+                              </div>
                             </div>
                           </Card.Body>
                         </Card>
 
                         {/* Added Room Categories Display */}
                         {console.log("formadata rooms :::", formData.rooms)}
-                        {formData.rooms && formData.rooms.map((room, roomIndex) => (
-                          
-                          <Card key={roomIndex} className="mb-4 border-0 shadow-sm">
-                            <Card.Header className="bg-light border-0">
-                              <div className="d-flex justify-content-between align-items-center">
-                                <div className="d-flex align-items-center">
-                                  <div className="bg-success text-white rounded-circle p-2 me-3">
-                                    <FaBed size={16} />
+                        {formData.rooms &&
+                          formData.rooms.map((room, roomIndex) => (
+                            <Card
+                              key={roomIndex}
+                              className="mb-4 border-0 shadow-sm"
+                            >
+                              <Card.Header className="bg-light border-0">
+                                <div className="d-flex justify-content-between align-items-center">
+                                  <div className="d-flex align-items-center">
+                                    <div className="bg-success text-white rounded-circle p-2 me-3">
+                                      <FaBed size={16} />
+                                    </div>
+                                    <div>
+                                      <h6 className="mb-0 text-primary">
+                                        {(() => {
+                                          console.log("Room data:", room);
+                                          console.log(
+                                            "Room category ID:",
+                                            room.roomCategoryId,
+                                            "Type:",
+                                            typeof room.roomCategoryId
+                                          );
+                                          console.log(
+                                            "Available room categories:",
+                                            roomCategories
+                                          );
+
+                                          // Find the category by matching roomCategoryId (convert to number for comparison)
+                                          const foundCategory =
+                                            roomCategories.find(
+                                              (cat) =>
+                                                Number(cat.roomCategoryId) ===
+                                                Number(room.roomCategoryId)
+                                            );
+
+                                          console.log(
+                                            "Found category:",
+                                            foundCategory
+                                          );
+
+                                          const categoryName =
+                                            foundCategory?.roomCategory ||
+                                            `Room Category ${roomIndex + 1}`;
+
+                                          console.log(
+                                            "Final category name:",
+                                            categoryName
+                                          );
+                                          return categoryName;
+                                        })()}
+                                      </h6>
+                                      <small className="text-muted">
+                                        {room.roomTypes?.length || 0} room
+                                        type(s) configured
+                                      </small>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <h6 className="mb-0 text-primary">
-                                      {(() => {
-                                        console.log("Room data:", room);
-                                        console.log("Room category ID:", room.roomCategoryId, "Type:", typeof room.roomCategoryId);
-                                        console.log("Available room categories:", roomCategories);
-                                        
-                                        // Find the category by matching roomCategoryId (convert to number for comparison)
-                                        const foundCategory = roomCategories.find(cat => 
-                                          Number(cat.roomCategoryId) === Number(room.roomCategoryId)
-                                        );
-                                        
-                                        console.log("Found category:", foundCategory);
-                                        
-                                        const categoryName = foundCategory?.roomCategory || `Room Category ${roomIndex + 1}`;
-                                        
-                                        console.log("Final category name:", categoryName);
-                                        return categoryName;
-                                      })()}
-                                    </h6>
-                                    <small className="text-muted">
-                                      {room.roomTypes?.length || 0} room type(s) configured
-                                    </small>
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => removeRoom(roomIndex)}
+                                    className="rounded-pill"
+                                  >
+                                    <FaTrash className="me-1" />
+                                    Remove
+                                  </Button>
+                                </div>
+                              </Card.Header>
+                              <Card.Body>
+                                <div className="mb-3">
+                                  <h6 className="text-success fw-bold mb-2">
+                                    <FaBed className="me-2" />
+                                    Room Type
+                                  </h6>
+                                  <div className="d-flex flex-wrap gap-3">
+                                    {room.roomTypes?.map(
+                                      (roomType, typeIndex) => (
+                                        <div
+                                          key={typeIndex}
+                                          className="form-check"
+                                        >
+                                          <input
+                                            className="form-check-input"
+                                            type="checkbox"
+                                            id={`room-${roomIndex}-type-${typeIndex}`}
+                                            checked={true}
+                                            readOnly
+                                          />
+                                          <label
+                                            className="form-check-label"
+                                            htmlFor={`room-${roomIndex}-type-${typeIndex}`}
+                                          >
+                                            {roomType.roomTypeName ||
+                                              roomType.name ||
+                                              `Room Type ${typeIndex + 1}`}
+                                          </label>
+                                        </div>
+                                      )
+                                    )}
                                   </div>
                                 </div>
-                                          <Button
-                                            variant="outline-danger"
-                                            size="sm"
-                                  onClick={() => removeRoom(roomIndex)}
-                                  className="rounded-pill"
-                                          >
-                                  <FaTrash className="me-1" />
-                                  Remove
-                                          </Button>
-                              </div>
-                            </Card.Header>
-                            <Card.Body>
-                              <div className="mb-3">
-                                <h6 className="text-success fw-bold mb-2">
-                                  <FaBed className="me-2" />
-                                  Room Type
-                                </h6>
-                                <div className="d-flex flex-wrap gap-3">
-                                  {room.roomTypes?.map((roomType, typeIndex) => (
-                                    <div key={typeIndex} className="form-check">
-                                      <input
-                                        className="form-check-input"
-                                        type="checkbox"
-                                        id={`room-${roomIndex}-type-${typeIndex}`}
-                                        checked={true}
-                                        readOnly
-                                      />
-                                      <label className="form-check-label" htmlFor={`room-${roomIndex}-type-${typeIndex}`}>
-                                        {roomType.roomTypeName || roomType.name || `Room Type ${typeIndex + 1}`}
-                                      </label>
-                                    </div>
-                                  ))}
-                                  </div>
-                              </div>
-                            </Card.Body>
-                          </Card>
-                        ))}
+                              </Card.Body>
+                            </Card>
+                          ))}
 
                         {formData.rooms.length === 0 && (
                           <div className="text-center py-5 text-muted">
                             <FaBed size={64} className="mb-3 opacity-50" />
                             <h5 className="mb-2">No Room Categories Added</h5>
-                            <p className="mb-4">Select a room category above and choose room types to get started.</p>
+                            <p className="mb-4">
+                              Select a room category above and choose room types
+                              to get started.
+                            </p>
                           </div>
                         )}
                       </div>
                     </Tab>
 
                     {/* Terms and Conditions Tab */}
-                    <Tab eventKey="terms-conditions" title={
-                      <span>
-                        <FaFileContract className="me-2" /> Terms
-                        <Badge bg="danger" className="ms-1">{formData.termsAndConditions.length}</Badge>
-                      </span>
-                    }>
+                    <Tab
+                      eventKey="terms-conditions"
+                      title={
+                        <span>
+                          <FaFileContract className="me-2" /> Terms
+                          <Badge bg="danger" className="ms-1">
+                            {formData.termsAndConditions.length}
+                          </Badge>
+                        </span>
+                      }
+                    >
                       <div className="p-4">
                         {validationErrors.termsAndConditions && (
                           <Alert variant="danger" className="mb-3">
                             {validationErrors.termsAndConditions}
                           </Alert>
                         )}
-                        
-                        {formData.termsAndConditions && formData.termsAndConditions.map((term, index) => (
-                          <Card key={index} className="mb-3">
-                            <Card.Header className="d-flex justify-content-between align-items-center">
-                              <h6 className="mb-0">Term {index + 1}</h6>
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                onClick={() => removeTermAndCondition(index)}
-                              >
-                                <FaTrash />
-                              </Button>
-                            </Card.Header>
-                            <Card.Body>
-                              <Form.Group className="mb-3">
-                                <Form.Label>Term and Condition</Form.Label>
-                                <Form.Control
-                                  as="textarea"
-                                  rows={3}
-                                  value={term}
-                                  onChange={(e) => updateTermAndCondition(index, e.target.value)}
-                                  placeholder="Enter term and condition"
-                                />
-                              </Form.Group>
-                            </Card.Body>
-                          </Card>
-                        ))}
+
+                        {formData.termsAndConditions &&
+                          formData.termsAndConditions.map((term, index) => (
+                            <Card key={index} className="mb-3">
+                              <Card.Header className="d-flex justify-content-between align-items-center">
+                                <h6 className="mb-0">Term {index + 1}</h6>
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => removeTermAndCondition(index)}
+                                >
+                                  <FaTrash />
+                                </Button>
+                              </Card.Header>
+                              <Card.Body>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>Term and Condition</Form.Label>
+                                  <Form.Control
+                                    as="textarea"
+                                    rows={3}
+                                    value={term}
+                                    onChange={(e) =>
+                                      updateTermAndCondition(
+                                        index,
+                                        e.target.value
+                                      )
+                                    }
+                                    placeholder="Enter term and condition"
+                                  />
+                                </Form.Group>
+                              </Card.Body>
+                            </Card>
+                          ))}
 
                         <Button
                           variant="outline-primary"
@@ -2044,9 +2528,12 @@ const handleSubmit = async (e) => {
                             <FaCheckCircle size={24} />
                           </div>
                           <div>
-                            <h5 className="mb-1 text-success">Ready to Register Hotel</h5>
+                            <h5 className="mb-1 text-success">
+                              Ready to Register Hotel
+                            </h5>
                             <p className="text-muted mb-0">
-                              Review all information and click the button below to register your hotel.
+                              Review all information and click the button below
+                              to register your hotel.
                             </p>
                           </div>
                         </div>
@@ -2066,12 +2553,14 @@ const handleSubmit = async (e) => {
                                 role="status"
                                 aria-hidden="true"
                               ></span>
-                              {isEditMode ? 'Updating Hotel...' : 'Registering Hotel...'}
+                              {isEditMode
+                                ? "Updating Hotel..."
+                                : "Registering Hotel..."}
                             </>
                           ) : (
                             <>
                               <FaSave />
-                              {isEditMode ? 'Update Hotel' : 'Register Hotel'}
+                              {isEditMode ? "Update Hotel" : "Register Hotel"}
                             </>
                           )}
                         </Button>

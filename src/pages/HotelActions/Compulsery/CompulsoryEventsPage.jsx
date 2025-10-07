@@ -145,13 +145,22 @@ const CompulsoryEventsPage = () => {
   const handleSave = async () => {
     try {
       const payload = {
-        ...formData,
+        supplymentId: editEvent?.supplymentId || "",
+        supplymentCode: formData.supplymentCode,
+        supplyments: formData.supplyments,
         hotelId: parseInt(id),
+        marketypeIds: formData.marketypeIds,
+        compulsorySupplymentsRateDTO: formData.compulsorySupplymentsRateDTO,
+        compulsorySupplyValidityDTO: formData.compulsorySupplyValidityDTO,
       };
-      await axiosInstance.post("/api/compulsoryEvent/save", payload);
-      toast.success("Event created successfully");
-      setShowModal(false);
-      fetchEvents();
+      console.log("Compulsory Event Save Payload:", payload);
+      const response = await axiosInstance.post("/api/compulsoryEvent/save", payload);
+      console.log("Compulsory Event Save Response:", response.data);
+      if (response.data != null) {
+        toast.success("Event created successfully");
+        setShowModal(false);
+        fetchEvents();
+      }
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to save event");
@@ -188,6 +197,15 @@ const CompulsoryEventsPage = () => {
       console.error("Error loading market types:", error);
       toast.error("Failed to load market types");
     }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value, type, checked, files } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]:
+        type === "checkbox" ? checked : type === "file" ? files[0] : value,
+    }));
   };
 
   return (
@@ -341,259 +359,285 @@ const CompulsoryEventsPage = () => {
                         <Form.Label>
                           Market Type <span className="text-danger">*</span>
                         </Form.Label>
-                        <Select
-                          isMulti
-                          options={marketTypes.map((market) => ({
-                            value: market.id,
-                            label: market.name,
-                          }))}
-                          value={formData.marketypeIds
-                            .map((id) => {
-                              const market = marketTypes.find(
-                                (m) => m.id === id
-                              );
-                              return market
-                                ? { value: market.id, label: market.name }
-                                : null;
-                            })
-                            .filter(Boolean)}
-                          onChange={(selected) => {
-                            setFormData({
-                              ...formData,
-                              marketypeIds: selected
-                                ? selected.map((opt) => opt.value)
-                                : [],
-                            });
-                            if (formErrors.marketypeIds) {
-                              setFormErrors({
-                                ...formErrors,
-                                marketypeIds: "",
-                              });
-                            }
-                          }}
-                          className={
-                            formErrors.marketypeIds ? "is-invalid" : ""
-                          }
-                          closeMenuOnSelect={false}
-                          menuIsOpen={undefined} // Let react-select control menu open state
-                        />
-                        {formErrors.marketypeIds && (
-                          <div className="invalid-feedback d-block">
-                            {formErrors.marketypeIds}
-                          </div>
-                        )}
+                        <Form.Select
+                          name="marketypeIds"
+                          value={formData.marketypeIds}
+                          onChange={handleInputChange}
+                        >
+                          <option value="">Select Market Type</option>
+                          {marketTypes.map((market) => (
+                            <option key={market.marketTypeId} value={market.marketTypeId}>
+                              {market.name}
+                            </option>
+                          ))}
+                        </Form.Select>
                       </Form.Group>
                     </Col>
                   </Row>
 
                   {/* Rates Section */}
-
                   <h5>Rates</h5>
-                  {formData.compulsorySupplymentsRateDTO.map((rate, idx) => (
-                    <Row key={idx} className="mb-3">
-                      <Col md={2}>
-                        <Form.Control
-                          placeholder="RoomCat ID"
-                          value={rate.hotelRoomcategoryId}
-                          onChange={(e) => {
-                            const newRates = [
-                              ...formData.compulsorySupplymentsRateDTO,
-                            ];
-                            newRates[idx].hotelRoomcategoryId = e.target.value;
-                            setFormData({
-                              ...formData,
-                              compulsorySupplymentsRateDTO: newRates,
-                            });
-                          }}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Form.Control
-                          placeholder="Occupancy ID"
-                          value={rate.ocuppancytypeId}
-                          onChange={(e) => {
-                            const newRates = [
-                              ...formData.compulsorySupplymentsRateDTO,
-                            ];
-                            newRates[idx].ocuppancytypeId = e.target.value;
-                            setFormData({
-                              ...formData,
-                              compulsorySupplymentsRateDTO: newRates,
-                            });
-                          }}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Form.Control
-                          placeholder="Rate"
-                          value={rate.rate}
-                          onChange={(e) => {
-                            const newRates = [
-                              ...formData.compulsorySupplymentsRateDTO,
-                            ];
-                            newRates[idx].rate = e.target.value;
-                            setFormData({
-                              ...formData,
-                              compulsorySupplymentsRateDTO: newRates,
-                            });
-                          }}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Form.Control
-                          placeholder="Adult Rate"
-                          value={rate.rateAdult}
-                          onChange={(e) => {
-                            const newRates = [
-                              ...formData.compulsorySupplymentsRateDTO,
-                            ];
-                            newRates[idx].rateAdult = e.target.value;
-                            setFormData({
-                              ...formData,
-                              compulsorySupplymentsRateDTO: newRates,
-                            });
-                          }}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Form.Control
-                          placeholder="Child Rate"
-                          value={rate.rateChild}
-                          onChange={(e) => {
-                            const newRates = [
-                              ...formData.compulsorySupplymentsRateDTO,
-                            ];
-                            newRates[idx].rateChild = e.target.value;
-                            setFormData({
-                              ...formData,
-                              compulsorySupplymentsRateDTO: newRates,
-                            });
-                          }}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => {
-                            const newRates =
-                              formData.compulsorySupplymentsRateDTO.filter(
-                                (_, i) => i !== idx
-                              );
-                            setFormData({
-                              ...formData,
-                              compulsorySupplymentsRateDTO: newRates,
-                            });
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      </Col>
-                    </Row>
-                  ))}
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      setFormData({
-                        ...formData,
-                        compulsorySupplymentsRateDTO: [
-                          ...formData.compulsorySupplymentsRateDTO,
-                          {
-                            supplymentrateId: "",
-                            hotelRoomcategoryId: "",
-                            ocuppancytypeId: "",
-                            rate: "",
-                            rateAdult: "",
-                            rateChild: "",
-                          },
-                        ],
-                      })
-                    }
-                  >
-                    + Add Rate
-                  </Button>
+                  <div className="mb-3 p-3 border rounded bg-light">
+                    <label>DELUXE SUITE ROOM - DSN</label>
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>Occupancy type</th>
+                          <th>Base Rate</th>
+                          <th>Adult Rate</th>
+                          <th>Child Rate</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formData.compulsorySupplymentsRateDTO.map(
+                          (rate, idx) => (
+                            <tr key={idx}>
+                              <td>
+                                <Form.Select
+                                  value={rate.ocuppancytypeId}
+                                  onChange={(e) => {
+                                    const newRates = [
+                                      ...formData.compulsorySupplymentsRateDTO,
+                                    ];
+                                    newRates[idx].ocuppancytypeId =
+                                      e.target.value;
+                                    setFormData({
+                                      ...formData,
+                                      compulsorySupplymentsRateDTO: newRates,
+                                    });
+                                  }}
+                                >
+                                  <option value="">Select Occupancy</option>
+                                  <option value="1">Single</option>
+                                  <option value="2">Double</option>
+                                </Form.Select>
+                              </td>
+                              <td>
+                                <Form.Control
+                                  type="number"
+                                  value={rate.rate}
+                                  onChange={(e) => {
+                                    const newRates = [
+                                      ...formData.compulsorySupplymentsRateDTO,
+                                    ];
+                                    newRates[idx].rate = e.target.value;
+                                    setFormData({
+                                      ...formData,
+                                      compulsorySupplymentsRateDTO: newRates,
+                                    });
+                                  }}
+                                  placeholder="Base Rate"
+                                />
+                              </td>
+                              <td>
+                                <Form.Control
+                                  type="number"
+                                  value={rate.rateAdult}
+                                  onChange={(e) => {
+                                    const newRates = [
+                                      ...formData.compulsorySupplymentsRateDTO,
+                                    ];
+                                    newRates[idx].rateAdult = e.target.value;
+                                    setFormData({
+                                      ...formData,
+                                      compulsorySupplymentsRateDTO: newRates,
+                                    });
+                                  }}
+                                  placeholder="Adult Rate"
+                                />
+                              </td>
+                              <td>
+                                <Form.Control
+                                  type="number"
+                                  value={rate.rateChild}
+                                  onChange={(e) => {
+                                    const newRates = [
+                                      ...formData.compulsorySupplymentsRateDTO,
+                                    ];
+                                    newRates[idx].rateChild = e.target.value;
+                                    setFormData({
+                                      ...formData,
+                                      compulsorySupplymentsRateDTO: newRates,
+                                    });
+                                  }}
+                                  placeholder="Child Rate"
+                                />
+                              </td>
+                              <td>
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newRates =
+                                      formData.compulsorySupplymentsRateDTO.filter(
+                                        (_, i) => i !== idx
+                                      );
+                                    setFormData({
+                                      ...formData,
+                                      compulsorySupplymentsRateDTO: newRates,
+                                    });
+                                  }}
+                                >
+                                  Remove
+                                </Button>
+                              </td>
+                            </tr>
+                          )
+                        )}
+                      </tbody>
+                    </Table>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          compulsorySupplymentsRateDTO: [
+                            ...formData.compulsorySupplymentsRateDTO,
+                            {
+                              supplymentrateId: "",
+                              hotelRoomcategoryId: "",
+                              ocuppancytypeId: "",
+                              rate: "",
+                              rateAdult: "",
+                              rateChild: "",
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      + Add Rate
+                    </Button>
+                  </div>
 
-                  {/* Validity Section */}
+                  {/* Validity Periods Section in a box */}
                   <h5 className="mt-3">Validity Periods</h5>
-                  {formData.compulsorySupplyValidityDTO.map((validity, idx) => (
-                    <Row key={idx} className="mb-3">
-                      <Col md={5}>
-                        <Form.Control
-                          type="date"
-                          value={validity.validityFrom}
-                          onChange={(e) => {
-                            const newValidity = [
-                              ...formData.compulsorySupplyValidityDTO,
-                            ];
-                            newValidity[idx].validityFrom = e.target.value;
-                            setFormData({
-                              ...formData,
-                              compulsorySupplyValidityDTO: newValidity,
-                            });
-                          }}
-                        />
-                      </Col>
-                      <Col md={5}>
-                        <Form.Control
-                          type="date"
-                          value={validity.validityTo}
-                          onChange={(e) => {
-                            const newValidity = [
-                              ...formData.compulsorySupplyValidityDTO,
-                            ];
-                            newValidity[idx].validityTo = e.target.value;
-                            setFormData({
-                              ...formData,
-                              compulsorySupplyValidityDTO: newValidity,
-                            });
-                          }}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => {
-                            const newValidity =
-                              formData.compulsorySupplyValidityDTO.filter(
-                                (_, i) => i !== idx
-                              );
-                            setFormData({
-                              ...formData,
-                              compulsorySupplyValidityDTO: newValidity,
-                            });
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      </Col>
-                    </Row>
-                  ))}
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      setFormData({
-                        ...formData,
-                        compulsorySupplyValidityDTO: [
-                          ...formData.compulsorySupplyValidityDTO,
-                          {
-                            supplymentValidityId: "",
-                            validityFrom: "",
-                            validityTo: "",
-                          },
-                        ],
-                      })
-                    }
-                  >
-                    + Add Validity
-                  </Button>
+                  <div className="mb-3 p-3 border rounded bg-light">
+                    <Table striped bordered hover responsive>
+                      <thead>
+                        <tr>
+                          <th>Validity From</th>
+                          <th>Validity To</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formData.compulsorySupplyValidityDTO.map(
+                          (validity, idx) => {
+                            // Calculate min date for validityTo (one day after validityFrom)
+                            let minToDate = "";
+                            if (validity.validityFrom) {
+                              const fromDate = new Date(validity.validityFrom);
+                              fromDate.setDate(fromDate.getDate() + 1);
+                              minToDate = fromDate.toISOString().split("T")[0];
+                            }
+                            return (
+                              <tr key={idx}>
+                                <td>
+                                  <Form.Control
+                                    type="date"
+                                    value={validity.validityFrom}
+                                    onChange={(e) => {
+                                      const newValidity = [
+                                        ...formData.compulsorySupplyValidityDTO,
+                                      ];
+                                      newValidity[idx].validityFrom =
+                                        e.target.value;
+                                      // If validityTo is before new validityFrom, reset validityTo
+                                      if (
+                                        newValidity[idx].validityTo &&
+                                        newValidity[idx].validityTo <=
+                                          e.target.value
+                                      ) {
+                                        newValidity[idx].validityTo = "";
+                                      }
+                                      setFormData({
+                                        ...formData,
+                                        compulsorySupplyValidityDTO:
+                                          newValidity,
+                                      });
+                                    }}
+                                  />
+                                </td>
+                                <td>
+                                  <Form.Control
+                                    type="date"
+                                    value={validity.validityTo}
+                                    min={minToDate}
+                                    onChange={(e) => {
+                                      const newValidity = [
+                                        ...formData.compulsorySupplyValidityDTO,
+                                      ];
+                                      newValidity[idx].validityTo =
+                                        e.target.value;
+                                      setFormData({
+                                        ...formData,
+                                        compulsorySupplyValidityDTO:
+                                          newValidity,
+                                      });
+                                    }}
+                                  />
+                                </td>
+                                <td>
+                                  <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newValidity =
+                                        formData.compulsorySupplyValidityDTO.filter(
+                                          (_, i) => i !== idx
+                                        );
+                                      setFormData({
+                                        ...formData,
+                                        compulsorySupplyValidityDTO:
+                                          newValidity,
+                                      });
+                                    }}
+                                  >
+                                    Remove
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          }
+                        )}
+                      </tbody>
+                    </Table>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          compulsorySupplyValidityDTO: [
+                            ...formData.compulsorySupplyValidityDTO,
+                            {
+                              supplymentValidityId: "",
+                              validityFrom: "",
+                              validityTo: "",
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      + Add Validity
+                    </Button>
+                  </div>
                 </Form>
               </Modal.Body>
               <Modal.Footer>
                 <Button variant="secondary" onClick={() => setShowModal(false)}>
                   Cancel
                 </Button>
-                <Button variant="success" onClick={handleSave}>
+                <Button
+                  variant="success"
+                  onClick={() => {
+                    if (editEvent) {
+                      handleEdit(); // Update case
+                    } else {
+                      handleSave(); // Create case
+                    }
+                  }}
+                >
                   {editEvent ? "Update" : "Create"}
                 </Button>
               </Modal.Footer>
