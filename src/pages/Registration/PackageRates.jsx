@@ -16,7 +16,14 @@ import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash, FaPlus, FaBackward, FaCopy, FaEye } from "react-icons/fa";
+import {
+  FaEdit,
+  FaTrash,
+  FaPlus,
+  FaBackward,
+  FaCopy,
+  FaEye,
+} from "react-icons/fa";
 
 const PackageRates = () => {
   const navigate = useNavigate();
@@ -61,7 +68,8 @@ const PackageRates = () => {
 
   // Get package info from navigation state
   const packageInfo = location.state || {};
-  const packageId = packageInfo.packageId || 0;
+  
+  const packageId = packageInfo.package.packageId || 0;
   const packageName = packageInfo.packageName || "Unknown Package";
   const packageCode = packageInfo.packageCode || "Unknown";
 
@@ -350,8 +358,9 @@ const PackageRates = () => {
         params.append("search", searchTerm.trim());
       }
 
+     
       const res = await axiosInstance.get(
-        `/api/TravelPackageRate/${packageId}?${params.toString()}`
+        `/api/TravelPackageRate/${packageId}`
       );
       console.log("package rates list :::", res);
 
@@ -416,8 +425,9 @@ const PackageRates = () => {
     try {
       setIsLoadingPackageCategories(true);
       const categoriesResponse = await axiosInstance.get(
-        "/api/packageCategory"
+        `/api/TravelPackage/packageCategories/${packageId}`
       );
+
       const allCategories = categoriesResponse.data || [];
       console.log("All available package categories:", allCategories);
       setPackageCategories(allCategories);
@@ -481,7 +491,6 @@ const PackageRates = () => {
       setIsLoading(true);
 
       const packageRateValidityDTO = validityList.map((validity) => ({
-      
         validityfrom: validity.validityFrom,
         validityto: validity.validityTo,
       }));
@@ -493,7 +502,6 @@ const PackageRates = () => {
         });
 
         return {
-         
           countryId: formData.countryId || "",
           placeId: formData.placeId ? [parseInt(formData.placeId)] : [],
           noofnight: formData.noOfNights || "",
@@ -1655,7 +1663,10 @@ const PackageRates = () => {
                 <i className="fas fa-times me-2"></i>
                 Cancel
               </Button>
-              <Button variant="success" onClick={editing ? handleEdit : handleSave}>
+              <Button
+                variant="success"
+                onClick={editing ? handleEdit : handleSave}
+              >
                 <i className="fas fa-arrow-right me-2"></i>
                 {editing ? "Update" : "Create"}
               </Button>

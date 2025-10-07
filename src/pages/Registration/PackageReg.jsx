@@ -978,10 +978,11 @@ const PackageReg = () => {
 
   const handlePackageRates = (item) => {
     // Navigate to Package Rates page
+    // console.log("Navigating to Package Rates for package:", item);
     navigate("/package-rates", {
       state: {
         package: item,
-        packageId: item.id,
+        packageId: item.packageId,
         packageName: item.packageName,
         packageCode: item.packageCode,
       },
@@ -1222,6 +1223,7 @@ const PackageReg = () => {
                   </tr>
                 </thead>
                 <tbody>
+                  {console.log("items list:::package cat::", items)}
                 {items.map((item, index) => (
                                     <tr key={item.id}>
                                       <td>{index + 1 + page * 10}</td>
