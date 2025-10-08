@@ -35,8 +35,9 @@ const PackageRates = () => {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [viewMode, setViewMode] = useState(false);
   const [search, setSearch] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState(null);
   const [countries, setCountries] = useState([]);
   const [places, setPlaces] = useState([]);
   const [marketTypes, setMarketTypes] = useState([]);
@@ -55,10 +56,8 @@ const PackageRates = () => {
       maximumPax: "",
     },
   ]);
-  const [selectedSharingTypes, setSelectedSharingTypes] = useState([]);
   const [packageCategories, setPackageCategories] = useState([]);
-  const [isLoadingPackageCategories, setIsLoadingPackageCategories] =
-    useState(false);
+  const [isLoadingPackageCategories, setIsLoadingPackageCategories] = useState(false);
   const [isAddingValidity, setIsAddingValidity] = useState(false);
   const [isAddingOccupancy, setIsAddingOccupancy] = useState(false);
 
@@ -68,14 +67,13 @@ const PackageRates = () => {
 
   // Get package info from navigation state
   const packageInfo = location.state || {};
-  
-  const packageId = packageInfo.package.packageId || 0;
+  const packageId = packageInfo.package?.packageId || 0;
   const packageName = packageInfo.packageName || "Unknown Package";
   const packageCode = packageInfo.packageCode || "Unknown";
 
   const [formData, setFormData] = useState({
     packageratesId: "",
-    package_id: packageId,
+    packageId: packageId,
     markettypeId: null,
     packagerateCode: "",
     packageRateValidityDTO: [],
@@ -102,6 +100,9 @@ const PackageRates = () => {
     const [filteredOptions, setFilteredOptions] = useState(options || []);
 
     useEffect(() => {
+      console.log(`SearchableSelect (${name}) - value:`, value);
+      console.log(`SearchableSelect (${name}) - options:`, options);
+
       if (!options || !Array.isArray(options)) {
         setFilteredOptions([]);
         return;
@@ -121,11 +122,11 @@ const PackageRates = () => {
       } else {
         setFilteredOptions(options);
       }
-    }, [searchTerm, options]);
+    }, [searchTerm, options, name]);
 
     const handleSelect = (option) => {
       try {
-        console.log("Selecting option:", option);
+        console.log(`SearchableSelect (${name}) - Selecting option:`, option);
         const optionValue = option.id !== undefined ? option.id : option;
         onChange({
           target: {
@@ -136,7 +137,7 @@ const PackageRates = () => {
         setIsOpen(false);
         setSearchTerm("");
       } catch (error) {
-        console.error("Error in handleSelect:", error);
+        console.error(`Error in handleSelect (${name}):`, error);
       }
     };
 
@@ -144,21 +145,14 @@ const PackageRates = () => {
       (option) => String(option.id) === String(value)
     );
 
-    if (name === "marketTypeId") {
-      console.log("MarketType SearchableSelect - value:", value);
-      console.log("MarketType SearchableSelect - options:", options);
-      console.log(
-        "MarketType SearchableSelect - selectedOption:",
-        selectedOption
-      );
-    }
+    console.log(`SearchableSelect (${name}) - selectedOption:`, selectedOption);
 
     const displayValue =
       selectedOption?.name ||
       selectedOption?.countryName ||
       selectedOption?.placeName ||
       selectedOption?.marketTypeName ||
-      "";
+      (value ? `Place ID: ${value}` : "");
 
     return (
       <div className="position-relative">
@@ -278,6 +272,9 @@ const PackageRates = () => {
     if (!data.packagerateCode?.trim())
       errors.packagerateCode = "Rate code is required";
     if (!data.markettypeId) errors.markettypeId = "Market type is required";
+    if (!data.countryId) errors.countryId = "Country is required";
+    if (!data.placeId) errors.placeId = "Place is required";
+    if (!data.noOfNights) errors.noOfNights = "Number of nights is required";
 
     const invalidValidity = validityList.some(
       (v) => !v.validityFrom || !v.validityTo
@@ -318,7 +315,7 @@ const PackageRates = () => {
 
     setFormData({
       packageratesId: "",
-      package_id: packageId,
+      packageId: packageId,
       markettypeId: null,
       packagerateCode: "",
       packageRateValidityDTO: [],
@@ -358,9 +355,8 @@ const PackageRates = () => {
         params.append("search", searchTerm.trim());
       }
 
-     
       const res = await axiosInstance.get(
-        `/api/TravelPackageRate/${packageId}`
+        `/api/packageRates/fullList/${packageId}`
       );
       console.log("package rates list :::", res);
 
@@ -402,6 +398,7 @@ const PackageRates = () => {
       const response = await axiosInstance.post(
         `/api/destination/getCitiesByCountryId/${countryId}`
       );
+      console.log("cityList response:", response.data);
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.log("axios call error for city list : ", error);
@@ -525,7 +522,7 @@ const PackageRates = () => {
 
       const payload = {
         packageratesId: "",
-        package_id: packageId,
+        packageId: packageId,
         markettypeId: formData.markettypeId ? [formData.markettypeId] : [],
         packagerateCode: formData.packagerateCode,
         packageRateValidityDTO: packageRateValidityDTO,
@@ -535,7 +532,7 @@ const PackageRates = () => {
       console.log("package rates save payload::", payload);
 
       const response = await axiosInstance.post(
-        "/api/TravelPackageRate/save",
+        "/api/packageRates/save",
         payload
       );
 
@@ -606,7 +603,7 @@ const PackageRates = () => {
 
       const payload = {
         packageratesId: editing.packageratesId,
-        package_id: packageId,
+        packageId: packageId,
         markettypeId: formData.markettypeId ? [formData.markettypeId] : [],
         packagerateCode: formData.packagerateCode,
         packageRateValidityDTO: packageRateValidityDTO,
@@ -616,7 +613,7 @@ const PackageRates = () => {
       console.log("package rates edit payload::", payload);
 
       const response = await axiosInstance.put(
-        `/api/TravelPackageRate/${editing.packageratesId}`,
+        `/api/packageRates/${editing.packageratesId}`,
         payload
       );
 
@@ -646,6 +643,7 @@ const PackageRates = () => {
     setEditing(null);
     setIsAddingValidity(false);
     setIsAddingOccupancy(false);
+    setViewMode(false);
   };
 
   const openEdit = (item) => {
@@ -684,16 +682,21 @@ const PackageRates = () => {
       }
     }
 
+    const countryId = item.packageAccommodationrateDTO?.[0]?.countryId || "";
+    const placeId = item.packageAccommodationrateDTO?.[0]?.placeId?.[0] || "";
+
+    console.log("openEdit formData:", { countryId, placeId });
+
     setFormData({
       packageratesId: item.packageratesId || "",
-      package_id: item.package_id || packageId,
+      packageId: item.packageId || packageId,
       markettypeId: item.markettypeId?.[0] || null,
       packagerateCode: item.packagerateCode || "",
       packageRateValidityDTO: item.packageRateValidityDTO || [],
       packageAccommodationrateDTO: item.packageAccommodationrateDTO || [],
       rates: rates,
-      countryId: item.packageAccommodationrateDTO?.[0]?.countryId || "",
-      placeId: item.packageAccommodationrateDTO?.[0]?.placeId?.[0] || "",
+      countryId: countryId,
+      placeId: placeId,
       noOfNights: item.packageAccommodationrateDTO?.[0]?.noofnight || "",
     });
 
@@ -716,6 +719,12 @@ const PackageRates = () => {
     setValidityList(validityList);
     setOccupancyList(occupancyList);
     setValidationErrors({});
+
+    // Fetch places for the countryId
+    if (countryId) {
+      cityList(countryId);
+    }
+
     setShowModal(true);
   };
 
@@ -734,7 +743,7 @@ const PackageRates = () => {
       try {
         setIsLoading(true);
         const response = await axiosInstance.delete(
-          `/api/TravelPackageRate/${item.packageratesId}`
+          `/api/packageRates/${item.packageratesId}`
         );
         if (response.data) {
           toast.success("Package rate deleted successfully!");
@@ -756,11 +765,12 @@ const PackageRates = () => {
     try {
       setIsLoading(true);
       const response = await axiosInstance.get(
-        `/api/TravelPackageRate/${item.packageratesId}`
+        `/api/packageRates/${item.packageratesId}`
       );
 
       if (response.data) {
-        openEdit(item);
+        setViewMode(true);
+        openEdit(response.data);
         toast.success("Package rate details loaded successfully!");
       }
     } catch (error) {
@@ -812,7 +822,7 @@ const PackageRates = () => {
 
     setFormData({
       packageratesId: "",
-      package_id: packageId,
+      packageId: packageId,
       markettypeId: item.markettypeId?.[0] || null,
       packagerateCode: `${item.packagerateCode}_COPY`,
       packageRateValidityDTO: [],
@@ -1025,7 +1035,11 @@ const PackageRates = () => {
     }
   }, [packageCategories, editing, showModal]);
 
-  const [searchTimeout, setSearchTimeout] = useState(null);
+  useEffect(() => {
+    if (showModal && formData.countryId && !places.length && !isLoadingPlaces) {
+      cityList(formData.countryId);
+    }
+  }, [showModal, formData.countryId, places, isLoadingPlaces]);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -1050,7 +1064,7 @@ const PackageRates = () => {
                   Package Rates - {packageName} ({packageCode})
                 </span>
               </div>
-              <Button className="btn-green" onClick={handleCreate}>
+              <Button className="btn-green" onClick={handleCreate} disabled={viewMode}>
                 + Create
               </Button>
             </Card.Header>
@@ -1062,7 +1076,6 @@ const PackageRates = () => {
                     <th>Rate Code</th>
                     <th>Market</th>
                     <th>No of Nights</th>
-                    <th>Status</th>
                     <th style={{ width: 200 }}>Actions</th>
                   </tr>
                 </thead>
@@ -1077,17 +1090,6 @@ const PackageRates = () => {
                           "N/A"}
                       </td>
                       <td>
-                        <span
-                          className={`badge ${
-                            item.status === "Active"
-                              ? "bg-success"
-                              : "bg-danger"
-                          }`}
-                        >
-                          {item.status || "N/A"}
-                        </span>
-                      </td>
-                      <td>
                         <div className="d-flex gap-2">
                           <FaEye
                             className="text-info view"
@@ -1098,7 +1100,10 @@ const PackageRates = () => {
                           <FaEdit
                             className="text-primary edit"
                             style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => openEdit(item)}
+                            onClick={() => {
+                              setViewMode(false);
+                              openEdit(item);
+                            }}
                             title="Edit"
                           />
                           <FaCopy
@@ -1106,12 +1111,14 @@ const PackageRates = () => {
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => handleCopy(item)}
                             title="Copy"
+                            disabled={viewMode}
                           />
                           <FaTrash
                             className="text-danger delete"
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => handleDelete(item)}
                             title="Delete"
+                            disabled={viewMode}
                           />
                         </div>
                       </td>
@@ -1182,7 +1189,11 @@ const PackageRates = () => {
           >
             <Modal.Header closeButton>
               <Modal.Title>
-                {editing ? "Edit Package Rate" : "Create Package Rate"}
+                {viewMode
+                  ? "View Package Rate"
+                  : editing
+                  ? "Edit Package Rate"
+                  : "Create Package Rate"}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -1210,6 +1221,7 @@ const PackageRates = () => {
                           }
                         }}
                         isInvalid={!!validationErrors.packagerateCode}
+                        readOnly={viewMode}
                       />
                       {validationErrors.packagerateCode && (
                         <Form.Control.Feedback type="invalid">
@@ -1227,8 +1239,6 @@ const PackageRates = () => {
                         value={formData.markettypeId}
                         onChange={(e) => {
                           const selectedValue = parseInt(e.target.value);
-                          console.log("Market type selected:", selectedValue);
-                          console.log("Available market types:", marketTypes);
                           setFormData((prev) => ({
                             ...prev,
                             markettypeId: selectedValue,
@@ -1241,6 +1251,8 @@ const PackageRates = () => {
                           }
                         }}
                         isInvalid={!!validationErrors.markettypeId}
+                        disabled={viewMode}
+                        readOnly={viewMode}
                       >
                         <option value="">Select Market</option>
                         {marketTypes.map((market) => (
@@ -1270,7 +1282,7 @@ const PackageRates = () => {
                           variant="outline-primary"
                           size="sm"
                           onClick={addValidityPeriod}
-                          disabled={isAddingValidity}
+                          disabled={isAddingValidity || viewMode}
                         >
                           <FaPlus className="me-2" />
                           {isAddingValidity ? "Adding..." : "Add Period"}
@@ -1289,6 +1301,7 @@ const PackageRates = () => {
                                 onClick={() =>
                                   removeValidityPeriod(validity.id)
                                 }
+                                disabled={viewMode}
                               >
                                 <FaTrash className="me-1" />
                                 Remove
@@ -1310,6 +1323,8 @@ const PackageRates = () => {
                                         e.target.value
                                       )
                                     }
+                                    readOnly={viewMode}
+                                    disabled={viewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -1326,6 +1341,8 @@ const PackageRates = () => {
                                         e.target.value
                                       )
                                     }
+                                    readOnly={viewMode}
+                                    disabled={viewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -1349,7 +1366,7 @@ const PackageRates = () => {
                           variant="outline-primary"
                           size="sm"
                           onClick={addOccupancy}
-                          disabled={isAddingOccupancy}
+                          disabled={isAddingOccupancy || viewMode}
                         >
                           <FaPlus className="me-2" />
                           {isAddingOccupancy ? "Adding..." : "Add Occupancy"}
@@ -1364,6 +1381,7 @@ const PackageRates = () => {
                                 variant="outline-danger"
                                 size="sm"
                                 onClick={() => removeOccupancy(occupancy.id)}
+                                disabled={viewMode}
                               >
                                 <FaTrash className="me-1" />
                                 Remove
@@ -1386,6 +1404,8 @@ const PackageRates = () => {
                                         e.target.value
                                       )
                                     }
+                                    readOnly={viewMode}
+                                    disabled={viewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -1403,6 +1423,8 @@ const PackageRates = () => {
                                         e.target.value
                                       )
                                     }
+                                    readOnly={viewMode}
+                                    disabled={viewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -1434,6 +1456,7 @@ const PackageRates = () => {
                           placeholder="Search and select country"
                           options={countries}
                           isInvalid={!!validationErrors.countryId}
+                          disabled={viewMode}
                         />
                         {validationErrors.countryId && (
                           <Form.Control.Feedback type="invalid">
@@ -1457,7 +1480,7 @@ const PackageRates = () => {
                               : "Search and select place"
                           }
                           options={places}
-                          disabled={!formData.countryId}
+                          disabled={!formData.countryId || viewMode}
                           isLoading={isLoadingPlaces}
                           isInvalid={!!validationErrors.placeId}
                         />
@@ -1488,6 +1511,8 @@ const PackageRates = () => {
                             }
                           }}
                           isInvalid={!!validationErrors.noOfNights}
+                          disabled={viewMode}
+                          readOnly={viewMode}
                         >
                           <option value="">SELECT</option>
                           {[...Array(15)].map((_, i) => (
@@ -1507,7 +1532,7 @@ const PackageRates = () => {
                 </div>
 
                 <div className="mb-3">
-                  <h6>Sharing Options</h6> 
+                  <h6>Sharing Options</h6>
                   {isLoadingPackageCategories ? (
                     <div className="text-center py-3">
                       <div
@@ -1552,6 +1577,7 @@ const PackageRates = () => {
                                   e.target.checked
                                 )
                               }
+                              disabled={viewMode}
                             />
                           </Card.Header>
                           <Card.Body>
@@ -1581,8 +1607,10 @@ const PackageRates = () => {
                                       )
                                     }
                                     disabled={
-                                      !formData.rates?.[categoryKey]?.enabled
+                                      !formData.rates?.[categoryKey]?.enabled ||
+                                      viewMode
                                     }
+                                    readOnly={viewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -1606,8 +1634,10 @@ const PackageRates = () => {
                                       )
                                     }
                                     disabled={
-                                      !formData.rates?.[categoryKey]?.enabled
+                                      !formData.rates?.[categoryKey]?.enabled ||
+                                      viewMode
                                     }
+                                    readOnly={viewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -1631,8 +1661,10 @@ const PackageRates = () => {
                                       )
                                     }
                                     disabled={
-                                      !formData.rates?.[categoryKey]?.enabled
+                                      !formData.rates?.[categoryKey]?.enabled ||
+                                      viewMode
                                     }
+                                    readOnly={viewMode}
                                   />
                                 </Form.Group>
                               </Col>
@@ -1659,17 +1691,21 @@ const PackageRates = () => {
               </Form>
             </Modal.Body>
             <Modal.Footer>
-              <Button variant="danger" onClick={closeModal}>
-                <i className="fas fa-times me-2"></i>
-                Cancel
-              </Button>
-              <Button
-                variant="success"
-                onClick={editing ? handleEdit : handleSave}
-              >
-                <i className="fas fa-arrow-right me-2"></i>
-                {editing ? "Update" : "Create"}
-              </Button>
+              {!viewMode && (
+                <>
+                  <Button variant="danger" onClick={closeModal}>
+                    <i className="fas fa-times me-2"></i>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    onClick={editing ? handleEdit : handleSave}
+                  >
+                    <i className="fas fa-arrow-right me-2"></i>
+                    {editing ? "Update" : "Create"}
+                  </Button>
+                </>
+              )}
             </Modal.Footer>
           </Modal>
         </main>

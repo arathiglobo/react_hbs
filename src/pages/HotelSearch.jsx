@@ -1434,7 +1434,7 @@ export default function HotelSearch() {
                         {console.log("agents:::" , agents)}
                          {agents.map((agent) => (
                               <option key={agent.id} value={agent.id}>
-                                {agent.firstName} {agent.lastName}
+                                {agent.companyName}
                               </option>
                             ))}
                       </Form.Select>

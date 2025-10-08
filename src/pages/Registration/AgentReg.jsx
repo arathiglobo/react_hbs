@@ -266,10 +266,10 @@ const AgentReg = () => {
   // Static data for external APIs
   const externalApis = [
     { code: "IWTX", name: "IWTX" },
-    { code: "x2", name: "X2" },
-    { code: "jumeirah", name: "Jumeirah" },
-    { code: "darina", name: "Darina" },
-    { code: "ratehawk", name: "RateHawk" },
+    { code: "X3", name: "X3" },
+    { code: "INHOUSE", name: "INHOUSE" },
+    { code: "DARINA", name: "DARINA" },
+    { code: "RATEHAWK", name: "RATEHAWK" },
   ];
 
   const nextId = useMemo(
@@ -330,7 +330,7 @@ const AgentReg = () => {
   };
 
   const openEdit = async (item) => {
-    console.log("edit item:::", item);
+   // console.log("edit item:::", item);
     setEditing(item);
     setIsViewMode(false); // Set to edit mode
 
@@ -391,12 +391,12 @@ const AgentReg = () => {
     // Fetch provinces and cities for the selected country and province
     if (item.countryId) {
       try {
-        console.log("Loading provinces for countryId:", item.countryId);
+       // console.log("Loading provinces for countryId:", item.countryId);
         await provinceList(item.countryId);
 
         // After provinces are loaded, fetch cities if provinceId exists
         if (item.provinceId) {
-          console.log("Loading cities for provinceId:", item.provinceId);
+         // console.log("Loading cities for provinceId:", item.provinceId);
           await cityList(item.provinceId);
         }
       } catch (error) {
@@ -411,10 +411,10 @@ const AgentReg = () => {
   const userRolesList = async () => {
     try {
       const rolesRes = await axiosInstance.get("/api/userRoles");
-      console.log("rolesRes::", rolesRes);
+     // console.log("rolesRes::", rolesRes);
       setUserRolesList(rolesRes.data);
     } catch (error) {
-      console.log("User roles  api call error::", error);
+     // console.log("User roles  api call error::", error);
     }
   };
 
@@ -423,17 +423,17 @@ const AgentReg = () => {
       const agentCatResponse = await axios.get("/api/agentCategory");
       setAgentCategoryies(agentCatResponse.data);
     } catch (error) {
-      console.log("agent category api call error::", error);
+     // console.log("agent category api call error::", error);
     }
   };
 
   const countryList = async () => {
     try {
       const response = await axios.get("/api/country");
-      console.log("Countries loaded:", response.data);
+     // console.log("Countries loaded:", response.data);
       setCountries(response.data);
     } catch (error) {
-      console.log("error for country list :", error);
+     // console.log("error for country list :", error);
     }
   };
 
@@ -444,7 +444,7 @@ const AgentReg = () => {
       );
       setProvinces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      console.log("axios call error for province list : ", error);
+     // console.log("axios call error for province list : ", error);
     }
   };
 
@@ -453,7 +453,7 @@ const AgentReg = () => {
       const response = await axios.get(`/api/destination/getplaces/${stateId}`);
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      console.log("axios call error for city list : ", error);
+     // console.log("axios call error for city list : ", error);
     }
   };
 
@@ -462,7 +462,7 @@ const AgentReg = () => {
       const response = await axiosInstance.get(`/api/markupType`);
       setMarkup(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      console.log("axios call error for markup list : ", error);
+     // console.log("axios call error for markup list : ", error);
     }
   };
 
@@ -471,7 +471,7 @@ const AgentReg = () => {
       const response = await axiosInstance.get(`/api/currency`);
       setCurrency(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      console.log("axios call error for currency list : ", error);
+     // console.log("axios call error for currency list : ", error);
     }
   };
 
@@ -572,15 +572,15 @@ const AgentReg = () => {
         agentPayload.currency = parseInt(agentPayload.currency);
       }
 
-      console.log("Edit payload:", agentPayload);
-      console.log("Editing agent ID:", editing.id);
+     // console.log("Edit payload:", agentPayload);
+     // console.log("Editing agent ID:", editing.id);
 
       const editRes = await axiosInstance.put(
         `/api/agent/${editing.id}`,
         agentPayload
       );
 
-      console.log("Edit response:", editRes);
+     // console.log("Edit response:", editRes);
 
       if (editRes.data) {
         toast.success("Agent Updated Successfully!");
@@ -719,15 +719,7 @@ const AgentReg = () => {
 
   // Validation function
   const validateAgentForm = (data) => {
-    console.log(
-      "Validation - data.countryId::",
-      data.countryId,
-      "agentClassification:",
-      data.agentClassification,
-      "agentGstIn:",
-      data.agentGstIn
-    );
-    const newErrors = {};
+       const newErrors = {};
 
     // Helper function to safely get string value
     const getStringValue = (value) => {
@@ -769,25 +761,20 @@ const AgentReg = () => {
 
     // GST fields validation (only if country is India)
     if (String(data.countryId) === "1") {
-      console.log("GST validation running - country is India");
+     // console.log("GST validation running - country is India");
       const gstInValue = getStringValue(data.agentGSTDetailsDTO?.agentGstIn);
-      console.log(
-        "GST validation - gstInValue:",
-        gstInValue,
-        "agentClassification:",
-        data.agentGSTDetailsDTO?.agentClassification
-      );
+   
 
       if (
         data.agentGSTDetailsDTO?.agentClassification === "registered" &&
         !gstInValue
       ) {
-        console.log("Adding GSTIN required error");
+       // console.log("Adding GSTIN required error");
         newErrors["agentGSTDetailsDTO.agentGstIn"] =
           "GSTIN is required for registered agencies";
       }
       if (gstInValue && !/^[A-Z0-9]{15}$/.test(gstInValue)) {
-        console.log("Adding GSTIN format error");
+       // console.log("Adding GSTIN format error");
         newErrors["agentGSTDetailsDTO.agentGstIn"] =
           "GSTIN must be 15 alphanumeric characters";
       }
@@ -800,18 +787,15 @@ const AgentReg = () => {
         newErrors["agentGSTDetailsDTO.agentCorrespondmail"] =
           "Invalid correspondence email format";
     } else {
-      console.log(
-        "GST validation skipped - country is not India:",
-        data.countryId
-      );
+     // console.log("GST validation skipped - country is not India:", data.countryId );
     }
 
-    console.log("Final validation errors:", newErrors);
+   // console.log("Final validation errors:", newErrors);
     return newErrors;
   };
 
   const saveAgent = async (e) => {
-    console.log("formdata::", formData);
+   // console.log("formdata::", formData);
     e.preventDefault();
     const errors = validateAgentForm(formData);
     if (Object.keys(errors).length > 0) {
@@ -860,7 +844,7 @@ const AgentReg = () => {
         agentPayload.currency = parseInt(agentPayload.currency);
       }
 
-      console.log("agentPayload::", agentPayload);
+     // console.log("agentPayload::", agentPayload);
 
       const agentSaveRes = await axiosInstance.post(
         "/api/agent/register",
@@ -997,12 +981,12 @@ const AgentReg = () => {
     // Fetch provinces and cities for the selected country and province
     if (item.countryId) {
       try {
-        console.log("Loading provinces for countryId:", item.countryId);
+       // console.log("Loading provinces for countryId:", item.countryId);
         await provinceList(item.countryId);
 
         // After provinces are loaded, fetch cities if provinceId exists
         if (item.provinceId) {
-          console.log("Loading cities for provinceId:", item.provinceId);
+         // console.log("Loading cities for provinceId:", item.provinceId);
           await cityList(item.provinceId);
         }
       } catch (error) {
@@ -1015,9 +999,9 @@ const AgentReg = () => {
   };
 
   const handleLogin = async (item) => {
-    console.log("=== LOGIN MODAL OPENED ===");
-    console.log("Agent clicked:", item);
-    console.log("Timestamp:", new Date().toISOString());
+   // console.log("=== LOGIN MODAL OPENED ===");
+   // console.log("Agent clicked:", item);
+   // console.log("Timestamp:", new Date().toISOString());
 
     setEditing(item);
 
@@ -1042,18 +1026,18 @@ const AgentReg = () => {
 
     // Fetch existing login data for this agent
     try {
-      console.log("Fetching existing login data for agent:", item.id);
+     // console.log("Fetching existing login data for agent:", item.id);
       const response = await axiosInstance.post(
         `/auth/checkRegisteredUserExist/${item.id}`
       );
 
       if (response.data) {
-        console.log("Existing login data found:", response.data);
+       // console.log("Existing login data found:", response.data);
 
         // Safely check both key variations
         const userNameValue = response.data.userName || response.data.username || "";
 
-        console.log("username:", userNameValue);
+       // console.log("username:", userNameValue);
 
         // Populate form with existing data
         setLoginFormData({
@@ -1063,12 +1047,12 @@ const AgentReg = () => {
           userroles: [],               // fetch separately if needed
         });
 
-        console.log("Form populated with existing data");
+       // console.log("Form populated with existing data");
       } else {
-        console.log("No existing login data found for agent:", item.id);
+       // console.log("No existing login data found for agent:", item.id);
       }
     } catch (error) {
-      console.log("No existing login data found or error fetching:", error);
+     // console.log("No existing login data found or error fetching:", error);
       // This is normal for agents with no existing login credentials
     }
 
@@ -1077,7 +1061,7 @@ const AgentReg = () => {
 
     // Show modal
     setShowLoginModal(true);
-    console.log("Modal opened with data loaded");
+   // console.log("Modal opened with data loaded");
   };
 
   const handleLoginSubmit = async () => {
@@ -1133,16 +1117,16 @@ const AgentReg = () => {
         setIsLoading(true);
 
         let activeUserRole = localStorage.getItem("currentActiveRole");
-        console.log("currentActiveRole::", activeUserRole);
-        console.log("roleslist::", rolesList);
+       // console.log("currentActiveRole::", activeUserRole);
+       // console.log("roleslist::", rolesList);
 
         let activeRoleObj = rolesList.find((role) => role.roleName === "AGENT");
 
         let loginPayload = null;
 
         if (activeRoleObj) {
-          console.log("Active role exists in rolesList:", activeUserRole);
-          console.log("activeRoleObj:", activeRoleObj);
+         // console.log("Active role exists in rolesList:", activeUserRole);
+         // console.log("activeRoleObj:", activeRoleObj);
 
           loginPayload = {
             userId: editing.id,
@@ -1155,20 +1139,16 @@ const AgentReg = () => {
             loginPayload.password = loginFormData.password;
           }
 
-          console.log(
-            "Login payload for agent:",
-            editing.companyName,
-            loginPayload
-          );
+       
         } else {
-          console.log("Active role not found in rolesList");
+         // console.log("Active role not found in rolesList");
         }
 
         const response = await axiosInstance.post(
           "/auth/register",
           loginPayload
         );
-        console.log("login register success::", response);
+       // console.log("login register success::", response);
 
         if (response.data) {
           toast.success("Login credentials saved successfully!");
@@ -1259,7 +1239,7 @@ const AgentReg = () => {
   };
 
   const handleCreditLimit = async (item) => {
-    console.log("Manage credit limit for agent:", item.companyName);
+   // console.log("Manage credit limit for agent:", item.companyName);
     setEditing(item);
 
     // Set default values for credit limit form
@@ -1354,7 +1334,7 @@ const AgentReg = () => {
           totalCreditLimit: addAmount,
         };
 
-        console.log("Creating initial credit limit:", createPayload);
+       // console.log("Creating initial credit limit:", createPayload);
         response = await axiosInstance.post(
           "/api/agent-credit-limit/create",
           null,
@@ -1370,7 +1350,7 @@ const AgentReg = () => {
           remarks: creditLimitFormData.remarks,
         };
 
-        console.log("Adding credit:", addCreditPayload);
+       // console.log("Adding credit:", addCreditPayload);
         response = await axiosInstance.post(
           "/api/agent-credit-limit/add-credit",
           addCreditPayload
@@ -1451,14 +1431,7 @@ const AgentReg = () => {
       const selectedCountry = countries.find(country => String(country.id) === String(value));
       const countryName = selectedCountry?.name || selectedCountry?.countryName || "Unknown";
       
-      console.log(
-        "Country selected:",
-        value,
-        "Country name:",
-        countryName
-      );
-      
-      setFormData((prev) => ({
+     setFormData((prev) => ({
         ...prev,
         countryId: String(value), // Explicitly convert to string
         provinceId: "", // Reset province when country changes
@@ -1528,8 +1501,8 @@ const AgentReg = () => {
 
   // Handle Agent Exclude function
   const handleAgentExclude = async (item) => {
-    console.log("Exclude agent:", item.companyName);
-    console.log("item:", item);
+   // console.log("Exclude agent:", item.companyName);
+   // console.log("item:", item);
     setEditing(item);
 
     // Reset form data first
@@ -1544,7 +1517,7 @@ const AgentReg = () => {
 
     // Fetch existing exclusions for this agent
     try {
-      console.log("Fetching existing exclusions for agent:", item.id);
+     // console.log("Fetching existing exclusions for agent:", item.id);
       const response = await axiosInstance.get(
         `/api/agent-api-exclusion/agent/${item.id}`
       );
@@ -1554,17 +1527,17 @@ const AgentReg = () => {
         const existingApiCodes = response.data
           .map((exclusion) => exclusion.apiCode)
           .filter(Boolean);
-        console.log("Existing API exclusions found:", existingApiCodes);
+       // console.log("Existing API exclusions found:", existingApiCodes);
 
         setExclusionFormData((prev) => ({
           ...prev,
           externalApi: existingApiCodes,
         }));
       } else {
-        console.log("No existing exclusions found for agent:", item.id);
+       // console.log("No existing exclusions found for agent:", item.id);
       }
     } catch (error) {
-      console.log("No existing exclusions found or error fetching:", error);
+     // console.log("No existing exclusions found or error fetching:", error);
       // This is normal for agents with no existing exclusions
     }
 
@@ -1618,16 +1591,13 @@ const AgentReg = () => {
 
     // Also remove from backend if it exists
     try {
-      console.log("Removing exclusion for API:", apiCode);
+     // console.log("Removing exclusion for API:", apiCode);
       await axiosInstance.delete(
         `/api/agent-api-exclusion/agent/${editing.id}/api/${apiCode}`
       );
-      console.log("Exclusion removed successfully");
+     // console.log("Exclusion removed successfully");
     } catch (error) {
-      console.log(
-        "Error removing exclusion or exclusion doesn't exist:",
-        error
-      );
+     // console.log("Error removing exclusion or exclusion doesn't exist:", error );
       // This is normal if the exclusion doesn't exist in the backend
     }
   };
@@ -1670,7 +1640,7 @@ const AgentReg = () => {
             .filter(Boolean);
         }
       } catch (error) {
-        console.log("No existing exclusions found");
+       // console.log("No existing exclusions found");
       }
 
       // Filter out APIs that are already excluded
@@ -1684,8 +1654,8 @@ const AgentReg = () => {
         return;
       }
 
-      console.log("Adding new exclusions:", newApiCodes);
-      console.log("Already excluded:", existingApiCodes);
+     // console.log("Adding new exclusions:", newApiCodes);
+     // console.log("Already excluded:", existingApiCodes);
 
       // Send multiple requests for each new API (avoiding duplicates)
       const promises = newApiCodes.map((apiCode) => {
@@ -1695,7 +1665,7 @@ const AgentReg = () => {
           apiCode: apiCode,
         };
 
-        console.log("Exclusion payload:", exclusionPayload);
+       // console.log("Exclusion payload:", exclusionPayload);
 
         return axiosInstance.post(
           "/api/agent-api-exclusion/exclude",
@@ -1704,11 +1674,10 @@ const AgentReg = () => {
       });
 
       const responses = await Promise.all(promises);
-       console.log("allSuccessful:::" , responses)
-
+     
       // Check if all responses were successful
       const allSuccessful = responses.every((response) => response.data);
-     
+    
 
       if (allSuccessful) {
         toast.success(
@@ -1723,11 +1692,7 @@ const AgentReg = () => {
       }
     } catch (error) {
       console.error("Exclusion submission failed:", error);
-      toast.error(
-        `Failed to add exclusion: ${
-          error.response?.data?.message || error.message
-        }`
-      );
+     
     } finally {
       setIsLoading(false);
     }
@@ -3039,10 +3004,7 @@ const AgentReg = () => {
                         cursor: "pointer",
                       }}
                       onClick={() => {
-                        console.log(
-                          "Clicking dropdown, current state:",
-                          showRolesDropdown
-                        );
+                       // console.log("Clicking dropdown, current state:",showRolesDropdown);
                         setShowRolesDropdown(!showRolesDropdown);
                       }}
                     >
@@ -3097,11 +3059,7 @@ const AgentReg = () => {
                           const isSelected = loginFormData.userroles.includes(
                             role.id
                           );
-                          console.log(
-                            "Rendering role:",
-                            role.id,
-                            role.roleName
-                          );
+                         // console.log( "Rendering role:",role.id,role.);
                           return (
                             <div
                               key={role.id}
