@@ -159,7 +159,11 @@ const HotelList = () => {
                   <Row>
                     {hotels.map((hotel) => (
                       <Col key={hotel.id} lg={4} md={6} className="mb-4">
-                        <Card className="h-100 shadow-sm border-0 rounded-4 hotel-card">
+                        <Card 
+                          className="h-100 shadow-sm border-0 rounded-4 hotel-card"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => handleViewHotel(hotel.id)}
+                        >
                           <div className="position-relative">
                             <Card.Img
                               variant="top"
@@ -197,24 +201,14 @@ const HotelList = () => {
                             </div>
 
                             <div className="mt-auto">
-                              {/* <div className="d-flex justify-content-between align-items-center mb-3">
-                                <div>
-                                  <small className="text-muted">Category ID: {hotel.hotelCategoryId}</small>
-                                  <br />
-                                  <small className="text-muted">Type ID: {hotel.hotelTypeId}</small>
-                                </div>
-                                <div className="text-end">
-                                  <small className="text-muted">Currency ID: {hotel.hotelCurrencyId}</small>
-                                  <br />
-                                  <small className="text-muted">Markup ID: {hotel.markupTypeId}</small>
-                                </div>
-                              </div> */}
-
                               <div className="d-flex gap-2">
                                 <Button
                                   variant="outline-primary"
                                   size="sm"
-                                  onClick={() => handleViewHotel(hotel.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleViewHotel(hotel.id);
+                                  }}
                                   className="flex-fill rounded-pill"
                                 >
                                   <FaEye className="me-1" />
@@ -223,7 +217,10 @@ const HotelList = () => {
                                 <Button
                                   variant="outline-warning"
                                   size="sm"
-                                  onClick={() => handleEditHotel(hotel.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditHotel(hotel.id);
+                                  }}
                                   className="flex-fill rounded-pill"
                                 >
                                   <FaEdit className="me-1" />
@@ -232,7 +229,10 @@ const HotelList = () => {
                                 <Button
                                   variant="outline-danger"
                                   size="sm"
-                                  onClick={() => handleDeleteHotel(hotel.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteHotel(hotel.id);
+                                  }}
                                   className="flex-fill rounded-pill"
                                 >
                                   <FaTrash className="me-1" />
