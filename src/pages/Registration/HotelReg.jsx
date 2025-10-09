@@ -36,14 +36,14 @@ import {
 } from "react-icons/fa";
 
 const tabOrder = [
-  'hotel-info',
-  'location-info',
-  'contact-details',
-  'bank-details',
-  'week-days',
-  'amenities',
-  'rooms',
-  'terms-conditions',
+  "hotel-info",
+  "location-info",
+  "contact-details",
+  "bank-details",
+  "week-days",
+  "amenities",
+  "rooms",
+  "terms-conditions",
 ];
 
 const HotelReg = () => {
@@ -53,47 +53,67 @@ const HotelReg = () => {
   // Per-step validation logic
   const validateStep = (step) => {
     const errors = {};
-    if (step === 'hotel-info') {
-      if (!formData.hotelName.trim()) errors.hotelName = 'Hotel name is required';
-      if (!formData.hotelDescription.trim()) errors.hotelDescription = 'Hotel description is required';
-      if (!formData.hotelCurrencyId) errors.hotelCurrencyId = 'Currency is required';
-      if (!formData.hotelCategoryId) errors.hotelCategoryId = 'Hotel category is required';
-      if (!formData.hotelTypeId) errors.hotelTypeId = 'Hotel type is required';
-      if (!formData.markupTypeId) errors.markupTypeId = 'Markup type is required';
-      if (!formData.childComAgeMin) errors.childComAgeMin = 'Child complimentary age minimum is required';
-      if (!formData.childComAgeMax) errors.childComAgeMax = 'Child complimentary age maximum is required';
-      if (!formData.childChargeableAgeMin) errors.childChargeableAgeMin = 'Child chargeable age minimum is required';
-      if (!formData.childChargeableAgeMax) errors.childChargeableAgeMax = 'Child chargeable age maximum is required';
+    if (step === "hotel-info") {
+      if (!formData.hotelName.trim())
+        errors.hotelName = "Hotel name is required";
+      if (!formData.hotelDescription.trim())
+        errors.hotelDescription = "Hotel description is required";
+      if (!formData.hotelCurrencyId)
+        errors.hotelCurrencyId = "Currency is required";
+      if (!formData.hotelCategoryId)
+        errors.hotelCategoryId = "Hotel category is required";
+      if (!formData.hotelTypeId) errors.hotelTypeId = "Hotel type is required";
+      if (!formData.markupTypeId)
+        errors.markupTypeId = "Markup type is required";
+      if (!formData.childComAgeMin)
+        errors.childComAgeMin = "Child complimentary age minimum is required";
+      if (!formData.childComAgeMax)
+        errors.childComAgeMax = "Child complimentary age maximum is required";
+      if (!formData.childChargeableAgeMin)
+        errors.childChargeableAgeMin =
+          "Child chargeable age minimum is required";
+      if (!formData.childChargeableAgeMax)
+        errors.childChargeableAgeMax =
+          "Child chargeable age maximum is required";
     }
-    if (step === 'location-info') {
-      if (!formData.regionId) errors.regionId = 'Region is required';
-      if (!formData.countryId) errors.countryId = 'Country is required';
-      if (!formData.stateId) errors.stateId = 'State/Province is required';
-      if (!formData.placeId) errors.placeId = 'City is required';
-      if (!formData.address.trim()) errors.address = 'Address is required';
-      if (!formData.zipcode.trim()) errors.zipcode = 'Zipcode is required';
+    if (step === "location-info") {
+      if (!formData.regionId) errors.regionId = "Region is required";
+      if (!formData.countryId) errors.countryId = "Country is required";
+      if (!formData.stateId) errors.stateId = "State/Province is required";
+      if (!formData.placeId) errors.placeId = "City is required";
+      if (!formData.address.trim()) errors.address = "Address is required";
+      if (!formData.zipcode.trim()) errors.zipcode = "Zipcode is required";
     }
-    if (step === 'contact-details') {
-      if (formData.contactDetails.length === 0) errors.contactDetails = 'At least one contact detail is required';
+    if (step === "contact-details") {
+      if (formData.contactDetails.length === 0)
+        errors.contactDetails = "At least one contact detail is required";
     }
-    if (step === 'bank-details') {
-      if (formData.bankDetails.length === 0) errors.bankDetails = 'At least one bank detail is required';
+    if (step === "bank-details") {
+      if (formData.bankDetails.length === 0)
+        errors.bankDetails = "At least one bank detail is required";
       formData.bankDetails.forEach((bank, index) => {
-        if (!bank.bankId) errors[`bank_${index}_bankId`] = 'Bank name is required';
-        if (!bank.accountNo) errors[`bank_${index}_accountNo`] = 'Bank Account is required';
+        if (!bank.bankId)
+          errors[`bank_${index}_bankId`] = "Bank name is required";
+        if (!bank.accountNo)
+          errors[`bank_${index}_accountNo`] = "Bank Account is required";
       });
     }
 
-
-    if (step === 'rooms') {
-      if (formData.rooms.length === 0) errors.rooms = 'At least one room category is required';
+    if (step === "rooms") {
+      if (formData.rooms.length === 0)
+        errors.rooms = "At least one room category is required";
       formData.rooms.forEach((room, roomIndex) => {
-        if (!room.roomCategoryId) errors[`room_${roomIndex}_category`] = 'Room category is required';
-        if (!room.roomTypes || room.roomTypes.length === 0) errors[`room_${roomIndex}_types`] = 'At least one room type is required for this category';
+        if (!room.roomCategoryId)
+          errors[`room_${roomIndex}_category`] = "Room category is required";
+        if (!room.roomTypes || room.roomTypes.length === 0)
+          errors[`room_${roomIndex}_types`] =
+            "At least one room type is required for this category";
       });
     }
-    if (step === 'terms-conditions') {
-      if (formData.termsAndConditions.length === 0) errors.termsAndConditions = 'At least one term and condition is required';
+    if (step === "terms-conditions") {
+      if (formData.termsAndConditions.length === 0)
+        errors.termsAndConditions =
+          "At least one term and condition is required";
     }
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -127,7 +147,7 @@ const HotelReg = () => {
         break;
       }
     }
-    if (allValid && validateStep('terms-conditions')) {
+    if (allValid && validateStep("terms-conditions")) {
       handleSubmit(e);
     }
   };
@@ -213,117 +233,118 @@ const HotelReg = () => {
   ];
 
   // Load hotel data for edit mode
-  
+
 const loadHotelData = async () => {
-    if (!isEditMode) return;
+  if (!isEditMode) return;
 
-    try {
-      setIsLoadingHotelData(true);
-      const response = await axiosInstance.get(`/api/hotels/${id}`);
-      const hotelData = response.data;
+  try {
+    setIsLoadingHotelData(true);
 
-      console.log("Loaded hotel data for edit:", hotelData);
+    const response = await axiosInstance.get(`/api/hotels/${id}`);
+    const hotelData = response.data;
 
-      // Step 1: Load dependent data (provinces and places) sequentially
-      let provincesData = [];
-      let placesData = [];
+    console.log("Loaded hotel data for edit:", hotelData);
 
-      if (hotelData.countryId) {
-        const provincesResponse = await axiosInstance.get(
-          `/api/province/getByCountryId/${hotelData.countryId}`
-        );
-        provincesData = provincesResponse.data || [];
-        setProvinces(provincesData);
-      }
-
-      if (hotelData.stateId) {
-        const placesResponse = await axiosInstance.get(
-          `/api/destination/getplaces/${hotelData.stateId}`
-        );
-        placesData = placesResponse.data || [];
-        setPlaces(placesData);
-      }
-
-      // Step 2: Map hotel data to formData
-      const rooms =
-        hotelData.roomCategories?.map((roomCategory) => {
-          const associatedRoomTypes =
-            hotelData.roomTypes?.filter(
-              (rt) => rt.hotelRoomCategoryId === roomCategory.roomCategoryId
-            ) || [];
-          return {
-            roomCategoryId: roomCategory.roomCategoryId,
-            roomCategoryName: roomCategory.name,
-            roomTypes: associatedRoomTypes.map((rt) => ({
-              roomTypeId: rt.roomTypeId,
-              roomTypeName: rt.name,
-            })),
-          };
-        }) || [];
-
-      const termsAndConditions =
-        hotelData.termsAndConditions?.map((term) => term.description) || [];
-
-      const amenityIds =
-        hotelData.amenities?.map((amenity) => amenity.amenityId) || [];
-
-      const weekDays = {
-        wdSunday: hotelData.weekDays?.wdSunday || false,
-        wdMonday: hotelData.weekDays?.wdMonday || false,
-        wdTuesday: hotelData.weekDays?.wdTuesday || false,
-        wdWednesday: hotelData.weekDays?.wdWednesday || false,
-        wdThursday: hotelData.weekDays?.wdThursday || false,
-        wdFriday: hotelData.weekDays?.wdFriday || false,
-        wdSaturday: hotelData.weekDays?.wdSaturday || false,
-        wedSunday: hotelData.weekDays?.wedSunday || false,
-        wedMonday: hotelData.weekDays?.wedMonday || false,
-        wedTuesday: hotelData.weekDays?.wedTuesday || false,
-        wedWednesday: hotelData.weekDays?.wedWednesday || false,
-        wedThursday: hotelData.weekDays?.wedThursday || false,
-        wedFriday: hotelData.weekDays?.wedFriday || false,
-        wedSaturday: hotelData.weekDays?.wedSaturday || false,
-        id: hotelData.weekDays?.id || "",
+    // Step 1: Set the form data first with the loaded hotel data
+    const rooms = hotelData.roomCategories?.map((roomCategory) => {
+      const associatedRoomTypes =
+        hotelData.roomTypes?.filter(
+          (rt) => rt.hotelRoomCategoryId === roomCategory.roomCategoryId
+        ) || [];
+      return {
+        roomCategoryId: roomCategory.roomCategoryId ?? "",
+        roomCategoryName: roomCategory.name ?? "",
+        roomTypes: associatedRoomTypes.map((rt) => ({
+          roomTypeId: rt.roomTypeId ?? "",
+          roomTypeName: rt.name ?? "",
+        })),
       };
+    }) || [];
 
-      // Step 3: Set formData with all data, including stateId and placeId
-      setFormData({
-        hotelName: hotelData.hotelName || "",
-        hotelDescription: hotelData.hotelDescription || "",
-        image360: hotelData.image360 || "",
-        image360File: null,
-        address: hotelData.address || "",
-        zipcode: hotelData.zipcode || "",
-        latitude: hotelData.latitude || "",
-        longitude: hotelData.longitude || "",
-        childComAgeMin: hotelData.childComAgeMin || "",
-        childComAgeMax: hotelData.childComAgeMax || "",
-        childChargeableAgeMin: hotelData.childChargeableAgeMin || "",
-        childChargeableAgeMax: hotelData.childChargeableAgeMax || "",
-        hotelCurrencyId: hotelData.hotelCurrencyId || "",
-        hotelCategoryId: hotelData.hotelCategoryId || "",
-        hotelTypeId: hotelData.hotelTypeId || "",
-        markupTypeId: hotelData.markupTypeId || "",
-        regionId: hotelData.regionId || "",
-        countryId: hotelData.countryId || "",
-        stateId: hotelData.stateId || "",
-        placeId: hotelData.placeId || "",
-        isDeleted: hotelData.isDeleted || false,
-        contactDetails: hotelData.contactDetails || [],
-        bankDetails: hotelData.bankDetails || [],
-        weekDays,
-        rooms,
-        termsAndConditions,
-        amenityIds,
-      });
-    } catch (error) {
-      console.error("Error loading hotel data:", error);
-      toast.error("Failed to load hotel data for editing");
-      navigate("/registration/hotel");
-    } finally {
-      setIsLoadingHotelData(false);
+    const termsAndConditions =
+      hotelData.termsAndConditions?.map((term) => term.description) || [];
+
+    // Ensure amenityIds are numbers and properly mapped
+    const amenityIds = hotelData.amenities?.map((amenity) => {
+      // Convert to number to ensure proper comparison
+      return Number(amenity.amenityId);
+    }) || [];
+
+    console.log("Amenity IDs from API:", amenityIds);
+    console.log("Amenities from API:", hotelData.amenities);
+
+    const weekDays = {
+      id: hotelData.weekDays?.id ?? "",
+      wdSunday: hotelData.weekDays?.wdSunday ?? false,
+      wdMonday: hotelData.weekDays?.wdMonday ?? false,
+      wdTuesday: hotelData.weekDays?.wdTuesday ?? false,
+      wdWednesday: hotelData.weekDays?.wdWednesday ?? false,
+      wdThursday: hotelData.weekDays?.wdThursday ?? false,
+      wdFriday: hotelData.weekDays?.wdFriday ?? false,
+      wdSaturday: hotelData.weekDays?.wdSaturday ?? false,
+      wedSunday: hotelData.weekDays?.wedSunday ?? false,
+      wedMonday: hotelData.weekDays?.wedMonday ?? false,
+      wedTuesday: hotelData.weekDays?.wedTuesday ?? false,
+      wedWednesday: hotelData.weekDays?.wedWednesday ?? false,
+      wedThursday: hotelData.weekDays?.wedThursday ?? false,
+      wedFriday: hotelData.weekDays?.wedFriday ?? false,
+      wedSaturday: hotelData.weekDays?.wedSaturday ?? false,
+    };
+
+    // Set the main form data first
+    setFormData({
+      hotelName: hotelData.hotelName ?? "",
+      hotelDescription: hotelData.hotelDescription ?? "",
+      image360: hotelData.image360 ?? "",
+      image360File: null,
+      address: hotelData.address ?? "",
+      zipcode: hotelData.zipcode ?? "",
+      latitude: hotelData.latitude ?? "",
+      longitude: hotelData.longitude ?? "",
+      childComAgeMin: hotelData.childComAgeMin ?? "",
+      childComAgeMax: hotelData.childComAgeMax ?? "",
+      childChargeableAgeMin: hotelData.childChargeableAgeMin ?? "",
+      childChargeableAgeMax: hotelData.childChargeableAgeMax ?? "",
+      hotelCurrencyId: hotelData.hotelCurrencyId ?? "",
+      hotelCategoryId: hotelData.hotelCategoryId ?? "",
+      hotelTypeId: hotelData.hotelTypeId ?? "",
+      markupTypeId: hotelData.markupTypeId ?? "",
+      regionId: hotelData.regionId ?? "",
+      countryId: hotelData.countryId ?? "",
+      stateId: hotelData.stateId ?? "",
+      placeId: hotelData.placeId ?? "",
+      isDeleted: hotelData.isDeleted ?? false,
+      contactDetails: hotelData.contactDetails ?? [],
+      bankDetails: hotelData.bankDetails ?? [],
+      weekDays,
+      rooms,
+      termsAndConditions,
+      amenityIds, // This should now contain [7, 8, 9] as numbers
+    });
+
+    // Step 2: Load dependent data after setting the form data
+    if (hotelData.countryId) {
+      const provincesResponse = await axiosInstance.get(
+        `/api/province/getByCountryId/${hotelData.countryId}`
+      );
+      setProvinces(provincesResponse.data || []);
     }
-  };
 
+    if (hotelData.stateId) {
+      const placesResponse = await axiosInstance.get(
+        `/api/destination/getplaces/${hotelData.stateId}`
+      );
+      setPlaces(placesResponse.data || []);
+    }
+
+  } catch (error) {
+    console.error("Error loading hotel data:", error);
+    toast.error("Failed to load hotel data for editing");
+    navigate("/registration/hotel");
+  } finally {
+    setIsLoadingHotelData(false);
+  }
+};
 
   // Load master data on component mount
   useEffect(() => {
@@ -576,15 +597,18 @@ const loadHotelData = async () => {
     }));
   };
 
-  const handleAmenityChange = (e) => {
-    const { value, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      amenityIds: checked
-        ? [...prev.amenityIds, parseInt(value)]
-        : prev.amenityIds.filter((id) => id !== parseInt(value)),
-    }));
-  };
+  //Amenity managenment
+const handleAmenityChange = (e) => {
+  const { value, checked } = e.target;
+  const amenityId = parseInt(value);
+  
+  setFormData((prev) => ({
+    ...prev,
+    amenityIds: checked
+      ? [...prev.amenityIds, amenityId]
+      : prev.amenityIds.filter((id) => id !== amenityId),
+  }));
+};
 
   // Contact Details Management
   const addContactDetail = () => {
@@ -884,11 +908,11 @@ const loadHotelData = async () => {
         roomCategoryId: parseInt(room.roomCategoryId),
         name: room.roomCategoryName,
         noOfRooms: 10, // Default value, adjust if needed
+        roomTypes: room.roomTypes || [],
       }));
 
       // Transform room types data
       const roomTypes = [];
-      console.log("=== TRANSFORMING ROOM TYPES ===");
       console.log("formData.rooms::", formData.rooms);
 
       formData.rooms.forEach((room, roomIndex) => {
@@ -901,8 +925,6 @@ const loadHotelData = async () => {
           });
         });
       });
-
-      console.log("Transformed roomTypes::", roomTypes);
 
       // Transform terms and conditions
       const termsAndConditions = formData.termsAndConditions.map((term) => ({
@@ -1051,24 +1073,28 @@ const loadHotelData = async () => {
       });
 
       // Room categories
-      roomCategories.forEach((room, index) => {
-        // formDataToSend.append(`roomCategories[${index}].hotelRoomCategoryId`, room.hotelRoomCategoryId || '');
-        // formDataToSend.append(`roomCategories[${index}].hotelId`, room.hotelId || '');
+      roomCategories.forEach((room, catIndex) => {
         formDataToSend.append(
-          `roomCategories[${index}].roomCategoryId`,
+          `roomCategories[${catIndex}].roomCategoryId`,
           parseInt(room.roomCategoryId)
         );
-        formDataToSend.append(`roomCategories[${index}].name`, room.name);
+        formDataToSend.append(`roomCategories[${catIndex}].name`, room.name);
         formDataToSend.append(
-          `roomCategories[${index}].noOfRooms`,
+          `roomCategories[${catIndex}].noOfRooms`,
           room.noOfRooms
         );
+
+        // Make sure roomTypes belongs to this category
+        room.roomTypes.forEach((roomType, typeIndex) => {
+          formDataToSend.append(
+            `roomCategories[${catIndex}].hotelRoomTypes[${typeIndex}].roomTypeId`,
+            parseInt(roomType.roomTypeId)
+          );
+        });
       });
 
       // Room types - Map to the correct roomCategoryId index
-      console.log("=== SUBMITTING ROOM TYPES ===");
-      console.log("Room Categories:", roomCategories);
-      console.log("Room Types:", roomTypes);
+
       // roomTypes.forEach((roomType, index) => {
       //   // Find the index of the room category that this room type belongs to
       //   const roomCategoryIndex = roomCategories.findIndex(
@@ -1093,24 +1119,24 @@ const loadHotelData = async () => {
       //   );
       // });
 
-      roomTypes.forEach((roomType, index) => {
-  // formDataToSend.append(
-  //   `roomTypes[${index}].hotelRoomTypeId`,
-  //   roomType.hotelRoomTypeId || ""
-  // );
-  formDataToSend.append(
-    `roomTypes[${index}].hotelRoomCategoryId`,
-    parseInt(roomType.hotelRoomCategoryId)
-  );
-  // formDataToSend.append(
-  //   `roomTypes[${index}].hotelId`,
-  //   roomType.hotelId || ""
-  // );
-  formDataToSend.append(
-    `roomTypes[${index}].roomTypeId`,
-    parseInt(roomType.roomTypeId)
-  );
-});
+      // roomTypes.forEach((roomType, index) => {
+      //   // formDataToSend.append(
+      //   //   `roomTypes[${index}].hotelRoomTypeId`,
+      //   //   roomType.hotelRoomTypeId || ""
+      //   // );
+      //   formDataToSend.append(
+      //     `roomTypes[${index}].hotelRoomCategoryId`,
+      //     parseInt(roomType.hotelRoomCategoryId)
+      //   );
+      //   // formDataToSend.append(
+      //   //   `roomTypes[${index}].hotelId`,
+      //   //   roomType.hotelId || ""
+      //   // );
+      //   formDataToSend.append(
+      //     `roomTypes[${index}].roomTypeId`,
+      //     parseInt(roomType.roomTypeId)
+      //   );
+      // });
 
       // Terms and conditions
       termsAndConditions.forEach((term, index) => {
@@ -1156,12 +1182,7 @@ const loadHotelData = async () => {
       if (isEditMode) {
         response = await axiosInstance.put(
           `/api/hotels/${id}`,
-          formDataToSend,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
+          formDataToSend     
         );
 
         console.log("Update response:", response);
@@ -2690,18 +2711,20 @@ const loadHotelData = async () => {
                           </div>
                           <div>
                             <h5 className="mb-1 text-success">
-                              {activeTab === 'terms-conditions' ? 'Ready to Register Hotel' : 'Continue Registration'}
+                              {activeTab === "terms-conditions"
+                                ? "Ready to Register Hotel"
+                                : "Continue Registration"}
                             </h5>
                             <p className="text-muted mb-0">
-                              {activeTab === 'terms-conditions'
-                                ? 'Review all information and click Register to complete.'
-                                : 'Fill out all required fields and click Next to proceed.'}
+                              {activeTab === "terms-conditions"
+                                ? "Review all information and click Register to complete."
+                                : "Fill out all required fields and click Next to proceed."}
                             </p>
                           </div>
                         </div>
                       </Col>
                       <Col md={4} className="text-end">
-                        {activeTab !== 'terms-conditions' ? (
+                        {activeTab !== "terms-conditions" ? (
                           <Button
                             type="button"
                             variant="primary"
@@ -2728,12 +2751,14 @@ const loadHotelData = async () => {
                                   role="status"
                                   aria-hidden="true"
                                 ></span>
-                                {isEditMode ? 'Updating Hotel...' : 'Registering Hotel...'}
+                                {isEditMode
+                                  ? "Updating Hotel..."
+                                  : "Registering Hotel..."}
                               </>
                             ) : (
                               <>
                                 <FaSave />
-                                {isEditMode ? 'Update Hotel' : 'Register'}
+                                {isEditMode ? "Update Hotel" : "Register"}
                               </>
                             )}
                           </Button>
