@@ -127,12 +127,13 @@ const HotelBookingPage = () => {
                           <small className="text-muted me-2">
                             ⭐ {hotelStaticData.starRating} Star
                           </small>
-                          {selectedRate.refundStatus !== undefined &&
+                          {selectedRate.nonRefundable !== undefined &&
                             getRefundStatusBadge(
-                              selectedRate.refundStatus
+                               selectedRate.nonRefundable === "Y"
                                 ? "NON REFUNDABLE"
                                 : "FLEXIBLE"
                             )}
+                           
                         </div>
                       </Col>
                       <Col md={6} lg={2}>

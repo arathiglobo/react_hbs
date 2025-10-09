@@ -188,6 +188,7 @@ const RoomList = () => {
         const response = await axiosInstance.post(endpoint, priceCheckReq);
         const hotel = response.data.hotels.hotel[0];
         const rooms = hotel.roomTypeDetails.rooms.room;
+        console.log("Accurate room details::", rooms);
         // Map all rooms to a structured object
         const accurateRates = rooms
           .filter((room) => room != null)
@@ -197,7 +198,7 @@ const RoomList = () => {
             roomCategory: room.roomType,
             mealPlan: room.mealPlan,
             contractLabel: room.contractLabel,
-            refundStatus: room.nonRefundable,
+            nonRefundable: room.nonRefundable,
             rate: room.rateDetails.rate,
             currency: room.currCode,
           }));
@@ -239,7 +240,25 @@ const RoomList = () => {
     }
   };
 
+  const getRefundStatusBadgeInRoomList = (nonRefundable) => {
+    console.log(
+      "SELECTED nonRefundable in getRefundStatusBadgeInRoomList:::",
+      nonRefundable
+    );
+
+    const value = String(nonRefundable).toLowerCase();
+    switch (value) {
+      case "false":
+        return <Badge bg="success">Flexible</Badge>;
+      case "true":
+        return <Badge bg="danger">Non-Refundable</Badge>;
+      default:
+        return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
+    }
+  };
+
   const getRefundStatusBadge = (refundStatus) => {
+    console.log("SELECTED refundStatus:::", refundStatus);
     switch (refundStatus) {
       case "FLEXIBLE":
         return <Badge bg="success">Flexible</Badge>;
@@ -540,11 +559,7 @@ const RoomList = () => {
                       <Row>
                         {category.availableRates.map((rate, rateIndex) => (
                           <Col key={rateIndex} lg={6} xl={4} className="mb-3">
-                            <Card
-                              className="rate-card h-100"
-                              role="button"
-                              onClick={() => handleBooking(rate)}
-                            >
+                            <Card className="rate-card h-100" role="button">
                               <Card.Body className="p-3">
                                 <div className="rate-header mb-3">
                                   <div className="d-flex align-items-center gap-2 mb-2">
@@ -553,7 +568,9 @@ const RoomList = () => {
                                       {rate.mealPlan}
                                     </span>
                                   </div>
-                                  {getRefundStatusBadge(rate.refundStatus)}
+                                  {getRefundStatusBadgeInRoomList(
+                                    rate.nonRefundable
+                                  )}
                                 </div>
 
                                 <div className="rate-pricing mb-3">
@@ -771,7 +788,7 @@ const RoomList = () => {
                     <span>Refund Status:</span>
                     <span>
                       {getRefundStatusBadge(
-                        selectedRate.refundStatus
+                        selectedRate.nonRefundable === "Y"
                           ? "NON REFUNDABLE"
                           : "FLEXIBLE"
                       )}
