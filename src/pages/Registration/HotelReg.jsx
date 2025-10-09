@@ -41,6 +41,7 @@ const tabOrder = [
   'contact-details',
   'bank-details',
   'week-days',
+  'amenities',
   'rooms',
   'terms-conditions',
 ];
@@ -82,6 +83,8 @@ const HotelReg = () => {
         if (!bank.accountNo) errors[`bank_${index}_accountNo`] = 'Bank Account is required';
       });
     }
+
+
     if (step === 'rooms') {
       if (formData.rooms.length === 0) errors.rooms = 'At least one room category is required';
       formData.rooms.forEach((room, roomIndex) => {
@@ -210,181 +213,117 @@ const HotelReg = () => {
   ];
 
   // Load hotel data for edit mode
-  // const loadHotelData = async () => {
-  //   if (!isEditMode) return;
+  
+const loadHotelData = async () => {
+    if (!isEditMode) return;
 
-  //   try {
-  //     setIsLoadingHotelData(true);
-  //     const response = await axiosInstance.get(`/api/hotels/${id}`);
-  //     const hotelData = response.data;
+    try {
+      setIsLoadingHotelData(true);
+      const response = await axiosInstance.get(`/api/hotels/${id}`);
+      const hotelData = response.data;
 
-  //     console.log("Loaded hotel data for edit:", hotelData);
+      console.log("Loaded hotel data for edit:", hotelData);
 
-  //     // Pre-fill form data
-  //     setFormData({
-  //       hotelName: hotelData.hotelName || "",
-  //       hotelDescription: hotelData.hotelDescription || "",
-  //       image360: hotelData.image360 || "",
-  //       address: hotelData.address || "",
-  //       zipcode: hotelData.zipcode || "",
-  //       latitude: hotelData.latitude || "",
-  //       longitude: hotelData.longitude || "",
-  //       childComAgeMin: hotelData.childComAgeMin || "",
-  //       childComAgeMax: hotelData.childComAgeMax || "",
-  //       childChargeableAgeMin: hotelData.childChargeableAgeMin || "",
-  //       childChargeableAgeMax: hotelData.childChargeableAgeMax || "",
-  //       hotelCurrencyId: hotelData.hotelCurrencyId || "",
-  //       hotelCategoryId: hotelData.hotelCategoryId || "",
-  //       hotelTypeId: hotelData.hotelTypeId || "",
-  //       markupTypeId: hotelData.markupTypeId || "",
-  //       regionId: hotelData.regionId || "",
-  //       countryId: hotelData.countryId || "",
-  //       stateId: hotelData.stateId || "",
-  //       placeId: hotelData.placeId || "",
-  //       isDeleted: hotelData.isDeleted || false,
-  //       contactDetails: hotelData.contactDetails || [],
-  //       bankDetails: hotelData.bankDetails || [],
-  //       weekDays: hotelData.weekDays || {
-  //         wdSunday: false,
-  //         wdMonday: false,
-  //         wdTuesday: false,
-  //         wdWednesday: false,
-  //         wdThursday: false,
-  //         wdFriday: false,
-  //         wdSaturday: false,
-  //         wedSunday: false,
-  //         wedMonday: false,
-  //         wedTuesday: false,
-  //         wedWednesday: false,
-  //         wedThursday: false,
-  //         wedFriday: false,
-  //         wedSaturday: false,
-  //       },
-  //       rooms: hotelData.rooms
-  //         ? hotelData.rooms.map((room) => ({
-  //             ...room,
-  //             roomTypes: room.roomTypes || [],
-  //           }))
-  //         : [],
-  //       termsAndConditions: hotelData.termsAndConditions || [],
-  //       amenityIds: hotelData.amenityIds || [],
-  //     });
+      // Step 1: Load dependent data (provinces and places) sequentially
+      let provincesData = [];
+      let placesData = [];
 
-  //     // Load dependent data for location
-  //     if (hotelData.countryId) {
-  //       await loadProvinces(hotelData.countryId);
-  //     }
-  //     if (hotelData.stateId) {
-  //       await loadPlaces(hotelData.stateId);
-  //     }
-  //   } catch (error) {
-  //     console.error("Error loading hotel data:", error);
-  //     toast.error("Failed to load hotel data for editing");
-  //     navigate("/registration/hotel");
-  //   } finally {
-  //     setIsLoadingHotelData(false);
-  //   }
-  // };
-  const loadHotelData = async () => {
-  if (!isEditMode) return;
+      if (hotelData.countryId) {
+        const provincesResponse = await axiosInstance.get(
+          `/api/province/getByCountryId/${hotelData.countryId}`
+        );
+        provincesData = provincesResponse.data || [];
+        setProvinces(provincesData);
+      }
 
-  try {
-    setIsLoadingHotelData(true);
-    const response = await axiosInstance.get(`/api/hotels/${id}`);
-    const hotelData = response.data;
+      if (hotelData.stateId) {
+        const placesResponse = await axiosInstance.get(
+          `/api/destination/getplaces/${hotelData.stateId}`
+        );
+        placesData = placesResponse.data || [];
+        setPlaces(placesData);
+      }
 
-    console.log("Loaded hotel data for edit:", hotelData);
+      // Step 2: Map hotel data to formData
+      const rooms =
+        hotelData.roomCategories?.map((roomCategory) => {
+          const associatedRoomTypes =
+            hotelData.roomTypes?.filter(
+              (rt) => rt.hotelRoomCategoryId === roomCategory.roomCategoryId
+            ) || [];
+          return {
+            roomCategoryId: roomCategory.roomCategoryId,
+            roomCategoryName: roomCategory.name,
+            roomTypes: associatedRoomTypes.map((rt) => ({
+              roomTypeId: rt.roomTypeId,
+              roomTypeName: rt.name,
+            })),
+          };
+        }) || [];
 
-    // Load dependent data for location BEFORE setting form data
-    let provincesData = [];
-    let placesData = [];
-    if (hotelData.countryId) {
-      await loadProvinces(hotelData.countryId);
-      // After loading provinces, get the latest provinces list
-      provincesData = await axiosInstance.get(`/api/province/getByCountryId/${hotelData.countryId}`).then(res => res.data || []);
+      const termsAndConditions =
+        hotelData.termsAndConditions?.map((term) => term.description) || [];
+
+      const amenityIds =
+        hotelData.amenities?.map((amenity) => amenity.amenityId) || [];
+
+      const weekDays = {
+        wdSunday: hotelData.weekDays?.wdSunday || false,
+        wdMonday: hotelData.weekDays?.wdMonday || false,
+        wdTuesday: hotelData.weekDays?.wdTuesday || false,
+        wdWednesday: hotelData.weekDays?.wdWednesday || false,
+        wdThursday: hotelData.weekDays?.wdThursday || false,
+        wdFriday: hotelData.weekDays?.wdFriday || false,
+        wdSaturday: hotelData.weekDays?.wdSaturday || false,
+        wedSunday: hotelData.weekDays?.wedSunday || false,
+        wedMonday: hotelData.weekDays?.wedMonday || false,
+        wedTuesday: hotelData.weekDays?.wedTuesday || false,
+        wedWednesday: hotelData.weekDays?.wedWednesday || false,
+        wedThursday: hotelData.weekDays?.wedThursday || false,
+        wedFriday: hotelData.weekDays?.wedFriday || false,
+        wedSaturday: hotelData.weekDays?.wedSaturday || false,
+        id: hotelData.weekDays?.id || "",
+      };
+
+      // Step 3: Set formData with all data, including stateId and placeId
+      setFormData({
+        hotelName: hotelData.hotelName || "",
+        hotelDescription: hotelData.hotelDescription || "",
+        image360: hotelData.image360 || "",
+        image360File: null,
+        address: hotelData.address || "",
+        zipcode: hotelData.zipcode || "",
+        latitude: hotelData.latitude || "",
+        longitude: hotelData.longitude || "",
+        childComAgeMin: hotelData.childComAgeMin || "",
+        childComAgeMax: hotelData.childComAgeMax || "",
+        childChargeableAgeMin: hotelData.childChargeableAgeMin || "",
+        childChargeableAgeMax: hotelData.childChargeableAgeMax || "",
+        hotelCurrencyId: hotelData.hotelCurrencyId || "",
+        hotelCategoryId: hotelData.hotelCategoryId || "",
+        hotelTypeId: hotelData.hotelTypeId || "",
+        markupTypeId: hotelData.markupTypeId || "",
+        regionId: hotelData.regionId || "",
+        countryId: hotelData.countryId || "",
+        stateId: hotelData.stateId || "",
+        placeId: hotelData.placeId || "",
+        isDeleted: hotelData.isDeleted || false,
+        contactDetails: hotelData.contactDetails || [],
+        bankDetails: hotelData.bankDetails || [],
+        weekDays,
+        rooms,
+        termsAndConditions,
+        amenityIds,
+      });
+    } catch (error) {
+      console.error("Error loading hotel data:", error);
+      toast.error("Failed to load hotel data for editing");
+      navigate("/registration/hotel");
+    } finally {
+      setIsLoadingHotelData(false);
     }
-    if (hotelData.stateId) {
-      await loadPlaces(hotelData.stateId);
-      // After loading places, get the latest places list
-      placesData = await axiosInstance.get(`/api/destination/getplaces/${hotelData.stateId}`).then(res => res.data || []);
-    }
+  };
 
-    // Pre-fill form data
-    setFormData({
-      hotelName: hotelData.hotelName || "",
-      hotelDescription: hotelData.hotelDescription || "",
-      image360: hotelData.image360 || "",
-      address: hotelData.address || "",
-      zipcode: hotelData.zipcode || "",
-      latitude: hotelData.latitude || "",
-      longitude: hotelData.longitude || "",
-      childComAgeMin: hotelData.childComAgeMin || "",
-      childComAgeMax: hotelData.childComAgeMax || "",
-      childChargeableAgeMin: hotelData.childChargeableAgeMin || "",
-      childChargeableAgeMax: hotelData.childChargeableAgeMax || "",
-      hotelCurrencyId: hotelData.hotelCurrencyId || "",
-      hotelCategoryId: hotelData.hotelCategoryId || "",
-      hotelTypeId: hotelData.hotelTypeId || "",
-      markupTypeId: hotelData.markupTypeId || "",
-      regionId: hotelData.regionId || "",
-      countryId: hotelData.countryId || "",
-      // Use correct keys for province and place
-      stateId: hotelData.stateId || "",
-      placeId: hotelData.placeId || "",
-      isDeleted: hotelData.isDeleted || false,
-      contactDetails: hotelData.contactDetails || [],
-      bankDetails: hotelData.bankDetails || [],
-      weekDays: hotelData.weekDays || {
-        wdSunday: false,
-        wdMonday: false,
-        wdTuesday: false,
-        wdWednesday: false,
-        wdThursday: false,
-        wdFriday: false,
-        wdSaturday: false,
-        wedSunday: false,
-        wedMonday: false,
-        wedTuesday: false,
-        wedWednesday: false,
-        wedThursday: false,
-        wedFriday: false,
-        wedSaturday: false,
-      },
-      rooms: hotelData.roomCategories
-        ? hotelData.roomCategories.map((category) => ({
-            roomCategoryId: category.roomCategoryId,
-            roomCategoryName: category.name,
-            roomTypes: hotelData.roomTypes
-              .filter(
-                (rt) => rt.hotelRoomCategoryId === category.roomCategoryId
-              )
-              .map((rt) => ({
-                roomTypeId: rt.roomTypeId,
-                roomTypeName: rt.name,
-              })),
-          }))
-        : [],
-      termsAndConditions: hotelData.termsAndConditions
-        ? hotelData.termsAndConditions.map((term) => term.description)
-        : [],
-      amenityIds: hotelData.amenities
-        ? hotelData.amenities.map((amenity) => amenity.amenityId)
-        : [],
-    });
-
-    // Set provinces and places state so dropdowns are populated
-    if (provincesData.length > 0) setProvinces(provincesData);
-   
-    if (placesData.length > 0) setPlaces(placesData);
-     console.log("placesData::", placesData);
-  } catch (error) {
-    console.error("Error loading hotel data:", error);
-    toast.error("Failed to load hotel data for editing");
-    navigate("/registration/hotel");
-  } finally {
-    setIsLoadingHotelData(false);
-  }
-};
 
   // Load master data on component mount
   useEffect(() => {
@@ -409,20 +348,39 @@ const HotelReg = () => {
   }, [isEditMode, id]);
 
   // Load dependent data when country/province changes
+
+  // Prevent resetting stateId/placeId on initial data load (edit mode)
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   useEffect(() => {
     if (formData.countryId) {
-      loadProvinces(formData.countryId);
-      setPlaces([]);
-      setFormData((prev) => ({ ...prev, stateId: "", placeId: "" }));
+      if (!isInitialLoad) {
+        loadProvinces(formData.countryId);
+        setPlaces([]);
+        setFormData((prev) => ({ ...prev, stateId: "", placeId: "" }));
+      } else {
+        loadProvinces(formData.countryId);
+      }
     }
-  }, [formData.countryId]);
+  }, [formData.countryId, isInitialLoad]);
 
   useEffect(() => {
     if (formData.stateId) {
-      loadPlaces(formData.stateId);
-      setFormData((prev) => ({ ...prev, placeId: "" }));
+      if (!isInitialLoad) {
+        loadPlaces(formData.stateId);
+        setFormData((prev) => ({ ...prev, placeId: "" }));
+      } else {
+        loadPlaces(formData.stateId);
+      }
     }
-  }, [formData.stateId]);
+  }, [formData.stateId, isInitialLoad]);
+
+  // After hotel data is loaded for edit, set isInitialLoad to false
+  useEffect(() => {
+    if (!isLoadingHotelData && isInitialLoad) {
+      setIsInitialLoad(false);
+    }
+  }, [isLoadingHotelData, isInitialLoad]);
 
   // Load currencies
   const loadCurrencies = async () => {
@@ -587,6 +545,13 @@ const HotelReg = () => {
       [name]:
         type === "checkbox" ? checked : type === "file" ? files[0] : value,
     }));
+    // Remove validation error for this field if any
+    setValidationErrors((prev) => {
+      if (!prev[name]) return prev;
+      const updated = { ...prev };
+      delete updated[name];
+      return updated;
+    });
   };
 
   const handleWeekdayChange = (e) => {
@@ -1186,6 +1151,7 @@ const HotelReg = () => {
         console.log(`${key}: ${value}`);
       }
 
+      console.log("Submitting form data:", formDataToSend);
       let response;
       if (isEditMode) {
         response = await axiosInstance.put(
@@ -1197,6 +1163,8 @@ const HotelReg = () => {
             },
           }
         );
+
+        console.log("Update response:", response);
         toast.success("Hotel updated successfully!");
       } else {
         response = await axiosInstance.post("/api/hotels", formDataToSend, {
@@ -2739,7 +2707,7 @@ const HotelReg = () => {
                             variant="primary"
                             size="lg"
                             disabled={isLoading}
-                            className="d-flex align-items-center gap-2 px-4 py-3 rounded-pill shadow"
+                            className="d-flex align-items-center gap-2 px-5 py-2 rounded-pill shadow handleNextStep"
                             onClick={handleNextStep}
                           >
                             Next
@@ -2750,7 +2718,7 @@ const HotelReg = () => {
                             variant="success"
                             size="lg"
                             disabled={isLoading}
-                            className="d-flex align-items-center gap-2 px-4 py-3 rounded-pill shadow"
+                            className="d-flex align-items-center gap-2 px-4 py-3 rounded-pill shadow handleRegister"
                             onClick={handleRegister}
                           >
                             {isLoading ? (

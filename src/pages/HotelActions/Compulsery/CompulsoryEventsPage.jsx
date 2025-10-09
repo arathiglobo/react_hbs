@@ -26,6 +26,8 @@ const CompulsoryEventsPage = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [marketTypes, setMarketTypes] = useState([]);
+  const [masterOccupancies, setMasterOccupancy] = useState([]);
+  const [hotelRoomsData, setHotelRoomsData] = useState([]);
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [editEvent, setEditEvent] = useState(null);
@@ -74,6 +76,8 @@ const CompulsoryEventsPage = () => {
   useEffect(() => {
     fetchEvents();
     loadMarketTypes();
+    loadMasterOcccupancies();
+    loadHotelRoomDatas();
   }, [id]);
 
   // Open modal for create
@@ -104,6 +108,7 @@ const CompulsoryEventsPage = () => {
   const openEdit = (event) => {
     setEditEvent(event);
     setFormData({
+      supplymentId: event?.supplymentId || "",
       supplymentCode: event.supplymentCode || "",
       supplyments: event.supplyments || "",
       marketypeIds: event.marketypeIds || event.marketypeIds || [],
@@ -154,7 +159,10 @@ const CompulsoryEventsPage = () => {
         compulsorySupplyValidityDTO: formData.compulsorySupplyValidityDTO,
       };
       console.log("Compulsory Event Save Payload:", payload);
-      const response = await axiosInstance.post("/api/compulsoryEvent/save", payload);
+      const response = await axiosInstance.post(
+        "/api/compulsoryEvent/save",
+        payload
+      );
       console.log("Compulsory Event Save Response:", response.data);
       if (response.data != null) {
         toast.success("Event created successfully");
@@ -196,6 +204,26 @@ const CompulsoryEventsPage = () => {
     } catch (error) {
       console.error("Error loading market types:", error);
       toast.error("Failed to load market types");
+    }
+  };
+
+  const loadMasterOcccupancies = async () => {
+    try {
+      const response = await axiosInstance.get(`/api/occupancyType`);
+      setMasterOccupancy(response.data || []);
+    } catch (error) {
+      toast.error("Failed to load Master Occupancy");
+    }
+  };
+
+  const loadHotelRoomDatas = async () => {
+    try {
+      const response = await axiosInstance.get(
+        `/api/hotelRoomDetailsController/${id}`
+      );
+      setHotelRoomsData(response.data || []);
+    } catch (error) {
+      toast.error("Failed to load Hotel Rooms Data");
     }
   };
 
@@ -366,7 +394,10 @@ const CompulsoryEventsPage = () => {
                         >
                           <option value="">Select Market Type</option>
                           {marketTypes.map((market) => (
-                            <option key={market.marketTypeId} value={market.marketTypeId}>
+                            <option
+                              key={market.marketTypeId}
+                              value={market.marketTypeId}
+                            >
                               {market.name}
                             </option>
                           ))}
@@ -378,136 +409,161 @@ const CompulsoryEventsPage = () => {
                   {/* Rates Section */}
                   <h5>Rates</h5>
                   <div className="mb-3 p-3 border rounded bg-light">
-                    <label>DELUXE SUITE ROOM - DSN</label>
-                    <Table striped bordered hover responsive>
-                      <thead>
-                        <tr>
-                          <th>Occupancy type</th>
-                          <th>Base Rate</th>
-                          <th>Adult Rate</th>
-                          <th>Child Rate</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {formData.compulsorySupplymentsRateDTO.map(
-                          (rate, idx) => (
-                            <tr key={idx}>
-                              <td>
-                                <Form.Select
-                                  value={rate.ocuppancytypeId}
-                                  onChange={(e) => {
-                                    const newRates = [
-                                      ...formData.compulsorySupplymentsRateDTO,
-                                    ];
-                                    newRates[idx].ocuppancytypeId =
-                                      e.target.value;
-                                    setFormData({
-                                      ...formData,
-                                      compulsorySupplymentsRateDTO: newRates,
-                                    });
-                                  }}
-                                >
-                                  <option value="">Select Occupancy</option>
-                                  <option value="1">Single</option>
-                                  <option value="2">Double</option>
-                                </Form.Select>
-                              </td>
-                              <td>
-                                <Form.Control
-                                  type="number"
-                                  value={rate.rate}
-                                  onChange={(e) => {
-                                    const newRates = [
-                                      ...formData.compulsorySupplymentsRateDTO,
-                                    ];
-                                    newRates[idx].rate = e.target.value;
-                                    setFormData({
-                                      ...formData,
-                                      compulsorySupplymentsRateDTO: newRates,
-                                    });
-                                  }}
-                                  placeholder="Base Rate"
-                                />
-                              </td>
-                              <td>
-                                <Form.Control
-                                  type="number"
-                                  value={rate.rateAdult}
-                                  onChange={(e) => {
-                                    const newRates = [
-                                      ...formData.compulsorySupplymentsRateDTO,
-                                    ];
-                                    newRates[idx].rateAdult = e.target.value;
-                                    setFormData({
-                                      ...formData,
-                                      compulsorySupplymentsRateDTO: newRates,
-                                    });
-                                  }}
-                                  placeholder="Adult Rate"
-                                />
-                              </td>
-                              <td>
-                                <Form.Control
-                                  type="number"
-                                  value={rate.rateChild}
-                                  onChange={(e) => {
-                                    const newRates = [
-                                      ...formData.compulsorySupplymentsRateDTO,
-                                    ];
-                                    newRates[idx].rateChild = e.target.value;
-                                    setFormData({
-                                      ...formData,
-                                      compulsorySupplymentsRateDTO: newRates,
-                                    });
-                                  }}
-                                  placeholder="Child Rate"
-                                />
-                              </td>
-                              <td>
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newRates =
-                                      formData.compulsorySupplymentsRateDTO.filter(
-                                        (_, i) => i !== idx
-                                      );
-                                    setFormData({
-                                      ...formData,
-                                      compulsorySupplymentsRateDTO: newRates,
-                                    });
-                                  }}
-                                >
-                                  Remove
-                                </Button>
-                              </td>
+                    {hotelRoomsData.map((room, roomIdx) => (
+                      <div key={roomIdx} className="mb-3">
+                        <label>
+                          {room.roomCategory.toUpperCase()} -{" "}
+                          {room.roomTypeDetailsDTOs
+                            .map((rt) => rt.roomTypeName)
+                            .join(", ")}
+                        </label>
+
+                        <Table striped bordered hover responsive>
+                          <thead>
+                            <tr>
+                              <th>Occupancy type</th>
+                              <th>Base Rate</th>
+                              <th>Adult Rate</th>
+                              <th>Child Rate</th>
+                              <th>Actions</th>
                             </tr>
-                          )
-                        )}
-                      </tbody>
-                    </Table>
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          compulsorySupplymentsRateDTO: [
-                            ...formData.compulsorySupplymentsRateDTO,
-                            {
-                              supplymentrateId: "",
-                              hotelRoomcategoryId: "",
-                              ocuppancytypeId: "",
-                              rate: "",
-                              rateAdult: "",
-                              rateChild: "",
-                            },
-                          ],
-                        })
-                      }
-                    >
-                      + Add Rate
-                    </Button>
+                          </thead>
+                          <tbody>
+                            {formData.compulsorySupplymentsRateDTO.map(
+                              (rate, idx) => (
+                                <tr key={idx}>
+                                  <td>
+                                    <Form.Select
+                                      value={rate.ocuppancytypeId}
+                                      onChange={(e) => {
+                                        const newRates = [
+                                          ...formData.compulsorySupplymentsRateDTO,
+                                        ];
+                                        newRates[idx].ocuppancytypeId =
+                                          e.target.value;
+                                        setFormData({
+                                          ...formData,
+                                          compulsorySupplymentsRateDTO:
+                                            newRates,
+                                        });
+                                      }}
+                                    >
+                                      <option value="">
+                                        Select Occupancy Type
+                                      </option>
+                                      {masterOccupancies.map((type) => (
+                                        <option
+                                          key={type.occupancyTypeId}
+                                          value={type.occupancyTypeId}
+                                        >
+                                          {type.occupancy}
+                                        </option>
+                                      ))}
+                                    </Form.Select>
+                                  </td>
+                                  <td>
+                                    <Form.Control
+                                      type="number"
+                                      value={rate.rate}
+                                      onChange={(e) => {
+                                        const newRates = [
+                                          ...formData.compulsorySupplymentsRateDTO,
+                                        ];
+                                        newRates[idx].rate = e.target.value;
+                                        setFormData({
+                                          ...formData,
+                                          compulsorySupplymentsRateDTO:
+                                            newRates,
+                                        });
+                                      }}
+                                      placeholder="Base Rate"
+                                    />
+                                  </td>
+                                  <td>
+                                    <Form.Control
+                                      type="number"
+                                      value={rate.rateAdult}
+                                      onChange={(e) => {
+                                        const newRates = [
+                                          ...formData.compulsorySupplymentsRateDTO,
+                                        ];
+                                        newRates[idx].rateAdult =
+                                          e.target.value;
+                                        setFormData({
+                                          ...formData,
+                                          compulsorySupplymentsRateDTO:
+                                            newRates,
+                                        });
+                                      }}
+                                      placeholder="Adult Rate"
+                                    />
+                                  </td>
+                                  <td>
+                                    <Form.Control
+                                      type="number"
+                                      value={rate.rateChild}
+                                      onChange={(e) => {
+                                        const newRates = [
+                                          ...formData.compulsorySupplymentsRateDTO,
+                                        ];
+                                        newRates[idx].rateChild =
+                                          e.target.value;
+                                        setFormData({
+                                          ...formData,
+                                          compulsorySupplymentsRateDTO:
+                                            newRates,
+                                        });
+                                      }}
+                                      placeholder="Child Rate"
+                                    />
+                                  </td>
+                                  <td>
+                                    <Button
+                                      variant="danger"
+                                      size="sm"
+                                      onClick={() => {
+                                        const newRates =
+                                          formData.compulsorySupplymentsRateDTO.filter(
+                                            (_, i) => i !== idx
+                                          );
+                                        setFormData({
+                                          ...formData,
+                                          compulsorySupplymentsRateDTO:
+                                            newRates,
+                                        });
+                                      }}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </td>
+                                </tr>
+                              )
+                            )}
+                          </tbody>
+                        </Table>
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              compulsorySupplymentsRateDTO: [
+                                ...formData.compulsorySupplymentsRateDTO,
+                                {
+                                  supplymentrateId: "",
+                                  hotelRoomcategoryId: "",
+                                  ocuppancytypeId: "",
+                                  rate: "",
+                                  rateAdult: "",
+                                  rateChild: "",
+                                },
+                              ],
+                            })
+                          }
+                        >
+                          + Add Rate
+                        </Button>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Validity Periods Section in a box */}

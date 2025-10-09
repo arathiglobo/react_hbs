@@ -110,6 +110,7 @@ const HotelRegistrationActions = () => {
         setIsLoading(true);
         const response = await axiosInstance.get(`/api/hotels/${id}`);
         setHotelData(response.data);
+        console.log("Hotel Data:", response.data);
         setError(null);
       } catch (error) {
         console.error("Error fetching hotel data:", error);
