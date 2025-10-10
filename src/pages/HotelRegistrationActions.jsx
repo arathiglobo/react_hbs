@@ -361,6 +361,8 @@ const HotelRegistrationActions = () => {
       setShowMailCenterModal(true);
     } else if (actionLabel === 'Login Details') {
       setShowLoginDetailsModal(true);
+    } else if (actionLabel === 'Occupancy & Minimum length') {
+      navigate(`/hotel-actions/${id}/occupancy-and-minimumlength`);
     } else if (actionLabel === 'Hotel Edit') {
       navigate(`/registration/hotel/create/${id}`);
     } else if (actionLabel === 'Compulsory Events') {

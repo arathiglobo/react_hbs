@@ -40,6 +40,7 @@ import PackageReg from "./pages/Registration/PackageReg";
 import PackageRates from "./pages/Registration/PackageRates";
 import SupplierReg from "./pages/Registration/SupplierReg";
 import CompulsoryEventsPage from "./pages/HotelActions/Compulsery/CompulsoryEventsPage";
+import OccupancyAndMinimumLength from "./pages/HotelActions/OccupancyAndMinimumLength";
 
 
 
@@ -140,6 +141,7 @@ export default function App() {
        <Route path="/registration/hotel/create/:id" element={<HotelReg />} />
        <Route path="/hotel-details/:id" element={<HotelRegistrationActions />} />
       <Route path="/registration/hotel/:id/compulsory-events" element={<CompulsoryEventsPage />} />
+      <Route path="/hotel-actions/:id/occupancy-and-minimumlength" element={<OccupancyAndMinimumLength />} />
 
       </Routes>
 
