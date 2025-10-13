@@ -10,6 +10,8 @@ import {
   Row,
   Col,
   Spinner,
+  Card,
+  Pagination,
 } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -30,6 +32,11 @@ const CompulsoryEventsPage = () => {
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [editEvent, setEditEvent] = useState(null);
+
+  // Search + pagination
+  const [searchTerm, setSearchTerm] = useState("");
+  const itemsPerPage = 8;
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -383,197 +390,311 @@ const CompulsoryEventsPage = () => {
     }
   };
 
+  // ---- Search & Pagination derived data ----
+  const filteredEvents = events.filter((ev) =>
+    ev.supplyments?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filteredEvents.length / itemsPerPage) || 1;
+  const currentData = filteredEvents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handlePageChange = (pageNumber) => {
+    if (pageNumber < 1 || pageNumber > totalPages) return;
+    setCurrentPage(pageNumber);
+  };
+
+  // reset page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, events.length]);
+
+  // ---- UI ----
   return (
-    <div
-      className="min-vh-100 bg-gradient-light d-flex flex-column"
-      style={{
-        background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
-      }}
-    >
+    <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Container fluid>
-            {/* Header Section */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <Button variant="link" onClick={() => navigate(-1)}>
-                <FaArrowLeft /> Back
-              </Button>
-              <h3 className="mb-0">Compulsory Events / Supplements</h3>
-              <Button variant="primary" onClick={handleCreate}>
-                <FaPlus /> Create
-              </Button>
-            </div>
+          <Container fluid className="px-0">
+            <Card className="shadow-sm border-0 rounded-4">
+              {/* ================= Header ================= */}
+              <Card.Header className="bg-white border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
+                <div className="fw-semibold fs-6 text-dark">
+                  Compulsory Events / Supplements
+                </div>
 
-            {/* Events Table */}
-            {loading ? (
-              <div className="text-center">
-                <Spinner animation="border" variant="primary" />
-                <p className="mt-2">Loading events...</p>
-              </div>
-            ) : (
-              <Table striped bordered hover responsive>
-                <thead>
-                  <tr>
-                    <th>S.N</th>
-                    <th>Supplement Code</th>
-                    <th>Tagline</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {events.length > 0 ? (
-                    events.map((ev, idx) => (
-                      <tr key={ev.supplymentId}>
-                        <td>{idx + 1}</td>
-                        <td>{ev.supplymentCode}</td>
-                        <td>{ev.supplyments}</td>
-                        <td>
-                          <Badge bg="success">Active</Badge>
-                        </td>
-                        <td>
-                          <Button
+                <div className="d-flex align-items-center gap-2 flex-grow-1 justify-content-end">
+                  <div
+                    className="position-relative"
+                    style={{
+                      width: "260px",
+                      maxWidth: "100%",
+                      marginRight: "270px",
+                    }}
+                  >
+                    <Form.Control
+                      type="text"
+                      placeholder="Search supplements..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="rounded-pill ps-3 text-dark"
+                      style={{
+                        fontSize: "0.9rem",
+                        height: "38px",
+                        borderColor: "#dee2e6",
+                      }}
+                    />
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                        style={{
+                          border: "none",
+                          background: "none",
+                          color: "#6c757d",
+                          padding: "0 10px",
+                          fontSize: "1rem",
+                        }}
+                        onClick={() => {
+                          setSearchTerm("");
+                          setCurrentPage(1);
+                        }}
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    )}
+                  </div>
+
+                  <Button
+                    className="ms-2 btn-green rounded-pill px-4 fw-semibold"
+                    onClick={handleCreate}
+                    style={{
+                      fontSize: "0.9rem",
+                      height: "38px",
+                      lineHeight: "1.2",
+                    }}
+                  >
+                    + Create
+                  </Button>
+                </div>
+              </Card.Header>
+
+              {/* ================= Table ================= */}
+              <Card.Body className="p-0">
+                <Table
+                  responsive
+                  hover
+                  striped
+                  className="mb-0 align-middle text-center"
+                >
+                  <thead className="table-light align-middle">
+                    <tr>
+                      <th style={{ width: "80px" }}>S/N</th>
+                      <th>Supplement Code</th>
+                      <th>Tagline</th>
+                      <th>Status</th>
+                      <th style={{ width: "160px" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={5} className="text-center py-5 text-muted">
+                          <Spinner
+                            animation="border"
                             size="sm"
-                            variant="warning"
-                            onClick={() => openEdit(ev)}
-                          >
-                            <FaEdit /> Edit
-                          </Button>{" "}
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => handleDelete(ev.supplymentId)}
-                          >
-                            <FaTrash /> Delete
-                          </Button>
+                            className="me-2"
+                          />
+                          Loading events...
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="text-center">
-                        No compulsory events found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            )}
+                    ) : currentData.length > 0 ? (
+                      currentData.map((ev, idx) => (
+                        <tr
+                          key={ev.supplymentId}
+                          style={{
+                            backgroundColor:
+                              idx % 2 === 0 ? "#f9f9f9" : "#ffffff",
+                          }}
+                        >
+                          <td>{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                          <td className="text-capitalize">
+                            {ev.supplymentCode}
+                          </td>
+                          <td className="text-capitalize">{ev.supplyments}</td>
+                          <td>
+                            <Badge
+                              bg="success"
+                              className="px-3 py-2 rounded-pill fw-normal"
+                            >
+                              Active
+                            </Badge>
+                          </td>
+                          <td>
+                            <div className="d-flex justify-content-center gap-3">
+                              <FaEdit
+                                className="text-warning"
+                                style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => openEdit(ev)}
+                                title="Edit"
+                              />
+                              <FaTrash
+                                className="text-danger"
+                                style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => handleDelete(ev.supplymentId)}
+                                title="Delete"
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="text-center py-5 text-muted">
+                          No events found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
 
-            {/* Create/Edit Modal */}
+                {/* ================= Pagination ================= */}
+                {filteredEvents.length > itemsPerPage && (
+                  <div className="d-flex justify-content-between align-items-center p-3 border-top bg-white rounded-bottom-4">
+                    <small className="text-muted">
+                      Showing{" "}
+                      <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> to{" "}
+                      <strong>
+                        {Math.min(currentPage * itemsPerPage, filteredEvents.length)}
+                      </strong>{" "}
+                      of <strong>{filteredEvents.length}</strong> events
+                    </small>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={currentPage === 1}
+                        onClick={() => handlePageChange(currentPage - 1)}
+                      />
+                      {[...Array(totalPages)].map((_, i) => (
+                        <Pagination.Item
+                          key={i}
+                          active={currentPage === i + 1}
+                          onClick={() => handlePageChange(i + 1)}
+                        >
+                          {i + 1}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={currentPage === totalPages}
+                        onClick={() => handlePageChange(currentPage + 1)}
+                      />
+                    </Pagination>
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+
+            {/* ================= Modal ================= */}
             <Modal
               show={showModal}
               onHide={() => setShowModal(false)}
+              centered
               size="lg"
             >
-              <Modal.Header closeButton>
+              <Modal.Header closeButton className="bg-primary text-white">
                 <Modal.Title>
-                  {editEvent
-                    ? "Update Supplement or Event"
-                    : "Create Supplement or Event"}
+                  {editEvent ? "Edit Compulsory Event" : "Create Compulsory Event"}
                 </Modal.Title>
               </Modal.Header>
               <Modal.Body>
                 <Form>
-                  <Row>
+                  <Row className="mb-3">
                     <Col md={4}>
-                      <Form.Group className="mb-3">
-                        <Form.Label>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold small">
                           Supplement Code <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
                           type="text"
                           value={formData.supplymentCode}
-                          isInvalid={!!formErrors.supplymentCode}
-                          onChange={(e) => {
+                          onChange={(e) =>
                             setFormData({
                               ...formData,
                               supplymentCode: e.target.value,
-                            });
-                            if (formErrors.supplymentCode) {
-                              setFormErrors({
-                                ...formErrors,
-                                supplymentCode: "",
-                              });
-                            }
-                          }}
+                            })
+                          }
+                          placeholder="Enter code"
+                          className="rounded-3"
                         />
-                        <Form.Control.Feedback type="invalid">
-                          {formErrors.supplymentCode}
-                        </Form.Control.Feedback>
                       </Form.Group>
                     </Col>
                     <Col md={4}>
-                      <Form.Group className="mb-3">
-                        <Form.Label>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold small">
                           Tagline <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
                           type="text"
                           value={formData.supplyments}
-                          isInvalid={!!formErrors.supplyments}
-                          onChange={(e) => {
+                          onChange={(e) =>
                             setFormData({
                               ...formData,
                               supplyments: e.target.value,
-                            });
-                            if (formErrors.supplyments) {
-                              setFormErrors({ ...formErrors, supplyments: "" });
-                            }
-                          }}
+                            })
+                          }
+                          placeholder="Enter tagline"
+                          className="rounded-3"
                         />
-                        <Form.Control.Feedback type="invalid">
-                          {formErrors.supplyments}
-                        </Form.Control.Feedback>
                       </Form.Group>
                     </Col>
                     <Col md={4}>
-                      <Form.Group className="mb-3">
-                        <Form.Label>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold small">
                           Market Type <span className="text-danger">*</span>
                         </Form.Label>
                         <Select
                           isMulti
-                          name="marketypeIds"
-                          options={marketTypes.map((market) => ({
-                            value: market.marketTypeId,
-                            label: market.name,
+                          options={marketTypes.map((m) => ({
+                            value: m.marketTypeId,
+                            label: m.name,
                           }))}
                           value={marketTypes
-                            .filter((market) =>
-                              formData.marketypeIds.includes(market.marketTypeId)
+                            .filter((m) =>
+                              formData.marketypeIds.includes(m.marketTypeId)
                             )
-                            .map((market) => ({
-                              value: market.marketTypeId,
-                              label: market.name,
+                            .map((m) => ({
+                              value: m.marketTypeId,
+                              label: m.name,
                             }))}
-                          onChange={handleMarketTypeChange}
-                          className={formErrors.marketypeIds ? "is-invalid" : ""}
+                          onChange={(selected) =>
+                            setFormData({
+                              ...formData,
+                              marketypeIds: selected.map((s) => s.value),
+                            })
+                          }
                         />
-                        {formErrors.marketypeIds && (
-                          <div className="text-danger small">
-                            {formErrors.marketypeIds}
-                          </div>
-                        )}
                       </Form.Group>
                     </Col>
                   </Row>
 
                   {/* Rates Section */}
-                  <h5>Rates</h5>
+                  <h5 className="mt-3">Rates</h5>
                   <div className="mb-3 p-3 border rounded bg-light">
                     {hotelRoomsData.map((room, roomIdx) => (
                       <div key={roomIdx} className="mb-3">
-                        <label>
-                          {room.roomCategory.toUpperCase()} -{" "}
-                          {room.roomTypeDetailsDTOs
-                            .map((rt) => rt.roomTypeName)
-                            .join(", ")}
+                        <label className="fw-semibold">
+                          {room.roomCategory?.toUpperCase() || "CATEGORY"} -{" "}
+                          {room.roomTypeDetailsDTO
+                            ?.map((rt) => rt.roomTypeName)
+                            .join(", ") || ""}
                         </label>
 
-                        <Table striped bordered hover responsive>
+                        <Table striped bordered hover responsive className="mt-2">
                           <thead>
                             <tr>
                               <th>Occupancy type</th>
@@ -587,8 +708,8 @@ const CompulsoryEventsPage = () => {
                             {formData.compulsorySupplymentsRateDTO
                               .filter(
                                 (rate) =>
-                                  rate.hotelRoomcategoryId ===
-                                  room.roomCategoryId
+                                  Number(rate.hotelRoomcategoryId) ===
+                                  Number(room.roomCategoryId)
                               )
                               .map((rate, idx) => (
                                 <tr key={idx}>
@@ -599,24 +720,29 @@ const CompulsoryEventsPage = () => {
                                         const newRates = [
                                           ...formData.compulsorySupplymentsRateDTO,
                                         ];
-                                        newRates[
-                                          formData.compulsorySupplymentsRateDTO.findIndex(
+                                        const findIndex = formData.compulsorySupplymentsRateDTO.findIndex(
+                                          (r, i) => i === formData.compulsorySupplymentsRateDTO.indexOf(rate)
+                                        );
+                                        if (findIndex > -1) {
+                                          newRates[findIndex].ocuppancytypeId = e.target.value;
+                                        } else {
+                                          // fallback by object identity
+                                          const idxFound = formData.compulsorySupplymentsRateDTO.findIndex(
                                             (r) =>
-                                              r.hotelRoomcategoryId ===
-                                                rate.hotelRoomcategoryId &&
-                                              r.ocuppancytypeId ===
-                                                rate.ocuppancytypeId
-                                          )
-                                        ].ocuppancytypeId = e.target.value;
+                                              r.hotelRoomcategoryId === rate.hotelRoomcategoryId &&
+                                              r.ocuppancytypeId === rate.ocuppancytypeId
+                                          );
+                                          if (idxFound > -1) {
+                                            newRates[idxFound].ocuppancytypeId = e.target.value;
+                                          }
+                                        }
                                         setFormData({
                                           ...formData,
                                           compulsorySupplymentsRateDTO: newRates,
                                         });
                                       }}
                                     >
-                                      <option value="">
-                                        Select Occupancy Type
-                                      </option>
+                                      <option value="">Select Occupancy Type</option>
                                       {masterOccupancies.map((type) => (
                                         <option
                                           key={type.occupancyTypeId}
@@ -632,18 +758,17 @@ const CompulsoryEventsPage = () => {
                                       type="number"
                                       value={rate.rate}
                                       onChange={(e) => {
-                                        const newRates = [
-                                          ...formData.compulsorySupplymentsRateDTO,
-                                        ];
-                                        newRates[
-                                          formData.compulsorySupplymentsRateDTO.findIndex(
-                                            (r) =>
-                                              r.hotelRoomcategoryId ===
-                                                rate.hotelRoomcategoryId &&
-                                              r.ocuppancytypeId ===
-                                                rate.ocuppancytypeId
-                                          )
-                                        ].rate = e.target.value;
+                                        const newRates = [...formData.compulsorySupplymentsRateDTO];
+                                        const targetIdx = newRates.findIndex(
+                                          (r) =>
+                                            r.hotelRoomcategoryId === rate.hotelRoomcategoryId &&
+                                            r.ocuppancytypeId === rate.ocuppancytypeId
+                                        );
+                                        if (targetIdx > -1) newRates[targetIdx].rate = e.target.value;
+                                        else {
+                                          // fallback by idx
+                                          newRates[idx].rate = e.target.value;
+                                        }
                                         setFormData({
                                           ...formData,
                                           compulsorySupplymentsRateDTO: newRates,
@@ -657,18 +782,14 @@ const CompulsoryEventsPage = () => {
                                       type="number"
                                       value={rate.rateAdult}
                                       onChange={(e) => {
-                                        const newRates = [
-                                          ...formData.compulsorySupplymentsRateDTO,
-                                        ];
-                                        newRates[
-                                          formData.compulsorySupplymentsRateDTO.findIndex(
-                                            (r) =>
-                                              r.hotelRoomcategoryId ===
-                                                rate.hotelRoomcategoryId &&
-                                              r.ocuppancytypeId ===
-                                                rate.ocuppancytypeId
-                                          )
-                                        ].rateAdult = e.target.value;
+                                        const newRates = [...formData.compulsorySupplymentsRateDTO];
+                                        const targetIdx = newRates.findIndex(
+                                          (r) =>
+                                            r.hotelRoomcategoryId === rate.hotelRoomcategoryId &&
+                                            r.ocuppancytypeId === rate.ocuppancytypeId
+                                        );
+                                        if (targetIdx > -1) newRates[targetIdx].rateAdult = e.target.value;
+                                        else newRates[idx].rateAdult = e.target.value;
                                         setFormData({
                                           ...formData,
                                           compulsorySupplymentsRateDTO: newRates,
@@ -682,18 +803,14 @@ const CompulsoryEventsPage = () => {
                                       type="number"
                                       value={rate.rateChild}
                                       onChange={(e) => {
-                                        const newRates = [
-                                          ...formData.compulsorySupplymentsRateDTO,
-                                        ];
-                                        newRates[
-                                          formData.compulsorySupplymentsRateDTO.findIndex(
-                                            (r) =>
-                                              r.hotelRoomcategoryId ===
-                                                rate.hotelRoomcategoryId &&
-                                              r.ocuppancytypeId ===
-                                                rate.ocuppancytypeId
-                                          )
-                                        ].rateChild = e.target.value;
+                                        const newRates = [...formData.compulsorySupplymentsRateDTO];
+                                        const targetIdx = newRates.findIndex(
+                                          (r) =>
+                                            r.hotelRoomcategoryId === rate.hotelRoomcategoryId &&
+                                            r.ocuppancytypeId === rate.ocuppancytypeId
+                                        );
+                                        if (targetIdx > -1) newRates[targetIdx].rateChild = e.target.value;
+                                        else newRates[idx].rateChild = e.target.value;
                                         setFormData({
                                           ...formData,
                                           compulsorySupplymentsRateDTO: newRates,
@@ -707,16 +824,13 @@ const CompulsoryEventsPage = () => {
                                       variant="danger"
                                       size="sm"
                                       onClick={() => {
-                                        const newRates =
-                                          formData.compulsorySupplymentsRateDTO.filter(
-                                            (r) =>
-                                              !(
-                                                r.hotelRoomcategoryId ===
-                                                  rate.hotelRoomcategoryId &&
-                                                r.ocuppancytypeId ===
-                                                  rate.ocuppancytypeId
-                                              )
-                                          );
+                                        const newRates = formData.compulsorySupplymentsRateDTO.filter(
+                                          (r) =>
+                                            !(
+                                              r.hotelRoomcategoryId === rate.hotelRoomcategoryId &&
+                                              r.ocuppancytypeId === rate.ocuppancytypeId
+                                            )
+                                        );
                                         setFormData({
                                           ...formData,
                                           compulsorySupplymentsRateDTO: newRates,
@@ -786,14 +900,9 @@ const CompulsoryEventsPage = () => {
                                       const newValidity = [
                                         ...formData.compulsorySupplyValidityDTO,
                                       ];
-                                      newValidity[idx].validityFrom =
-                                        e.target.value;
+                                      newValidity[idx].validityFrom = e.target.value;
                                       // If validityTo is before new validityFrom, reset validityTo
-                                      if (
-                                        newValidity[idx].validityTo &&
-                                        newValidity[idx].validityTo <=
-                                          e.target.value
-                                      ) {
+                                      if (newValidity[idx].validityTo && newValidity[idx].validityTo <= e.target.value) {
                                         newValidity[idx].validityTo = "";
                                       }
                                       setFormData({
@@ -812,8 +921,7 @@ const CompulsoryEventsPage = () => {
                                       const newValidity = [
                                         ...formData.compulsorySupplyValidityDTO,
                                       ];
-                                      newValidity[idx].validityTo =
-                                        e.target.value;
+                                      newValidity[idx].validityTo = e.target.value;
                                       setFormData({
                                         ...formData,
                                         compulsorySupplyValidityDTO: newValidity,
@@ -826,10 +934,9 @@ const CompulsoryEventsPage = () => {
                                     variant="danger"
                                     size="sm"
                                     onClick={() => {
-                                      const newValidity =
-                                        formData.compulsorySupplyValidityDTO.filter(
-                                          (_, i) => i !== idx
-                                        );
+                                      const newValidity = formData.compulsorySupplyValidityDTO.filter(
+                                        (_, i) => i !== idx
+                                      );
                                       setFormData({
                                         ...formData,
                                         compulsorySupplyValidityDTO: newValidity,
@@ -867,11 +974,16 @@ const CompulsoryEventsPage = () => {
                 </Form>
               </Modal.Body>
               <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowModal(false)}>
-                  Cancel
+                <Button
+                  variant="outline-secondary"
+                  className="px-4 rounded-pill"
+                  onClick={() => setShowModal(false)}
+                >
+                  ✖ Cancel
                 </Button>
                 <Button
                   variant="success"
+                  className="px-4 rounded-pill"
                   onClick={() => {
                     if (editEvent) {
                       handleEdit(); // Update case
