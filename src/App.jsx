@@ -42,6 +42,7 @@ import SupplierReg from "./pages/Registration/SupplierReg";
 import CompulsoryEventsPage from "./pages/HotelActions/Compulsery/CompulsoryEventsPage";
 import OccupancyAndMinimumLength from "./pages/HotelActions/OccupancyAndMinimumLength";
 import HotelAvailability from "./pages/HotelActions/HotelAvailability";
+import MakeUrOwnPackage from "./pages/search/MakeUrOwnPackage";
 
 
 
@@ -120,6 +121,7 @@ export default function App() {
          <Route path="/masters/markup-type" element={<MarkupType />} />
          <Route path="/masters/currency" element={<Currency />} />
         <Route path="/new-booking/hotel" element={<HotelSearch />} />
+        <Route path="/new-booking/make-your-own-package" element={<MakeUrOwnPackage />} />
         <Route path="/room-list" element={<RoomList />} />
         <Route path="/masters/market-type" element={<MarketType />} />
         <Route path="/masters/region" element={<Region />} />
