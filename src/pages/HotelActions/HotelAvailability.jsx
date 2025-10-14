@@ -37,14 +37,24 @@ const HotelAvailability = () => {
   // State for form data
   const [formData, setFormData] = useState({
     marketTypeId: "",
-    roomCategoryId: "",
-    totalRooms: "",
-    type: "Free-Sale", // Free-Sale, Pre Buy, Room Allocation
-    validityList: [
+    hotelRoomId: "",
+    noOfRooms: "",
+    releaseDay: "",
+    availabilityType: "FREE_SALE", // FREE_SALE, PRE_BUY, ROOM_ALLOCATION
+    availabilityValidities: [
       {
         validityFrom: "",
         validityTo: "",
       },
+    ],
+    checkinAllowedDays: [
+      "SUNDAY",
+      "MONDAY",
+      "TUESDAY",
+      "WEDNESDAY",
+      "THURSDAY",
+      "FRIDAY",
+      "SATURDAY",
     ],
   });
 
@@ -75,6 +85,10 @@ const HotelAvailability = () => {
     validityList: [{ validityFrom: "", validityTo: "" }],
   });
   const [validationErrorsBlock, setValidationErrorsBlock] = useState({});
+  const [isLoadingBlock, setIsLoadingBlock] = useState(false);
+  const [pageBlock, setPageBlock] = useState(0);
+  const [totalPagesBlock, setTotalPagesBlock] = useState(0);
+  const [searchBlock, setSearchBlock] = useState("");
 
   // State for Stop Sale
   const [stopSaleItems, setStopSaleItems] = useState([]);
@@ -88,12 +102,18 @@ const HotelAvailability = () => {
     validityList: [{ validityFrom: "", validityTo: "" }],
   });
   const [validationErrorsStopSale, setValidationErrorsStopSale] = useState({});
+  const [isLoadingStopSale, setIsLoadingStopSale] = useState(false);
+  const [pageStopSale, setPageStopSale] = useState(0);
+  const [totalPagesStopSale, setTotalPagesStopSale] = useState(0);
+  const [searchStopSale, setSearchStopSale] = useState("");
 
   // Load market types and room categories
   useEffect(() => {
     loadMarketTypes();
     loadRoomCategories();
     fetchAvailabilityList();
+    fetchBlockList();
+    fetchStopSaleList();
   }, []);
 
   // Search functionality
@@ -112,6 +132,38 @@ const HotelAvailability = () => {
     };
   }, [search]);
 
+  // Block search functionality
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    const timeout = setTimeout(() => {
+      fetchBlockList(0, searchBlock);
+    }, 500);
+    setSearchTimeout(timeout);
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchBlock]);
+
+  // Stop Sale search functionality
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    const timeout = setTimeout(() => {
+      fetchStopSaleList(0, searchStopSale);
+    }, 500);
+    setSearchTimeout(timeout);
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchStopSale]);
+
   const loadMarketTypes = async () => {
     try {
       const response = await axiosInstance.get("/api/marketType");
@@ -124,7 +176,9 @@ const HotelAvailability = () => {
 
   const loadRoomCategories = async () => {
     try {
-      const response = await axiosInstance.get(`/api/hotelRoomDetailsController/${id}`);
+      const response = await axiosInstance.get(
+        `/api/hotelRoomDetailsController/${id}`
+      );
       console.log("Hotel Rooms Data:", response.data);
       setRoomCategories(response.data || []);
     } catch (error) {
@@ -143,10 +197,14 @@ const HotelAvailability = () => {
       if (searchTerm && searchTerm.trim()) {
         params.append("search", searchTerm.trim());
       }
-      const response = await axiosInstance.get(`/api/hotels/${id}/availabilities`, {
-        params,
-      });
+      const response = await axiosInstance.get(
+        `/api/hotels/${id}/availabilities`,
+        {
+          params,
+        }
+      );
       if (response.data && Array.isArray(response.data)) {
+        console.log("Hotel Availability API Response:", response.data);
         setItems(response.data);
         if (response.data.length < 10) {
           setTotalPages(pageNum + 1);
@@ -155,6 +213,7 @@ const HotelAvailability = () => {
         }
         setPage(pageNum);
       } else {
+        console.log("Hotel Availability API Response (no data):", response.data);
         setItems([]);
         setTotalPages(0);
         setPage(0);
@@ -175,14 +234,24 @@ const HotelAvailability = () => {
     setIsViewMode(false);
     setFormData({
       marketTypeId: "",
-      roomCategoryId: "",
-      totalRooms: "",
-      type: "Free-Sale",
-      validityList: [
+      hotelRoomId: "",
+      noOfRooms: "",
+      releaseDay: "",
+      availabilityType: "FREE_SALE",
+      availabilityValidities: [
         {
           validityFrom: "",
           validityTo: "",
         },
+      ],
+      checkinAllowedDays: [
+        "SUNDAY",
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
       ],
     });
     setValidationErrors({});
@@ -190,10 +259,11 @@ const HotelAvailability = () => {
   };
 
   const openEditModal = async (item) => {
+    console.log("Opening edit modal for item:", item);
     try {
       setIsLoading(true);
       const response = await axiosInstance.get(
-        `/api/hotels/${id}/availabilities/${item.id}`
+        `/api/hotels/${id}/availabilities/${item.availabilityId}`
       );
       const data = response.data;
 
@@ -201,14 +271,24 @@ const HotelAvailability = () => {
       setIsViewMode(false);
       setFormData({
         marketTypeId: data.marketTypeId || "",
-        roomCategoryId: data.roomCategoryId || "",
-        totalRooms: data.totalRooms || "",
-        type: data.type || "Free-Sale",
-        validityList: data.validityList || [
+        hotelRoomId: data.hotelRoomId || "",
+        noOfRooms: data.noOfRooms || "",
+        releaseDay: data.releaseDay || "",
+        availabilityType: data.availabilityType || "FREE_SALE",
+        availabilityValidities: data.availabilityValidities || [
           {
             validityFrom: "",
             validityTo: "",
           },
+        ],
+        checkinAllowedDays: data.checkinAllowedDays || [
+          "SUNDAY",
+          "MONDAY",
+          "TUESDAY",
+          "WEDNESDAY",
+          "THURSDAY",
+          "FRIDAY",
+          "SATURDAY",
         ],
       });
       setValidationErrors({});
@@ -225,7 +305,7 @@ const HotelAvailability = () => {
     try {
       setIsLoading(true);
       const response = await axiosInstance.get(
-        `/api/hotels/${id}/availabilities/${item.id}`
+        `/api/hotels/${id}/availabilities/${item.availabilityId}`
       );
       const data = response.data;
 
@@ -233,14 +313,24 @@ const HotelAvailability = () => {
       setIsViewMode(true);
       setFormData({
         marketTypeId: data.marketTypeId || "",
-        roomCategoryId: data.roomCategoryId || "",
-        totalRooms: data.totalRooms || "",
-        type: data.type || "Free-Sale",
-        validityList: data.validityList || [
+        hotelRoomId: data.hotelRoomId || "",
+        noOfRooms: data.noOfRooms || "",
+        releaseDay: data.releaseDay || "",
+        availabilityType: data.availabilityType || "FREE_SALE",
+        availabilityValidities: data.availabilityValidities || [
           {
             validityFrom: "",
             validityTo: "",
           },
+        ],
+        checkinAllowedDays: data.checkinAllowedDays || [
+          "SUNDAY",
+          "MONDAY",
+          "TUESDAY",
+          "WEDNESDAY",
+          "THURSDAY",
+          "FRIDAY",
+          "SATURDAY",
         ],
       });
       setValidationErrors({});
@@ -259,14 +349,24 @@ const HotelAvailability = () => {
     setIsViewMode(false);
     setFormData({
       marketTypeId: "",
-      roomCategoryId: "",
-      totalRooms: "",
-      type: "Free-Sale",
-      validityList: [
+      hotelRoomId: "",
+      noOfRooms: "",
+      releaseDay: "",
+      availabilityType: "FREE_SALE",
+      availabilityValidities: [
         {
           validityFrom: "",
           validityTo: "",
         },
+      ],
+      checkinAllowedDays: [
+        "SUNDAY",
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
       ],
     });
     setValidationErrors({});
@@ -274,25 +374,37 @@ const HotelAvailability = () => {
 
   const validateForm = (data) => {
     const newErrors = {};
-    
+
     if (!data.marketTypeId) newErrors.marketTypeId = "Market Type is required";
-    if (!data.roomCategoryId) newErrors.roomCategoryId = "Room Category is required";
-    if (!data.totalRooms || data.totalRooms <= 0) newErrors.totalRooms = "Total Rooms must be greater than 0";
-    if (!data.type) newErrors.type = "Type is required";
-    
-    if (!data.validityList || data.validityList.length === 0) {
-      newErrors.validityList = "At least one validity period is required";
+    if (!data.hotelRoomId) newErrors.hotelRoomId = "Room Category is required";
+    if (!data.noOfRooms || data.noOfRooms <= 0)
+      newErrors.noOfRooms = "Number of Rooms must be greater than 0";
+    if (!data.releaseDay || data.releaseDay < 0)
+      newErrors.releaseDay = "Release Day must be 0 or greater";
+    if (!data.availabilityType)
+      newErrors.availabilityType = "Availability Type is required";
+
+    if (
+      !data.availabilityValidities ||
+      data.availabilityValidities.length === 0
+    ) {
+      newErrors.availabilityValidities =
+        "At least one validity period is required";
     } else {
-      data.validityList.forEach((period, index) => {
+      data.availabilityValidities.forEach((period, index) => {
         if (!period.validityFrom) {
-          newErrors[`validityFrom_${index}`] = `Validity From is required for period ${index + 1}`;
+          newErrors[
+            `validityFrom_${index}`
+          ] = `Validity From is required for period ${index + 1}`;
         }
         if (!period.validityTo) {
-          newErrors[`validityTo_${index}`] = `Validity To is required for period ${index + 1}`;
+          newErrors[
+            `validityTo_${index}`
+          ] = `Validity To is required for period ${index + 1}`;
         }
       });
     }
-    
+
     return newErrors;
   };
 
@@ -308,14 +420,18 @@ const HotelAvailability = () => {
       setIsLoading(true);
       const payload = {
         hotelId: id,
-        type: formData.type,
         marketTypeId: formData.marketTypeId,
-        roomCategoryId: formData.roomCategoryId,
-        totalRooms: Number(formData.totalRooms),
-        validityList: formData.validityList.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
-        })),
+        hotelRoomId: formData.hotelRoomId,
+        noOfRooms: Number(formData.noOfRooms),
+        releaseDay: Number(formData.releaseDay),
+        availabilityType: formData.availabilityType,
+        availabilityValidities: formData.availabilityValidities.map(
+          (period) => ({
+            validityFrom: period.validityFrom,
+            validityTo: period.validityTo,
+          })
+        ),
+        checkinAllowedDays: formData.checkinAllowedDays,
       };
 
       console.log("Save Availability Payload:", payload);
@@ -356,21 +472,33 @@ const HotelAvailability = () => {
 
     if (!editingItem) return;
 
+    console.log("Editing Item:", editingItem);
+
     try {
       setIsLoading(true);
       const payload = {
-        hotelId: id,
-        type: formData.type,
-        marketTypeId: formData.marketTypeId,
-        roomCategoryId: formData.roomCategoryId,
-        totalRooms: Number(formData.totalRooms),
-        validityList: formData.validityList.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
-        })),
+        hotelId: Number(id),
+        marketTypeId: Number(formData.marketTypeId),
+        hotelRoomId: Number(formData.hotelRoomId),
+        noOfRooms: Number(formData.noOfRooms),
+        releaseDay: Number(formData.releaseDay),
+        availabilityType: formData.availabilityType,
+        availabilityValidities: formData.availabilityValidities.map(
+          (period) => ({
+            validityFrom: period.validityFrom,
+            validityTo: period.validityTo,
+          })
+        ),
+        checkinAllowedDays: formData.checkinAllowedDays,
       };
 
       console.log("Update Availability Payload:", payload);
+      console.log("Editing Item ID:", editingItem.id);
+      console.log("Hotel ID:", id);
+      console.log(
+        "API Endpoint:",
+        `/api/hotels/${id}/availabilities/${editingItem.id}`
+      );
       const response = await axiosInstance.put(
         `/api/hotels/${id}/availabilities/${editingItem.id}`,
         payload,
@@ -389,9 +517,14 @@ const HotelAvailability = () => {
       }
     } catch (error) {
       console.error("Update availability error:", error);
+      console.error("Error response:", error.response);
+      console.error("Error status:", error.response?.status);
+      console.error("Error data:", error.response?.data);
       toast.error(
         `Failed to update availability: ${
-          error.response?.data?.message || error.message
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message
         }`
       );
     } finally {
@@ -416,7 +549,7 @@ const HotelAvailability = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/hotels/${id}/availabilities/${item.id}`)
+          .delete(`/api/hotels/${id}/availabilities/${item.availabilityId}`)
           .then(() => {
             toast.success("Availability deleted successfully");
             fetchAvailabilityList(page, search);
@@ -431,8 +564,8 @@ const HotelAvailability = () => {
   const addValidityPeriod = () => {
     setFormData({
       ...formData,
-      validityList: [
-        ...formData.validityList,
+      availabilityValidities: [
+        ...formData.availabilityValidities,
         {
           validityFrom: "",
           validityTo: "",
@@ -442,11 +575,13 @@ const HotelAvailability = () => {
   };
 
   const removeValidityPeriod = (index) => {
-    if (formData.validityList.length > 1) {
-      const newValidityList = formData.validityList.filter((_, i) => i !== index);
+    if (formData.availabilityValidities.length > 1) {
+      const newValidityList = formData.availabilityValidities.filter(
+        (_, i) => i !== index
+      );
       setFormData({
         ...formData,
-        validityList: newValidityList,
+        availabilityValidities: newValidityList,
       });
     }
   };
@@ -454,14 +589,24 @@ const HotelAvailability = () => {
   const resetForm = () => {
     setFormData({
       marketTypeId: "",
-      roomCategoryId: "",
-      totalRooms: "",
-      type: "Free-Sale",
-      validityList: [
+      hotelRoomId: "",
+      noOfRooms: "",
+      releaseDay: "",
+      availabilityType: "FREE_SALE",
+      availabilityValidities: [
         {
           validityFrom: "",
           validityTo: "",
         },
+      ],
+      checkinAllowedDays: [
+        "SUNDAY",
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
       ],
     });
     setValidationErrors({});
@@ -512,7 +657,89 @@ const HotelAvailability = () => {
     setActiveTab(key);
   };
 
-  // Block Checkin Checkout functions
+  const addBlockValidityPeriod = () => {
+    setFormDataBlock({
+      ...formDataBlock,
+      validityList: [
+        ...formDataBlock.validityList,
+        { validityFrom: "", validityTo: "" },
+      ],
+    });
+  };
+
+  const removeBlockValidityPeriod = (index) => {
+    if (formDataBlock.validityList.length > 1) {
+      const newValidityList = formDataBlock.validityList.filter(
+        (_, i) => i !== index
+      );
+      setFormDataBlock({ ...formDataBlock, validityList: newValidityList });
+    }
+  };
+
+
+  const addStopSaleValidityPeriod = () => {
+    setFormDataStopSale({
+      ...formDataStopSale,
+      validityList: [
+        ...formDataStopSale.validityList,
+        { validityFrom: "", validityTo: "" },
+      ],
+    });
+  };
+
+  const removeStopSaleValidityPeriod = (index) => {
+    if (formDataStopSale.validityList.length > 1) {
+      const newValidityList = formDataStopSale.validityList.filter(
+        (_, i) => i !== index
+      );
+      setFormDataStopSale({
+        ...formDataStopSale,
+        validityList: newValidityList,
+      });
+    }
+  };
+
+  // Block Checkin Checkout CRUD Functions
+  const fetchBlockList = async (pageNum = 0, searchTerm = searchBlock) => {
+    setIsLoadingBlock(true);
+    try {
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: "10",
+      });
+      if (searchTerm && searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+      const response = await axiosInstance.get(
+        `/api/hotels/${id}/blockCheckInCheckout`,
+        {
+          params,
+        }
+      );
+      if (response.data && Array.isArray(response.data)) {
+        setBlockItems(response.data);
+        if (response.data.length < 10) {
+          setTotalPagesBlock(pageNum + 1);
+        } else {
+          setTotalPagesBlock(Math.max(totalPagesBlock, pageNum + 2));
+        }
+        setPageBlock(pageNum);
+      } else {
+        setBlockItems([]);
+        setTotalPagesBlock(0);
+        setPageBlock(0);
+      }
+    } catch (error) {
+      console.error("Failed to load block list:", error);
+      toast.error("Failed to load block list");
+      setBlockItems([]);
+      setTotalPagesBlock(0);
+      setPageBlock(0);
+    } finally {
+      setIsLoadingBlock(false);
+    }
+  };
+
   const openCreateBlock = () => {
     setEditingBlock(null);
     setIsViewModeBlock(false);
@@ -523,6 +750,66 @@ const HotelAvailability = () => {
     });
     setValidationErrorsBlock({});
     setShowBlockModal(true);
+  };
+
+  const openEditBlock = async (item) => {
+    try {
+      setIsLoadingBlock(true);
+      const response = await axiosInstance.get(
+        `/api/hotels/${id}/blockCheckInCheckout/${item.id}`
+      );
+      const data = response.data;
+
+      setEditingBlock(data);
+      setIsViewModeBlock(false);
+      setFormDataBlock({
+        marketTypeId: data.marketTypeId || "",
+        type: data.isCheckin ? "CheckIn" : "CheckOut",
+        validityList: data.validityList || [
+          {
+            validityFrom: "",
+            validityTo: "",
+          },
+        ],
+      });
+      setValidationErrorsBlock({});
+      setShowBlockModal(true);
+    } catch (error) {
+      console.error("Failed to load block for edit:", error);
+      toast.error("Failed to load block data for editing");
+    } finally {
+      setIsLoadingBlock(false);
+    }
+  };
+
+  const openViewBlock = async (item) => {
+    try {
+      setIsLoadingBlock(true);
+      const response = await axiosInstance.get(
+        `/api/hotels/${id}/blockCheckInCheckout/${item.id}`
+      );
+      const data = response.data;
+
+      setEditingBlock(data);
+      setIsViewModeBlock(true);
+      setFormDataBlock({
+        marketTypeId: data.marketTypeId || "",
+        type: data.isCheckin ? "CheckIn" : "CheckOut",
+        validityList: data.validityList || [
+          {
+            validityFrom: "",
+            validityTo: "",
+          },
+        ],
+      });
+      setValidationErrorsBlock({});
+      setShowBlockModal(true);
+    } catch (error) {
+      console.error("Failed to load block for view:", error);
+      toast.error("Failed to load block data for viewing");
+    } finally {
+      setIsLoadingBlock(false);
+    }
   };
 
   const closeBlockModal = () => {
@@ -537,21 +824,200 @@ const HotelAvailability = () => {
     setValidationErrorsBlock({});
   };
 
-  const addBlockValidityPeriod = () => {
-    setFormDataBlock({
-      ...formDataBlock,
-      validityList: [...formDataBlock.validityList, { validityFrom: "", validityTo: "" }],
-    });
+  const validateBlockForm = (data) => {
+    const newErrors = {};
+
+    if (!data.marketTypeId) newErrors.marketTypeId = "Market Type is required";
+    if (!data.type) newErrors.type = "Type is required";
+
+    if (!data.validityList || data.validityList.length === 0) {
+      newErrors.validityList = "At least one validity period is required";
+    } else {
+      data.validityList.forEach((period, index) => {
+        if (!period.validityFrom) {
+          newErrors[
+            `validityFrom_${index}`
+          ] = `Validity From is required for period ${index + 1}`;
+        }
+        if (!period.validityTo) {
+          newErrors[
+            `validityTo_${index}`
+          ] = `Validity To is required for period ${index + 1}`;
+        }
+      });
+    }
+
+    return newErrors;
   };
 
-  const removeBlockValidityPeriod = (index) => {
-    if (formDataBlock.validityList.length > 1) {
-      const newValidityList = formDataBlock.validityList.filter((_, i) => i !== index);
-      setFormDataBlock({ ...formDataBlock, validityList: newValidityList });
+  const saveBlock = async (e) => {
+    e.preventDefault();
+    const errors = validateBlockForm(formDataBlock);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrorsBlock(errors);
+      return;
+    }
+
+    try {
+      setIsLoadingBlock(true);
+      const payload = {
+        hotelId: Number(id),
+        marketTypeId: Number(formDataBlock.marketTypeId),
+        isCheckin: formDataBlock.type === "CheckIn",
+        isCheckOut: formDataBlock.type === "CheckOut",
+        validityList: formDataBlock.validityList.map((period) => ({
+          validityFrom: period.validityFrom,
+          validityTo: period.validityTo,
+        })),
+      };
+
+      console.log("Save Block Payload:", payload);
+      const response = await axiosInstance.post(
+        `/api/hotels/${id}/blockCheckInCheckout`,
+        payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data) {
+        toast.success("Block Checkin Checkout created successfully!");
+        setValidationErrorsBlock({});
+        await fetchBlockList(pageBlock, searchBlock);
+        closeBlockModal();
+      }
+    } catch (error) {
+      console.error("Save block error:", error);
+      toast.error(
+        `Failed to save block: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoadingBlock(false);
     }
   };
 
-  // Stop Sale functions
+  const updateBlock = async () => {
+    const errors = validateBlockForm(formDataBlock);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrorsBlock(errors);
+      return;
+    }
+
+    if (!editingBlock) return;
+
+    try {
+      setIsLoadingBlock(true);
+      const payload = {
+        hotelId: Number(id),
+        marketTypeId: Number(formDataBlock.marketTypeId),
+        isCheckin: formDataBlock.type === "CheckIn",
+        isCheckOut: formDataBlock.type === "CheckOut",
+        validityList: formDataBlock.validityList.map((period) => ({
+          validityFrom: period.validityFrom,
+          validityTo: period.validityTo,
+        })),
+      };
+      console.log("editingBlock:", editingBlock);
+      console.log("Update Block Payload:", payload);
+      const response = await axiosInstance.put(
+        `/api/hotels/${id}/blockCheckInCheckout/${editingBlock.id}`,
+        payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data) {
+        toast.success("Block Checkin Checkout updated successfully!");
+        setValidationErrorsBlock({});
+        await fetchBlockList(pageBlock, searchBlock);
+        closeBlockModal();
+      }
+    } catch (error) {
+      console.error("Update block error:", error);
+      toast.error(
+        `Failed to update block: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoadingBlock(false);
+    }
+  };
+
+  const handleDeleteBlock = (item) => {
+    Swal.fire({
+      title: "Are you sure?",
+      text: `You want to delete this block record`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
+      customClass: {
+        popup: "swal-small",
+        title: "swal-small-title",
+        htmlContainer: "swal-small-text",
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        axiosInstance
+          .delete(`/api/hotels/${id}/blockCheckInCheckout/${item.id}`)
+          .then(() => {
+            toast.success("Block deleted successfully");
+            fetchBlockList(pageBlock, searchBlock);
+          })
+          .catch(() => {
+            toast.error("Failed to delete block");
+          });
+      }
+    });
+  };
+
+  // Stop Sale CRUD Functions
+  const fetchStopSaleList = async (pageNum = 0, searchTerm = searchStopSale) => {
+    setIsLoadingStopSale(true);
+    try {
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: "10",
+      });
+      if (searchTerm && searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+      const response = await axiosInstance.get("/api/hotelStopSale", {
+        params,
+      });
+      if (response.data && Array.isArray(response.data)) {
+        setStopSaleItems(response.data);
+        if (response.data.length < 10) {
+          setTotalPagesStopSale(pageNum + 1);
+        } else {
+          setTotalPagesStopSale(Math.max(totalPagesStopSale, pageNum + 2));
+        }
+        setPageStopSale(pageNum);
+      } else {
+        setStopSaleItems([]);
+        setTotalPagesStopSale(0);
+        setPageStopSale(0);
+      }
+    } catch (error) {
+      console.error("Failed to load stop sale list:", error);
+      toast.error("Failed to load stop sale list");
+      setStopSaleItems([]);
+      setTotalPagesStopSale(0);
+      setPageStopSale(0);
+    } finally {
+      setIsLoadingStopSale(false);
+    }
+  };
+
   const openCreateStopSale = () => {
     setEditingStopSale(null);
     setIsViewModeStopSale(false);
@@ -563,6 +1029,65 @@ const HotelAvailability = () => {
     });
     setValidationErrorsStopSale({});
     setShowStopSaleModal(true);
+  };
+
+  const openEditStopSale = async (item) => {
+    console.log("Editing Stop Sale:", item);
+    try {
+      setIsLoadingStopSale(true);
+      const response = await axiosInstance.get(`/api/hotelStopSale/${item.stopSaleId}`);
+      const data = response.data;
+
+      setEditingStopSale(data);
+      setIsViewModeStopSale(false);
+      setFormDataStopSale({
+        marketTypeId: data.marketTypeId || "",
+        roomCategoryId: data.roomCategoryId || "",
+        type: data.roomAllocation ? "Room Allocation" : data.block ? "Block" : "Free-Sale",
+        validityList: data.stopSaleValidityDTO || [
+          {
+            validityFrom: "",
+            validityTo: "",
+          },
+        ],
+      });
+      setValidationErrorsStopSale({});
+      setShowStopSaleModal(true);
+    } catch (error) {
+      console.error("Failed to load stop sale for edit:", error);
+      toast.error("Failed to load stop sale data for editing");
+    } finally {
+      setIsLoadingStopSale(false);
+    }
+  };
+
+  const openViewStopSale = async (item) => {
+    try {
+      setIsLoadingStopSale(true);
+      const response = await axiosInstance.get(`/api/hotelStopSale/${item.stopSaleId}`);
+      const data = response.data;
+
+      setEditingStopSale(data);
+      setIsViewModeStopSale(true);
+      setFormDataStopSale({
+        marketTypeId: data.marketTypeId || "",
+        roomCategoryId: data.roomCategoryId || "",
+        type: data.roomAllocation ? "Room Allocation" : data.block ? "Block" : "Free-Sale",
+        validityList: data.stopSaleValidityDTO || [
+          {
+            validityFrom: "",
+            validityTo: "",
+          },
+        ],
+      });
+      setValidationErrorsStopSale({});
+      setShowStopSaleModal(true);
+    } catch (error) {
+      console.error("Failed to load stop sale for view:", error);
+      toast.error("Failed to load stop sale data for viewing");
+    } finally {
+      setIsLoadingStopSale(false);
+    }
   };
 
   const closeStopSaleModal = () => {
@@ -578,18 +1103,159 @@ const HotelAvailability = () => {
     setValidationErrorsStopSale({});
   };
 
-  const addStopSaleValidityPeriod = () => {
-    setFormDataStopSale({
-      ...formDataStopSale,
-      validityList: [...formDataStopSale.validityList, { validityFrom: "", validityTo: "" }],
-    });
+  const validateStopSaleForm = (data) => {
+    const newErrors = {};
+    
+    if (!data.marketTypeId) newErrors.marketTypeId = "Market Type is required";
+    if (!data.roomCategoryId) newErrors.roomCategoryId = "Room Category is required";
+    if (!data.type) newErrors.type = "Type is required";
+    
+    if (!data.validityList || data.validityList.length === 0) {
+      newErrors.validityList = "At least one validity period is required";
+    } else {
+      data.validityList.forEach((period, index) => {
+        if (!period.validityFrom) {
+          newErrors[`validityFrom_${index}`] = `Validity From is required for period ${index + 1}`;
+        }
+        if (!period.validityTo) {
+          newErrors[`validityTo_${index}`] = `Validity To is required for period ${index + 1}`;
+        }
+      });
+    }
+    
+    return newErrors;
   };
 
-  const removeStopSaleValidityPeriod = (index) => {
-    if (formDataStopSale.validityList.length > 1) {
-      const newValidityList = formDataStopSale.validityList.filter((_, i) => i !== index);
-      setFormDataStopSale({ ...formDataStopSale, validityList: newValidityList });
+  const saveStopSale = async (e) => {
+    e.preventDefault();
+    const errors = validateStopSaleForm(formDataStopSale);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrorsStopSale(errors);
+      return;
     }
+
+    try {
+      setIsLoadingStopSale(true);
+      const payload = {
+        hotelId: Number(id),
+        marketTypeId: Number(formDataStopSale.marketTypeId),
+        roomCategoryId: Number(formDataStopSale.roomCategoryId),
+        roomAllocation: formDataStopSale.type === "Room Allocation",
+        block: formDataStopSale.type === "Block",
+        freeSale: formDataStopSale.type === "Free-Sale",
+        stopSaleValidityDTO: formDataStopSale.validityList.map((period) => ({
+          validityFrom: period.validityFrom,
+          validityTo: period.validityTo,
+        })),
+      };
+
+      console.log("Save Stop Sale Payload:", payload);
+      const response = await axiosInstance.post("/api/hotelStopSale/save", payload, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.data) {
+        toast.success("Stop Sale created successfully!");
+        setValidationErrorsStopSale({});
+        await fetchStopSaleList(pageStopSale, searchStopSale);
+        closeStopSaleModal();
+      }
+    } catch (error) {
+      console.error("Save stop sale error:", error);
+      toast.error(
+        `Failed to save stop sale: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoadingStopSale(false);
+    }
+  };
+
+  const updateStopSale = async () => {
+    const errors = validateStopSaleForm(formDataStopSale);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrorsStopSale(errors);
+      return;
+    }
+
+    console.log("Editing Stop Sale:", editingStopSale);
+    if (!editingStopSale) return;
+
+    try {
+      setIsLoadingStopSale(true);
+      const payload = {
+        hotelId: Number(id),
+        marketTypeId: Number(formDataStopSale.marketTypeId),
+        roomCategoryId: Number(formDataStopSale.roomCategoryId),
+        roomAllocation: formDataStopSale.type === "Room Allocation",
+        block: formDataStopSale.type === "Block",
+        freeSale: formDataStopSale.type === "Free-Sale",
+        stopSaleValidityDTO: formDataStopSale.validityList.map((period) => ({
+          validityFrom: period.validityFrom,
+          validityTo: period.validityTo,
+        })),
+      };
+
+      console.log("Update Stop Sale Payload:", payload);
+      const response = await axiosInstance.put(
+        `/api/hotelStopSale/${editingStopSale.stopSaleId}`,
+        payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data) {
+        toast.success("Stop Sale updated successfully!");
+        setValidationErrorsStopSale({});
+        await fetchStopSaleList(pageStopSale, searchStopSale);
+        closeStopSaleModal();
+      }
+    } catch (error) {
+      console.error("Update stop sale error:", error);
+      toast.error(
+        `Failed to update stop sale: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoadingStopSale(false);
+    }
+  };
+
+  const handleDeleteStopSale = (item) => {
+    console.log("Deleting Stop Sale:", item);
+    Swal.fire({
+      title: "Are you sure?",
+      text: `You want to delete this stop sale record`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
+      customClass: {
+        popup: "swal-small",
+        title: "swal-small-title",
+        htmlContainer: "swal-small-text",
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        axiosInstance
+          .delete(`/api/hotelStopSale/${item.stopSaleId}`)
+          .then(() => {
+            toast.success("Stop Sale deleted successfully");
+            fetchStopSaleList(pageStopSale, searchStopSale);
+          })
+          .catch(() => {
+            toast.error("Failed to delete stop sale");
+          });
+      }
+    });
   };
 
   return (
@@ -608,7 +1274,10 @@ const HotelAvailability = () => {
             <Tab eventKey="availability" title="Hotel Availability">
               <Card className="shadow-sm rounded-xl mb-3">
                 <Card.Header className="d-flex justify-content-between align-items-center text-white">
-                  <span className="fw-semibold cursor-pointer text-primary" style={{ padding: "10px" }}>
+                  <span
+                    className="fw-semibold cursor-pointer text-primary"
+                    style={{ padding: "10px" }}
+                  >
                     Hotel Availability
                   </span>
                   <Form.Group className="hotel-search-bar position-relative">
@@ -628,37 +1297,42 @@ const HotelAvailability = () => {
                   </Button>
                 </Card.Header>
                 <Card.Body className="p-0">
-
-              <Table striped bordered hover responsive className="mb-0 align-middle">
-                <thead>
-                  <tr>
-                    <th style={{ width: 100 }}>S/N</th>
-                    <th>Market Type</th>
-                    <th>Room Category</th>
-                    <th>Total Rooms</th>
-                    <th>Type</th>
-                     <th>Status</th>
-                    <th style={{ width: 160 }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+                  <Table
+                    striped
+                    bordered
+                    hover
+                    responsive
+                    className="mb-0 align-middle"
+                  >
+                    <thead>
+                      <tr>
+                        <th style={{ width: 100 }}>S/N</th>
+                        <th>Market Type</th>
+                        <th>Room Category</th>
+                        <th>No of Rooms</th>
+                        <th>Availability Type</th>
+                        <th>Status</th>
+                        <th style={{ width: 160 }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
                       {items.map((item, index) => (
                         <tr key={item.id}>
                           <td>{index + 1 + page * 10}</td>
-                          <td>{item.marketName || item.marketTypeName}</td>
+                          <td>{item.marketTypeName || item.marketName}</td>
                           <td>{item.roomCategoryName || item.roomCategory}</td>
-                          <td>{item.totalRooms}</td>
+                          <td>{item.noOfRooms}</td>
                           <td>
                             <Badge
                               bg={
-                                item.type === "Free-Sale"
-                                  ? "success"
-                                  : item.type === "Pre Buy"
+                                item.availabilityType === "FREE_SALE" ||
+                                item.availabilityType === "PRE_BUY" ||
+                                item.availabilityType === "ROOM_ALLOCATION"
                                   ? "info"
                                   : "warning"
                               }
                             >
-                              {item.type}
+                              {item.availabilityType}
                             </Badge>
                           </td>
                           <td>
@@ -680,99 +1354,107 @@ const HotelAvailability = () => {
                               </Badge>
                             )}
                           </td>
-                      <td>
-                        <div className="d-flex gap-2">
-                          <FaEdit
-                            className="text-primary"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => openEditModal(item)}
-                            title="Edit"
-                          />
-                          <FaEye
-                            className="text-info"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => openViewModal(item)}
-                            title="View"
-                          />
-                          <FaTrash
-                            className="text-danger"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => handleDelete(item)}
-                            title="Delete"
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {isLoading && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="text-center text-muted py-4"
-                      >
-                        <div
-                          className="spinner-border spinner-border-sm me-2"
-                          role="status"
-                        >
-                          <span className="visually-hidden">
-                            Loading...
-                          </span>
-                        </div>
-                        Loading availability records...
-                      </td>
-                    </tr>
-                  )}
-                  {items.length === 0 && !isLoading && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="text-center text-muted py-4"
-                      >
-                        No availability records found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-
-              {totalPages > 1 && (
-                <div className="d-flex justify-content-between align-items-center p-3 border-top">
-                  <div>
-                    <small className="text-muted">
-                      Showing {items.length > 0 ? page * 10 + 1 : 0} to{" "}
-                      {page * 10 + items.length} of {totalPages * 10} entries
-                    </small>
-                  </div>
-                  <div>
-                    <Pagination className="mb-0">
-                      <Pagination.Prev
-                        disabled={page === 0}
-                        onClick={() => fetchAvailabilityList(page - 1, search)}
-                      />
-                      {[...Array(totalPages)].map((_, i) => (
-                        <Pagination.Item
-                          key={i}
-                          active={i === page}
-                          onClick={() => fetchAvailabilityList(i, search)}
-                        >
-                          {i + 1}
-                        </Pagination.Item>
+                          <td>
+                            <div className="d-flex gap-2">
+                              <FaEdit
+                                className="text-primary"
+                                style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => openEditModal(item)}
+                                title="Edit"
+                              />
+                              <FaEye
+                                className="text-info"
+                                style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => openViewModal(item)}
+                                title="View"
+                              />
+                              <FaTrash
+                                className="text-danger"
+                                style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => handleDelete(item)}
+                                title="Delete"
+                              />
+                            </div>
+                          </td>
+                        </tr>
                       ))}
-                      <Pagination.Next
-                        disabled={page === totalPages - 1}
-                        onClick={() => fetchAvailabilityList(page + 1, search)}
-                      />
-                    </Pagination>
-                  </div>
-                </div>
-              )}
+                      {isLoading && (
+                        <tr>
+                          <td
+                            colSpan={8}
+                            className="text-center text-muted py-4"
+                          >
+                            <div
+                              className="spinner-border spinner-border-sm me-2"
+                              role="status"
+                            >
+                              <span className="visually-hidden">
+                                Loading...
+                              </span>
+                            </div>
+                            Loading availability records...
+                          </td>
+                        </tr>
+                      )}
+                      {items.length === 0 && !isLoading && (
+                        <tr>
+                          <td
+                            colSpan={8}
+                            className="text-center text-muted py-4"
+                          >
+                            No availability records found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </Table>
+
+                  {totalPages > 1 && (
+                    <div className="d-flex justify-content-between align-items-center p-3 border-top">
+                      <div>
+                        <small className="text-muted">
+                          Showing {items.length > 0 ? page * 10 + 1 : 0} to{" "}
+                          {page * 10 + items.length} of {totalPages * 10}{" "}
+                          entries
+                        </small>
+                      </div>
+                      <div>
+                        <Pagination className="mb-0">
+                          <Pagination.Prev
+                            disabled={page === 0}
+                            onClick={() =>
+                              fetchAvailabilityList(page - 1, search)
+                            }
+                          />
+                          {[...Array(totalPages)].map((_, i) => (
+                            <Pagination.Item
+                              key={i}
+                              active={i === page}
+                              onClick={() => fetchAvailabilityList(i, search)}
+                            >
+                              {i + 1}
+                            </Pagination.Item>
+                          ))}
+                          <Pagination.Next
+                            disabled={page === totalPages - 1}
+                            onClick={() =>
+                              fetchAvailabilityList(page + 1, search)
+                            }
+                          />
+                        </Pagination>
+                      </div>
+                    </div>
+                  )}
                 </Card.Body>
               </Card>
             </Tab>
             <Tab eventKey="block-checkin" title="Block Checkin Checkout">
               <Card className="shadow-sm rounded-xl mb-3">
                 <Card.Header className="d-flex justify-content-between align-items-center text-white">
-                  <span className="fw-semibold cursor-pointer text-primary" style={{ padding: "10px" }}>
+                  <span
+                    className="fw-semibold cursor-pointer text-primary"
+                    style={{ padding: "10px" }}
+                  >
                     Block Checkin Checkout
                   </span>
                   <Form.Group className="hotel-search-bar position-relative">
@@ -780,6 +1462,8 @@ const HotelAvailability = () => {
                       type="text"
                       placeholder="Search block checkin..."
                       className="form-control-modern-sm"
+                      value={searchBlock}
+                      onChange={(e) => setSearchBlock(e.target.value)}
                     />
                   </Form.Group>
                   <Button
@@ -790,7 +1474,13 @@ const HotelAvailability = () => {
                   </Button>
                 </Card.Header>
                 <Card.Body className="p-0">
-                  <Table striped bordered hover responsive className="mb-0 align-middle">
+                  <Table
+                    striped
+                    bordered
+                    hover
+                    responsive
+                    className="mb-0 align-middle"
+                  >
                     <thead>
                       <tr>
                         <th style={{ width: 100 }}>S/N</th>
@@ -803,15 +1493,14 @@ const HotelAvailability = () => {
                     <tbody>
                       {blockItems.map((item, index) => (
                         <tr key={item.id}>
-                          <td>{index + 1}</td>
-                          <td>{item.marketName || item.marketTypeName}</td>
+                          <td>{index + 1 + pageBlock * 10}</td>
+                          <td>{item.marketTypeName || item.marketName}</td>
                           <td>
-                            <Badge
-                              bg={item.type === "CheckIn" ? "success" : "info"}
-                            >
-                              {item.type}
+                            <Badge bg="light" text="dark" className="border">
+                              {item.isCheckin ? "Check In" : "Check Out"}
                             </Badge>
                           </td>
+
                           <td>
                             <Badge bg={item.isActive ? "success" : "danger"}>
                               {item.isActive ? "Active" : "Inactive"}
@@ -822,25 +1511,49 @@ const HotelAvailability = () => {
                               <FaEdit
                                 className="text-primary"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => openEditBlock(item)}
                                 title="Edit"
                               />
                               <FaEye
                                 className="text-info"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => openViewBlock(item)}
                                 title="View"
                               />
                               <FaTrash
                                 className="text-danger"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => handleDeleteBlock(item)}
                                 title="Delete"
                               />
                             </div>
                           </td>
                         </tr>
                       ))}
-                      {blockItems.length === 0 && (
+                      {isLoadingBlock && (
                         <tr>
-                          <td colSpan={5} className="text-center text-muted py-4">
+                          <td
+                            colSpan={5}
+                            className="text-center text-muted py-4"
+                          >
+                            <div
+                              className="spinner-border spinner-border-sm me-2"
+                              role="status"
+                            >
+                              <span className="visually-hidden">
+                                Loading...
+                              </span>
+                            </div>
+                            Loading block records...
+                          </td>
+                        </tr>
+                      )}
+                      {blockItems.length === 0 && !isLoadingBlock && (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="text-center text-muted py-4"
+                          >
                             No block checkin records found.
                           </td>
                         </tr>
@@ -853,16 +1566,21 @@ const HotelAvailability = () => {
             <Tab eventKey="stop-sale" title="Stop Sale">
               <Card className="shadow-sm rounded-xl mb-3">
                 <Card.Header className="d-flex justify-content-between align-items-center text-white">
-                  <span className="fw-semibold cursor-pointer text-primary" style={{ padding: "10px" }}>
+                  <span
+                    className="fw-semibold cursor-pointer text-primary"
+                    style={{ padding: "10px" }}
+                  >
                     Stop Sale
                   </span>
-                  <Form.Group className="hotel-search-bar position-relative">
-                    <Form.Control
-                      type="text"
-                      placeholder="Search stop sale..."
-                      className="form-control-modern-sm"
-                    />
-                  </Form.Group>
+                      <Form.Group className="hotel-search-bar position-relative">
+                        <Form.Control
+                          type="text"
+                          placeholder="Search stop sale..."
+                          className="form-control-modern-sm"
+                          value={searchStopSale}
+                          onChange={(e) => setSearchStopSale(e.target.value)}
+                        />
+                      </Form.Group>
                   <Button
                     className="btn-green create-btn"
                     onClick={openCreateStopSale}
@@ -871,7 +1589,13 @@ const HotelAvailability = () => {
                   </Button>
                 </Card.Header>
                 <Card.Body className="p-0">
-                  <Table striped bordered hover responsive className="mb-0 align-middle">
+                  <Table
+                    striped
+                    bordered
+                    hover
+                    responsive
+                    className="mb-0 align-middle"
+                  >
                     <thead>
                       <tr>
                         <th style={{ width: 100 }}>S/N</th>
@@ -885,25 +1609,20 @@ const HotelAvailability = () => {
                     <tbody>
                       {stopSaleItems.map((item, index) => (
                         <tr key={item.id}>
-                          <td>{index + 1}</td>
-                          <td>{item.marketName || item.marketTypeName}</td>
+                          <td>{index + 1 + pageStopSale * 10}</td>
+                          <td>{item.marketTypeName || item.marketName}</td>
                           <td>{item.roomCategoryName || item.roomCategory}</td>
                           <td>
-                            <Badge
-                              bg={
-                                item.type === "Room Allocation"
-                                  ? "primary"
-                                  : item.type === "Block"
-                                  ? "warning"
-                                  : "info"
-                              }
-                            >
-                              {item.type}
-                            </Badge>
-                          </td>
+  {item.roomAllocation
+    ? "Room Allocation"
+    : item.block
+    ? "Block"
+    : "Free-Sale"}
+</td>
+
                           <td>
-                            <Badge bg={item.isActive ? "success" : "danger"}>
-                              {item.isActive ? "Active" : "Inactive"}
+                            <Badge bg={item.isLive ? "success" : "danger"}>
+                              {item.isLive ? "Active" : "Inactive"}
                             </Badge>
                           </td>
                           <td>
@@ -911,25 +1630,49 @@ const HotelAvailability = () => {
                               <FaEdit
                                 className="text-primary"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => openEditStopSale(item)}
                                 title="Edit"
                               />
                               <FaEye
                                 className="text-info"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => openViewStopSale(item)}
                                 title="View"
                               />
                               <FaTrash
                                 className="text-danger"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => handleDeleteStopSale(item)}
                                 title="Delete"
                               />
                             </div>
                           </td>
                         </tr>
                       ))}
-                      {stopSaleItems.length === 0 && (
+                      {isLoadingStopSale && (
                         <tr>
-                          <td colSpan={6} className="text-center text-muted py-4">
+                          <td
+                            colSpan={6}
+                            className="text-center text-muted py-4"
+                          >
+                            <div
+                              className="spinner-border spinner-border-sm me-2"
+                              role="status"
+                            >
+                              <span className="visually-hidden">
+                                Loading...
+                              </span>
+                            </div>
+                            Loading stop sale records...
+                          </td>
+                        </tr>
+                      )}
+                      {stopSaleItems.length === 0 && !isLoadingStopSale && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="text-center text-muted py-4"
+                          >
                             No stop sale records found.
                           </td>
                         </tr>
@@ -963,52 +1706,53 @@ const HotelAvailability = () => {
           <span className="text-muted small ms-auto">* mandatory fields</span>
         </Modal.Header>
         <Modal.Body>
-
           <Form>
-            {/* Type Selection */}
+            {/* Availability Type Selection */}
             <Row className="mb-3">
               <Col md={12}>
                 <Form.Group>
-                  <Form.Label>Type <span className="text-danger">*</span></Form.Label>
+                  <Form.Label>
+                    Availability Type <span className="text-danger">*</span>
+                  </Form.Label>
                   <div className="d-flex gap-3">
                     <Form.Check
                       type="radio"
-                      label="Free-Sale"
-                      name="type"
-                      value="Free-Sale"
-                      checked={formData.type === "Free-Sale"}
+                      label="FREE_SALE"
+                      name="availabilityType"
+                      value="FREE_SALE"
+                      checked={formData.availabilityType === "FREE_SALE"}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          type: e.target.value,
+                          availabilityType: e.target.value,
                         })
                       }
                       disabled={isViewMode}
                     />
                     <Form.Check
                       type="radio"
-                      label="Pre Buy"
-                      name="type"
-                      value="Pre Buy"
-                      checked={formData.type === "Pre Buy"}
+                      label="PRE_BUY"
+                      name="availabilityType"
+                      value="PRE_BUY"
+                      checked={formData.availabilityType === "PRE_BUY"}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          type: e.target.value,
+                          availabilityType: e.target.value,
                         })
                       }
                       disabled={isViewMode}
                     />
                     <Form.Check
                       type="radio"
-                      label="Room Allocation"
-                      name="type"
-                      value="Room Allocation"
-                      checked={formData.type === "Room Allocation"}
+                      label="ROOM_ALLOCATION"
+                      name="availabilityType"
+                      value="ROOM_ALLOCATION"
+                      checked={formData.availabilityType === "ROOM_ALLOCATION"}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          type: e.target.value,
+                          availabilityType: e.target.value,
                         })
                       }
                       disabled={isViewMode}
@@ -1020,7 +1764,7 @@ const HotelAvailability = () => {
 
             {/* Main Fields */}
             <Row className="mb-3">
-              <Col md={4}>
+              <Col md={3}>
                 <Form.Group>
                   <Form.Label>
                     MarketType <span className="text-danger">*</span>
@@ -1038,7 +1782,10 @@ const HotelAvailability = () => {
                   >
                     <option value="">SELECT</option>
                     {marketTypes.map((market) => (
-                      <option key={market.marketTypeId} value={market.marketTypeId}>
+                      <option
+                        key={market.marketTypeId}
+                        value={market.marketTypeId}
+                      >
                         {market.name || market.marketTypeName}
                       </option>
                     ))}
@@ -1050,56 +1797,83 @@ const HotelAvailability = () => {
                   )}
                 </Form.Group>
               </Col>
-              <Col md={4}>
+              <Col md={3}>
                 <Form.Group>
                   <Form.Label>
                     Room Category <span className="text-danger">*</span>
                   </Form.Label>
                   <Form.Select
-                    value={formData.roomCategoryId}
+                    value={formData.hotelRoomId}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        roomCategoryId: e.target.value,
+                        hotelRoomId: e.target.value,
                       })
                     }
                     disabled={isViewMode}
-                    isInvalid={!!validationErrors.roomCategoryId}
+                    isInvalid={!!validationErrors.hotelRoomId}
                   >
                     <option value="">SELECT</option>
                     {roomCategories.map((category) => (
-                      <option key={category.rommCategoryId} value={category.rommCategoryId}>
+                      <option
+                        key={category.rommCategoryId}
+                        value={category.rommCategoryId}
+                      >
                         {category.roomCategory}
                       </option>
                     ))}
                   </Form.Select>
-                  {validationErrors.roomCategoryId && (
+                  {validationErrors.hotelRoomId && (
                     <Form.Control.Feedback type="invalid">
-                      {validationErrors.roomCategoryId}
+                      {validationErrors.hotelRoomId}
                     </Form.Control.Feedback>
                   )}
                 </Form.Group>
               </Col>
-              <Col md={4}>
+              <Col md={3}>
                 <Form.Group>
                   <Form.Label>
-                    Total Rooms <span className="text-danger">*</span>
+                    No of Rooms <span className="text-danger">*</span>
                   </Form.Label>
                   <Form.Control
                     type="number"
-                    value={formData.totalRooms}
+                    value={formData.noOfRooms}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        totalRooms: e.target.value,
+                        noOfRooms: e.target.value,
                       })
                     }
                     disabled={isViewMode}
-                    isInvalid={!!validationErrors.totalRooms}
+                    isInvalid={!!validationErrors.noOfRooms}
                   />
-                  {validationErrors.totalRooms && (
+                  {validationErrors.noOfRooms && (
                     <Form.Control.Feedback type="invalid">
-                      {validationErrors.totalRooms}
+                      {validationErrors.noOfRooms}
+                    </Form.Control.Feedback>
+                  )}
+                </Form.Group>
+              </Col>
+              <Col md={3}>
+                <Form.Group>
+                  <Form.Label>
+                    Release Day <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    type="number"
+                    value={formData.releaseDay}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        releaseDay: e.target.value,
+                      })
+                    }
+                    disabled={isViewMode}
+                    isInvalid={!!validationErrors.releaseDay}
+                  />
+                  {validationErrors.releaseDay && (
+                    <Form.Control.Feedback type="invalid">
+                      {validationErrors.releaseDay}
                     </Form.Control.Feedback>
                   )}
                 </Form.Group>
@@ -1110,7 +1884,7 @@ const HotelAvailability = () => {
             <Card className="mb-3">
               <Card.Header>Validity List</Card.Header>
               <Card.Body>
-                {formData.validityList.map((period, index) => (
+                {formData.availabilityValidities.map((period, index) => (
                   <Row key={index} className="mb-3">
                     <Col md={5}>
                       <Form.Group>
@@ -1121,15 +1895,20 @@ const HotelAvailability = () => {
                           type="datetime-local"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
-                            const newValidityList = [...formData.validityList];
-                            newValidityList[index].validityFrom = e.target.value;
+                            const newValidityList = [
+                              ...formData.availabilityValidities,
+                            ];
+                            newValidityList[index].validityFrom =
+                              e.target.value;
                             setFormData({
                               ...formData,
-                              validityList: newValidityList,
+                              availabilityValidities: newValidityList,
                             });
                           }}
                           disabled={isViewMode}
-                          isInvalid={!!validationErrors[`validityFrom_${index}`]}
+                          isInvalid={
+                            !!validationErrors[`validityFrom_${index}`]
+                          }
                         />
                         {validationErrors[`validityFrom_${index}`] && (
                           <Form.Control.Feedback type="invalid">
@@ -1147,11 +1926,13 @@ const HotelAvailability = () => {
                           type="datetime-local"
                           value={period.validityTo || ""}
                           onChange={(e) => {
-                            const newValidityList = [...formData.validityList];
+                            const newValidityList = [
+                              ...formData.availabilityValidities,
+                            ];
                             newValidityList[index].validityTo = e.target.value;
                             setFormData({
                               ...formData,
-                              validityList: newValidityList,
+                              availabilityValidities: newValidityList,
                             });
                           }}
                           disabled={isViewMode}
@@ -1164,17 +1945,18 @@ const HotelAvailability = () => {
                         )}
                       </Form.Group>
                     </Col>
-                    {!isViewMode && formData.validityList.length > 1 && (
-                      <Col md={2} className="d-flex align-items-end pb-2">
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => removeValidityPeriod(index)}
-                        >
-                          <FaTrash size={10} />
-                        </Button>
-                      </Col>
-                    )}
+                    {!isViewMode &&
+                      formData.availabilityValidities.length > 1 && (
+                        <Col md={2} className="d-flex align-items-end pb-2">
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => removeValidityPeriod(index)}
+                          >
+                            <FaTrash size={10} />
+                          </Button>
+                        </Col>
+                      )}
                   </Row>
                 ))}
                 {!isViewMode && (
@@ -1189,14 +1971,67 @@ const HotelAvailability = () => {
                 )}
               </Card.Body>
             </Card>
+
+            {/* Days of the Week Checkboxes */}
+            <Card className="mb-3">
+              <Card.Header>
+                <Form.Label className="mb-0">
+                  Checkin is allowed the given days{" "}
+                  <span className="text-danger">*</span>
+                </Form.Label>
+              </Card.Header>
+              <Card.Body>
+                <Row>
+                  <Col md={12}>
+                    <div className="d-flex flex-wrap gap-3">
+                      {[
+                        { key: "SUNDAY", label: "Sunday" },
+                        { key: "MONDAY", label: "Monday" },
+                        { key: "TUESDAY", label: "Tuesday" },
+                        { key: "WEDNESDAY", label: "Wednesday" },
+                        { key: "THURSDAY", label: "Thursday" },
+                        { key: "FRIDAY", label: "Friday" },
+                        { key: "SATURDAY", label: "Saturday" },
+                      ].map((day) => (
+                        <Form.Check
+                          key={day.key}
+                          type="checkbox"
+                          id={`day-${day.key}`}
+                          label={day.label}
+                          checked={formData.checkinAllowedDays.includes(
+                            day.key
+                          )}
+                          onChange={(e) => {
+                            let newAllowedDays;
+                            if (e.target.checked) {
+                              newAllowedDays = [
+                                ...formData.checkinAllowedDays,
+                                day.key,
+                              ];
+                            } else {
+                              newAllowedDays =
+                                formData.checkinAllowedDays.filter(
+                                  (d) => d !== day.key
+                                );
+                            }
+                            setFormData({
+                              ...formData,
+                              checkinAllowedDays: newAllowedDays,
+                            });
+                          }}
+                          disabled={isViewMode}
+                          className="me-3"
+                        />
+                      ))}
+                    </div>
+                  </Col>
+                </Row>
+              </Card.Body>
+            </Card>
           </Form>
         </Modal.Body>
         <Modal.Footer>
-          <Button
-            variant="secondary"
-            onClick={closeModal}
-            disabled={isLoading}
-          >
+          <Button variant="secondary" onClick={closeModal} disabled={isLoading}>
             {isViewMode ? "Close" : "Cancel"}
           </Button>
           {!isViewMode && (
@@ -1287,7 +2122,7 @@ const HotelAvailability = () => {
         backdrop="static"
         keyboard={false}
       >
-        <Modal.Header closeButton={!isLoading}>
+        <Modal.Header closeButton={!isLoadingBlock}>
           <Modal.Title>
             {isViewModeBlock
               ? "View Hotel Block Checkin Checkout"
@@ -1318,7 +2153,10 @@ const HotelAvailability = () => {
                   >
                     <option value="">SELECT</option>
                     {marketTypes.map((market) => (
-                      <option key={market.marketTypeId} value={market.marketTypeId}>
+                      <option
+                        key={market.marketTypeId}
+                        value={market.marketTypeId}
+                      >
                         {market.name || market.marketTypeName}
                       </option>
                     ))}
@@ -1343,7 +2181,10 @@ const HotelAvailability = () => {
                       value="CheckIn"
                       checked={formDataBlock.type === "CheckIn"}
                       onChange={(e) =>
-                        setFormDataBlock({ ...formDataBlock, type: e.target.value })
+                        setFormDataBlock({
+                          ...formDataBlock,
+                          type: e.target.value,
+                        })
                       }
                       disabled={isViewModeBlock}
                     />
@@ -1354,7 +2195,10 @@ const HotelAvailability = () => {
                       value="CheckOut"
                       checked={formDataBlock.type === "CheckOut"}
                       onChange={(e) =>
-                        setFormDataBlock({ ...formDataBlock, type: e.target.value })
+                        setFormDataBlock({
+                          ...formDataBlock,
+                          type: e.target.value,
+                        })
                       }
                       disabled={isViewModeBlock}
                     />
@@ -1378,8 +2222,11 @@ const HotelAvailability = () => {
                           type="datetime-local"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
-                            const newValidityList = [...formDataBlock.validityList];
-                            newValidityList[index].validityFrom = e.target.value;
+                            const newValidityList = [
+                              ...formDataBlock.validityList,
+                            ];
+                            newValidityList[index].validityFrom =
+                              e.target.value;
                             setFormDataBlock({
                               ...formDataBlock,
                               validityList: newValidityList,
@@ -1398,7 +2245,9 @@ const HotelAvailability = () => {
                           type="datetime-local"
                           value={period.validityTo || ""}
                           onChange={(e) => {
-                            const newValidityList = [...formDataBlock.validityList];
+                            const newValidityList = [
+                              ...formDataBlock.validityList,
+                            ];
                             newValidityList[index].validityTo = e.target.value;
                             setFormDataBlock({
                               ...formDataBlock,
@@ -1409,17 +2258,18 @@ const HotelAvailability = () => {
                         />
                       </Form.Group>
                     </Col>
-                    {!isViewModeBlock && formDataBlock.validityList.length > 1 && (
-                      <Col md={2} className="d-flex align-items-end pb-2">
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => removeBlockValidityPeriod(index)}
-                        >
-                          <FaTrash size={10} />
-                        </Button>
-                      </Col>
-                    )}
+                    {!isViewModeBlock &&
+                      formDataBlock.validityList.length > 1 && (
+                        <Col md={2} className="d-flex align-items-end pb-2">
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => removeBlockValidityPeriod(index)}
+                          >
+                            <FaTrash size={10} />
+                          </Button>
+                        </Col>
+                      )}
                   </Row>
                 ))}
                 {!isViewModeBlock && (
@@ -1440,29 +2290,27 @@ const HotelAvailability = () => {
           <Button
             variant="secondary"
             onClick={closeBlockModal}
-            disabled={isLoading}
+            disabled={isLoadingBlock}
           >
             {isViewModeBlock ? "Close" : "Cancel"}
           </Button>
           {!isViewModeBlock && (
             <Button
               variant="primary"
-              onClick={() => {
-                // TODO: Implement save functionality
-                toast.success("Block Checkin Checkout created successfully!");
-                closeBlockModal();
-              }}
-              disabled={isLoading}
+              onClick={editingBlock ? updateBlock : saveBlock}
+              disabled={isLoadingBlock}
             >
-              {isLoading ? (
+              {isLoadingBlock ? (
                 <>
                   <span
                     className="spinner-border spinner-border-sm me-2"
                     role="status"
                     aria-hidden="true"
                   ></span>
-                  Creating...
+                  {editingBlock ? "Updating..." : "Creating..."}
                 </>
+              ) : editingBlock ? (
+                "Update"
               ) : (
                 "Create"
               )}
@@ -1496,7 +2344,7 @@ const HotelAvailability = () => {
         backdrop="static"
         keyboard={false}
       >
-        <Modal.Header closeButton={!isLoading}>
+        <Modal.Header closeButton={!isLoadingStopSale}>
           <Modal.Title>
             {isViewModeStopSale
               ? "View Hotel Stop Sale"
@@ -1527,7 +2375,10 @@ const HotelAvailability = () => {
                   >
                     <option value="">SELECT</option>
                     {marketTypes.map((market) => (
-                      <option key={market.marketTypeId} value={market.marketTypeId}>
+                      <option
+                        key={market.marketTypeId}
+                        value={market.marketTypeId}
+                      >
                         {market.name || market.marketTypeName}
                       </option>
                     ))}
@@ -1557,7 +2408,10 @@ const HotelAvailability = () => {
                   >
                     <option value="">SELECT</option>
                     {roomCategories.map((category) => (
-                      <option key={category.rommCategoryId} value={category.rommCategoryId}>
+                      <option
+                        key={category.rommCategoryId}
+                        value={category.rommCategoryId}
+                      >
                         {category.roomCategory}
                       </option>
                     ))}
@@ -1585,7 +2439,10 @@ const HotelAvailability = () => {
                       value="Room Allocation"
                       checked={formDataStopSale.type === "Room Allocation"}
                       onChange={(e) =>
-                        setFormDataStopSale({ ...formDataStopSale, type: e.target.value })
+                        setFormDataStopSale({
+                          ...formDataStopSale,
+                          type: e.target.value,
+                        })
                       }
                       disabled={isViewModeStopSale}
                     />
@@ -1596,7 +2453,10 @@ const HotelAvailability = () => {
                       value="Block"
                       checked={formDataStopSale.type === "Block"}
                       onChange={(e) =>
-                        setFormDataStopSale({ ...formDataStopSale, type: e.target.value })
+                        setFormDataStopSale({
+                          ...formDataStopSale,
+                          type: e.target.value,
+                        })
                       }
                       disabled={isViewModeStopSale}
                     />
@@ -1607,7 +2467,10 @@ const HotelAvailability = () => {
                       value="Free-Sale"
                       checked={formDataStopSale.type === "Free-Sale"}
                       onChange={(e) =>
-                        setFormDataStopSale({ ...formDataStopSale, type: e.target.value })
+                        setFormDataStopSale({
+                          ...formDataStopSale,
+                          type: e.target.value,
+                        })
                       }
                       disabled={isViewModeStopSale}
                     />
@@ -1631,8 +2494,11 @@ const HotelAvailability = () => {
                           type="datetime-local"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
-                            const newValidityList = [...formDataStopSale.validityList];
-                            newValidityList[index].validityFrom = e.target.value;
+                            const newValidityList = [
+                              ...formDataStopSale.validityList,
+                            ];
+                            newValidityList[index].validityFrom =
+                              e.target.value;
                             setFormDataStopSale({
                               ...formDataStopSale,
                               validityList: newValidityList,
@@ -1651,7 +2517,9 @@ const HotelAvailability = () => {
                           type="datetime-local"
                           value={period.validityTo || ""}
                           onChange={(e) => {
-                            const newValidityList = [...formDataStopSale.validityList];
+                            const newValidityList = [
+                              ...formDataStopSale.validityList,
+                            ];
                             newValidityList[index].validityTo = e.target.value;
                             setFormDataStopSale({
                               ...formDataStopSale,
@@ -1662,17 +2530,18 @@ const HotelAvailability = () => {
                         />
                       </Form.Group>
                     </Col>
-                    {!isViewModeStopSale && formDataStopSale.validityList.length > 1 && (
-                      <Col md={2} className="d-flex align-items-end pb-2">
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => removeStopSaleValidityPeriod(index)}
-                        >
-                          <FaTrash size={10} />
-                        </Button>
-                      </Col>
-                    )}
+                    {!isViewModeStopSale &&
+                      formDataStopSale.validityList.length > 1 && (
+                        <Col md={2} className="d-flex align-items-end pb-2">
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => removeStopSaleValidityPeriod(index)}
+                          >
+                            <FaTrash size={10} />
+                          </Button>
+                        </Col>
+                      )}
                   </Row>
                 ))}
                 {!isViewModeStopSale && (
@@ -1693,29 +2562,27 @@ const HotelAvailability = () => {
           <Button
             variant="secondary"
             onClick={closeStopSaleModal}
-            disabled={isLoading}
+            disabled={isLoadingStopSale}
           >
             {isViewModeStopSale ? "Close" : "Cancel"}
           </Button>
           {!isViewModeStopSale && (
             <Button
               variant="primary"
-              onClick={() => {
-                // TODO: Implement save functionality
-                toast.success("Stop Sale created successfully!");
-                closeStopSaleModal();
-              }}
-              disabled={isLoading}
+              onClick={editingStopSale ? updateStopSale : saveStopSale}
+              disabled={isLoadingStopSale}
             >
-              {isLoading ? (
+              {isLoadingStopSale ? (
                 <>
                   <span
                     className="spinner-border spinner-border-sm me-2"
                     role="status"
                     aria-hidden="true"
                   ></span>
-                  Creating...
+                  {editingStopSale ? "Updating..." : "Creating..."}
                 </>
+              ) : editingStopSale ? (
+                "Update"
               ) : (
                 "Create"
               )}

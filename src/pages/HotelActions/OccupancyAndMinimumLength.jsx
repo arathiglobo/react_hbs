@@ -780,9 +780,7 @@ const OccupancyAndMinimumLength = () => {
   const openEditMin = async (item) => {
     try {
       setIsLoading(true);
-      console.log("Edit item:", item);
-      console.log("Available fields:", Object.keys(item));
-      console.log("Using ID:", item.id);
+     
       // Try different possible ID fields
       const itemId = item.id || item.minimumLengthId || item.minLengthId;
       console.log("Final ID to use:", itemId);
