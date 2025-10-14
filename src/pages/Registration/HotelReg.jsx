@@ -247,10 +247,15 @@ const loadHotelData = async () => {
 
     // Step 1: Set the form data first with the loaded hotel data
     const rooms = hotelData.roomCategories?.map((roomCategory) => {
+      // Find associated room types from the roomTypes array
       const associatedRoomTypes =
         hotelData.roomTypes?.filter(
-          (rt) => rt.hotelRoomCategoryId === roomCategory.roomCategoryId
+          (rt) => rt.hotelRoomCategoryId === roomCategory.hotelRoomCategoryId
         ) || [];
+      
+      console.log("Room Category:", roomCategory);
+      console.log("Associated Room Types:", associatedRoomTypes);
+      
       return {
         roomCategoryId: roomCategory.roomCategoryId ?? "",
         roomCategoryName: roomCategory.name ?? "",
@@ -272,6 +277,11 @@ const loadHotelData = async () => {
 
     console.log("Amenity IDs from API:", amenityIds);
     console.log("Amenities from API:", hotelData.amenities);
+    console.log("Available amenities for comparison:", amenities);
+    console.log("Form data amenityIds:", amenityIds);
+    console.log("Amenities length:", amenities.length);
+    console.log("Hotel data placeId:", hotelData.placeId);
+    console.log("Hotel data stateId:", hotelData.stateId);
 
     const weekDays = {
       id: hotelData.weekDays?.id ?? "",
@@ -290,6 +300,9 @@ const loadHotelData = async () => {
       wedFriday: hotelData.weekDays?.wedFriday ?? false,
       wedSaturday: hotelData.weekDays?.wedSaturday ?? false,
     };
+
+    console.log("WeekDays from API:", hotelData.weekDays);
+    console.log("Processed weekDays:", weekDays);
 
     // Set the main form data first
     setFormData({
@@ -323,18 +336,32 @@ const loadHotelData = async () => {
     });
 
     // Step 2: Load dependent data after setting the form data
+    // Load provinces first, then places
     if (hotelData.countryId) {
-      const provincesResponse = await axiosInstance.get(
-        `/api/province/getByCountryId/${hotelData.countryId}`
-      );
-      setProvinces(provincesResponse.data || []);
-    }
-
-    if (hotelData.stateId) {
-      const placesResponse = await axiosInstance.get(
-        `/api/destination/getplaces/${hotelData.stateId}`
-      );
-      setPlaces(placesResponse.data || []);
+      console.log("Loading provinces for country:", hotelData.countryId);
+      try {
+        const provincesResponse = await axiosInstance.get(
+          `/api/province/getByCountryId/${hotelData.countryId}`
+        );
+        console.log("Provinces loaded:", provincesResponse.data);
+        setProvinces(provincesResponse.data || []);
+        
+        // After provinces are loaded, load places if stateId exists
+        if (hotelData.stateId) {
+          console.log("Loading places for state:", hotelData.stateId);
+          const placesResponse = await axiosInstance.get(
+            `/api/destination/getplaces/${hotelData.stateId}`
+          );
+          console.log("Places loaded:", placesResponse.data);
+          console.log("Looking for placeId:", hotelData.placeId, "in places data");
+          const loadedPlaces = placesResponse.data || [];
+          console.log("Available place IDs:", loadedPlaces.map(p => p.id));
+          console.log("Available place names:", loadedPlaces.map(p => p.name));
+          setPlaces(loadedPlaces);
+        }
+      } catch (error) {
+        console.error("Error loading dependent data:", error);
+      }
     }
 
   } catch (error) {
@@ -402,6 +429,58 @@ const loadHotelData = async () => {
       setIsInitialLoad(false);
     }
   }, [isLoadingHotelData, isInitialLoad]);
+
+  // Force re-render when provinces or places are loaded
+  useEffect(() => {
+    if (provinces.length > 0 && formData.countryId) {
+      console.log("Provinces updated, current formData.stateId:", formData.stateId);
+    }
+  }, [provinces, formData.countryId, formData.stateId]);
+
+  useEffect(() => {
+    if (places.length > 0 && formData.stateId) {
+      console.log("Places updated, current formData.placeId:", formData.placeId);
+      console.log("Available places:", places.map(p => ({ id: p.id, name: p.name })));
+      
+      // Check if the current placeId exists in the loaded places
+      const currentPlace = places.find(p => p.id == formData.placeId);
+      if (currentPlace) {
+        console.log("Found matching place:", currentPlace);
+      } else {
+        console.log("No matching place found for placeId:", formData.placeId);
+        console.log("Available place IDs:", places.map(p => p.id));
+        
+        // Try to find by name if ID doesn't match
+        const placeByName = places.find(p => 
+          p.name.toLowerCase().includes('abu dhabi') || 
+          p.name.toLowerCase().includes('dubai') ||
+          p.name.toLowerCase().includes('sharjah') ||
+          p.name.toLowerCase().includes('ajman') ||
+          p.name.toLowerCase().includes('fujairah') ||
+          p.name.toLowerCase().includes('ras al khaimah') ||
+          p.name.toLowerCase().includes('umm al quwain')
+        );
+        if (placeByName) {
+          console.log("Found place by name:", placeByName);
+          // Update the form data with the correct ID
+          setFormData(prev => ({
+            ...prev,
+            placeId: placeByName.id
+          }));
+        } else {
+          console.log("No matching place found by name either");
+          // If still no match, try to find the first place as fallback
+          if (places.length > 0) {
+            console.log("Using first available place as fallback:", places[0]);
+            setFormData(prev => ({
+              ...prev,
+              placeId: places[0].id
+            }));
+          }
+        }
+      }
+    }
+  }, [places, formData.stateId, formData.placeId]);
 
   // Load currencies
   const loadCurrencies = async () => {
@@ -573,6 +652,21 @@ const loadHotelData = async () => {
       delete updated[name];
       return updated;
     });
+  };
+
+  // Function to get image preview URL
+  const getImagePreviewUrl = (imagePath) => {
+    if (!imagePath) return null;
+    
+    // If it's already a URL, return as is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    
+    // If it's a local file path, try to construct a proper URL
+    // This assumes the backend serves images from a specific endpoint
+    const fileName = imagePath.split(/[/\\]/).pop();
+    return `/api/images/${fileName}`; // Adjust this endpoint based on your backend
   };
 
   const handleWeekdayChange = (e) => {
@@ -1466,6 +1560,58 @@ const handleAmenityChange = (e) => {
                           <Col md={6}>
                             <Form.Group className="mb-3">
                               <Form.Label>360° Image</Form.Label>
+                              {formData.image360 && (
+                                <div className="mb-2">
+                                  <div className="border rounded p-2 bg-light">
+                                    <div className="d-flex align-items-center mb-2">
+                                      <i className="fas fa-image text-muted me-2"></i>
+                                      <small className="text-muted">
+                                        Current image: {formData.image360.split(/[/\\]/).pop()}
+                                      </small>
+                                    </div>
+                                    <div className="text-center">
+                                      <div 
+                                        className="d-flex align-items-center justify-content-center bg-white border rounded position-relative"
+                                        style={{
+                                          width: "200px",
+                                          height: "150px",
+                                          margin: "0 auto"
+                                        }}
+                                      >
+                                        {getImagePreviewUrl(formData.image360) ? (
+                                          <img
+                                            src={getImagePreviewUrl(formData.image360)}
+                                            alt="Hotel 360° Image"
+                                            style={{
+                                              maxWidth: "100%",
+                                              maxHeight: "100%",
+                                              objectFit: "cover",
+                                              borderRadius: "4px"
+                                            }}
+                                            onError={(e) => {
+                                              // If image fails to load, show fallback
+                                              e.target.style.display = 'none';
+                                              e.target.nextSibling.style.display = 'block';
+                                            }}
+                                          />
+                                        ) : null}
+                                        <div 
+                                          className="text-center"
+                                          style={{ display: getImagePreviewUrl(formData.image360) ? 'none' : 'block' }}
+                                        >
+                                          <i className="fas fa-image fa-3x text-muted mb-2"></i>
+                                          <div className="text-muted small">
+                                            Image Preview
+                                          </div>
+                                          <div className="text-muted small">
+                                            {formData.image360.split(/[/\\]/).pop()}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                               <Form.Control
                                 type="file"
                                 name="image360File"
@@ -1473,7 +1619,10 @@ const handleAmenityChange = (e) => {
                                 accept="image/*"
                               />
                               <Form.Text className="text-muted">
-                                Upload a 360° image file for the hotel
+                                {formData.image360 
+                                  ? "Select a new image to replace the current one" 
+                                  : "Upload a 360° image file for the hotel"
+                                }
                               </Form.Text>
                             </Form.Group>
                           </Col>
@@ -1754,6 +1903,7 @@ const handleAmenityChange = (e) => {
                                 <span className="text-danger">*</span>
                               </Form.Label>
                               <Form.Select
+                                key={`state-${provinces.length}-${formData.countryId}`}
                                 name="stateId"
                                 value={formData.stateId}
                                 onChange={handleInputChange}
@@ -1761,12 +1911,20 @@ const handleAmenityChange = (e) => {
                                 isInvalid={!!validationErrors.stateId}
                               >
                                 <option value="">Select State/Province</option>
-                                {provinces.map((province) => (
-                                  <option key={province.id} value={province.id}>
-                                    {province.stateName}
-                                  </option>
-                                ))}
+                                {provinces.map((province) => {
+                                  console.log("Rendering province:", province);
+                                  return (
+                                    <option key={province.id} value={province.id}>
+                                      {province.stateName}
+                                    </option>
+                                  );
+                                })}
                               </Form.Select>
+                              {provinces.length > 0 && (
+                                <small className="text-muted">
+                                  {provinces.length} provinces loaded
+                                </small>
+                              )}
                               <Form.Control.Feedback type="invalid">
                                 {validationErrors.stateId}
                               </Form.Control.Feedback>
@@ -1778,6 +1936,7 @@ const handleAmenityChange = (e) => {
                                 City <span className="text-danger">*</span>
                               </Form.Label>
                               <Form.Select
+                                key={`place-${places.length}-${formData.stateId}`}
                                 name="placeId"
                                 value={formData.placeId}
                                 onChange={handleInputChange}
@@ -1785,12 +1944,20 @@ const handleAmenityChange = (e) => {
                                 isInvalid={!!validationErrors.placeId}
                               >
                                 <option value="">Select City</option>
-                                {places.map((place) => (
-                                  <option key={place.id} value={place.id}>
-                                    {place.name}
-                                  </option>
-                                ))}
+                                {places.map((place) => {
+                                  console.log("Rendering place:", place, "formData.placeId:", formData.placeId, "match:", place.id == formData.placeId);
+                                  return (
+                                    <option key={place.id} value={place.id} selected={place.id == formData.placeId}>
+                                      {place.name}
+                                    </option>
+                                  );
+                                })}
                               </Form.Select>
+                              {places.length > 0 && (
+                                <small className="text-muted">
+                                  {places.length} places loaded
+                                </small>
+                              )}
                               <Form.Control.Feedback type="invalid">
                                 {validationErrors.placeId}
                               </Form.Control.Feedback>
@@ -2262,24 +2429,28 @@ const handleAmenityChange = (e) => {
                                 Week Days
                               </span>
                               <div className="d-flex gap-4">
-                                {weekdays.map((day) => (
-                                  <Form.Check
-                                    key={day.key}
-                                    type="checkbox"
-                                    id={`wd-${day.key}`}
-                                    name={day.key}
-                                    label={day.label}
-                                    checked={formData.weekDays[day.key]}
-                                    onChange={handleWeekdayChange}
-                                    className="weekday-checkbox"
-                                    style={{
-                                      "--bs-form-check-input-checked-bg-color":
-                                        "#fd7e14",
-                                      "--bs-form-check-input-checked-border-color":
-                                        "#fd7e14",
-                                    }}
-                                  />
-                                ))}
+                                {weekdays.map((day) => {
+                                  const isChecked = formData.weekDays[day.key];
+                                  console.log(`Weekday ${day.label}: fieldName=${day.key}, isChecked=${isChecked}`);
+                                  return (
+                                    <Form.Check
+                                      key={day.key}
+                                      type="checkbox"
+                                      id={`wd-${day.key}`}
+                                      name={day.key}
+                                      label={day.label}
+                                      checked={isChecked}
+                                      onChange={handleWeekdayChange}
+                                      className="weekday-checkbox"
+                                      style={{
+                                        "--bs-form-check-input-checked-bg-color":
+                                          "#fd7e14",
+                                        "--bs-form-check-input-checked-border-color":
+                                          "#fd7e14",
+                                      }}
+                                    />
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -2294,34 +2465,32 @@ const handleAmenityChange = (e) => {
                                 Week End Days
                               </span>
                               <div className="d-flex gap-4">
-                                {weekdays.map((day) => (
-                                  <Form.Check
-                                    key={`wed-${day.key}`}
-                                    type="checkbox"
-                                    id={`wed-${day.key}`}
-                                    name={`wed${
-                                      day.key.charAt(0).toUpperCase() +
-                                      day.key.slice(1)
-                                    }`}
-                                    label={day.label}
-                                    checked={
-                                      formData.weekDays[
-                                        `wed${
-                                          day.key.charAt(0).toUpperCase() +
-                                          day.key.slice(1)
-                                        }`
-                                      ]
-                                    }
-                                    onChange={handleWeekEndDayChange}
-                                    className="weekday-checkbox"
-                                    style={{
-                                      "--bs-form-check-input-checked-bg-color":
-                                        "#fd7e14",
-                                      "--bs-form-check-input-checked-border-color":
-                                        "#fd7e14",
-                                    }}
-                                  />
-                                ))}
+                                {weekdays.map((day) => {
+                                  const fieldName = `wed${
+                                    day.key.charAt(0).toUpperCase() +
+                                    day.key.slice(1)
+                                  }`;
+                                  const isChecked = formData.weekDays[fieldName];
+                                  console.log(`Weekend day ${day.label}: fieldName=${fieldName}, isChecked=${isChecked}`);
+                                  return (
+                                    <Form.Check
+                                      key={`wed-${day.key}`}
+                                      type="checkbox"
+                                      id={`wed-${day.key}`}
+                                      name={fieldName}
+                                      label={day.label}
+                                      checked={isChecked}
+                                      onChange={handleWeekEndDayChange}
+                                      className="weekday-checkbox"
+                                      style={{
+                                        "--bs-form-check-input-checked-bg-color":
+                                          "#fd7e14",
+                                        "--bs-form-check-input-checked-border-color":
+                                          "#fd7e14",
+                                      }}
+                                    />
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -2355,7 +2524,7 @@ const handleAmenityChange = (e) => {
                                 value={amenity.amenitiesId}
                                 label={amenity.amenityName}
                                 checked={formData.amenityIds.includes(
-                                  amenity.amenitiesId
+                                  Number(amenity.amenitiesId)
                                 )}
                                 onChange={handleAmenityChange}
                               />
