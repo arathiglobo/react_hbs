@@ -453,11 +453,10 @@ const HotelAvailability = () => {
 
   const resetForm = () => {
     setFormData({
-      selectionType: "Free-Sale",
       marketTypeId: "",
       roomCategoryId: "",
-      noOfRooms: "",
-      releaseDay: "",
+      totalRooms: "",
+      type: "Free-Sale",
       validityList: [
         {
           validityFrom: "",
@@ -1021,7 +1020,7 @@ const HotelAvailability = () => {
 
             {/* Main Fields */}
             <Row className="mb-3">
-              <Col md={3}>
+              <Col md={4}>
                 <Form.Group>
                   <Form.Label>
                     MarketType <span className="text-danger">*</span>
@@ -1051,7 +1050,7 @@ const HotelAvailability = () => {
                   )}
                 </Form.Group>
               </Col>
-              <Col md={3}>
+              <Col md={4}>
                 <Form.Group>
                   <Form.Label>
                     Room Category <span className="text-danger">*</span>
@@ -1081,50 +1080,26 @@ const HotelAvailability = () => {
                   )}
                 </Form.Group>
               </Col>
-              <Col md={3}>
+              <Col md={4}>
                 <Form.Group>
                   <Form.Label>
-                    No of Rooms <span className="text-danger">*</span>
+                    Total Rooms <span className="text-danger">*</span>
                   </Form.Label>
                   <Form.Control
                     type="number"
-                    value={formData.noOfRooms}
+                    value={formData.totalRooms}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        noOfRooms: e.target.value,
+                        totalRooms: e.target.value,
                       })
                     }
                     disabled={isViewMode}
-                    isInvalid={!!validationErrors.noOfRooms}
+                    isInvalid={!!validationErrors.totalRooms}
                   />
-                  {validationErrors.noOfRooms && (
+                  {validationErrors.totalRooms && (
                     <Form.Control.Feedback type="invalid">
-                      {validationErrors.noOfRooms}
-                    </Form.Control.Feedback>
-                  )}
-                </Form.Group>
-              </Col>
-              <Col md={3}>
-                <Form.Group>
-                  <Form.Label>
-                    Release Day <span className="text-danger">*</span>
-                  </Form.Label>
-                  <Form.Control
-                    type="number"
-                    value={formData.releaseDay}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        releaseDay: e.target.value,
-                      })
-                    }
-                    disabled={isViewMode}
-                    isInvalid={!!validationErrors.releaseDay}
-                  />
-                  {validationErrors.releaseDay && (
-                    <Form.Control.Feedback type="invalid">
-                      {validationErrors.releaseDay}
+                      {validationErrors.totalRooms}
                     </Form.Control.Feedback>
                   )}
                 </Form.Group>
