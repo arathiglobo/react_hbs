@@ -367,6 +367,8 @@ const HotelRegistrationActions = () => {
       navigate(`/registration/hotel/create/${id}`);
     } else if (actionLabel === 'Compulsory Events') {
       navigate(`/registration/hotel/${id}/compulsory-events`);
+    } else if (actionLabel === 'Hotel Availability') {
+      navigate(`/hotel-actions/${id}/hotel-availability`);
     } 
   };
 
