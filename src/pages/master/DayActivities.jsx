@@ -1,18 +1,141 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Card, Button, Table, Modal, Form, Pagination } from "react-bootstrap";
+import React, { useEffect, useState } from "react";
+import {
+  Card,
+  Button,
+  Table,
+  Modal,
+  Form,
+  Pagination,
+} from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaEye } from "react-icons/fa";
+
+// Enhanced SearchableSelect Component with loading support
+const SearchableSelect = ({
+  options,
+  value,
+  onChange,
+  placeholder,
+  className,
+  isInvalid,
+  name,
+  disabled = false,
+  isLoading = false,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredOptions, setFilteredOptions] = useState(options || []);
+
+  useEffect(() => {
+    if (!options || !Array.isArray(options)) {
+      setFilteredOptions([]);
+      return;
+    }
+
+    if (searchTerm) {
+      const filtered = options.filter((option) => {
+        const optionName = option.name || String(option);
+        return optionName.toLowerCase().includes(searchTerm.toLowerCase());
+      });
+      setFilteredOptions(filtered);
+    } else {
+      setFilteredOptions(options);
+    }
+  }, [searchTerm, options]);
+
+  const handleSelect = (option) => {
+    try {
+      const value = option.id !== undefined ? option.id : option;
+      onChange({
+        target: {
+          name: name,
+          value: value,
+        },
+      });
+      setIsOpen(false);
+      setSearchTerm("");
+    } catch (error) {
+      console.error("Error in handleSelect:", error);
+    }
+  };
+
+  const selectedOption = options?.find(
+    (option) => String(option.id) === String(value)
+  );
+
+  return (
+    <div className="position-relative">
+      <Form.Control
+        type="text"
+        value={
+          isOpen
+            ? searchTerm
+            : selectedOption?.name || ""
+        }
+        onChange={(e) => {
+          if (disabled) return;
+          if (isOpen) {
+            setSearchTerm(e.target.value);
+          } else {
+            setIsOpen(true);
+            setSearchTerm(e.target.value);
+          }
+        }}
+        onFocus={() => {
+          if (!disabled) {
+            setIsOpen(true);
+          }
+        }}
+        placeholder={isLoading ? "Loading..." : placeholder}
+        className={`${className} ${isInvalid ? "is-invalid" : ""}`}
+        disabled={disabled || isLoading}
+        autoComplete="off"
+      />
+      {isOpen && (
+        <div
+          className="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-sm"
+          style={{ zIndex: 1000, maxHeight: "200px", overflowY: "auto" }}
+        >
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option, index) => (
+              <div
+                key={index}
+                className="px-3 py-2 cursor-pointer hover-bg-light"
+                onClick={() => handleSelect(option)}
+                style={{ cursor: "pointer" }}
+              >
+                {option.name || String(option)}
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-muted">No options found</div>
+          )}
+        </div>
+      )}
+      {isOpen && (
+        <div
+          className="position-fixed w-100 h-100"
+          style={{ top: 0, left: 0, zIndex: 999 }}
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+    </div>
+  );
+};
 
 export default function DayActivities() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [isViewMode, setIsViewMode] = useState(false);
+  const [countries, setCountries] = useState([]);
+  const [places, setPlaces] = useState([]);
+  const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
@@ -22,26 +145,48 @@ export default function DayActivities() {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState(null);
 
+  const [formData, setFormData] = useState({
+    countryId: "",
+    stateId: "",
+    activityName: "",
+    activityCode: "",
+    description: "",
+  });
+
   // Validation functions
   const validateForm = () => {
     const newErrors = {};
 
-    // Name validation (matches @NotBlank annotation)
-    if (!name || name.trim() === "") {
-      newErrors.name = "Name is required";
-    } else if (name.trim().length < 2) {
-      newErrors.name = "Name must be at least 2 characters long";
-    } else if (name.trim().length > 100) {
-      newErrors.name = "Name must not exceed 100 characters";
+    if (!formData.countryId) {
+      newErrors.countryId = "Country is required";
     }
 
-    // Code validation (matches @NotBlank and @Size annotations)
-    if (!code || code.trim() === "") {
-      newErrors.code = "Code is required";
-    } else if (code.trim().length < 2) {
-      newErrors.code = "Code must be at least 2 characters long";
-    } else if (code.trim().length > 10) {
-      newErrors.code = "Code must not exceed 10 characters";
+    if (!formData.stateId) {
+      newErrors.stateId = "Place is required";
+    }
+
+    if (!formData.activityName || formData.activityName.trim() === "") {
+      newErrors.activityName = "Activity Name is required";
+    } else if (formData.activityName.trim().length < 2) {
+      newErrors.activityName = "Activity Name must be at least 2 characters long";
+    } else if (formData.activityName.trim().length > 100) {
+      newErrors.activityName = "Activity Name must not exceed 100 characters";
+    }
+
+    if (!formData.activityCode || formData.activityCode.trim() === "") {
+      newErrors.activityCode = "Activity Code is required";
+    } else if (formData.activityCode.trim().length < 2) {
+      newErrors.activityCode = "Activity Code must be at least 2 characters long";
+    } else if (formData.activityCode.trim().length > 20) {
+      newErrors.activityCode = "Activity Code must not exceed 20 characters";
+    }
+
+    if (!formData.description || formData.description.trim() === "") {
+      newErrors.description = "Description is required";
+    } else if (formData.description.trim().length < 10) {
+      newErrors.description = "Description must be at least 10 characters long";
+    } else if (formData.description.trim().length > 500) {
+      newErrors.description = "Description must not exceed 500 characters";
     }
 
     setErrors(newErrors);
@@ -58,15 +203,16 @@ export default function DayActivities() {
     }
   };
 
-  const nextId = useMemo(
-    () => Math.max(0, ...items.map((i) => i.id)) + 1,
-    [items]
-  );
-
   const openCreate = () => {
     setEditing(null);
-    setName("");
-    setCode("");
+    setIsViewMode(false);
+    setFormData({
+      countryId: "",
+      stateId: "",
+      activityName: "",
+      activityCode: "",
+      description: "",
+    });
     setError("");
     setErrors({});
     setShowModal(true);
@@ -74,17 +220,107 @@ export default function DayActivities() {
 
   const openEdit = (item) => {
     setEditing(item);
-    setName(item.name || "");
-    setCode(item.code || "");
+    setIsViewMode(false);
+    setFormData({
+      countryId: item.countryId || "",
+      stateId: item.stateId || "",
+      activityName: item.activityName || "",
+      activityCode: item.activityCode || "",
+      description: item.description || "",
+    });
     setError("");
     setErrors({});
     setShowModal(true);
   };
 
+  const openView = (item) => {
+    setEditing(item);
+    setIsViewMode(true);
+    setFormData({
+      countryId: item.countryId || "",
+      stateId: item.stateId || "",
+      activityName: item.activityName || "",
+      activityCode: item.activityCode || "",
+      description: item.description || "",
+    });
+    setError("");
+    setErrors({});
+    setShowModal(true);
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    clearError(name);
+  };
+
+  const handleCountryChange = (e) => {
+    try {
+      const value = e.target.value;
+      const stringValue = String(value); // Convert to string to avoid trim error
+      const selectedCountry = countries.find(country => String(country.id) === String(value));
+      const countryName = selectedCountry?.name || selectedCountry?.countryName || "Unknown";
+      
+      console.log(
+        "Country selected:",
+        value,
+        "Country name:",
+        countryName
+      );
+      
+      // Clear places and place selection when country changes
+      setPlaces([]);
+      setIsLoadingPlaces(false);
+      
+      setFormData((prev) => ({
+        ...prev,
+        countryId: stringValue,
+        stateId: "", // Clear state selection
+      }));
+      
+      // Fetch cities for the selected country
+      if (value && stringValue.trim() !== "") {
+        cityList(value);
+      }
+      
+      // Clear validation errors
+      if (errors.countryId) {
+        clearError('countryId');
+      }
+      if (errors.stateId) {
+        clearError('stateId');
+      }
+    } catch (error) {
+      console.error("Error in handleCountryChange:", error);
+    }
+  };
+
+  const handleStateChange = (e) => {
+    try {
+      const value = e.target.value;
+      const stringValue = String(value); // Convert to string for consistency
+      console.log("State selected:", value);
+      
+      setFormData(prev => ({
+        ...prev,
+        stateId: stringValue
+      }));
+      
+      // Clear validation errors
+      if (errors.stateId) {
+        clearError('stateId');
+      }
+    } catch (error) {
+      console.error("Error in handleStateChange:", error);
+    }
+  };
+
   const handleEdit = async () => {
     if (!editing) return;
 
-    // Validate form before submitting
     if (!validateForm()) {
       toast.error("Please fix the validation errors");
       return;
@@ -93,23 +329,18 @@ export default function DayActivities() {
     try {
       setIsLoading(true);
       const editRes = await axiosInstance.put(
-        `/api/dayActivities/${editing.dayActivitiesId}`,
-        {
-          name: name.trim(),
-          code: code.trim(),
-        }
+        `/api/dayActivities/${editing.dayActivityId}`,
+        formData
       );
 
-     if (editRes.data) {
-        toast.success("DayActivities Updated Successfully!");
-        // First refresh the list
-        await fetchDayActivitiesList(page, search);
-        // Then close modal and reset state
+      if (editRes.data) {
+        toast.success("Day Activity Updated Successfully!");
+        await fetchDayActivityList(page, search);
         closeModal();
       }
     } catch (error) {
-      setError("Failed to update day activities");
-      toast.error("Failed to update day activities");
+      setError("Failed to update day activity");
+      toast.error("Failed to update day activity");
     } finally {
       setIsLoading(false);
     }
@@ -118,13 +349,19 @@ export default function DayActivities() {
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
-    setName("");
-    setCode("");
+    setIsViewMode(false);
+    setFormData({
+      countryId: "",
+      stateId: "",
+      activityName: "",
+      activityCode: "",
+      description: "",
+    });
     setError("");
     setErrors({});
   };
 
-  const fetchDayActivitiesList = async (pageNum = 0, searchTerm = search) => {
+  const fetchDayActivityList = async (pageNum = 0, searchTerm = search) => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
@@ -140,19 +377,13 @@ export default function DayActivities() {
         `/api/dayActivities?${params.toString()}`
       );
      
-     // Check if response has data and pagination info
-     if (res.data && Array.isArray(res.data)) {
+      if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
-        // Since backend doesn't return totalPages, we'll calculate it based on data length
-        // If we get less than 10 items, it's likely the last page
         if (res.data.length < 10) {
           setTotalPages(pageNum + 1);
         } else {
-          // If we get exactly 10 items, there might be more pages
-          // We'll set a reasonable total or keep the current totalPages
           setTotalPages(Math.max(totalPages, pageNum + 2));
         }
-
         setPage(pageNum);
       } else {
         setItems([]);
@@ -160,7 +391,7 @@ export default function DayActivities() {
         setPage(0);
       }
     } catch (err) {
-      toast.error("Failed to load day activitiess");
+      toast.error("Failed to load day activities");
       setItems([]);
       setTotalPages(0);
       setPage(0);
@@ -169,8 +400,7 @@ export default function DayActivities() {
     }
   };
 
-  const saveDayActivities = async () => {
-    // Validate form before submitting
+  const saveDayActivity = async () => {
     if (!validateForm()) {
       toast.error("Please fix the validation errors");
       return;
@@ -178,52 +408,66 @@ export default function DayActivities() {
 
     try {
       setIsLoading(true);
-      const dayActivitiesPayload = { 
-        name: name.trim(),
-        code: code.trim()
-      };
-      const dayActivitiesSaveRes = await axiosInstance.post(
+      const dayActivitySaveRes = await axiosInstance.post(
         "/api/dayActivities/save",
-        dayActivitiesPayload
+        formData
       );
-      if (dayActivitiesSaveRes.data !== 0) {
-        toast.success("DayActivities added Successfully!");
-        // First refresh the list
-        await fetchDayActivitiesList(page, search);
-        // Then close modal
+      if (dayActivitySaveRes.data !== 0) {
+        toast.success("Day Activity added Successfully!");
+        await fetchDayActivityList(page, search);
         closeModal();
       }
     } catch (error) {
       setError("Sorry! Data not saved to db..");
-      toast.error("Failed to save day activities data");
+      toast.error("Failed to save day activity data");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const countryList = async () => {
+    try {
+      const response = await axios.get("/api/country");
+      setCountries(response.data);
+    } catch (error) {
+      console.log("axios call error for country list : ", error);
+      setCountries([]);
+    }
+  };
+
+  const cityList = async (countryId) => {
+    try {
+      setIsLoadingPlaces(true);
+      const response = await axiosInstance.post(`/api/destination/getCitiesByCountryId/${countryId}`);
+      setPlaces(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for city list : ", error);
+      setPlaces([]);
+    } finally {
+      setIsLoadingPlaces(false);
+    }
+  };
+
   useEffect(() => {
-    fetchDayActivitiesList();
+    fetchDayActivityList();
+    countryList();
   }, []);
 
   // Debounced search effect
   useEffect(() => {
-    // Clear previous timeout
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
 
-    // Set new timeout for search
     if (search !== "") {
       const timeout = setTimeout(() => {
-        fetchDayActivitiesList(0, search);
-      }, 500); // 500ms delay
+        fetchDayActivityList(0, search);
+      }, 500);
       setSearchTimeout(timeout);
     } else if (search === "") {
-      // If search is cleared, fetch all data
-      fetchDayActivitiesList(0, "");
+      fetchDayActivityList(0, "");
     }
 
-    // Cleanup timeout on unmount
     return () => {
       if (searchTimeout) {
         clearTimeout(searchTimeout);
@@ -232,9 +476,8 @@ export default function DayActivities() {
   }, [search]);
 
   const handleDelete = (item) => {
-    console.log("delete item :::" , item);
     Swal.fire({
-      title: `Are you sure? You want to delete ${item.name} DayActivities`,
+      title: `Are you sure? You want to delete ${item.activityName} Day Activity`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -248,13 +491,13 @@ export default function DayActivities() {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/dayActivities/${item.dayActivitiesId}`)
+          .delete(`/api/dayActivities/${item.dayActivityId}`)
           .then(() => {
-            toast.success("DayActivities deleted successfully");
-            fetchDayActivitiesList(page, search);
+            toast.success("Day Activity deleted successfully");
+            fetchDayActivityList(page, search);
           })
           .catch(() => {
-            toast.error("Sorry!! DayActivities not deleted");
+            toast.error("Sorry!! Day Activity not deleted");
           });
       }
     });
@@ -268,43 +511,55 @@ export default function DayActivities() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <span className="fw-semibold">DayActivities</span>
-              {/* DayActivities Search */}
-               <Form.Group className="hotel-search-bar">
-                  <Form.Control
-                    type="text"
-                    placeholder="Search day activities...."
-                    className="form-control-modern-sm"
-                    value={searchTerm}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSearchTerm(value);
-                      fetchDayActivitiesList(0, value); // pass value to API
-                    }}
-                  />
-                </Form.Group>
-              <Button className="btn-green" onClick={openCreate}>
-                + Create
-              </Button>
+              <span className="fw-semibold">Day Activities</span>
+              <div className="d-flex align-items-center gap-3">
+                {/* <Form.Select className="form-select-sm" style={{ width: "auto" }}>
+                  <option>Display 10 records</option>
+                </Form.Select> */}
+                <Form.Control
+                  type="text"
+                  placeholder="Search:"
+                  className="form-control-sm"
+                  style={{ width: "200px" }}
+                  value={searchTerm}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSearchTerm(value);
+                    fetchDayActivityList(0, value);
+                  }}
+                />
+                <Button className="btn-green" onClick={openCreate}>
+                  <FaPlus className="me-1" />
+                  Create
+                </Button>
+              </div>
             </Card.Header>
             <Card.Body className="p-0">
               <Table responsive hover striped className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th style={{ width: 100 }}>S/N</th>
-                    <th>Day Activities Name</th>
-                    <th>Code</th>
+                    <th style={{ width: 100 }}>S.N</th>
+                    <th>Day Activity name</th>
+                    <th>Place</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
-                    <tr key={item.dayActivitiesId}>
+                    <tr key={item.dayActivityId}>
                       <td>{index + 1 + page * 10}</td>
-                      <td>{item.name}</td>
-                      <td>{item.code}</td>
+                      <td>{item.activityName}</td>
+                      <td>
+                        {places.find(p => String(p.id) === String(item.stateId))?.name || item.stateId}
+                      </td>
                       <td>
                         <div className="d-flex gap-2">
+                          <FaEye
+                            className="text-info"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => openView(item)}
+                            title="View"
+                          />
                           <FaEdit
                             className="text-primary"
                             style={{ cursor: "pointer", fontSize: "18px" }}
@@ -330,14 +585,14 @@ export default function DayActivities() {
                         >
                           <span className="visually-hidden">Loading...</span>
                         </div>
-                        Loading available day activitiess...
+                        Loading available day activities...
                       </td>
                     </tr>
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
                       <td colSpan={4} className="text-center text-muted py-4">
-                        No day activitiess found.
+                        No day activities found.
                       </td>
                     </tr>
                   )}
@@ -349,27 +604,27 @@ export default function DayActivities() {
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
                   <div>
                     <small className="text-muted">
-                      Showing {items.length} of {totalPages * 10} day activitiess
+                      Showing {items.length} of {totalPages * 10} day activities
                     </small>
                   </div>
                   <div>
                     <Pagination className="mb-0">
                       <Pagination.Prev
                         disabled={page === 0}
-                        onClick={() => fetchDayActivitiesList(page - 1, search)}
+                        onClick={() => fetchDayActivityList(page - 1, search)}
                       />
                       {[...Array(totalPages).keys()].map((num) => (
                         <Pagination.Item
                           key={num}
                           active={num === page}
-                          onClick={() => fetchDayActivitiesList(num, search)}
+                          onClick={() => fetchDayActivityList(num, search)}
                         >
                           {num + 1}
                         </Pagination.Item>
                       ))}
                       <Pagination.Next
                         disabled={page === totalPages - 1}
-                        onClick={() => fetchDayActivitiesList(page + 1, search)}
+                        onClick={() => fetchDayActivityList(page + 1, search)}
                       />
                     </Pagination>
                   </div>
@@ -378,52 +633,114 @@ export default function DayActivities() {
             </Card.Body>
           </Card>
 
-          <Modal show={showModal} onHide={() => {}} centered backdrop="static" keyboard={false}>
-            <Modal.Header closeButton={!isLoading} onHide={closeModal}>
+          {/* Save Day Activity Modal */}
+          <Modal show={showModal} onHide={() => {}} centered backdrop="static" keyboard={false} size="lg">
+            <Modal.Header 
+              closeButton={!isLoading} 
+              onHide={closeModal}
+              className="bg-primary text-white"
+            >
               <Modal.Title>
-                {editing ? "Update DayActivities" : "Create DayActivities"}
+                {isViewMode ? "View Day Activity" : editing ? "Update Day Activity" : "Save Day Activity"}
               </Modal.Title>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body className="p-4">
               <Form>
-                <Form.Group className="mb-3">
-                  <Form.Label>Day Activities Name <span className="text-danger">*</span></Form.Label>
-                  <Form.Control
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      clearError('name');
-                    }}
-                    placeholder="Enter day activities name"
-                    autoFocus
-                    isInvalid={!!errors.name}
-                    maxLength={100}
-                  />
-                  {errors.name && (
-                    <Form.Control.Feedback type="invalid">
-                      {errors.name}
-                    </Form.Control.Feedback>
-                  )}
-                </Form.Group>
+                <div className="row">
+                  <div className="col-md-6 mb-3">
+                    <Form.Label>Country <span className="text-danger">*</span></Form.Label>
+                    <SearchableSelect
+                      name="countryId"
+                      value={formData.countryId}
+                      onChange={handleCountryChange}
+                      placeholder="SELECT"
+                      options={Array.isArray(countries) ? countries.map(country => ({ id: country.id, name: country.name })) : []}
+                      isInvalid={!!errors.countryId}
+                      disabled={isViewMode}
+                    />
+                    {errors.countryId && (
+                      <div className="text-danger small mt-1">
+                        {errors.countryId}
+                      </div>
+                    )}
+                  </div>
 
-                <Form.Group className="mb-3">
-                  <Form.Label>Day Activities Code <span className="text-danger">*</span></Form.Label>
-                  <Form.Control
-                    value={code}
-                    onChange={(e) => {
-                      setCode(e.target.value);
-                      clearError('code');
-                    }}
-                    placeholder="Enter day activities code (2-10 characters)"
-                    isInvalid={!!errors.code}
-                    maxLength={10}
-                  />
-                  {errors.code && (
-                    <Form.Control.Feedback type="invalid">
-                      {errors.code}
-                    </Form.Control.Feedback>
-                  )}
-                </Form.Group>
+                  <div className="col-md-6 mb-3">
+                    <Form.Label>Place <span className="text-danger">*</span></Form.Label>
+                    <SearchableSelect
+                      name="stateId"
+                      value={formData.stateId}
+                      onChange={handleStateChange}
+                      placeholder={isLoadingPlaces ? "Loading places..." : "SELECT"}
+                      options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name })) : []}
+                      isInvalid={!!errors.stateId}
+                      disabled={isViewMode || !formData.countryId || isLoadingPlaces}
+                      isLoading={isLoadingPlaces}
+                    />
+                    {errors.stateId && (
+                      <div className="text-danger small mt-1">
+                        {errors.stateId}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <Form.Label>Activity Name <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      name="activityName"
+                      value={formData.activityName}
+                      onChange={handleInputChange}
+                      placeholder="Enter activity name"
+                      isInvalid={!!errors.activityName}
+                      maxLength={100}
+                      disabled={isViewMode}
+                    />
+                    {errors.activityName && (
+                      <Form.Control.Feedback type="invalid">
+                        {errors.activityName}
+                      </Form.Control.Feedback>
+                    )}
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <Form.Label>Activity Code <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      name="activityCode"
+                      value={formData.activityCode}
+                      onChange={handleInputChange}
+                      placeholder="Enter activity code"
+                      isInvalid={!!errors.activityCode}
+                      maxLength={20}
+                      disabled={isViewMode}
+                    />
+                    {errors.activityCode && (
+                      <Form.Control.Feedback type="invalid">
+                        {errors.activityCode}
+                      </Form.Control.Feedback>
+                    )}
+                  </div>
+
+                  <div className="col-12 mb-3">
+                    <Form.Label>Description <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      name="description"
+                      value={formData.description}
+                      onChange={handleInputChange}
+                      placeholder="Enter activity description"
+                      rows={4}
+                      isInvalid={!!errors.description}
+                      maxLength={500}
+                      style={{ resize: "vertical" }}
+                      disabled={isViewMode}
+                    />
+                    {errors.description && (
+                      <Form.Control.Feedback type="invalid">
+                        {errors.description}
+                      </Form.Control.Feedback>
+                    )}
+                  </div>
+                </div>
 
                 {error && (
                   <div className="alert alert-danger" role="alert">
@@ -432,34 +749,60 @@ export default function DayActivities() {
                 )}
               </Form>
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer className="d-flex justify-content-between">
               <Button
-                variant="secondary"
+                variant="danger"
                 onClick={closeModal}
                 disabled={isLoading}
+                className="d-flex align-items-center"
               >
-                Cancel
+                <i className="fas fa-times me-1"></i>
+                {isViewMode ? "Close" : "Cancel"}
               </Button>
-              <Button
-                className="btn-indigo"
-                onClick={editing ? handleEdit : saveDayActivities}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <span
-                      className="spinner-border spinner-border-sm me-2"
-                      role="status"
-                      aria-hidden="true"
-                    ></span>
-                    {editing ? "Updating..." : "Saving..."}
-                  </>
-                ) : editing ? (
-                  "Update"
-                ) : (
-                  "Save"
-                )}
-              </Button>
+              {!isViewMode && (
+                <div className="d-flex gap-2">
+                  <Button
+                    variant="success"
+                    onClick={editing ? handleEdit : saveDayActivity}
+                    disabled={isLoading}
+                    className="d-flex align-items-center"
+                  >
+                    {isLoading ? (
+                      <>
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"
+                        ></span>
+                        {editing ? "Updating..." : "Creating..."}
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-arrow-right me-1"></i>
+                        {editing ? "Update" : "Create"}
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setFormData({
+                        countryId: "",
+                        stateId: "",
+                        activityName: "",
+                        activityCode: "",
+                        description: "",
+                      });
+                      setErrors({});
+                    }}
+                    disabled={isLoading}
+                    className="d-flex align-items-center"
+                  >
+                    <i className="fas fa-redo me-1"></i>
+                    Reset
+                  </Button>
+                </div>
+              )}
             </Modal.Footer>
           </Modal>
         </main>
