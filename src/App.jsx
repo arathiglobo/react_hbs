@@ -46,6 +46,13 @@ import MakeUrOwnPackage from "./pages/search/MakeUrOwnPackage";
 import Calendar from "./pages/Calendar";
 import HotelCategory from "./pages/master/HotelCategory";
 import HotelType from "./pages/master/HotelType";
+import OccupancyType from "./pages/master/OccupancyType";
+import SeasonType from "./pages/master/SeasonType";
+import RoomCategory from "./pages/master/RoomCategory";
+import RoomType from "./pages/master/RoomType";
+import RoomAmenity from "./pages/master/RoomAmenity";
+import HotelAmenity from "./pages/master/HotelAmenity";
+import MealPlan from "./pages/master/MealPlan";
 
 
 
@@ -136,6 +143,13 @@ export default function App() {
        <Route path="/masters/city-mapping" element={<CityMapping />} />
        <Route path="/masters/hotel-category" element={<HotelCategory />} />
        <Route path="/masters/hotel-type" element={<HotelType />} />
+       <Route path="/masters/occupancy-type" element={<OccupancyType />} />
+       <Route path="/masters/season-type" element={<SeasonType />} />
+       <Route path="/masters/room-category" element={<RoomCategory />} />
+       <Route path="/masters/room-types" element={<RoomType />} />
+       <Route path="/masters/hotel-amenity" element={<HotelAmenity />} />
+       <Route path="/masters/room-amenity" element={<RoomAmenity />} />
+       <Route path="/masters/meal-plans" element={<MealPlan />} />
 
 
        {/* Registration */}
