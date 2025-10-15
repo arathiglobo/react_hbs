@@ -53,6 +53,10 @@ import RoomType from "./pages/master/RoomType";
 import RoomAmenity from "./pages/master/RoomAmenity";
 import HotelAmenity from "./pages/master/HotelAmenity";
 import MealPlan from "./pages/master/MealPlan";
+import MasterAgentCategory from "./pages/master/MasterAgentCategory";
+import PackageCategory from "./pages/master/PackageCategory";
+import PackageType from "./pages/master/PackageType";
+import DayActivities from "./pages/master/DayActivities";
 
 
 
@@ -150,6 +154,10 @@ export default function App() {
        <Route path="/masters/hotel-amenity" element={<HotelAmenity />} />
        <Route path="/masters/room-amenity" element={<RoomAmenity />} />
        <Route path="/masters/meal-plans" element={<MealPlan />} />
+       <Route path="/masters/agent-category" element={<MasterAgentCategory />} />
+       <Route path="/masters/package-category" element={<PackageCategory />} />
+       <Route path="/masters/package-type" element={<PackageType />} />
+       <Route path="/masters/day-activity" element={<DayActivities />} />
 
 
        {/* Registration */}
