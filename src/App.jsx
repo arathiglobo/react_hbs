@@ -43,6 +43,7 @@ import CompulsoryEventsPage from "./pages/HotelActions/Compulsery/CompulsoryEven
 import OccupancyAndMinimumLength from "./pages/HotelActions/OccupancyAndMinimumLength";
 import HotelAvailability from "./pages/HotelActions/HotelAvailability";
 import MakeUrOwnPackage from "./pages/search/MakeUrOwnPackage";
+import Calendar from "./pages/Calendar";
 
 
 
@@ -146,6 +147,7 @@ export default function App() {
       <Route path="/registration/hotel/:id/compulsory-events" element={<CompulsoryEventsPage />} />
       <Route path="/hotel-actions/:id/occupancy-and-minimumlength" element={<OccupancyAndMinimumLength />} />
       <Route path="/hotel-actions/:id/hotel-availability" element={<HotelAvailability />} />
+      <Route path="/calendar" element={<Calendar />} />
 
       </Routes>
 

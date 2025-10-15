@@ -1,0 +1,148 @@
+/* Calendar Container */
+.calendar-container {
+  border: 1px solid #dee2e6;
+  background-color: #fff;
+}
+
+/* Calendar Grid Layout - Rows and Columns */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  min-height: 400px;
+  background-color: #fff;
+}
+
+.calendar-day {
+  position: relative;
+  min-height: 100px;
+  border: 1px solid #dee2e6;
+  background-color: #fff;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-day:hover {
+  background-color: #f8f9fa;
+}
+
+.calendar-day.today {
+  background-color: #fff3cd !important;
+  border: 2px solid #ffc107;
+}
+
+/* Day number styling */
+.day-number {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.calendar-day.today .day-number {
+  color: #1976d2;
+  font-weight: 700;
+}
+
+/* Events container */
+.events-container {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 80px;
+}
+
+/* Event item styling */
+.event-item {
+  margin-bottom: 2px;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 10px;
+}
+
+.event-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Week day headers */
+.week-day-header {
+  background-color: #e3f2fd;
+  border-bottom: 1px solid #ddd;
+  font-weight: 600;
+  color: #1976d2;
+  font-size: 12px;
+  padding: 8px 4px;
+  text-align: center;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .calendar-grid {
+    grid-template-columns: repeat(7, 1fr);
+    font-size: 0.8rem;
+    min-height: 400px;
+  }
+  
+  .calendar-day {
+    min-height: 80px;
+  }
+  
+  .event-item {
+    font-size: 0.7rem;
+  }
+  
+  .day-number {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 576px) {
+  .calendar-grid {
+    min-height: 300px;
+  }
+  
+  .calendar-day {
+    min-height: 60px;
+  }
+  
+  .events-container {
+    max-height: 40px;
+  }
+}
+
+/* Custom Scrollbar */
+.events-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.events-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 2px;
+}
+
+.events-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 2px;
+}
+
+.events-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Animation for events */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.event-item {
+  animation: fadeIn 0.3s ease;
+}
