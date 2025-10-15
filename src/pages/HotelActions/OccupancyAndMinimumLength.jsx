@@ -244,16 +244,6 @@ const OccupancyAndMinimumLength = () => {
     }
   };
 
-  const loadRoomCategories = async () => {
-    try {
-      const response = await axiosInstance.get("/api/roomCategories");
-      setRoomCategories(response.data || []);
-    } catch (error) {
-      console.error("Error loading room categories:", error);
-      toast.error("Failed to load room categories");
-    }
-  };
-
   const loadOccupancyTypes = async () => {
     try {
       const response = await axiosInstance.get("/api/occupancyType");
@@ -276,11 +266,13 @@ const OccupancyAndMinimumLength = () => {
     }
   };
 
+  // Test backend connectivity
+  
   useEffect(() => {
     loadMarketTypes();
-    loadRoomCategories();
     loadOccupancyTypes();
     loadHotelRoomDatas();
+    
   }, []);
 
   useEffect(() => {
@@ -338,6 +330,7 @@ const OccupancyAndMinimumLength = () => {
   };
 
   useEffect(() => {
+    // Only fetch occupancy data initially since it's the default active tab
     fetchOccupancyList();
   }, []);
 
@@ -724,31 +717,87 @@ const OccupancyAndMinimumLength = () => {
   };
 
   const confirmLiveStatusChangeOcc = async () => {
-    if (!selectedItemOcc) return;
+    console.log("=== CONFIRM LIVE STATUS CHANGE OCC ===");
+    console.log("Toggling live status for:", selectedItemOcc);
+    console.log("Hotel ID from params:", id);
+    console.log("Occupancy ID:", selectedItemOcc.occupancyId);
+    
+    if (!selectedItemOcc) {
+      console.error("No selected item found!");
+      return;
+    }
+    
     try {
       setIsLoading(true);
+      
+      // Create payload matching HotelOccupancyPatchDTO structure
       const payload = {
-        isLive: !selectedItemOcc.isLive,
+        isLive: !selectedItemOcc.isLive, // Toggle the current status
       };
+      
+      console.log("Sending payload:", payload);
+      console.log("Full API URL:", `http://localhost:8081/api/hotels/${id}/occupancies/${selectedItemOcc.occupancyId}/status`);
+      
+      // Add CORS headers to the request
       const res = await axiosInstance.patch(
         `/api/hotels/${id}/occupancies/${selectedItemOcc.occupancyId}/status`,
-        payload
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          },
+        }
       );
+      
+      console.log("✅ API call successful!");
+      console.log("API response:", res.data);
+      
       toast.success(
         `Occupancy ${
           selectedItemOcc.isLive ? "deactivated" : "activated"
         } successfully`
       );
+      
+      // Refresh the occupancy list to show updated data
       await fetchOccupancyList(pageOcc, searchOcc);
       setShowLiveStatusModalOcc(false);
       setSelectedItemOcc(null);
+      
     } catch (error) {
-      console.error("Error updating live status:", error);
-      toast.error(
-        `Failed to update status: ${
-          error.response?.data?.message || error.message
-        }`
-      );
+      console.error("❌ Error in confirmLiveStatusChangeOcc:");
+      console.error("Error object:", error);
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+      
+      // Handle CORS error specifically
+      if (error.code === 'ERR_NETWORK' || error.message.includes('CORS')) {
+        console.error("🚨 CORS Error Detected!");
+        console.error("This is a CORS (Cross-Origin Resource Sharing) issue.");
+        console.error("The backend server needs to be configured to allow requests from localhost:3000");
+        
+        toast.error(
+          <div>
+            <strong>CORS Error:</strong><br/>
+            Backend server needs CORS configuration.<br/>
+            <small>Add @CrossOrigin annotation to your Spring Boot controller</small>
+          </div>
+        );
+      } else if (error.response?.status === 404) {
+        toast.error("API endpoint not found. Please check the backend routes.");
+      } else if (error.response?.status === 500) {
+        toast.error("Server error. Please check the backend logs.");
+      } else {
+        toast.error(
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -778,12 +827,20 @@ const OccupancyAndMinimumLength = () => {
   };
 
   const openEditMin = async (item) => {
+    console.log("Opening edit for minimum length item:", item);
     try {
       setIsLoading(true);
      
       // Try different possible ID fields
-      const itemId = item.id || item.minimumLengthId || item.minLengthId;
+      const itemId = item.minimumLengthId;
       console.log("Final ID to use:", itemId);
+      
+      // Ensure hotelRoomsData is loaded first
+      if (hotelRoomsData.length === 0) {
+        console.log("Loading hotel rooms data first...");
+        await loadHotelRoomDatas();
+      }
+      
       // Fetch detailed minimum length data from API
       const editRes = await axiosInstance.get(
         `/api/hotels/${id}/minimumlengths/${itemId}`
@@ -793,22 +850,42 @@ const OccupancyAndMinimumLength = () => {
 
       setEditingMin(data);
       setIsViewModeMin(false);
+      
+      // Map validity periods correctly
+      const mappedValidityPeriods = (data.validityPeriods || []).map(period => ({
+        validityFrom: period.validityFrom ? period.validityFrom.substring(0, 16) : "", // Convert to datetime-local format
+        validityTo: period.validityTo ? period.validityTo.substring(0, 16) : "",
+      }));
+      
+      // Map hotel rooms correctly - need to match with hotelRoomsData
+      const mappedHotelRooms = (data.hotelRooms || []).map(room => {
+        const matchingCategory = hotelRoomsData.find(cat => cat.rommCategoryId === room.roomId);
+        console.log(`Mapping room ${room.roomId}:`, {
+          roomData: room,
+          matchingCategory: matchingCategory,
+          categoryName: matchingCategory?.roomCategory
+        });
+        
+        return {
+          roomId: room.roomId.toString(),
+          roomCategory: matchingCategory?.roomCategory || `Room ${room.roomId}`,
+          minimumLength: room.minimumLength || "",
+        };
+      });
+      
+      console.log("Mapped validity periods:", mappedValidityPeriods);
+      console.log("Mapped hotel rooms:", mappedHotelRooms);
+      console.log("Available hotel rooms data:", hotelRoomsData);
+      
       setFormDataMin({
         marketTypeId: data.marketTypeId || "",
-        validityPeriods: data.validityPeriods || [{ validityFrom: "", validityTo: "" }],
-        hotelRooms: data.hotelRooms || [{ 
-          roomId: "", 
-          roomCategory: "", 
-          minimumLength: "" 
-        }],
+        validityPeriods: mappedValidityPeriods.length > 0 ? mappedValidityPeriods : [{ validityFrom: "", validityTo: "" }],
+        hotelRooms: mappedHotelRooms,
       });
     setValidationErrorsMin({});
     setShowModalMin(true);
     } catch (error) {
-      console.error("Failed to load minimum length for edit:", error);
-      console.error("Error response:", error.response?.data);
-      console.error("Error status:", error.response?.status);
-      console.error("Error message:", error.message);
+      console.error("Error in openEditMin:", error);
       toast.error(`Failed to load minimum length data for editing: ${error.response?.data?.message || error.message}`);
     } finally {
       setIsLoading(false);
@@ -923,9 +1000,8 @@ const OccupancyAndMinimumLength = () => {
     }
   };
 
-  useEffect(() => {
-    fetchMinLengthList();
-  }, []);
+  // Remove the automatic fetch for minimum length on mount
+  // It will be called when the tab is selected
 
   const validateMinForm = (data) => {
     const newErrors = {};
@@ -1055,9 +1131,17 @@ const OccupancyAndMinimumLength = () => {
       console.log("View item:", item);
       console.log("Available fields:", Object.keys(item));
       console.log("Using ID:", item.id);
+      
       // Try different possible ID fields
       const itemId = item.id || item.minimumLengthId || item.minLengthId;
       console.log("Final ID to use:", itemId);
+      
+      // Ensure hotelRoomsData is loaded first
+      if (hotelRoomsData.length === 0) {
+        console.log("Loading hotel rooms data first for view...");
+        await loadHotelRoomDatas();
+      }
+      
       // Fetch detailed minimum length data from API
       const viewRes = await axiosInstance.get(
         `/api/hotels/${id}/minimumlengths/${itemId}`
@@ -1067,14 +1151,37 @@ const OccupancyAndMinimumLength = () => {
 
       setEditingMin(data);
       setIsViewModeMin(true);
+      
+      // Map validity periods correctly (same as edit)
+      const mappedValidityPeriods = (data.validityPeriods || []).map(period => ({
+        validityFrom: period.validityFrom ? period.validityFrom.substring(0, 16) : "", // Convert to datetime-local format
+        validityTo: period.validityTo ? period.validityTo.substring(0, 16) : "",
+      }));
+      
+      // Map hotel rooms correctly (same as edit)
+      const mappedHotelRooms = (data.hotelRooms || []).map(room => {
+        const matchingCategory = hotelRoomsData.find(cat => cat.rommCategoryId === room.roomId);
+        console.log(`View mapping room ${room.roomId}:`, {
+          roomData: room,
+          matchingCategory: matchingCategory,
+          categoryName: matchingCategory?.roomCategory
+        });
+        
+        return {
+          roomId: room.roomId.toString(),
+          roomCategory: matchingCategory?.roomCategory || `Room ${room.roomId}`,
+          minimumLength: room.minimumLength || "",
+        };
+      });
+      
+      console.log("View mapped validity periods:", mappedValidityPeriods);
+      console.log("View mapped hotel rooms:", mappedHotelRooms);
+      console.log("Available hotel rooms data for view:", hotelRoomsData);
+      
       setFormDataMin({
         marketTypeId: data.marketTypeId || "",
-        validityPeriods: data.validityPeriods || [{ validityFrom: "", validityTo: "" }],
-        hotelRooms: data.hotelRooms || [{ 
-          roomId: "", 
-          roomCategory: "", 
-          minimumLength: "" 
-        }],
+        validityPeriods: mappedValidityPeriods.length > 0 ? mappedValidityPeriods : [{ validityFrom: "", validityTo: "" }],
+        hotelRooms: mappedHotelRooms,
       });
     setValidationErrorsMin({});
     setShowModalMin(true);
@@ -1095,26 +1202,36 @@ const OccupancyAndMinimumLength = () => {
   };
 
   const confirmLiveStatusChangeMin = async () => {
+    console.log("Toggling live status for minimum length:", selectedItemMin);
     if (!selectedItemMin) return;
     try {
       setIsLoading(true);
+      
+      // Create payload matching the backend DTO structure
       const payload = {
-        isLive: !selectedItemMin.isLive,
+        isLive: !selectedItemMin.status, // Toggle the current status
       };
-      const res = await axiosInstance.patch(
-        `/api/hotels/${id}/minlengths/${selectedItemMin.id}/status`,
+      
+    const res = await axiosInstance.patch(
+        `/api/hotels/${id}/minimumlengths/${selectedItemMin.minimumLengthId}/status`,
         payload
       );
+      
+      console.log("API response:", res.data);
+      
       toast.success(
         `Min Length ${
-          selectedItemMin.isLive ? "deactivated" : "activated"
+          selectedItemMin.status ? "deactivated" : "activated"
         } successfully`
       );
+      
+      // Refresh the minimum length list to show updated data
       await fetchMinLengthList(pageMin, searchMin);
       setShowLiveStatusModalMin(false);
       setSelectedItemMin(null);
     } catch (error) {
-      console.error("Error updating live status:", error);
+      console.error("Error status:", error.response?.status);
+      
       toast.error(
         `Failed to update status: ${
           error.response?.data?.message || error.message
@@ -1132,6 +1249,21 @@ const OccupancyAndMinimumLength = () => {
 
   const handleTabSelect = (key) => {
     setActiveTab(key);
+    
+    // Call appropriate API based on selected tab
+    if (key === "occupancy") {
+      // Reset occupancy search and fetch data
+      setSearchOcc("");
+      setPageOcc(0);
+      setItemsOcc([]); // Clear previous data
+      fetchOccupancyList(0, "");
+    } else if (key === "minlength") {
+      // Reset minimum length search and fetch data
+      setSearchMin("");
+      setPageMin(0);
+      setItemsMin([]); // Clear previous data
+      fetchMinLengthList(0, "");
+    }
   };
 
   const openAllOccupancy = () => {
@@ -1156,7 +1288,13 @@ const OccupancyAndMinimumLength = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <h3>Occupancy And Minimum Length</h3>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h3>Occupancy And Minimum Length</h3>
+            <div className="d-flex gap-2">
+             
+            
+            </div>
+          </div>
           <Tabs
             activeKey={activeTab}
             onSelect={handleTabSelect}
@@ -1168,7 +1306,7 @@ const OccupancyAndMinimumLength = () => {
                 <Card.Header className="d-flex justify-content-between align-items-center text-white">
                   <span
                     className="fw-semibold cursor-pointer text-primary"
-                    onClick={openAllOccupancy}
+                    // onClick={openAllOccupancy}
                     style={{ padding: "10px" }}
                   >
                     Occupancy
@@ -1845,7 +1983,7 @@ const OccupancyAndMinimumLength = () => {
                           <td>{item.marketName}</td>
                         
                           <td>
-                            {item.isLive ? (
+                            {item.status ? (
                               <Badge
                                 bg="danger"
                                 style={{ cursor: "pointer" }}
@@ -2167,7 +2305,15 @@ const OccupancyAndMinimumLength = () => {
                                 </Form.Label>
                                 <Form.Control
                                   type="number"
-                                  value={formDataMin.hotelRooms.find(room => room.roomId === category.rommCategoryId.toString())?.minimumLength || ""}
+                                  value={(() => {
+                                    const roomData = formDataMin.hotelRooms.find(room => room.roomId === category.rommCategoryId.toString());
+                                    console.log(`Finding minimum length for category ${category.rommCategoryId}:`, {
+                                      categoryId: category.rommCategoryId,
+                                      roomData: roomData,
+                                      minimumLength: roomData?.minimumLength
+                                    });
+                                    return roomData?.minimumLength || "";
+                                  })()}
                                   onChange={(e) => {
                                     const newHotelRooms = [...formDataMin.hotelRooms];
                                     const existingRoomIndex = newHotelRooms.findIndex(room => room.roomId === category.rommCategoryId.toString());
