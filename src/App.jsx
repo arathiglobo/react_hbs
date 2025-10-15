@@ -44,6 +44,8 @@ import OccupancyAndMinimumLength from "./pages/HotelActions/OccupancyAndMinimumL
 import HotelAvailability from "./pages/HotelActions/HotelAvailability";
 import MakeUrOwnPackage from "./pages/search/MakeUrOwnPackage";
 import Calendar from "./pages/Calendar";
+import HotelCategory from "./pages/master/HotelCategory";
+import HotelType from "./pages/master/HotelType";
 
 
 
@@ -116,6 +118,8 @@ export default function App() {
             </PrivateRoute>
           }
         />
+
+        {/* Masters */}
         <Route path="/masters/designations" element={<Designations />} />
         <Route path="/masters/bank" element={<Bank />} />
          <Route path="/masters/contact-type" element={<ContactType />} />
@@ -130,6 +134,11 @@ export default function App() {
         <Route path="/masters/states" element={<Province />} />
        <Route path="/masters/destination" element={<Destination />} />
        <Route path="/masters/city-mapping" element={<CityMapping />} />
+       <Route path="/masters/hotel-category" element={<HotelCategory />} />
+       <Route path="/masters/hotel-type" element={<HotelType />} />
+
+
+       {/* Registration */}
        <Route path="/hotel-booking-page" element={<HotelBookingPage/>} />
        <Route path="/registration/agent" element={<AgentReg />} />
        <Route path="/registration/employee" element={<EmployeeReg />} />
