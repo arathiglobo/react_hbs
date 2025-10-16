@@ -57,6 +57,7 @@ import MasterAgentCategory from "./pages/master/MasterAgentCategory";
 import PackageCategory from "./pages/master/PackageCategory";
 import PackageType from "./pages/master/PackageType";
 import DayActivities from "./pages/master/DayActivities";
+import ItineraryDetails from "./pages/master/ItineraryDetails";
 
 
 
@@ -158,6 +159,7 @@ export default function App() {
        <Route path="/masters/package-category" element={<PackageCategory />} />
        <Route path="/masters/package-type" element={<PackageType />} />
        <Route path="/masters/day-activity" element={<DayActivities />} />
+       <Route path="/masters/itinerary-details" element={<ItineraryDetails />} />
 
 
        {/* Registration */}

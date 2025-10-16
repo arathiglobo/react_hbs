@@ -5,13 +5,17 @@ import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash } from "react-icons/fa";
+import { FaEdit, FaTrash, FaTimes, FaCheck, FaUndo } from "react-icons/fa";
 
 export default function ItineraryDetails() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [season, setSeason] = useState("");
+  const [formData, setFormData] = useState({
+    itineraryHeading: "",
+    itineraryDesc: "",
+    itineraryImg: null
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
@@ -25,13 +29,22 @@ export default function ItineraryDetails() {
   const validateForm = () => {
     const newErrors = {};
 
-    // Season validation
-    if (!season || season.trim() === "") {
-      newErrors.season = "Season Type is required";
-    } else if (season.trim().length < 2) {
-      newErrors.season = "Season Type must be at least 2 characters long";
-    } else if (season.trim().length > 100) {
-      newErrors.season = "Season Type must not exceed 100 characters";
+    // Heading validation
+    if (!formData.itineraryHeading || formData.itineraryHeading.trim() === "") {
+      newErrors.itineraryHeading = "Heading is required";
+    } else if (formData.itineraryHeading.trim().length < 2) {
+      newErrors.itineraryHeading = "Heading must be at least 2 characters long";
+    } else if (formData.itineraryHeading.trim().length > 100) {
+      newErrors.itineraryHeading = "Heading must not exceed 100 characters";
+    }
+
+    // Description validation
+    if (!formData.itineraryDesc || formData.itineraryDesc.trim() === "") {
+      newErrors.itineraryDesc = "Description is required";
+    } else if (formData.itineraryDesc.trim().length < 10) {
+      newErrors.itineraryDesc = "Description must be at least 10 characters long";
+    } else if (formData.itineraryDesc.trim().length > 500) {
+      newErrors.itineraryDesc = "Description must not exceed 500 characters";
     }
 
     setErrors(newErrors);
@@ -55,7 +68,11 @@ export default function ItineraryDetails() {
 
   const openCreate = () => {
     setEditing(null);
-    setSeason("");
+    setFormData({
+      itineraryHeading: "",
+      itineraryDesc: "",
+      itineraryImg: null
+    });
     setError("");
     setErrors({});
     setShowModal(true);
@@ -63,7 +80,11 @@ export default function ItineraryDetails() {
 
   const openEdit = (item) => {
     setEditing(item);
-    setSeason(item.season || "");
+    setFormData({
+      itineraryHeading: item.itineraryHeading || "",
+      itineraryDesc: item.itineraryDesc || "",
+      itineraryImg: null
+    });
     setError("");
     setErrors({});
     setShowModal(true);
@@ -80,23 +101,34 @@ export default function ItineraryDetails() {
 
     try {
       setIsLoading(true);
+      
+      const formDataToSend = new FormData();
+      formDataToSend.append('itineraryHeading', formData.itineraryHeading.trim());
+      formDataToSend.append('itineraryDesc', formData.itineraryDesc.trim());
+      if (formData.itineraryImg) {
+        formDataToSend.append('itineraryImg', formData.itineraryImg);
+      }
+
       const editRes = await axiosInstance.put(
-        `/api/seasonType/${editing.seasonTypeId}`,
+        `/api/master/itenaryDetails/${editing.itineraryId}`,
+        formDataToSend,
         {
-          season: season.trim(),
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
         }
       );
 
      if (editRes.data) {
-        toast.success("Season Type Updated Successfully!");
+        toast.success("Itinerary Details Updated Successfully!");
         // First refresh the list
-        await fetchSeasonTypeList(page, search);
+        await fetchItineraryDetailsList(page, search);
         // Then close modal and reset state
         closeModal();
       }
     } catch (error) {
-      setError("Failed to update season type");
-      toast.error("Failed to update season type");
+      setError("Failed to update itinerary details");
+      toast.error("Failed to update itinerary details");
     } finally {
       setIsLoading(false);
     }
@@ -105,12 +137,16 @@ export default function ItineraryDetails() {
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
-    setSeason("");
+    setFormData({
+      itineraryHeading: "",
+      itineraryDesc: "",
+      itineraryImg: null
+    });
     setError("");
     setErrors({});
   };
 
-  const fetchSeasonTypeList = async (pageNum = 0, searchTerm = search) => {
+  const fetchItineraryDetailsList = async (pageNum = 0, searchTerm = search) => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
@@ -123,7 +159,7 @@ export default function ItineraryDetails() {
       }
 
       const res = await axiosInstance.get(
-        `/api/seasonType?${params.toString()}`
+        `/api/master/itenaryDetails?${params.toString()}`
       );
      
      // Check if response has data and pagination info
@@ -146,7 +182,7 @@ export default function ItineraryDetails() {
         setPage(0);
       }
     } catch (err) {
-      toast.error("Failed to load season types");
+      toast.error("Failed to load itinerary detailss");
       setItems([]);
       setTotalPages(0);
       setPage(0);
@@ -155,7 +191,7 @@ export default function ItineraryDetails() {
     }
   };
 
-  const saveSeasonType = async () => {
+  const saveItineraryDetails = async () => {
     // Validate form before submitting
     if (!validateForm()) {
       toast.error("Please fix the validation errors");
@@ -164,30 +200,40 @@ export default function ItineraryDetails() {
 
     try {
       setIsLoading(true);
-      const seasonTypePayload = { 
-        season: season.trim()
-      };
-      const seasonTypeSaveRes = await axiosInstance.post(
-        "/api/seasonType/save",
-        seasonTypePayload
+      
+      const formDataToSend = new FormData();
+      formDataToSend.append('itineraryHeading', formData.itineraryHeading.trim());
+      formDataToSend.append('itineraryDesc', formData.itineraryDesc.trim());
+      if (formData.itineraryImg) {
+        formDataToSend.append('itineraryImg', formData.itineraryImg);
+      }
+
+      const itineraryDetailsSaveRes = await axiosInstance.post(
+        "/api/master/itenaryDetails/save",
+        formDataToSend,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
       );
-      if (seasonTypeSaveRes.data !== 0) {
-        toast.success("Season Type added Successfully!");
+      if (itineraryDetailsSaveRes.data) {
+        toast.success("Itinerary Details added Successfully!");
         // First refresh the list
-        await fetchSeasonTypeList(page, search);
+        await fetchItineraryDetailsList(page, search);
         // Then close modal
         closeModal();
       }
     } catch (error) {
       setError("Sorry! Data not saved to db..");
-      toast.error("Failed to save season type data");
+      toast.error("Failed to save itinerary details data");
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSeasonTypeList();
+    fetchItineraryDetailsList();
   }, []);
 
   // Debounced search effect
@@ -200,12 +246,12 @@ export default function ItineraryDetails() {
     // Set new timeout for search
     if (search !== "") {
       const timeout = setTimeout(() => {
-        fetchSeasonTypeList(0, search);
+        fetchItineraryDetailsList(0, search);
       }, 500); // 500ms delay
       setSearchTimeout(timeout);
     } else if (search === "") {
       // If search is cleared, fetch all data
-      fetchSeasonTypeList(0, "");
+      fetchItineraryDetailsList(0, "");
     }
 
     // Cleanup timeout on unmount
@@ -219,7 +265,7 @@ export default function ItineraryDetails() {
   const handleDelete = (item) => {
     console.log("delete item :::" , item);
     Swal.fire({
-      title: `Are you sure? You want to delete ${item.season} Season Type`,
+      title: `Are you sure? You want to delete ${item.itineraryHeading} Itinerary Details`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -233,13 +279,13 @@ export default function ItineraryDetails() {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/seasonType/${item.seasonTypeId}`)
+          .delete(`/api/master/itenaryDetails/${item.itineraryId}`)
           .then(() => {
-            toast.success("Season Type deleted successfully");
-            fetchSeasonTypeList(page, search);
+            toast.success("Itinerary Details deleted successfully");
+            fetchItineraryDetailsList(page, search);
           })
           .catch(() => {
-            toast.error("Sorry!! Season Type not deleted");
+            toast.error("Sorry!! Itinerary Details not deleted");
           });
       }
     });
@@ -253,43 +299,58 @@ export default function ItineraryDetails() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <span className="fw-semibold">Season Type</span>
-              {/* Season Type Search */}
-               <Form.Group className="hotel-search-bar">
+              <div>
+                <h4 className="fw-bold text-primary mb-0">Itinerary Details</h4>
+               </div>
+              <div className="d-flex align-items-center gap-3">
+               
+                <Form.Group className="mb-0">
                   <Form.Control
                     type="text"
-                    placeholder="Search season type...."
-                    className="form-control-modern-sm"
+                    placeholder="Search"
+                    className="form-control-sm"
                     value={searchTerm}
                     onChange={(e) => {
                       const value = e.target.value;
                       setSearchTerm(value);
-                      fetchSeasonTypeList(0, value); // pass value to API
+                      fetchItineraryDetailsList(0, value);
                     }}
                   />
                 </Form.Group>
-              <Button className="btn-green" onClick={openCreate}>
-                + Create
-              </Button>
+                <Button className="btn btn-success" onClick={openCreate}>
+                  Create +
+                </Button>
+              </div>
             </Card.Header>
             <Card.Body className="p-0">
               <Table responsive hover striped className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th style={{ width: 100 }}>S/N</th>
-                    <th>Season</th>
+                    <th style={{ width: 100 }}>S.N</th>
+                    <th>Description</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
-                    <tr key={item.seasonTypeId}>
+                    <tr key={item.itineraryId}>
                       <td>{index + 1 + page * 10}</td>
-                      <td>{item.season}</td>
+                      <td>
+                        <div>
+                          <div className="fw-semibold">{item.itineraryHeading}</div>
+                          {item.itineraryDesc && (
+                            <div className="text-muted small">
+                              {item.itineraryDesc.length > 100 
+                                ? `${item.itineraryDesc.substring(0, 100)}...` 
+                                : item.itineraryDesc}
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td>
                         <div className="d-flex gap-2">
                           <FaEdit
-                            className="text-primary"
+                            className="text-success"
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => openEdit(item)}
                             title="Edit"
@@ -313,14 +374,14 @@ export default function ItineraryDetails() {
                         >
                           <span className="visually-hidden">Loading...</span>
                         </div>
-                        Loading available season types...
+                        Loading available itinerary detailss...
                       </td>
                     </tr>
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
                       <td colSpan={3} className="text-center text-muted py-4">
-                        No season types found.
+                        No itinerary detailss found.
                       </td>
                     </tr>
                   )}
@@ -332,27 +393,27 @@ export default function ItineraryDetails() {
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
                   <div>
                     <small className="text-muted">
-                      Showing {items.length} of {totalPages * 10} season types
+                      Showing {items.length} of {totalPages * 10} itinerary detailss
                     </small>
                   </div>
                   <div>
                     <Pagination className="mb-0">
                       <Pagination.Prev
                         disabled={page === 0}
-                        onClick={() => fetchSeasonTypeList(page - 1, search)}
+                        onClick={() => fetchItineraryDetailsList(page - 1, search)}
                       />
                       {[...Array(totalPages).keys()].map((num) => (
                         <Pagination.Item
                           key={num}
                           active={num === page}
-                          onClick={() => fetchSeasonTypeList(num, search)}
+                          onClick={() => fetchItineraryDetailsList(num, search)}
                         >
                           {num + 1}
                         </Pagination.Item>
                       ))}
                       <Pagination.Next
                         disabled={page === totalPages - 1}
-                        onClick={() => fetchSeasonTypeList(page + 1, search)}
+                        onClick={() => fetchItineraryDetailsList(page + 1, search)}
                       />
                     </Pagination>
                   </div>
@@ -361,36 +422,92 @@ export default function ItineraryDetails() {
             </Card.Body>
           </Card>
 
-          <Modal show={showModal} onHide={() => {}} centered backdrop="static" keyboard={false}>
-            <Modal.Header closeButton={!isLoading} onHide={closeModal}>
-              <Modal.Title>
-                {editing ? "Update Season Type" : "Create Season Type"}
+          <Modal show={showModal} onHide={() => {}} centered backdrop="static" keyboard={false} size="lg">
+            <Modal.Header className="bg-primary text-white">
+              <Modal.Title className="fw-bold">
+                Save Itinerary Details
               </Modal.Title>
+              <div className="text-danger small">* mandatory fields</div>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body className="p-4">
               <Form>
                 <Form.Group className="mb-3">
-                  <Form.Label>Season <span className="text-danger">*</span></Form.Label>
+                  <Form.Label className="fw-semibold">
+                    * Heading
+                  </Form.Label>
                   <Form.Control
-                    value={season}
+                    value={formData.itineraryHeading}
                     onChange={(e) => {
-                      setSeason(e.target.value);
-                      clearError('season');
+                      setFormData(prev => ({ ...prev, itineraryHeading: e.target.value }));
+                      clearError('itineraryHeading');
                     }}
-                    placeholder="Enter season type"
+                    placeholder="Enter itinerary heading"
                     autoFocus
-                    isInvalid={!!errors.season}
+                    isInvalid={!!errors.itineraryHeading}
                     maxLength={100}
                   />
                   <Form.Text className="text-muted">
-                    {season.length}/100 characters
+                    {formData.itineraryHeading.length}/100 characters
                   </Form.Text>
-                  {errors.season && (
+                  {errors.itineraryHeading && (
                     <Form.Control.Feedback type="invalid">
-                      {errors.season}
+                      {errors.itineraryHeading}
                     </Form.Control.Feedback>
                   )}
                 </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-semibold">
+                    * Description
+                  </Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={4}
+                    value={formData.itineraryDesc}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, itineraryDesc: e.target.value }));
+                      clearError('itineraryDesc');
+                    }}
+                    placeholder="Enter itinerary description"
+                    isInvalid={!!errors.itineraryDesc}
+                    maxLength={500}
+                  />
+                  <Form.Text className="text-muted">
+                    {formData.itineraryDesc.length}/500 characters
+                  </Form.Text>
+                  {errors.itineraryDesc && (
+                    <Form.Control.Feedback type="invalid">
+                      {errors.itineraryDesc}
+                    </Form.Control.Feedback>
+                  )}
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-semibold">
+                    Itinerary Image
+                  </Form.Label>
+                  <div className="d-flex align-items-center gap-2">
+                    <Form.Control
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, itineraryImg: e.target.files[0] }));
+                      }}
+                      className="form-control-sm"
+                    />
+                    <Button 
+                      variant="outline-primary" 
+                      size="sm"
+                      onClick={() => document.querySelector('input[type="file"]').click()}
+                    >
+                      Choose
+                    </Button>
+                  </div>
+                  <Form.Text className="text-muted">
+                    {formData.itineraryImg ? formData.itineraryImg.name : "No file selected"}
+                  </Form.Text>
+                </Form.Group>
+
                 {error && (
                   <div className="alert alert-danger" role="alert">
                     {error}
@@ -398,34 +515,43 @@ export default function ItineraryDetails() {
                 )}
               </Form>
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer className="d-flex justify-content-between">
               <Button
-                variant="secondary"
+                variant="danger"
                 onClick={closeModal}
                 disabled={isLoading}
+                className="d-flex align-items-center gap-2"
               >
+                <FaTimes />
                 Cancel
               </Button>
-              <Button
-                className="btn-indigo"
-                onClick={editing ? handleEdit : saveSeasonType}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <span
-                      className="spinner-border spinner-border-sm me-2"
-                      role="status"
-                      aria-hidden="true"
-                    ></span>
-                    {editing ? "Updating..." : "Saving..."}
-                  </>
-                ) : editing ? (
-                  "Update"
-                ) : (
-                  "Save"
-                )}
-              </Button>
+              <div className="d-flex gap-2">
+                <Button
+                  variant="success"
+                  onClick={editing ? handleEdit : saveItineraryDetails}
+                  disabled={isLoading}
+                  className="d-flex align-items-center gap-2"
+                >
+                  <FaCheck />
+                  {isLoading ? (editing ? "Updating..." : "Saving...") : (editing ? "Update" : "Create")}
+                </Button>
+                <Button
+                  variant="info"
+                  onClick={() => {
+                    setFormData({
+                      itineraryHeading: "",
+                      itineraryDesc: "",
+                      itineraryImg: null
+                    });
+                    setErrors({});
+                  }}
+                  disabled={isLoading}
+                  className="d-flex align-items-center gap-2"
+                >
+                  <FaUndo />
+                  Reset
+                </Button>
+              </div>
             </Modal.Footer>
           </Modal>
         </main>
