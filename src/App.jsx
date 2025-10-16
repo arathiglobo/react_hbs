@@ -59,6 +59,8 @@ import PackageType from "./pages/master/PackageType";
 import DayActivities from "./pages/master/DayActivities";
 import ItineraryDetails from "./pages/master/ItineraryDetails";
 import VisaDetails from "./pages/master/VisaDetails";
+import TermsAndConditions from "./pages/master/TermsAndConditions";
+
 
 
 
@@ -162,6 +164,9 @@ export default function App() {
        <Route path="/masters/day-activity" element={<DayActivities />} />
        <Route path="/masters/itinerary-details" element={<ItineraryDetails />} />
        <Route path="/masters/visa-information" element={<VisaDetails />} />
+       <Route path="/masters/terms-and-conditions" element={<TermsAndConditions />} />
+       
+
 
 
        {/* Registration */}
