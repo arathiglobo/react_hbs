@@ -13,9 +13,10 @@ import {
   Card,
   Pagination,
 } from "react-bootstrap";
-import { FaArrowLeft, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaPlus, FaEdit, FaTrash, FaCopy } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import Swal from "sweetalert2";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import Select from "react-select";
@@ -23,6 +24,17 @@ import Select from "react-select";
 const CompulsoryEventsPage = () => {
   const { id } = useParams(); // hotelId
   const navigate = useNavigate();
+
+  // Helper function to convert date from DD-MM-YYYY to YYYY-MM-DD
+  const convertDateFormat = (dateString) => {
+    if (!dateString) return "";
+    const parts = dateString.split("-");
+    if (parts.length === 3) {
+      const [day, month, year] = parts;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
+    return dateString;
+  };
 
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,13 +75,15 @@ const CompulsoryEventsPage = () => {
     supplymentCode: "",
     supplyments: "",
     marketypeIds: "",
+    validityFrom: "",
+    validityTo: "",
   });
 
   // Fetch compulsory events
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const res = await axiosInstance.get(`/api/compulsoryEvent/${id}`);
+      const res = await axiosInstance.get(`/api/compulsoryEvent`);
       setEvents(res.data || []);
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -111,6 +125,8 @@ const CompulsoryEventsPage = () => {
       supplymentCode: "",
       supplyments: "",
       marketypeIds: "",
+      validityFrom: "",
+      validityTo: "",
     });
     setShowModal(true);
   };
@@ -125,7 +141,10 @@ const CompulsoryEventsPage = () => {
       marketypeIds: event.marketypeIds || [],
       compulsorySupplymentsRateDTO:
         event.compulsorySupplymentsRateDTO?.length > 0
-          ? event.compulsorySupplymentsRateDTO
+          ? event.compulsorySupplymentsRateDTO.map(rate => ({
+              ...rate,
+              uniqueId: rate.uniqueId || Date.now() + Math.random()
+            }))
           : [
               {
                 supplymentrateId: "",
@@ -134,32 +153,101 @@ const CompulsoryEventsPage = () => {
                 rate: "",
                 rateAdult: "",
                 rateChild: "",
+                uniqueId: Date.now() + Math.random(),
               },
             ],
       compulsorySupplyValidityDTO:
         event.compulsorySupplyValidityDTO?.length > 0
-          ? event.compulsorySupplyValidityDTO
+          ? event.compulsorySupplyValidityDTO.map(validity => ({
+              ...validity,
+              validityFrom: validity.validityFrom ? convertDateFormat(validity.validityFrom) : "",
+              validityTo: validity.validityTo ? convertDateFormat(validity.validityTo) : ""
+            }))
           : [{ supplymentValidityId: "", validityFrom: "", validityTo: "" }],
     });
     setFormErrors({
       supplymentCode: "",
       supplyments: "",
       marketypeIds: "",
+      validityFrom: "",
+      validityTo: "",
+    });
+    setShowModal(true);
+  };
+
+  // Open modal for copy
+  const openCopy = (event) => {
+    setEditEvent(null); // Set to null for create mode
+    setFormData({
+      supplymentId: "", // Clear ID for new record
+      supplymentCode: event.supplymentCode ? `${event.supplymentCode}_COPY` : "",
+      supplyments: event.supplyments || "",
+      marketypeIds: event.marketypeIds || [],
+      compulsorySupplymentsRateDTO:
+        event.compulsorySupplymentsRateDTO?.length > 0
+          ? event.compulsorySupplymentsRateDTO.map(rate => ({
+              ...rate,
+              supplymentrateId: "", // Clear ID for new record
+              uniqueId: Date.now() + Math.random(), // New unique ID for copy
+            }))
+          : [
+              {
+                supplymentrateId: "",
+                hotelRoomcategoryId: "",
+                ocuppancytypeId: "",
+                rate: "",
+                rateAdult: "",
+                rateChild: "",
+                uniqueId: Date.now() + Math.random(),
+              },
+            ],
+      compulsorySupplyValidityDTO:
+        event.compulsorySupplyValidityDTO?.length > 0
+          ? event.compulsorySupplyValidityDTO.map(validity => ({
+              ...validity,
+              supplymentValidityId: "", // Clear ID for new record
+              validityFrom: validity.validityFrom ? convertDateFormat(validity.validityFrom) : "",
+              validityTo: validity.validityTo ? convertDateFormat(validity.validityTo) : ""
+            }))
+          : [{ supplymentValidityId: "", validityFrom: "", validityTo: "" }],
+    });
+    setFormErrors({
+      supplymentCode: "",
+      supplyments: "",
+      marketypeIds: "",
+      validityFrom: "",
+      validityTo: "",
     });
     setShowModal(true);
   };
 
   // Handle delete
-  const handleDelete = async (eventId) => {
-    if (!window.confirm("Are you sure you want to delete this event?")) return;
-    try {
-      await axiosInstance.delete(`/api/compulsoryEvent/${eventId}`);
-      toast.success("Event deleted successfully");
-      fetchEvents();
-    } catch (error) {
-      console.error("Delete error:", error);
-      toast.error("Failed to delete event");
-    }
+  const handleDelete = (event) => {
+    Swal.fire({
+      title: `Are you sure? You want to delete ${event.supplyments}`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
+      customClass: {
+        popup: "swal-small",
+        title: "swal-small-title",
+        htmlContainer: "swal-small-text",
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        axiosInstance
+          .delete(`/api/compulsoryEvent/${event.supplymentId}`)
+          .then(() => {
+            toast.success("Event deleted successfully");
+            fetchEvents();
+          })
+          .catch(() => {
+            toast.error("Sorry!! Event not deleted");
+          });
+      }
+    });
   };
 
   // Validate form data
@@ -168,6 +256,8 @@ const CompulsoryEventsPage = () => {
       supplymentCode: "",
       supplyments: "",
       marketypeIds: "",
+      validityFrom: "",
+      validityTo: "",
     };
     let isValid = true;
 
@@ -184,27 +274,30 @@ const CompulsoryEventsPage = () => {
       isValid = false;
     }
 
-    // Validate validity periods
-    formData.compulsorySupplyValidityDTO.forEach((validity, index) => {
-      if (!validity.validityFrom) {
-        toast.error(`Validity ${index + 1}: Validity From is required`);
+    // Validate only the first validity period
+    if (formData.compulsorySupplyValidityDTO.length === 0) {
+      errors.validityFrom = "At least one validity period is required";
+      errors.validityTo = "At least one validity period is required";
+      isValid = false;
+    } else {
+      const firstValidity = formData.compulsorySupplyValidityDTO[0];
+      if (!firstValidity.validityFrom) {
+        errors.validityFrom = "Validity From is required";
         isValid = false;
       }
-      if (!validity.validityTo) {
-        toast.error(`Validity ${index + 1}: Validity To is required`);
+      if (!firstValidity.validityTo) {
+        errors.validityTo = "Validity To is required";
         isValid = false;
       }
-      if (validity.validityFrom && validity.validityTo) {
-        const fromDate = new Date(validity.validityFrom);
-        const toDate = new Date(validity.validityTo);
+      if (firstValidity.validityFrom && firstValidity.validityTo) {
+        const fromDate = new Date(firstValidity.validityFrom);
+        const toDate = new Date(firstValidity.validityTo);
         if (toDate <= fromDate) {
-          toast.error(
-            `Validity ${index + 1}: Validity To must be after Validity From`
-          );
+          errors.validityTo = "Validity To must be after Validity From";
           isValid = false;
         }
       }
-    });
+    }
 
     setFormErrors(errors);
     return isValid;
@@ -223,7 +316,7 @@ const CompulsoryEventsPage = () => {
           const fromDate = new Date(validity.validityFrom);
           const toDate = new Date(validity.validityTo);
           return {
-            supplymentValidityId: validity.supplymentValidityId || "",
+            supplymentValidityId: validity.supplymentValidityId || null,
             validityFrom: `${fromDate.getDate().toString().padStart(2, "0")}-${(
               fromDate.getMonth() + 1
             )
@@ -239,21 +332,25 @@ const CompulsoryEventsPage = () => {
       );
 
       const payload = {
-        supplymentId: "",
+        supplymentId: null,
         supplymentCode: formData.supplymentCode,
         supplyments: formData.supplyments,
         hotelId: parseInt(id),
         marketypeIds: formData.marketypeIds.map(Number),
-        compulsorySupplymentsRateDTO: formData.compulsorySupplymentsRateDTO.map(
-          (rate) => ({
-            supplymentrateId: rate.supplymentrateId || "",
-            hotelRoomcategoryId: parseInt(rate.hotelRoomcategoryId) || 0,
+        compulsorySupplymentsRateDTO: formData.compulsorySupplymentsRateDTO
+          .filter(rate => 
+            rate.hotelRoomcategoryId && 
+            rate.hotelRoomcategoryId !== "" && 
+            parseInt(rate.hotelRoomcategoryId) > 0
+          )
+          .map((rate) => ({
+            supplymentrateId: rate.supplymentrateId || null,
+            hotelRoomcategoryId: parseInt(rate.hotelRoomcategoryId),
             ocuppancytypeId: parseInt(rate.ocuppancytypeId) || 0,
             rate: parseFloat(rate.rate) || 0,
             rateAdult: parseFloat(rate.rateAdult) || 0,
             rateChild: parseFloat(rate.rateChild) || 0,
-          })
-        ),
+          })),
         compulsorySupplyValidityDTO: formattedValidityDTO,
       };
 
@@ -287,7 +384,7 @@ const CompulsoryEventsPage = () => {
           const fromDate = new Date(validity.validityFrom);
           const toDate = new Date(validity.validityTo);
           return {
-            supplymentValidityId: validity.supplymentValidityId || "",
+            supplymentValidityId: validity.supplymentValidityId || null,
             validityFrom: `${fromDate.getDate().toString().padStart(2, "0")}-${(
               fromDate.getMonth() + 1
             )
@@ -303,21 +400,25 @@ const CompulsoryEventsPage = () => {
       );
 
       const payload = {
-        supplymentId: editEvent?.supplymentId || "",
+        supplymentId: editEvent?.supplymentId || null,
         supplymentCode: formData.supplymentCode,
         supplyments: formData.supplyments,
         hotelId: parseInt(id),
         marketypeIds: formData.marketypeIds.map(Number),
-        compulsorySupplymentsRateDTO: formData.compulsorySupplymentsRateDTO.map(
-          (rate) => ({
-            supplymentrateId: rate.supplymentrateId || "",
-            hotelRoomcategoryId: parseInt(rate.hotelRoomcategoryId) || 0,
+        compulsorySupplymentsRateDTO: formData.compulsorySupplymentsRateDTO
+          .filter(rate => 
+            rate.hotelRoomcategoryId && 
+            rate.hotelRoomcategoryId !== "" && 
+            parseInt(rate.hotelRoomcategoryId) > 0
+          )
+          .map((rate) => ({
+            supplymentrateId: rate.supplymentrateId || null,
+            hotelRoomcategoryId: parseInt(rate.hotelRoomcategoryId),
             ocuppancytypeId: parseInt(rate.ocuppancytypeId) || 0,
             rate: parseFloat(rate.rate) || 0,
             rateAdult: parseFloat(rate.rateAdult) || 0,
             rateChild: parseFloat(rate.rateChild) || 0,
-          })
-        ),
+          })),
         compulsorySupplyValidityDTO: formattedValidityDTO,
       };
 
@@ -538,6 +639,12 @@ const CompulsoryEventsPage = () => {
                           </td>
                           <td>
                             <div className="d-flex justify-content-center gap-3">
+                              <FaCopy
+                                className="text-info"
+                                style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => openCopy(ev)}
+                                title="Copy"
+                              />
                               <FaEdit
                                 className="text-warning"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
@@ -547,7 +654,7 @@ const CompulsoryEventsPage = () => {
                               <FaTrash
                                 className="text-danger"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
-                                onClick={() => handleDelete(ev.supplymentId)}
+                                onClick={() => handleDelete(ev)}
                                 title="Delete"
                               />
                             </div>
@@ -602,14 +709,33 @@ const CompulsoryEventsPage = () => {
             {/* ================= Modal ================= */}
             <Modal
               show={showModal}
-              onHide={() => setShowModal(false)}
+              onHide={() => {}} // Prevent closing on outside click
               centered
               size="lg"
+              backdrop="static"
+              keyboard={false}
             >
-              <Modal.Header closeButton className="bg-primary text-white">
+              <Modal.Header className="bg-primary text-white">
                 <Modal.Title>
                   {editEvent ? "Edit Compulsory Event" : "Create Compulsory Event"}
                 </Modal.Title>
+                <Button
+                  variant="link"
+                  className="text-white p-0 ms-auto"
+                  onClick={() => {
+                    setShowModal(false);
+                    setFormErrors({
+                      supplymentCode: "",
+                      supplyments: "",
+                      marketypeIds: "",
+                      validityFrom: "",
+                      validityTo: "",
+                    });
+                  }}
+                  style={{ fontSize: '1.5rem', textDecoration: 'none' }}
+                >
+                  ×
+                </Button>
               </Modal.Header>
               <Modal.Body>
                 <Form>
@@ -622,15 +748,21 @@ const CompulsoryEventsPage = () => {
                         <Form.Control
                           type="text"
                           value={formData.supplymentCode}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               supplymentCode: e.target.value,
-                            })
-                          }
+                            });
+                            if (formErrors.supplymentCode) {
+                              setFormErrors(prev => ({ ...prev, supplymentCode: "" }));
+                            }
+                          }}
                           placeholder="Enter code"
-                          className="rounded-3"
+                          className={`rounded-3 ${formErrors.supplymentCode ? 'is-invalid' : ''}`}
                         />
+                        {formErrors.supplymentCode && (
+                          <div className="invalid-feedback">{formErrors.supplymentCode}</div>
+                        )}
                       </Form.Group>
                     </Col>
                     <Col md={4}>
@@ -641,15 +773,21 @@ const CompulsoryEventsPage = () => {
                         <Form.Control
                           type="text"
                           value={formData.supplyments}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               supplyments: e.target.value,
-                            })
-                          }
+                            });
+                            if (formErrors.supplyments) {
+                              setFormErrors(prev => ({ ...prev, supplyments: "" }));
+                            }
+                          }}
                           placeholder="Enter tagline"
-                          className="rounded-3"
+                          className={`rounded-3 ${formErrors.supplyments ? 'is-invalid' : ''}`}
                         />
+                        {formErrors.supplyments && (
+                          <div className="invalid-feedback">{formErrors.supplyments}</div>
+                        )}
                       </Form.Group>
                     </Col>
                     <Col md={4}>
@@ -671,13 +809,20 @@ const CompulsoryEventsPage = () => {
                               value: m.marketTypeId,
                               label: m.name,
                             }))}
-                          onChange={(selected) =>
+                          onChange={(selected) => {
                             setFormData({
                               ...formData,
                               marketypeIds: selected.map((s) => s.value),
-                            })
-                          }
+                            });
+                            if (formErrors.marketypeIds) {
+                              setFormErrors(prev => ({ ...prev, marketypeIds: "" }));
+                            }
+                          }}
+                          className={formErrors.marketypeIds ? 'is-invalid' : ''}
                         />
+                        {formErrors.marketypeIds && (
+                          <div className="invalid-feedback">{formErrors.marketypeIds}</div>
+                        )}
                       </Form.Group>
                     </Col>
                   </Row>
@@ -686,19 +831,52 @@ const CompulsoryEventsPage = () => {
                   <h5 className="mt-3">Rates</h5>
                   <div className="mb-3 p-3 border rounded bg-light">
                     {hotelRoomsData.map((room, roomIdx) => (
-                      <div key={roomIdx} className="mb-3">
-                        <label className="fw-semibold">
-                          {room.roomCategory?.toUpperCase() || "CATEGORY"} -{" "}
-                          {room.roomTypeDetailsDTO
-                            ?.map((rt) => rt.roomTypeName)
-                            .join(", ") || ""}
-                        </label>
+                      <div key={roomIdx} className="mb-4">
+                        <div className="d-flex justify-content-between align-items-center mb-3">
+                          <h6 className="fw-bold text-primary mb-0">
+                            {room.roomCategory?.toUpperCase() || "CATEGORY"}
+                          </h6>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            onClick={() => {
+                              const newRate = {
+                                supplymentrateId: "",
+                                hotelRoomcategoryId: room.rommCategoryId || room.roomCategoryId,
+                                ocuppancytypeId: "",
+                                rate: "",
+                                rateAdult: "",
+                                rateChild: "",
+                                uniqueId: Date.now() + Math.random(), // Add unique identifier
+                              };
+                              setFormData({
+                                ...formData,
+                                compulsorySupplymentsRateDTO: [
+                                  ...formData.compulsorySupplymentsRateDTO,
+                                  newRate,
+                                ],
+                              });
+                              // toast.success("Rate added successfully");
+                            }}
+                          >
+                            + Add Rate
+                          </Button>
+                        </div>
+
+                        {/* Room Type Details */}
+                        {room.roomTypeDetailsDTOs && room.roomTypeDetailsDTOs.length > 0 && (
+                          <div className="mb-3">
+                            <small className="text-muted">
+                              <strong>Room Types:</strong> {room.roomTypeDetailsDTOs.map(rt => rt.roomTypeName).join(", ")}
+                            </small>
+                          </div>
+                        )}
 
                         <Table striped bordered hover responsive className="mt-2">
-                          <thead>
+                          <thead className="table-white">
                             <tr>
-                              <th>Occupancy type</th>
-                              <th>Base Rate</th>
+                              <th>Occupancy Type</th>
+                              <th>Rate</th>
                               <th>Adult Rate</th>
                               <th>Child Rate</th>
                               <th>Actions</th>
@@ -709,7 +887,7 @@ const CompulsoryEventsPage = () => {
                               .filter(
                                 (rate) =>
                                   Number(rate.hotelRoomcategoryId) ===
-                                  Number(room.roomCategoryId)
+                                  Number(room.rommCategoryId || room.roomCategoryId)
                               )
                               .map((rate, idx) => (
                                 <tr key={idx}>
@@ -717,24 +895,16 @@ const CompulsoryEventsPage = () => {
                                     <Form.Select
                                       value={rate.ocuppancytypeId}
                                       onChange={(e) => {
-                                        const newRates = [
-                                          ...formData.compulsorySupplymentsRateDTO,
-                                        ];
-                                        const findIndex = formData.compulsorySupplymentsRateDTO.findIndex(
-                                          (r, i) => i === formData.compulsorySupplymentsRateDTO.indexOf(rate)
+                                        const newRates = [...formData.compulsorySupplymentsRateDTO];
+                                        const targetIdx = newRates.findIndex(
+                                          (r) =>
+                                            r.hotelRoomcategoryId === rate.hotelRoomcategoryId &&
+                                            r.ocuppancytypeId === rate.ocuppancytypeId
                                         );
-                                        if (findIndex > -1) {
-                                          newRates[findIndex].ocuppancytypeId = e.target.value;
+                                        if (targetIdx > -1) {
+                                          newRates[targetIdx].ocuppancytypeId = e.target.value;
                                         } else {
-                                          // fallback by object identity
-                                          const idxFound = formData.compulsorySupplymentsRateDTO.findIndex(
-                                            (r) =>
-                                              r.hotelRoomcategoryId === rate.hotelRoomcategoryId &&
-                                              r.ocuppancytypeId === rate.ocuppancytypeId
-                                          );
-                                          if (idxFound > -1) {
-                                            newRates[idxFound].ocuppancytypeId = e.target.value;
-                                          }
+                                          newRates[idx].ocuppancytypeId = e.target.value;
                                         }
                                         setFormData({
                                           ...formData,
@@ -743,12 +913,12 @@ const CompulsoryEventsPage = () => {
                                       }}
                                     >
                                       <option value="">Select Occupancy Type</option>
-                                      {masterOccupancies.map((type) => (
+                                      {room.occupancyDetailsDTOs?.map((occupancy) => (
                                         <option
-                                          key={type.occupancyTypeId}
-                                          value={type.occupancyTypeId}
+                                          key={occupancy.id}
+                                          value={occupancy.id}
                                         >
-                                          {type.occupancy}
+                                          {occupancy.occupanyType}
                                         </option>
                                       ))}
                                     </Form.Select>
@@ -756,6 +926,8 @@ const CompulsoryEventsPage = () => {
                                   <td>
                                     <Form.Control
                                       type="number"
+                                      step="0.01"
+                                      min="0"
                                       value={rate.rate}
                                       onChange={(e) => {
                                         const newRates = [...formData.compulsorySupplymentsRateDTO];
@@ -765,21 +937,20 @@ const CompulsoryEventsPage = () => {
                                             r.ocuppancytypeId === rate.ocuppancytypeId
                                         );
                                         if (targetIdx > -1) newRates[targetIdx].rate = e.target.value;
-                                        else {
-                                          // fallback by idx
-                                          newRates[idx].rate = e.target.value;
-                                        }
+                                        else newRates[idx].rate = e.target.value;
                                         setFormData({
                                           ...formData,
                                           compulsorySupplymentsRateDTO: newRates,
                                         });
                                       }}
-                                      placeholder="Base Rate"
+                                      placeholder="0.00"
                                     />
                                   </td>
                                   <td>
                                     <Form.Control
                                       type="number"
+                                      step="0.01"
+                                      min="0"
                                       value={rate.rateAdult}
                                       onChange={(e) => {
                                         const newRates = [...formData.compulsorySupplymentsRateDTO];
@@ -795,12 +966,14 @@ const CompulsoryEventsPage = () => {
                                           compulsorySupplymentsRateDTO: newRates,
                                         });
                                       }}
-                                      placeholder="Adult Rate"
+                                      placeholder="0.00"
                                     />
                                   </td>
                                   <td>
                                     <Form.Control
                                       type="number"
+                                      step="0.01"
+                                      min="0"
                                       value={rate.rateChild}
                                       onChange={(e) => {
                                         const newRates = [...formData.compulsorySupplymentsRateDTO];
@@ -816,7 +989,7 @@ const CompulsoryEventsPage = () => {
                                           compulsorySupplymentsRateDTO: newRates,
                                         });
                                       }}
-                                      placeholder="Child Rate"
+                                      placeholder="0.00"
                                     />
                                   </td>
                                   <td>
@@ -824,12 +997,9 @@ const CompulsoryEventsPage = () => {
                                       variant="danger"
                                       size="sm"
                                       onClick={() => {
+                                        // Remove rate by unique identifier
                                         const newRates = formData.compulsorySupplymentsRateDTO.filter(
-                                          (r) =>
-                                            !(
-                                              r.hotelRoomcategoryId === rate.hotelRoomcategoryId &&
-                                              r.ocuppancytypeId === rate.ocuppancytypeId
-                                            )
+                                          (r) => r.uniqueId !== rate.uniqueId
                                         );
                                         setFormData({
                                           ...formData,
@@ -842,29 +1012,19 @@ const CompulsoryEventsPage = () => {
                                   </td>
                                 </tr>
                               ))}
+                            {formData.compulsorySupplymentsRateDTO.filter(
+                              (rate) =>
+                                Number(rate.hotelRoomcategoryId) ===
+                                Number(room.rommCategoryId || room.roomCategoryId)
+                            ).length === 0 && (
+                              <tr>
+                                <td colSpan={5} className="text-center text-muted py-3">
+                                  No rates added for this room category. Click "Add Rate" to add rates.
+                                </td>
+                              </tr>
+                            )}
                           </tbody>
                         </Table>
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            setFormData({
-                              ...formData,
-                              compulsorySupplymentsRateDTO: [
-                                ...formData.compulsorySupplymentsRateDTO,
-                                {
-                                  supplymentrateId: "",
-                                  hotelRoomcategoryId: room.roomCategoryId,
-                                  ocuppancytypeId: "",
-                                  rate: "",
-                                  rateAdult: "",
-                                  rateChild: "",
-                                },
-                              ],
-                            })
-                          }
-                        >
-                          + Add Rate
-                        </Button>
                       </div>
                     ))}
                   </div>
@@ -909,8 +1069,16 @@ const CompulsoryEventsPage = () => {
                                         ...formData,
                                         compulsorySupplyValidityDTO: newValidity,
                                       });
+                                      // Clear error when user starts typing
+                                      if (idx === 0 && formErrors.validityFrom) {
+                                        setFormErrors(prev => ({ ...prev, validityFrom: "" }));
+                                      }
                                     }}
+                                    className={idx === 0 && formErrors.validityFrom ? 'is-invalid' : ''}
                                   />
+                                  {idx === 0 && formErrors.validityFrom && (
+                                    <div className="invalid-feedback">{formErrors.validityFrom}</div>
+                                  )}
                                 </td>
                                 <td>
                                   <Form.Control
@@ -926,8 +1094,16 @@ const CompulsoryEventsPage = () => {
                                         ...formData,
                                         compulsorySupplyValidityDTO: newValidity,
                                       });
+                                      // Clear error when user starts typing
+                                      if (idx === 0 && formErrors.validityTo) {
+                                        setFormErrors(prev => ({ ...prev, validityTo: "" }));
+                                      }
                                     }}
+                                    className={idx === 0 && formErrors.validityTo ? 'is-invalid' : ''}
                                   />
+                                  {idx === 0 && formErrors.validityTo && (
+                                    <div className="invalid-feedback">{formErrors.validityTo}</div>
+                                  )}
                                 </td>
                                 <td>
                                   <Button
@@ -977,7 +1153,16 @@ const CompulsoryEventsPage = () => {
                 <Button
                   variant="outline-secondary"
                   className="px-4 rounded-pill"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setFormErrors({
+                      supplymentCode: "",
+                      supplyments: "",
+                      marketypeIds: "",
+                      validityFrom: "",
+                      validityTo: "",
+                    });
+                  }}
                 >
                   ✖ Cancel
                 </Button>

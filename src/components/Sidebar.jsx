@@ -49,7 +49,7 @@ export default function Sidebar() {
     { label: labelForDashboard, to: dashboardPath , roles: ["admin", "agent", "staff", "hotel"]},
     {
       label: "Manage Masters",
-      to: "/manage-masters",
+      // to: "/manage-masters",
       roles: ["admin"],
       groups: [
         {
@@ -303,7 +303,7 @@ export default function Sidebar() {
             return (
               <Nav.Item
                 key={item.label}
-                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""}`}
+                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${(item.label === "Report" || item.label === "Inhouse Accounts") ? "submenu-up" : ""}`}
               >
                 <Nav.Link as={Link} to={item.to || "#"} className="d-flex align-items-center justify-content-between">
                   <span className="d-flex align-items-center">
