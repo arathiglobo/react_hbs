@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams , useNavigate} from "react-router-dom";
 import {
   Card,
   Button,
@@ -13,7 +13,7 @@ import {
   Tabs,
   Tab,
 } from "react-bootstrap";
-import { FaEdit, FaEye, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaEdit, FaEye, FaTrash } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import axiosInstance from "../../components/AxiosInstance";
@@ -22,6 +22,7 @@ import Topbar from "../../components/TopBar";
 
 const HotelAvailability = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
 
   // State for data
   const [items, setItems] = useState([]);
@@ -213,7 +214,10 @@ const HotelAvailability = () => {
         }
         setPage(pageNum);
       } else {
-        console.log("Hotel Availability API Response (no data):", response.data);
+        console.log(
+          "Hotel Availability API Response (no data):",
+          response.data
+        );
         setItems([]);
         setTotalPages(0);
         setPage(0);
@@ -676,7 +680,6 @@ const HotelAvailability = () => {
     }
   };
 
-
   const addStopSaleValidityPeriod = () => {
     setFormDataStopSale({
       ...formDataStopSale,
@@ -981,7 +984,10 @@ const HotelAvailability = () => {
   };
 
   // Stop Sale CRUD Functions
-  const fetchStopSaleList = async (pageNum = 0, searchTerm = searchStopSale) => {
+  const fetchStopSaleList = async (
+    pageNum = 0,
+    searchTerm = searchStopSale
+  ) => {
     setIsLoadingStopSale(true);
     try {
       const params = new URLSearchParams({
@@ -1035,7 +1041,9 @@ const HotelAvailability = () => {
     console.log("Editing Stop Sale:", item);
     try {
       setIsLoadingStopSale(true);
-      const response = await axiosInstance.get(`/api/hotelStopSale/${item.stopSaleId}`);
+      const response = await axiosInstance.get(
+        `/api/hotelStopSale/${item.stopSaleId}`
+      );
       const data = response.data;
 
       setEditingStopSale(data);
@@ -1043,7 +1051,11 @@ const HotelAvailability = () => {
       setFormDataStopSale({
         marketTypeId: data.marketTypeId || "",
         roomCategoryId: data.roomCategoryId || "",
-        type: data.roomAllocation ? "Room Allocation" : data.block ? "Block" : "Free-Sale",
+        type: data.roomAllocation
+          ? "Room Allocation"
+          : data.block
+          ? "Block"
+          : "Free-Sale",
         validityList: data.stopSaleValidityDTO || [
           {
             validityFrom: "",
@@ -1064,7 +1076,9 @@ const HotelAvailability = () => {
   const openViewStopSale = async (item) => {
     try {
       setIsLoadingStopSale(true);
-      const response = await axiosInstance.get(`/api/hotelStopSale/${item.stopSaleId}`);
+      const response = await axiosInstance.get(
+        `/api/hotelStopSale/${item.stopSaleId}`
+      );
       const data = response.data;
 
       setEditingStopSale(data);
@@ -1072,7 +1086,11 @@ const HotelAvailability = () => {
       setFormDataStopSale({
         marketTypeId: data.marketTypeId || "",
         roomCategoryId: data.roomCategoryId || "",
-        type: data.roomAllocation ? "Room Allocation" : data.block ? "Block" : "Free-Sale",
+        type: data.roomAllocation
+          ? "Room Allocation"
+          : data.block
+          ? "Block"
+          : "Free-Sale",
         validityList: data.stopSaleValidityDTO || [
           {
             validityFrom: "",
@@ -1105,24 +1123,29 @@ const HotelAvailability = () => {
 
   const validateStopSaleForm = (data) => {
     const newErrors = {};
-    
+
     if (!data.marketTypeId) newErrors.marketTypeId = "Market Type is required";
-    if (!data.roomCategoryId) newErrors.roomCategoryId = "Room Category is required";
+    if (!data.roomCategoryId)
+      newErrors.roomCategoryId = "Room Category is required";
     if (!data.type) newErrors.type = "Type is required";
-    
+
     if (!data.validityList || data.validityList.length === 0) {
       newErrors.validityList = "At least one validity period is required";
     } else {
       data.validityList.forEach((period, index) => {
         if (!period.validityFrom) {
-          newErrors[`validityFrom_${index}`] = `Validity From is required for period ${index + 1}`;
+          newErrors[
+            `validityFrom_${index}`
+          ] = `Validity From is required for period ${index + 1}`;
         }
         if (!period.validityTo) {
-          newErrors[`validityTo_${index}`] = `Validity To is required for period ${index + 1}`;
+          newErrors[
+            `validityTo_${index}`
+          ] = `Validity To is required for period ${index + 1}`;
         }
       });
     }
-    
+
     return newErrors;
   };
 
@@ -1150,11 +1173,15 @@ const HotelAvailability = () => {
       };
 
       console.log("Save Stop Sale Payload:", payload);
-      const response = await axiosInstance.post("/api/hotelStopSale/save", payload, {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await axiosInstance.post(
+        "/api/hotelStopSale/save",
+        payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (response.data) {
         toast.success("Stop Sale created successfully!");
@@ -1264,7 +1291,18 @@ const HotelAvailability = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <h3>Hotel Availability</h3>
+          <div className="d-flex align-items-center gap-3 mb-3">
+            <Button
+              variant="outline-primary"
+              onClick={() => navigate(`/hotel-details/${id}`)}
+              className="d-flex align-items-center btn-sm gap-2"
+            >
+              <FaArrowLeft />
+              Back
+            </Button>
+            <h3 className="mb-0">Hotel Availability</h3>
+          </div>
+
           <Tabs
             activeKey={activeTab}
             onSelect={handleTabSelect}
@@ -1572,15 +1610,15 @@ const HotelAvailability = () => {
                   >
                     Stop Sale
                   </span>
-                      <Form.Group className="hotel-search-bar position-relative">
-                        <Form.Control
-                          type="text"
-                          placeholder="Search stop sale..."
-                          className="form-control-modern-sm"
-                          value={searchStopSale}
-                          onChange={(e) => setSearchStopSale(e.target.value)}
-                        />
-                      </Form.Group>
+                  <Form.Group className="hotel-search-bar position-relative">
+                    <Form.Control
+                      type="text"
+                      placeholder="Search stop sale..."
+                      className="form-control-modern-sm"
+                      value={searchStopSale}
+                      onChange={(e) => setSearchStopSale(e.target.value)}
+                    />
+                  </Form.Group>
                   <Button
                     className="btn-green create-btn"
                     onClick={openCreateStopSale}
@@ -1613,12 +1651,12 @@ const HotelAvailability = () => {
                           <td>{item.marketTypeName || item.marketName}</td>
                           <td>{item.roomCategoryName || item.roomCategory}</td>
                           <td>
-  {item.roomAllocation
-    ? "Room Allocation"
-    : item.block
-    ? "Block"
-    : "Free-Sale"}
-</td>
+                            {item.roomAllocation
+                              ? "Room Allocation"
+                              : item.block
+                              ? "Block"
+                              : "Free-Sale"}
+                          </td>
 
                           <td>
                             <Badge bg={item.isLive ? "success" : "danger"}>

@@ -60,6 +60,7 @@ import DayActivities from "./pages/master/DayActivities";
 import ItineraryDetails from "./pages/master/ItineraryDetails";
 import VisaDetails from "./pages/master/VisaDetails";
 import TermsAndConditions from "./pages/master/TermsAndConditions";
+import ValidityPage from "./pages/HotelActions/ValidityPage";
 
 
 
@@ -165,6 +166,7 @@ export default function App() {
        <Route path="/masters/itinerary-details" element={<ItineraryDetails />} />
        <Route path="/masters/visa-information" element={<VisaDetails />} />
        <Route path="/masters/terms-and-conditions" element={<TermsAndConditions />} />
+     
        
 
 
@@ -187,6 +189,8 @@ export default function App() {
       <Route path="/registration/hotel/:id/compulsory-events" element={<CompulsoryEventsPage />} />
       <Route path="/hotel-actions/:id/occupancy-and-minimumlength" element={<OccupancyAndMinimumLength />} />
       <Route path="/hotel-actions/:id/hotel-availability" element={<HotelAvailability />} />
+      <Route path="/hotel-actions/:id/validity-period-details" element={<ValidityPage />} />
+    
       <Route path="/calendar" element={<Calendar />} />
 
       </Routes>
