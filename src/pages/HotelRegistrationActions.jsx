@@ -209,7 +209,7 @@ const HotelRegistrationActions = () => {
                           alt={hotelData.hotelName}
                           className="hotel-main-image"
                           style={{ 
-                            width: "120%", 
+                            width: "130%", 
                             height: "300px", 
                             objectFit: "cover",
                             borderRadius: "8px",
@@ -462,6 +462,8 @@ const HotelRegistrationActions = () => {
       navigate(`/hotel-actions/${id}/hotel-availability`);
     } else if (actionLabel === "Validity Periods") {
       navigate(`/hotel-actions/${id}/validity-period-details`);
+    }else if (actionLabel === "Book Hotel") {
+      navigate(`/hotel-actions/${id}/individual-hotel-search`);
     }
   };
 

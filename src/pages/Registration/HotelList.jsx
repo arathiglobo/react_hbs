@@ -8,6 +8,7 @@ import {
   Badge,
   Spinner,
   Alert,
+  Form,
 } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
@@ -21,13 +22,16 @@ import {
   FaStar,
   FaEye,
   FaEdit,
-  FaTrash
+  FaTrash,
+  FaSearch
 } from "react-icons/fa";
 
 const HotelList = () => {
   const [hotels, setHotels] = useState([]);
+  const [filteredHotels, setFilteredHotels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
 
   // Load hotels from API
@@ -36,7 +40,9 @@ const HotelList = () => {
       setIsLoading(true);
       const response = await axiosInstance.get("/api/hotels");
       console.log("Hotels response:", response.data);
-      setHotels(response.data || []);
+      const hotelsData = response.data || [];
+      setHotels(hotelsData);
+      setFilteredHotels(hotelsData);
       setError(null);
     } catch (error) {
       console.error("Error loading hotels:", error);
@@ -45,6 +51,25 @@ const HotelList = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Filter hotels based on search term
+  const filterHotels = (searchValue) => {
+    if (!searchValue.trim()) {
+      setFilteredHotels(hotels);
+    } else {
+      const filtered = hotels.filter(hotel =>
+        hotel.hotelName.toLowerCase().includes(searchValue.toLowerCase())
+      );
+      setFilteredHotels(filtered);
+    }
+  };
+
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    filterHotels(value);
   };
 
   // Load hotels on component mount
@@ -110,6 +135,39 @@ const HotelList = () => {
               </div>
             </div>
 
+            {/* Search Section */}
+            <Card className="shadow-sm border-0 rounded-4 mb-4">
+              <Card.Body className="p-4">
+                {/* <div className="row align-items-center"> */}
+                  {/* <div className="col-md-6">
+                    <h5 className="mb-0 text-primary">
+                      <FaSearch className="me-2" />
+                      Search Hotels
+                    </h5>
+                    <p className="text-muted mb-0">Find hotels by name</p>
+                  </div> */}
+                  <div className="col-md-6">
+                    <Form.Group>
+                      <div className="position-relative">
+                        <Form.Control
+                          type="text"
+                          placeholder="Search hotel names..."
+                          value={searchTerm}
+                          onChange={handleSearchChange}
+                          className="ps-5 border-0 shadow-sm rounded-pill"
+                          style={{ height: "45px" }}
+                        />
+                        <FaSearch 
+                          className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"
+                          style={{ left: "15px" }}
+                        />
+                      </div>
+                    </Form.Group>
+                  </div>
+                {/* </div> */}
+              </Card.Body>
+            </Card>
+
             {/* Content Section */}
             <Card className="shadow-lg border-0 rounded-4">
               <Card.Header className="bg-gradient-primary text-white border-0 rounded-top-4">
@@ -119,7 +177,12 @@ const HotelList = () => {
                     Hotel List
                   </h4>
                   <Badge bg="light" text="dark" className="fs-6 px-3 py-2">
-                    {hotels.length} Hotel{hotels.length !== 1 ? 's' : ''}
+                    {filteredHotels.length} Hotel{filteredHotels.length !== 1 ? 's' : ''}
+                    {searchTerm && (
+                      <span className="ms-2 text-muted">
+                        (filtered from {hotels.length})
+                      </span>
+                    )}
                   </Badge>
                 </div>
               </Card.Header>
@@ -141,23 +204,44 @@ const HotelList = () => {
                       Retry
                     </Button>
                   </Alert>
-                ) : hotels.length === 0 ? (
+                ) : filteredHotels.length === 0 ? (
                   <div className="text-center py-5">
                     <FaHotel size={64} className="mb-3 text-muted opacity-50" />
-                    <h5 className="mb-2 text-muted">No Hotels Found</h5>
-                    <p className="text-muted mb-4">Start by creating your first hotel.</p>
-                    <Button
-                      variant="primary"
-                      onClick={handleCreateHotel}
-                      className="d-flex align-items-center gap-2 mx-auto px-4 py-2 rounded-pill"
-                    >
-                      <FaPlus />
-                      Create First Hotel
-                    </Button>
+                    <h5 className="mb-2 text-muted">
+                      {searchTerm ? "No Hotels Found" : "No Hotels Found"}
+                    </h5>
+                    <p className="text-muted mb-4">
+                      {searchTerm 
+                        ? `No hotels found matching "${searchTerm}". Try a different search term.`
+                        : "Start by creating your first hotel."
+                      }
+                    </p>
+                    {searchTerm ? (
+                      <Button
+                        variant="outline-primary"
+                        onClick={() => {
+                          setSearchTerm("");
+                          setFilteredHotels(hotels);
+                        }}
+                        className="d-flex align-items-center gap-2 mx-auto px-4 py-2 rounded-pill"
+                      >
+                        <FaSearch />
+                        Clear Search
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        onClick={handleCreateHotel}
+                        className="d-flex align-items-center gap-2 mx-auto px-4 py-2 rounded-pill"
+                      >
+                        <FaPlus />
+                        Create First Hotel
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <Row>
-                    {hotels.map((hotel) => (
+                    {filteredHotels.map((hotel) => (
                       <Col key={hotel.id} lg={4} md={6} className="mb-4">
                         <Card 
                           className="h-100 shadow-sm border-0 rounded-4 hotel-card"

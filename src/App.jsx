@@ -61,6 +61,7 @@ import ItineraryDetails from "./pages/master/ItineraryDetails";
 import VisaDetails from "./pages/master/VisaDetails";
 import TermsAndConditions from "./pages/master/TermsAndConditions";
 import ValidityPage from "./pages/HotelActions/ValidityPage";
+import IndividualHotelSearch from "./pages/HotelActions/IndividualHotelSearch";
 
 
 
@@ -190,6 +191,7 @@ export default function App() {
       <Route path="/hotel-actions/:id/occupancy-and-minimumlength" element={<OccupancyAndMinimumLength />} />
       <Route path="/hotel-actions/:id/hotel-availability" element={<HotelAvailability />} />
       <Route path="/hotel-actions/:id/validity-period-details" element={<ValidityPage />} />
+      <Route path="/hotel-actions/:id/individual-hotel-search" element={<IndividualHotelSearch />} />
     
       <Route path="/calendar" element={<Calendar />} />
 
