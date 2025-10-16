@@ -70,6 +70,8 @@ const HotelRegistrationActions = () => {
   const [uploadedImages, setUploadedImages] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingImages, setIsLoadingImages] = useState(false);
+  const [editingImage, setEditingImage] = useState(null);
 
   console.log("hotel complete data::", hotelData);
 
@@ -98,8 +100,8 @@ const HotelRegistrationActions = () => {
 
   const navigationTabs = [
     { id: "basic-details", label: "Basic details", icon: FaUser },
-    { id: "gallery", label: "Gallery", icon: FaImages },
-    { id: "360-view", label: "360 degree view", icon: FaEye },
+    // { id: "gallery", label: "Gallery", icon: FaImages },
+    // { id: "360-view", label: "360 degree view", icon: FaEye },
     { id: "contact-details", label: "Contact details", icon: FaPhone },
     { id: "bank-details", label: "Bank details", icon: FaCreditCard },
     { id: "room-details", label: "Room details", icon: FaBed },
@@ -139,7 +141,7 @@ const HotelRegistrationActions = () => {
       status: "count",
       count: 0,
     },
-    { label: "Image Upload", icon: FaImage, status: "count", count: 0 },
+    // { label: "Image Upload", icon: FaImage, status: "count", count: 0 },
     { label: "Hotel Edit", icon: FaEdit, status: "none", count: null },
     {
       label: "Validity Periods",
@@ -197,84 +199,106 @@ const HotelRegistrationActions = () => {
             <h4 className="mb-3">Basic Details</h4>
             <div className="hotel-basic-info">
               <div className="hotel-image-section mb-4">
-                <div className="hotel-image-container">
-                  {hotelData.image360 ? (
-                    <img
-                      src={hotelData.image360}
-                      alt={hotelData.hotelName}
-                      className="hotel-main-image"
-                      onError={(e) => {
-                        e.target.style.display = "none";
-                        e.target.nextSibling.style.display = "flex";
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className="no-image-placeholder"
-                    style={{ display: hotelData.image360 ? "none" : "flex" }}
-                  >
-                    <FaImages className="placeholder-icon" />
-                    <p>NO IMAGE AVAILABLE</p>
+                <div className="row">
+                  {/* Left Column - Image */}
+                  <div className="col-md-6">
+                    <div className="hotel-image-container">
+                      {hotelData.image360 ? (
+                        <img
+                          src={hotelData.image360}
+                          alt={hotelData.hotelName}
+                          className="hotel-main-image"
+                          style={{ 
+                            width: "120%", 
+                            height: "300px", 
+                            objectFit: "cover",
+                            borderRadius: "8px",
+                            boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
+                          }}
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                            e.target.nextSibling.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className="no-image-placeholder"
+                        style={{ 
+                          display: hotelData.image360 ? "none" : "flex",
+                          width: "130%",
+                          height: "300px",
+                          borderRadius: "8px"
+                        }}
+                      >
+                        <FaImages className="placeholder-icon" />
+                        <p>NO IMAGE AVAILABLE</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="hotel-info">
-                  <h3 className="hotel-name">{hotelData.hotelName}</h3>
-                  <div className="hotel-location">
-                    <FaMapMarkerAlt className="location-icon" />
-                    <span>{hotelData.address}</span>
-                  </div>
-                  <div className="hotel-rating">
-                    <FaStar className="star-icon" />
-                    <FaStar className="star-icon" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="hotel-overview mb-4">
-                <h5>Overview</h5>
-                <p className="overview-text">
-                  {hotelData.hotelDescription || "No description available"}
-                </p>
-              </div>
-
-              <div className="amenities-section">
-                <h5>Amenities</h5>
-                <div className="amenities-grid">
-                  {hotelData.amenities &&
-                    hotelData.amenities.map((amenity) => {
-                      const IconComponent = getAmenityIcon(amenity.amenityId);
-                      return (
-                        <div key={amenity.amenityId} className="amenity-item">
-                          <IconComponent className="amenity-icon" />
-                          <span>{amenity.amenityName}</span>
+                  
+                  {/* Right Column - Hotel Info */}
+                  <div className="col-md-6">
+                    <div className="hotel-info">
+                      {/* Hotel Name */}
+                      <h3 className="hotel-name mb-3">{hotelData.hotelName}</h3>
+                      
+                      {/* Hotel Address */}
+                      <div className="hotel-location mb-4">
+                        <FaMapMarkerAlt className="location-icon" />
+                        <span>{hotelData.address}</span>
+                      </div>
+                      
+                      {/* Overview */}
+                      <div className="hotel-overview mb-4">
+                        <h5>Overview</h5>
+                        <p className="overview-text">
+                          {hotelData.hotelDescription || "No description available"}
+                        </p>
+                      </div>
+                      
+                      {/* Amenities */}
+                      <div className="amenities-section">
+                        <h5 className="mb-3">Amenities</h5>
+                        <div className="amenities-grid">
+                          {hotelData.amenities &&
+                            hotelData.amenities.map((amenity) => {
+                              const IconComponent = getAmenityIcon(amenity.amenityId);
+                              return (
+                                <div key={amenity.amenityId} className="amenity-item">
+                                  <IconComponent className="amenity-icon" />
+                                  <span>{amenity.amenityName}</span>
+                                </div>
+                              );
+                            })}
                         </div>
-                      );
-                    })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         );
-      case "gallery":
-        return (
-          <div>
-            <h4 className="mb-3">Gallery</h4>
-            <div className="no-image-placeholder">
-              <FaImages className="placeholder-icon" />
-              <p>NO IMAGE AVAILABLE</p>
-            </div>
-          </div>
-        );
-      case "360-view":
-        return (
-          <div>
-            <h4 className="mb-3">360 Degree View</h4>
-            <div className="no-image-placeholder">
-              <FaEye className="placeholder-icon" />
-              <p>NO 360° VIEW AVAILABLE</p>
-            </div>
-          </div>
-        );
+      // case "gallery":
+      //   return (
+      //     <div>
+      //       <h4 className="mb-3">Gallery</h4>
+      //       <div className="no-image-placeholder">
+      //         <FaImages className="placeholder-icon" />
+      //         <p>NO IMAGE AVAILABLE</p>
+      //       </div>
+      //     </div>
+      //   );
+      // case "360-view":
+      //   return (
+      //     <div>
+      //       <h4 className="mb-3">360 Degree View</h4>
+      //       <div className="no-image-placeholder">
+      //         <FaEye className="placeholder-icon" />
+      //         <p>NO 360° VIEW AVAILABLE</p>
+      //       </div>
+      //     </div>
+      //   );
       case "contact-details":
         return (
           <div>
@@ -422,9 +446,13 @@ const HotelRegistrationActions = () => {
       setShowMailCenterModal(true);
     } else if (actionLabel === "Login Details") {
       setShowLoginDetailsModal(true);
-    } else if (actionLabel === "Image Upload") {
-      handleImageUploadClick();
-    } else if (actionLabel === "Occupancy & Minimum length") {
+    } 
+    
+    // else if (actionLabel === "Image Upload") {
+    //    handleImageUploadClick();
+    // } 
+    
+    else if (actionLabel === "Occupancy & Minimum length") {
       navigate(`/hotel-actions/${id}/occupancy-and-minimumlength`);
     } else if (actionLabel === "Hotel Edit") {
       navigate(`/registration/hotel/create/${id}`);
@@ -474,64 +502,141 @@ const HotelRegistrationActions = () => {
 
   // Image upload handlers
   const handleFileSelect = (event) => {
-    const files = Array.from(event.target.files);
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    const file = event.target.files[0]; // Get only the first file
     
-    if (imageFiles.length !== files.length) {
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
       toast.error("Please select only image files");
-    }
-    
-    setSelectedFiles(prev => [...prev, ...imageFiles]);
-  };
-
-  const handleImageUpload = async () => {
-    if (selectedFiles.length === 0) {
-      toast.error("Please select images to upload");
       return;
     }
-
-    setIsUploading(true);
-    try {
-      const formData = new FormData();
-      selectedFiles.forEach((file, index) => {
-        formData.append(`images`, file);
-      });
-      formData.append('hotelId', id);
-
-      const response = await axiosInstance.post('/api/hotel/images/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      if (response.data) {
-        toast.success(`${selectedFiles.length} image(s) uploaded successfully!`);
-        setUploadedImages(prev => [...prev, ...response.data]);
-        setSelectedFiles([]);
-        setShowImageUploadModal(false);
-      }
-    } catch (error) {
-      console.error("Error uploading images:", error);
-      toast.error("Failed to upload images");
-    } finally {
-      setIsUploading(false);
-    }
+    
+    // Clear previous selection and set new single file
+    setSelectedFiles([file]);
   };
+
+  // const handleImageUpload = async () => {
+  //   if (selectedFiles.length === 0) {
+  //     toast.error("Please select an image to upload");
+  //     return;
+  //   }
+
+  //   // Only allow single image upload based on DTO structure
+  //   if (selectedFiles.length > 1) {
+  //     toast.error("Please select only one image at a time");
+  //     return;
+  //   }
+
+  //   setIsUploading(true);
+  //   try {
+  //     const formData = new FormData();
+  //     const file = selectedFiles[0]; // Get the first (and only) file
+      
+  //     // Match backend DTO structure
+  //     formData.append('image1', file);
+    
+  //     const response = await axiosInstance.post(`/api/hotelInventory/imageUpload/${id}/save`, formData, {
+  //       headers: {
+  //         'Content-Type': 'multipart/form-data',
+  //       },
+  //     });
+
+  //     if (response.data) {
+  //       toast.success("Image uploaded successfully!");
+  //       // Add the uploaded image to the list
+  //       setUploadedImages(prev => [...prev, {
+  //         id: response.data.id,
+  //         hotelId: response.data.hotelId,
+  //         image1Path: response.data.image1Path,
+  //         name: file.name
+  //       }]);
+  //       setSelectedFiles([]);
+  //       // setShowImageUploadModal(false);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error uploading image:", error);
+  //     toast.error("Failed to upload image");
+  //   } finally {
+  //     setIsUploading(false);
+  //   }
+  // };
 
   const removeSelectedFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const removeUploadedImage = (index) => {
-    setUploadedImages(prev => prev.filter((_, i) => i !== index));
-  };
+ 
+  // const handleImageUploadClick = () => {
+  //   setShowImageUploadModal(true);
+  //   fetchUploadedImages();
+  // };
 
-  const handleImageUploadClick = () => {
-    setShowImageUploadModal(true);
-    // Load existing images if any
-    if (hotelData?.images) {
-      setUploadedImages(hotelData.images);
-    }
+  // Fetch all uploaded images
+  // const fetchUploadedImages = async () => {
+  //   try {
+  //     setIsLoadingImages(true);
+  //     const response = await axiosInstance.get(`/api/hotelInventory/imageUpload/${id}/list`);
+  //     setUploadedImages(response.data || []);
+  //   } catch (error) {
+  //     console.error("Error fetching images:", error);
+  //     // toast.error("Failed to load images");
+  //   } finally {
+  //     setIsLoadingImages(false);
+  //   }
+  // };
+
+  // Delete image
+  // const handleDeleteImage = async (imageId) => {
+  //   if (!window.confirm("Are you sure you want to delete this image?")) return;
+    
+  //   try {
+  //     await axiosInstance.delete(`/api/hotelInventory/imageUpload/${id}/${imageId}`);
+  //     toast.success("Image deleted successfully!");
+  //     fetchUploadedImages(); // Refresh the list
+  //   } catch (error) {
+  //     console.error("Error deleting image:", error);
+  //     toast.error("Failed to delete image");
+  //   }
+  // };
+
+  // Update image
+  // const handleUpdateImage = async () => {
+  //   if (selectedFiles.length === 0) {
+  //     toast.error("Please select a new image to replace the existing one");
+  //     return;
+  //   }
+
+  //   setIsUploading(true);
+  //   try {
+  //     const formData = new FormData();
+  //     const file = selectedFiles[0];
+      
+  //     formData.append('image1', file);
+     
+  //     const response = await axiosInstance.put(`/api/hotelInventory/imageUpload/${id}/${editingImage.id}`, formData, {
+  //       headers: {
+  //         'Content-Type': 'multipart/form-data',
+  //       },
+  //     });
+
+  //     if (response.data) {
+  //       toast.success("Image updated successfully!");
+  //       setEditingImage(null);
+  //       setSelectedFiles([]);
+  //       fetchUploadedImages(); // Refresh the list
+  //     }
+  //   } catch (error) {
+  //     console.error("Error updating image:", error);
+  //     toast.error("Failed to update image");
+  //   } finally {
+  //     setIsUploading(false);
+  //   }
+  // };
+
+  // Cancel edit
+  const handleCancelEdit = () => {
+    setEditingImage(null);
+    setSelectedFiles([]);
   };
 
   if (isLoading) {
@@ -657,7 +762,7 @@ const HotelRegistrationActions = () => {
                                 cursor:
                                   action.label === "Mail center" ||
                                   action.label === "Login Details" ||
-                                  action.label === "Image Upload" ||
+                                  // action.label === "Image Upload" ||
                                   action.label === "Hotel Edit"
                                     ? "pointer"
                                     : "default",
@@ -825,154 +930,7 @@ const HotelRegistrationActions = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* Image Upload Modal */}
-      <Modal
-        show={showImageUploadModal}
-        onHide={() => setShowImageUploadModal(false)}
-        size="xl"
-        centered
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>
-            <FaImage className="me-2" />
-            Image Upload
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="row">
-            {/* Upload Section */}
-            <div className="col-md-6">
-              <h5 className="mb-3">Upload New Images</h5>
-              <div className="upload-area border-2 border-dashed border-primary rounded p-4 text-center mb-3">
-                <FaImage size={48} className="text-primary mb-3" />
-                <h6>Drop images here or click to browse</h6>
-                <p className="text-muted small">Supports JPG, PNG, GIF formats</p>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="d-none"
-                  id="image-upload-input"
-                />
-                <label htmlFor="image-upload-input" className="btn btn-primary">
-                  Choose Images
-                </label>
-              </div>
-
-              {/* Selected Files Preview */}
-              {selectedFiles.length > 0 && (
-                <div className="selected-files">
-                  <h6 className="mb-2">Selected Files ({selectedFiles.length})</h6>
-                  <div className="row">
-                    {selectedFiles.map((file, index) => (
-                      <div key={index} className="col-md-6 mb-2">
-                        <div className="card">
-                          <div className="card-body p-2">
-                            <div className="d-flex align-items-center">
-                              <img
-                                src={URL.createObjectURL(file)}
-                                alt={file.name}
-                                className="img-thumbnail me-2"
-                                style={{ width: "50px", height: "50px", objectFit: "cover" }}
-                              />
-                              <div className="flex-grow-1">
-                                <small className="text-truncate d-block">{file.name}</small>
-                                <small className="text-muted">
-                                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                                </small>
-                              </div>
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                onClick={() => removeSelectedFile(index)}
-                                className="ms-2"
-                              >
-                                ×
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Uploaded Images Section */}
-            <div className="col-md-6">
-              <h5 className="mb-3">Uploaded Images ({uploadedImages.length})</h5>
-              {uploadedImages.length > 0 ? (
-                <div className="uploaded-images">
-                  <div className="row">
-                    {uploadedImages.map((image, index) => (
-                      <div key={index} className="col-md-6 mb-2">
-                        <div className="card">
-                          <div className="card-body p-2">
-                            <div className="d-flex align-items-center">
-                              <img
-                                src={image.url || image}
-                                alt={`Uploaded ${index + 1}`}
-                                className="img-thumbnail me-2"
-                                style={{ width: "50px", height: "50px", objectFit: "cover" }}
-                                onError={(e) => {
-                                  e.target.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjUwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik0yMCAyMEgzMFYzMEgyMFYyMFoiIGZpbGw9IiNDQ0NDQ0MiLz4KPC9zdmc+";
-                                }}
-                              />
-                              <div className="flex-grow-1">
-                                <small className="text-truncate d-block">
-                                  {image.name || `Image ${index + 1}`}
-                                </small>
-                                <small className="text-muted">Uploaded</small>
-                              </div>
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                onClick={() => removeUploadedImage(index)}
-                                className="ms-2"
-                              >
-                                ×
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center text-muted py-4">
-                  <FaImages size={48} className="mb-2" />
-                  <p>No images uploaded yet</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="secondary"
-            onClick={() => setShowImageUploadModal(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleImageUpload}
-            disabled={selectedFiles.length === 0 || isUploading}
-          >
-            {isUploading ? (
-              <>
-                <Spinner animation="border" size="sm" className="me-2" />
-                Uploading...
-              </>
-            ) : (
-              `Upload ${selectedFiles.length} Image(s)`
-            )}
-          </Button>
-        </Modal.Footer>
-      </Modal>
+        {/* Image Upload Modal - Currently Disabled */}
     </div>
   );
 };
