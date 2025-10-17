@@ -66,7 +66,7 @@ import ContractRate from "./pages/HotelActions/ContractRate/ContractRate";
 import Promotion from "./pages/HotelActions/Promotion/Promotion";
 import Policy from "./pages/HotelActions/Policy/Policy";
 import CreateContractRate from "./pages/HotelActions/ContractRate/CreateContractRate";
-import EditContractRate from "./pages/HotelActions/ContractRate/EditContract";
+import EditContractRate from "./pages/HotelActions/ContractRate/EditContractRate";
 import CopyContractRate from "./pages/HotelActions/ContractRate/CopyContractRate";
 
 
@@ -203,7 +203,7 @@ export default function App() {
       <Route path="/hotel-actions/:id/individual-hotel-search" element={<IndividualHotelSearch />} />
       <Route path="/hotel-actions/:id/contract-rate" element={<ContractRate />} />
       <Route path="/hotel-actions/hotel/:id/contract-rate/create" element={<CreateContractRate />} />
-      <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/edit" element={<EditContractRate />} />
+      <Route path="/hotel-actions/hotel/:id/contract-rate/:contractRateId/edit" element={<EditContractRate />} />
       <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/copy" element={<CopyContractRate />} />
       <Route path="/hotel-actions/:id/promotions" element={<Promotion />} />
       

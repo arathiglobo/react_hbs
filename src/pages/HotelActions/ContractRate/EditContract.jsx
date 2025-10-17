@@ -229,7 +229,8 @@ export default function EditContractRate() {
 
       if (res.status === 200) {
         toast.success("Contract Rate updated successfully!");
-        navigate(`/registration/hotel/${id}/contract-rate`);
+        navigate(`/hotel-actions/${id}/contract-rate`);
+       
       }
     } catch (err) {
       console.error("❌ Update Error:", err);

@@ -200,9 +200,7 @@ export default function ContractRate() {
                     rates.map((rate, index) => (
                       <tr key={rate.contractrateId}>
                         <td>{index + 1 + page * 10}</td>
-                        <td>
-                       {rate.rateCode || "-"}
-                        </td>
+                        <td>{rate.rateCode || "-"}</td>
                         <td>
                           {rate.markeType && rate.markeType.length > 0
                             ? rate.markeType.map((type) => (
@@ -227,7 +225,7 @@ export default function ContractRate() {
                         </td>
                         <td>
                           {/* <Badge bg="success"> */}
-                            {rate.seasonName || rate.seasonId || "N/A"}
+                          {rate.seasonName || rate.seasonId || "N/A"}
                           {/* </Badge> */}
                         </td>
                         <td>
@@ -245,13 +243,12 @@ export default function ContractRate() {
                           )} */}
                           {rate.allDays ? (
                             <span>All Days</span>
+                          ) : rate.weekDay ? (
+                            <span>Weekdays</span>
+                          ) : rate.weekEndDay ? (
+                            <span>Weekend</span>
                           ) : (
-                            <div>
-                              <span>{rate.weekDay}</span>
-                              <span className="ms-2">
-                                {rate.weekEndDay}
-                              </span>
-                            </div>
+                            <span>-</span> // optional fallback
                           )}
                         </td>
                         <td>
@@ -270,25 +267,28 @@ export default function ContractRate() {
                           )}
                         </td>
                         <td>
-                          <Badge bg={rate.isLive ? "success" : "secondary"}>
-                            {rate.isLive ? "Live" : "Draft"}
+                          <Badge bg={rate.isLive ? "danger" : "success"}>
+                            {rate.isLive ? "Inactive" : "Active"}
                           </Badge>
                         </td>
+
                         <td>
-                           <div className="d-flex gap-2">
-                              <FaEdit
-                                className="text-primary"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
-                                onClick={() => handleEdit(rate.contractrateId)}
-                                title="Edit"
-                              />
-                             <FaTrash
-                                className="text-danger"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
-                                onClick={() =>  handleDelete(rate.contractrateId, rate.rateCode)}
-                                title="Delete"
-                              />
-                            </div>
+                          <div className="d-flex gap-2">
+                            <FaEdit
+                              className="text-primary"
+                              style={{ cursor: "pointer", fontSize: "18px" }}
+                              onClick={() => handleEdit(rate.contractrateId)}
+                              title="Edit"
+                            />
+                            <FaTrash
+                              className="text-danger"
+                              style={{ cursor: "pointer", fontSize: "18px" }}
+                              onClick={() =>
+                                handleDelete(rate.contractrateId, rate.rateCode)
+                              }
+                              title="Delete"
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))
