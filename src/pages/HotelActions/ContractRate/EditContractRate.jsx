@@ -66,25 +66,35 @@ export default function EditContractRate() {
   // ✅ Fetch existing contract rate data
   useEffect(() => {
     const fetchContractRateData = async () => {
-      if (!contractRateId) return;
+      if (!contractRateId || markets.length === 0 || countries.length === 0) return;
       try {
         setFetchingData(true);
         const res = await axiosInstance.get(`/api/hotelContractRate/${contractRateId}`);
         
+        console.log("🔍 API Response for Contract Rate:", res.data);
+        
         if (res.data) {
           const data = res.data;
           
-          // Map market types
-          const selectedMarkets = data.markeType?.map(market => ({
-            value: market.marketTypeId || market.id,
-            label: market.name
-          })) || [];
+          // Map market types - ensure we match with available markets
+          const selectedMarkets = data.markeType?.map(apiMarket => {
+            const matchingMarket = markets.find(m => 
+              m.marketTypeId === apiMarket.marketTypeId || m.marketTypeId === apiMarket.id
+            );
+            return {
+              value: apiMarket.marketTypeId || apiMarket.id,
+              label: apiMarket.name || matchingMarket?.name || 'Unknown Market'
+            };
+          }).filter(market => market.label !== 'Unknown Market') || [];
 
-          // Map exclude countries
-          const selectedCountries = data.excludeCountry?.map(country => ({
-            value: country.id,
-            label: `${country.name} (${country.marketType || ''})`
-          })) || [];
+          // Map exclude countries - ensure we match with available countries
+          const selectedCountries = data.excludeCountry?.map(apiCountry => {
+            const matchingCountry = countries.find(c => c.id === apiCountry.id);
+            return {
+              value: apiCountry.id,
+              label: `${apiCountry.name || matchingCountry?.name || 'Unknown Country'} (${apiCountry.marketType || matchingCountry?.marketType || ''})`
+            };
+          }).filter(country => !country.label.includes('Unknown Country')) || [];
 
           // Determine day selection
           let daySelection = "allDays";
@@ -135,6 +145,19 @@ export default function EditContractRate() {
             );
             setFilteredCountries(filtered);
           }
+
+          console.log("✅ Contract Rate Data Loaded:", {
+            originalData: data,
+            selectedMarkets,
+            selectedCountries,
+            formData: {
+              seasonId: String(data.seasonId || ""),
+              rateCode: data.rateCode || "",
+              marketType: selectedMarkets,
+              excludeCountry: selectedCountries,
+              daySelection: daySelection,
+            }
+          });
         }
       } catch (error) {
         console.error("Error fetching contract rate data:", error);
@@ -144,7 +167,7 @@ export default function EditContractRate() {
       }
     };
     fetchContractRateData();
-  }, [contractRateId, countries]);
+  }, [contractRateId, markets, countries]);
 
   // ✅ Fetch hotel rooms
   useEffect(() => {
@@ -358,7 +381,7 @@ export default function EditContractRate() {
 
       if (res.status === 200 || res.status === 201) {
         toast.success("Contract Rate updated successfully!");
-        navigate(`/hotel-actions/hotel/${id}/contract-rate`);
+        navigate(`/hotel-actions/${id}/contract-rate`);
       }
     } catch (err) {
       console.error("❌ Update Error:", err);
