@@ -16,9 +16,9 @@ import {
 import { FaArrowLeft, FaEdit, FaEye, FaTrash } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import axiosInstance from "../../components/AxiosInstance";
-import Sidebar from "../../components/Sidebar";
-import Topbar from "../../components/TopBar";
+import axiosInstance from "../../../components/AxiosInstance";
+import Sidebar from "../../../components/Sidebar";
+import Topbar from "../../../components/TopBar";
 
 const HotelAvailability = () => {
   const { id } = useParams();

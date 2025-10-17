@@ -156,11 +156,7 @@ export default function IndividualHotelSearch() {
   ];
 
   const channelTypeOptions = [
-    { value: "inhouse", label: "Inhouse" },
-    { value: "iwtx", label: "Iwtx" },
-    { value: "x3", label: "x3" },
-    { value: "ratehawk", label: "Ratehawk" },
-    { value: "darina", label: "Darina" },
+    { value: "inhouse", label: "Inhouse" }    
   ];
 
   // Debounce utility function
@@ -529,7 +525,7 @@ export default function IndividualHotelSearch() {
             <Card.Body className="p-4">
               <div className="text-center mb-4">
                 <h2 className="fw-bold text-primary mb-2">
-                  Individual Hotel Search
+                   Search Rooms For 
                 </h2>
                 <p className="text-muted">
                   Search for specific hotels with advanced filters

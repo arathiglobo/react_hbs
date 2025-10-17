@@ -40,8 +40,8 @@ import PackageReg from "./pages/Registration/PackageReg";
 import PackageRates from "./pages/Registration/PackageRates";
 import SupplierReg from "./pages/Registration/SupplierReg";
 import CompulsoryEventsPage from "./pages/HotelActions/Compulsery/CompulsoryEventsPage";
-import OccupancyAndMinimumLength from "./pages/HotelActions/OccupancyAndMinimumLength";
-import HotelAvailability from "./pages/HotelActions/HotelAvailability";
+import OccupancyAndMinimumLength from "./pages/HotelActions/OccupancyAndMinimumLength/OccupancyAndMinimumLength";
+import HotelAvailability from "./pages/HotelActions/Availability/HotelAvailability";
 import MakeUrOwnPackage from "./pages/search/MakeUrOwnPackage";
 import Calendar from "./pages/Calendar";
 import HotelCategory from "./pages/master/HotelCategory";
@@ -60,8 +60,14 @@ import DayActivities from "./pages/master/DayActivities";
 import ItineraryDetails from "./pages/master/ItineraryDetails";
 import VisaDetails from "./pages/master/VisaDetails";
 import TermsAndConditions from "./pages/master/TermsAndConditions";
-import ValidityPage from "./pages/HotelActions/ValidityPage";
+import ValidityPage from "./pages/HotelActions/Validities/ValidityPage";
 import IndividualHotelSearch from "./pages/HotelActions/IndividualHotelSearch";
+import ContractRate from "./pages/HotelActions/ContractRate/ContractRate";
+import Promotion from "./pages/HotelActions/Promotion/Promotion";
+import Policy from "./pages/HotelActions/Policy/Policy";
+import CreateContractRate from "./pages/HotelActions/ContractRate/CreateContractRate";
+import EditContractRate from "./pages/HotelActions/ContractRate/EditContract";
+import CopyContractRate from "./pages/HotelActions/ContractRate/CopyContractRate";
 
 
 
@@ -186,12 +192,25 @@ export default function App() {
        <Route path="/registration/hotel" element={<HotelList />} />
        <Route path="/registration/hotel/create" element={<HotelReg />} />
        <Route path="/registration/hotel/create/:id" element={<HotelReg />} />
+
+
+       {/* Hotel Actions */}
        <Route path="/hotel-details/:id" element={<HotelRegistrationActions />} />
       <Route path="/registration/hotel/:id/compulsory-events" element={<CompulsoryEventsPage />} />
       <Route path="/hotel-actions/:id/occupancy-and-minimumlength" element={<OccupancyAndMinimumLength />} />
       <Route path="/hotel-actions/:id/hotel-availability" element={<HotelAvailability />} />
       <Route path="/hotel-actions/:id/validity-period-details" element={<ValidityPage />} />
       <Route path="/hotel-actions/:id/individual-hotel-search" element={<IndividualHotelSearch />} />
+      <Route path="/hotel-actions/:id/contract-rate" element={<ContractRate />} />
+      <Route path="/hotel-actions/hotel/:id/contract-rate/create" element={<CreateContractRate />} />
+      <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/edit" element={<EditContractRate />} />
+      <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/copy" element={<CopyContractRate />} />
+      <Route path="/hotel-actions/:id/promotions" element={<Promotion />} />
+      
+
+
+
+      <Route path="/hotel-actions/:id/hotel-policy" element={<Policy />} />
     
       <Route path="/calendar" element={<Calendar />} />
 

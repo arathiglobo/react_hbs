@@ -12,9 +12,9 @@ import {
   Tabs,
   Tab,
 } from "react-bootstrap";
-import Sidebar from "../../components/Sidebar";
-import Topbar from "../../components/TopBar";
-import axiosInstance from "../../components/AxiosInstance";
+import Sidebar from "../../../components/Sidebar";
+import Topbar from "../../../components/TopBar";
+import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import {
@@ -1018,6 +1018,7 @@ const OccupancyAndMinimumLength = () => {
       const res = await axiosInstance.get(`/api/hotels/${id}/minimumlengths`, {
         params,
       });
+      console.log("Fetching min length list response:", res.data);
       if (res.data && Array.isArray(res.data)) {
         setItemsMin(res.data);
         if (res.data.length < 10) {
@@ -1026,10 +1027,12 @@ const OccupancyAndMinimumLength = () => {
           setTotalPagesMin(Math.max(totalPagesMin, pageNum + 2));
         }
         setPageMin(pageNum);
+        console.log("Updated itemsMin:", res.data);
       } else {
         setItemsMin([]);
         setTotalPagesMin(0);
         setPageMin(0);
+        console.log("No data found, cleared itemsMin");
       }
     } catch (err) {
       toast.error("Failed to load min lengths");
@@ -1147,34 +1150,54 @@ const OccupancyAndMinimumLength = () => {
     };
   }, [searchMin]);
 
-  const handleDeleteMin = (item) => {
-    Swal.fire({
-      title: `Are you sure? You want to delete ${item.market}`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#3085d6",
-      confirmButtonText: "Yes, delete it!",
-      customClass: {
-        popup: "swal-small",
-        title: "swal-small-title",
-        htmlContainer: "swal-small-text",
-      },
-    }).then((result) => {
-      if (result.isConfirmed) {
-        const itemId = item.id || item.minimumLengthId || item.minLengthId;
-        axiosInstance
-          .delete(`/api/hotels/${id}/minimumlengths/${itemId}`)
-          .then(() => {
-            toast.success("Minimum Length deleted successfully");
-            fetchMinLengthList(pageMin, searchMin);
-          })
-          .catch(() => {
-            toast.error("Sorry!! Minimum Length not deleted");
-          });
+  const handleDeleteMin = async (item) => {
+  console.log("Deleting minimum length item:", item);
+
+  Swal.fire({
+    title: `Are you sure? You want to delete minimum length for ${item.marketName}?`,
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#d33",
+    cancelButtonColor: "#3085d6",
+    confirmButtonText: "Yes, delete it!",
+    customClass: {
+      popup: "swal-small",
+      title: "swal-small-title",
+      htmlContainer: "swal-small-text",
+    },
+  }).then(async (result) => { // ✅ make callback async
+    
+    if (result.isConfirmed) {
+      try {
+        const itemId = item.minimumLengthId;
+        const minDeleteRes = await axiosInstance.delete(
+          `/api/hotels/${id}/minimumlengths/${itemId}`
+        );
+
+        console.log("Minimum length delete response:", minDeleteRes);
+
+        if (minDeleteRes.status === 200 || minDeleteRes.status === 204) {
+          toast.success("Minimum Length deleted successfully");
+          console.log("Delete successful, refreshing list...");
+          
+          // Force refresh the list by calling fetchMinLengthList
+          await fetchMinLengthList(pageMin, searchMin);
+          
+          // Additional force update - remove the deleted item from state immediately
+          setItemsMin(prevItems => prevItems.filter(item => item.minimumLengthId !== itemId));
+          
+          console.log("List refreshed after deletion");
+        } else {
+          toast.error("Sorry!! Minimum Length not deleted");
+        }
+      } catch (error) {
+        console.error("Error deleting minimum length:", error);
+        toast.error("Something went wrong while deleting minimum length");
       }
-    });
-  };
+    }
+  });
+};
+
 
   const handleViewMin = async (item) => {
     try {

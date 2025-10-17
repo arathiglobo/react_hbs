@@ -45,11 +45,13 @@ import {
   FaSpa,
   FaWifi,
   FaHotel,
+  FaSearch,
 } from "react-icons/fa";
 import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/TopBar";
+import Select from "react-select";
 import "../styles/HotelRegistrationActions.css";
 
 const HotelRegistrationActions = () => {
@@ -64,6 +66,7 @@ const HotelRegistrationActions = () => {
   const [showMailCenterModal, setShowMailCenterModal] = useState(false);
   const [showLoginDetailsModal, setShowLoginDetailsModal] = useState(false);
   const [showImageUploadModal, setShowImageUploadModal] = useState(false);
+  const [showRoomSearchModal, setShowRoomSearchModal] = useState(false);
   const [mailCenterData, setMailCenterData] = useState([]);
   
   // Image upload states
@@ -72,6 +75,22 @@ const HotelRegistrationActions = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingImages, setIsLoadingImages] = useState(false);
   const [editingImage, setEditingImage] = useState(null);
+
+  // Room search states
+  const [roomSearchForm, setRoomSearchForm] = useState({
+    checkIn: "",
+    checkOut: "",
+    nights: 1,
+    rooms: [{ adults: 1, children: 0, childAges: [] }],
+    nationality: null,
+    agent: ""
+  });
+  const [roomSearchResults, setRoomSearchResults] = useState([]);
+  const [isRoomSearchLoading, setIsRoomSearchLoading] = useState(false);
+  const [hasRoomSearched, setHasRoomSearched] = useState(false);
+  const [roomSearchErrors, setRoomSearchErrors] = useState({});
+  const [nationalityList, setNationalityList] = useState([]);
+  const [agents, setAgents] = useState([]);
 
   console.log("hotel complete data::", hotelData);
 
@@ -174,6 +193,32 @@ const HotelRegistrationActions = () => {
       fetchHotelData();
     }
   }, [id]);
+
+  // Load nationality and agent data
+  useEffect(() => {
+    const loadDropdownData = async () => {
+      try {
+        // Load nationalities
+        const nationalityResponse = await axiosInstance.get("/api/country");
+        const nationalityOptions = Array.isArray(nationalityResponse.data)
+          ? nationalityResponse.data.map((country) => ({
+              value: country.id,
+              label: country.name,
+              code: country.countryCode,
+            }))
+          : [];
+        setNationalityList(nationalityOptions);
+
+        // Load agents
+        const agentResponse = await axiosInstance.get("/api/agent");
+        setAgents(agentResponse.data || []);
+      } catch (error) {
+        console.error("Error loading dropdown data:", error);
+      }
+    };
+
+    loadDropdownData();
+  }, []);
 
   const getAmenityIcon = (amenityId) => {
     const iconMap = {
@@ -460,10 +505,152 @@ const HotelRegistrationActions = () => {
       navigate(`/registration/hotel/${id}/compulsory-events`);
     } else if (actionLabel === "Hotel Availability") {
       navigate(`/hotel-actions/${id}/hotel-availability`);
-    } else if (actionLabel === "Validity Periods") {
+    } else if (actionLabel === "Contract Rate") {
+      navigate(`/hotel-actions/${id}/contract-rate`);
+    } else if (actionLabel === "Promotion") {
+      navigate(`/hotel-actions/${id}/promotions`);
+    } else if (actionLabel === "Policy") {
+      navigate(`/hotel-actions/${id}/hotel-policy`);
+    }else if (actionLabel === "Validity Periods") {
       navigate(`/hotel-actions/${id}/validity-period-details`);
     }else if (actionLabel === "Book Hotel") {
-      navigate(`/hotel-actions/${id}/individual-hotel-search`);
+      setShowRoomSearchModal(true);
+      // Pre-populate search form with hotel data
+      setRoomSearchForm(prev => ({
+        ...prev,
+        checkIn: "",
+        checkOut: "",
+        nights: 1,
+        rooms: [{ adults: 1, children: 0, childAges: [] }],
+        nationality: null,
+        agent: ""
+      }));
+    }
+  };
+
+  // Room search functions
+  const formatDate = (date) => date.toISOString().split("T")[0];
+
+  const getTomorrow = (date = new Date()) => {
+    const tomorrow = new Date(date);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow;
+  };
+
+  const today = formatDate(new Date());
+
+  const handleRoomSearchFormChange = (field, value) => {
+    setRoomSearchForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+    
+    // Clear error for this field
+    if (roomSearchErrors[field]) {
+      setRoomSearchErrors(prev => {
+        const { [field]: _omit, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
+
+  const handleNightsChange = (value) => {
+    const val = Math.max(1, Number(value) || 1);
+    handleRoomSearchFormChange("nights", val);
+    if (roomSearchForm.checkIn) {
+      const start = new Date(roomSearchForm.checkIn);
+      const out = new Date(start);
+      out.setDate(start.getDate() + val);
+      const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 10);
+      handleRoomSearchFormChange("checkOut", iso);
+    }
+  };
+
+  const validateRoomSearchForm = () => {
+    const newErrors = {};
+
+    if (!roomSearchForm.nationality) {
+      newErrors.nationality = "Nationality is required";
+    }
+
+    if (!roomSearchForm.checkIn) {
+      newErrors.checkIn = "Check-in date is required";
+    }
+
+    if (!roomSearchForm.checkOut) {
+      newErrors.checkOut = "Check-out date is required";
+    }
+
+    if (!roomSearchForm.agent) {
+      newErrors.agent = "Agent is required";
+    }
+
+    return newErrors;
+  };
+
+  const handleRoomSearch = async (e) => {
+    e.preventDefault();
+    const formErrors = validateRoomSearchForm();
+    if (Object.keys(formErrors).length > 0) {
+      setRoomSearchErrors(formErrors);
+      return;
+    }
+
+    setRoomSearchErrors({});
+    setIsRoomSearchLoading(true);
+    setHasRoomSearched(true);
+
+    try {
+      // Mock room search results for the specific hotel
+      const mockRoomResults = [
+        {
+          id: "room1",
+          roomType: "Standard Room",
+          roomCategory: "Standard",
+          maxOccupancy: 2,
+          price: 150,
+          currency: "AED",
+          amenities: ["WiFi", "AC", "TV", "Minibar"],
+          availability: 5,
+          image: "https://via.placeholder.com/300x200"
+        },
+        {
+          id: "room2", 
+          roomType: "Deluxe Room",
+          roomCategory: "Deluxe",
+          maxOccupancy: 3,
+          price: 250,
+          currency: "AED",
+          amenities: ["WiFi", "AC", "TV", "Minibar", "Balcony"],
+          availability: 3,
+          image: "https://via.placeholder.com/300x200"
+        },
+        {
+          id: "room3",
+          roomType: "Suite",
+          roomCategory: "Suite",
+          maxOccupancy: 4,
+          price: 450,
+          currency: "AED", 
+          amenities: ["WiFi", "AC", "TV", "Minibar", "Balcony", "Kitchenette"],
+          availability: 2,
+          image: "https://via.placeholder.com/300x200"
+        }
+      ];
+
+      // Simulate API call delay
+      setTimeout(() => {
+        setRoomSearchResults(mockRoomResults);
+        setIsRoomSearchLoading(false);
+        toast.success("Room search completed!");
+      }, 1500);
+
+    } catch (error) {
+      console.error("Error searching rooms:", error);
+      toast.error("Failed to search rooms");
+      setIsRoomSearchLoading(false);
     }
   };
 
@@ -933,6 +1120,239 @@ const HotelRegistrationActions = () => {
       </Modal>
 
         {/* Image Upload Modal - Currently Disabled */}
+
+        {/* Room Search Modal */}
+        <Modal
+          show={showRoomSearchModal}
+          onHide={() => setShowRoomSearchModal(false)}
+          size="xl"
+          scrollable
+        >
+          <Modal.Header closeButton>
+            <Modal.Title>
+              <FaBed className="me-2" />
+              Search Rooms - {hotelData?.hotelName || "Hotel"}
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {/* Search Form */}
+            <Card className="mb-4">
+              <Card.Body>
+                <h5 className="mb-3">Search Criteria</h5>
+                <Form onSubmit={handleRoomSearch}>
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label>Nationality</Form.Label>
+                        <Select
+                          options={nationalityList}
+                          value={roomSearchForm.nationality}
+                          onChange={(option) => handleRoomSearchFormChange("nationality", option)}
+                          placeholder="Select nationality"
+                          isSearchable
+                          isClearable
+                          className="modern-select"
+                          menuPortalTarget={document.body}
+                          styles={{
+                            menuPortal: base => ({ ...base, zIndex: 9999 }),
+                            control: (base) => ({
+                              ...base,
+                              minHeight: "38px",
+                              border: "1px solid #dee2e6",
+                              "&:hover": { borderColor: "#86b7fe" },
+                            }),
+                          }}
+                        />
+                        {roomSearchErrors.nationality && (
+                          <div className="text-danger small mt-1">
+                            {roomSearchErrors.nationality}
+                          </div>
+                        )}
+                      </Form.Group>
+                    </Col>
+
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label>Agent</Form.Label>
+                        <Form.Select
+                          value={roomSearchForm.agent}
+                          onChange={(e) => handleRoomSearchFormChange("agent", e.target.value)}
+                        >
+                          <option value="">Select Agent</option>
+                          {agents.map((agent) => (
+                            <option key={agent.id} value={agent.id}>
+                              {agent.companyName}
+                            </option>
+                          ))}
+                        </Form.Select>
+                        {roomSearchErrors.agent && (
+                          <div className="text-danger small mt-1">
+                            {roomSearchErrors.agent}
+                          </div>
+                        )}
+                      </Form.Group>
+                    </Col>
+
+                    <Col md={4}>
+                      <Form.Group>
+                        <Form.Label>Check-in Date</Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={roomSearchForm.checkIn}
+                          min={today}
+                          onChange={(e) => {
+                            const newCheckIn = e.target.value;
+                            handleRoomSearchFormChange("checkIn", newCheckIn);
+                            if (!roomSearchForm.checkOut || new Date(newCheckIn) >= new Date(roomSearchForm.checkOut)) {
+                              handleRoomSearchFormChange("checkOut", formatDate(getTomorrow(new Date(newCheckIn))));
+                            }
+                          }}
+                        />
+                        {roomSearchErrors.checkIn && (
+                          <div className="text-danger small mt-1">
+                            {roomSearchErrors.checkIn}
+                          </div>
+                        )}
+                      </Form.Group>
+                    </Col>
+
+                    <Col md={4}>
+                      <Form.Group>
+                        <Form.Label>Check-out Date</Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={roomSearchForm.checkOut}
+                          min={roomSearchForm.checkIn ? formatDate(getTomorrow(new Date(roomSearchForm.checkIn))) : formatDate(getTomorrow())}
+                          onChange={(e) => handleRoomSearchFormChange("checkOut", e.target.value)}
+                        />
+                        {roomSearchErrors.checkOut && (
+                          <div className="text-danger small mt-1">
+                            {roomSearchErrors.checkOut}
+                          </div>
+                        )}
+                      </Form.Group>
+                    </Col>
+
+                    <Col md={4}>
+                      <Form.Group>
+                        <Form.Label>Nights</Form.Label>
+                        <Form.Control
+                          type="number"
+                          min={1}
+                          max={60}
+                          value={roomSearchForm.nights}
+                          onChange={(e) => handleNightsChange(e.target.value)}
+                        />
+                      </Form.Group>
+                    </Col>
+                  </Row>
+
+                  <Row className="mt-3">
+                    <Col className="d-flex justify-content-center">
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        disabled={isRoomSearchLoading}
+                      >
+                        {isRoomSearchLoading ? (
+                          <>
+                            <Spinner animation="border" size="sm" className="me-2" />
+                            Searching Rooms...
+                          </>
+                        ) : (
+                          <>
+                            <FaSearch className="me-2" />
+                            Search Rooms
+                          </>
+                        )}
+                      </Button>
+                    </Col>
+                  </Row>
+                </Form>
+              </Card.Body>
+            </Card>
+
+            {/* Search Results */}
+            {hasRoomSearched && (
+              <Card>
+                <Card.Body>
+                  <h5 className="mb-3">Available Rooms</h5>
+                  {isRoomSearchLoading ? (
+                    <div className="text-center py-4">
+                      <Spinner animation="border" variant="primary" />
+                      <p className="mt-2 text-muted">Searching for rooms...</p>
+                    </div>
+                  ) : roomSearchResults.length > 0 ? (
+                    <Row className="g-3">
+                      {roomSearchResults.map((room) => (
+                        <Col md={6} key={room.id}>
+                          <Card className="h-100">
+                            <Card.Img
+                              variant="top"
+                              src={room.image}
+                              alt={room.roomType}
+                              style={{ height: "200px", objectFit: "cover" }}
+                            />
+                            <Card.Body>
+                              <Card.Title className="h6">{room.roomType}</Card.Title>
+                              <Card.Text>
+                                <small className="text-muted">
+                                  <FaUsers className="me-1" />
+                                  Max Occupancy: {room.maxOccupancy}
+                                </small>
+                                <br />
+                                <small className="text-muted">
+                                  <FaBed className="me-1" />
+                                  Category: {room.roomCategory}
+                                </small>
+                                <br />
+                                <small className="text-muted">
+                                  Available: {room.availability} rooms
+                                </small>
+                              </Card.Text>
+                              <div className="d-flex justify-content-between align-items-center">
+                                <div>
+                                  <strong className="text-primary">
+                                    {room.currency} {room.price}
+                                  </strong>
+                                  <small className="text-muted d-block">per night</small>
+                                </div>
+                                <Button variant="outline-primary" size="sm">
+                                  Book Now
+                                </Button>
+                              </div>
+                              <div className="mt-2">
+                                <small className="text-muted">
+                                  Amenities: {room.amenities.join(", ")}
+                                </small>
+                              </div>
+                            </Card.Body>
+                          </Card>
+                        </Col>
+                      ))}
+                    </Row>
+                  ) : (
+                    <div className="text-center py-4">
+                      <FaBed className="display-4 text-muted mb-3" />
+                      <h5>No rooms available</h5>
+                      <p className="text-muted">
+                        No rooms found for the selected criteria. Try adjusting your search parameters.
+                      </p>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            )}
+          </Modal.Body>
+          <Modal.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setShowRoomSearchModal(false)}
+            >
+              Close
+            </Button>
+          </Modal.Footer>
+        </Modal>
     </div>
   );
 };

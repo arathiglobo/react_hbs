@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, Button, Row, Col, Badge, Spinner, Table } from "react-bootstrap";
-import Sidebar from "../../components/Sidebar";
-import Topbar from "../../components/TopBar";
-import axiosInstance from "../../components/AxiosInstance";
+import Sidebar from "../../../components/Sidebar";
+import Topbar from "../../../components/TopBar";
+import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import {
   FaCalendarAlt,

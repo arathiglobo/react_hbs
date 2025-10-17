@@ -1,0 +1,503 @@
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  Container,
+  Table,
+  Button,
+  Modal,
+  Form,
+  Spinner,
+  Badge,
+  Card,
+  Pagination,
+} from "react-bootstrap";
+import { FaArrowLeft, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
+import axiosInstance from "../../../components/AxiosInstance";
+import { toast } from "react-hot-toast";
+import Sidebar from "../../../components/Sidebar";
+import Topbar from "../../../components/TopBar";
+
+const Promotion = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [promotions, setPromotions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [showValidityModal, setShowValidityModal] = useState(false);
+  const [selectedPromo, setSelectedPromo] = useState(null);
+  const [formData, setFormData] = useState({ type: "" });
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // ✅ Fetch Promotions
+  const fetchPromotions = async () => {
+    try {
+      setLoading(true);
+      const res = await axiosInstance.get(`/api/hotelPromotions/${id}`);
+      setPromotions(res.data || []);
+    } catch (error) {
+      console.error("Error fetching promotions:", error);
+      toast.error("Failed to load promotions");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id) fetchPromotions();
+  }, [id]);
+
+  // ✅ Delete promotion
+  const handleDelete = async (promo) => {
+    if (!window.confirm("Are you sure you want to delete this promotion?"))
+      return;
+
+    let endpoint = "";
+    switch (promo.promotionType) {
+      case "Special Rates":
+        endpoint = `/api/hotelSpecialRate/${promo.id}`;
+        break;
+      case "Discount":
+      case "Discount Promotion":
+        endpoint = `/api/discount/${promo.id}`;
+        break;
+      case "StayPay":
+      case "Stay Pay Promotion":
+        endpoint = `/api/hotelStaypay/${promo.id}`;
+        break;
+      default:
+        toast.error("Unknown promotion type");
+        return;
+    }
+
+    try {
+      await axiosInstance.delete(endpoint);
+      toast.success(`${promo.promotionType} deleted successfully`);
+      fetchPromotions();
+    } catch (error) {
+      console.error("❌ Delete Error:", error.response || error);
+      toast.error("Failed to delete promotion");
+    }
+  };
+
+  // ✅ Handle navigation for creation
+  const handleGo = () => {
+    if (!formData.type) return toast.error("Please select a promotion type");
+    switch (formData.type) {
+      case "special-rates":
+        navigate(`/registration/hotel/${id}/promotion/special`);
+        break;
+      case "discount-promotion":
+        navigate(`/registration/hotel/${id}/promotion/discount`);
+        break;
+      case "stay-pay-promotion":
+        navigate(`/registration/hotel/${id}/promotion/staypay`);
+        break;
+      default:
+        break;
+    }
+    setShowModal(false);
+  };
+
+  // ✅ Filter + Pagination
+  const filteredPromotions = promotions.filter(
+    (p) =>
+      p.promotionName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.promotionType?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filteredPromotions.length / itemsPerPage);
+  const currentData = filteredPromotions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
+
+  return (
+    <div className="min-vh-100 bg-light d-flex flex-column">
+      <Topbar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
+        <main className="flex-grow-1 p-4">
+          <Card className="shadow-sm rounded-xl">
+            {/* Header */}
+            <Card.Header className="d-flex justify-content-between align-items-center">
+              <div className="d-flex align-items-center gap-3 mb-3">
+                <Button
+                  variant="outline-primary"
+                  onClick={() => navigate(`/hotel-details/${id}`)}
+                  className="d-flex align-items-center btn-sm gap-2"
+                >
+                  <FaArrowLeft />
+                  Back
+                </Button>
+                <div className="fw-semibold fs-4 text-dark">
+                  Promotions
+                </div>
+              </div>
+              <div className="d-flex align-items-center justify-content-between w-100">
+                {/* Centered search bar */}
+                <div className="d-flex justify-content-center flex-grow-1">
+                  <div className="position-relative" style={{ width: "260px" }}>
+                    <Form.Control
+                      type="text"
+                      placeholder="Search promotion..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                    />
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                        style={{
+                          border: "none",
+                          background: "none",
+                          color: "#6c757d",
+                          padding: "0 12px",
+                          zIndex: 10,
+                        }}
+                        onClick={() => {
+                          setSearchTerm("");
+                          setCurrentPage(1);
+                        }}
+                        title="Clear search"
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Create button on the right */}
+                <Button
+                  className="ms-3 btn-green"
+                  onClick={() => setShowModal(true)}
+                >
+                  + Create
+                </Button>
+              </div>
+            </Card.Header>
+
+            {/* Table */}
+            <Card.Body className="p-0">
+              <Table responsive hover striped className="mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th style={{ width: 70 }}>S/N</th>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th>Validity</th>
+                    <th>Promotion Code</th>
+                    <th>Day Type</th>
+                    <th>Status</th>
+                    <th style={{ width: 160 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentData.length > 0 ? (
+                    currentData.map((promo, index) => (
+                      <tr key={promo.id}>
+                        <td>{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                        <td>{promo.promotionType || "—"}</td>
+                        <td>{promo.promotionName || "—"}</td>
+                        <td>
+                          <Button
+                            variant="link"
+                            className="text-decoration-none text-primary fw-semibold p-0"
+                            onClick={() => {
+                              setSelectedPromo(promo);
+                              setShowValidityModal(true);
+                            }}
+                          >
+                            View
+                          </Button>
+                        </td>
+                        <td>{promo.promotionCode || "—"}</td>
+                        <td>{promo.dayType || "—"}</td>
+                        <td>
+                          <Badge bg={promo.status ? "success" : "secondary"}>
+                            {promo.status ? "Active" : "Inactive"}
+                          </Badge>
+                        </td>
+                        <td>
+                          <div className="d-flex gap-3 justify-content-center">
+                            <FaEdit
+                              className="text-warning"
+                              style={{ cursor: "pointer", fontSize: "18px" }}
+                              onClick={() => {
+                                const type = promo.promotionType?.toLowerCase();
+                                if (type.includes("special")) {
+                                  navigate(
+                                    `/registration/hotel/${id}/promotion/special/${promo.id}/edit`
+                                  );
+                                } else if (type.includes("discount")) {
+                                  navigate(
+                                    `/registration/hotel/${id}/promotion/discount/${promo.id}/edit`
+                                  );
+                                } else if (
+                                  type.includes("staypay") ||
+                                  type.includes("stay pay")
+                                ) {
+                                  navigate(
+                                    `/registration/hotel/${id}/promotion/staypay/${promo.id}/edit`
+                                  );
+                                } else {
+                                  toast.error("Unknown promotion type");
+                                }
+                              }}
+                              title="Edit"
+                            />
+
+                            <FaTrash
+                              className="text-danger"
+                              style={{ cursor: "pointer", fontSize: "18px" }}
+                              onClick={() => handleDelete(promo)}
+                              title="Delete"
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : loading ? (
+                    <tr>
+                      <td colSpan={8} className="text-center text-muted py-4">
+                        <div
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                        ></div>
+                        Loading promotions...
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="text-center text-muted py-4">
+                        No promotions found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </Table>
+
+              {/* Pagination */}
+              {filteredPromotions.length > itemsPerPage && (
+                <div className="d-flex justify-content-between align-items-center p-3 border-top bg-white">
+                  <div>
+                    <small className="text-muted">
+                      Showing{" "}
+                      <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> to{" "}
+                      <strong>
+                        {Math.min(
+                          currentPage * itemsPerPage,
+                          filteredPromotions.length
+                        )}
+                      </strong>{" "}
+                      of <strong>{filteredPromotions.length}</strong> promotions
+                    </small>
+                  </div>
+                  <Pagination className="mb-0">
+                    <Pagination.Prev
+                      disabled={currentPage === 1}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                    />
+                    {[...Array(totalPages)].map((_, i) => (
+                      <Pagination.Item
+                        key={i}
+                        active={currentPage === i + 1}
+                        onClick={() => handlePageChange(i + 1)}
+                      >
+                        {i + 1}
+                      </Pagination.Item>
+                    ))}
+                    <Pagination.Next
+                      disabled={currentPage === totalPages}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                    />
+                  </Pagination>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+
+          {/* ✅ Create Modal */}
+          <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+            <Modal.Header className="bg-primary text-white">
+              <Modal.Title>Select Promotion Type</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form>
+                <Form.Label className="fw-semibold text-danger">
+                  * Choose one:
+                </Form.Label>
+                <div className="mt-2">
+                  {[
+                    {
+                      id: "specialRates",
+                      label: "Special Rates",
+                      value: "special-rates",
+                    },
+                    {
+                      id: "discountPromotion",
+                      label: "Discount Promotion",
+                      value: "discount-promotion",
+                    },
+                    {
+                      id: "stayPayPromotion",
+                      label: "Stay Pay Promotion",
+                      value: "stay-pay-promotion",
+                    },
+                  ].map((opt) => (
+                    <Form.Check
+                      key={opt.id}
+                      type="radio"
+                      id={opt.id}
+                      name="promotionType"
+                      label={opt.label}
+                      value={opt.value}
+                      checked={formData.type === opt.value}
+                      onChange={(e) =>
+                        setFormData({ ...formData, type: e.target.value })
+                      }
+                      className="mb-2"
+                    />
+                  ))}
+                </div>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer className="justify-content-between">
+              <Button variant="danger" onClick={() => setShowModal(false)}>
+                ✖ Cancel
+              </Button>
+              <Button variant="success" onClick={handleGo}>
+                Go →
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* ✅ Validity Modal */}
+          <Modal
+            show={showValidityModal}
+            onHide={() => setShowValidityModal(false)}
+            centered
+            size="lg"
+          >
+            <Modal.Header className="bg-primary text-white" closeButton>
+              <Modal.Title>Validity List</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {selectedPromo ? (
+                <>
+                  {selectedPromo.contractRateValidityDTO?.length > 0 && (
+                    <>
+                      <h6 className="fw-bold text-primary mb-2">
+                        Special Rates
+                      </h6>
+                      <Table bordered responsive>
+                        <thead>
+                          <tr className="table-light">
+                            <th>Validity From</th>
+                            <th>Validity To</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedPromo.contractRateValidityDTO.map((v, i) => (
+                            <tr key={i}>
+                              <td>{v.validityFrom || "—"}</td>
+                              <td>{v.validityTo || "—"}</td>
+                              <td>
+                                <Badge bg="success">Live</Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </>
+                  )}
+
+                  {selectedPromo.promotionValidityDTO && (
+                    <>
+                      <h6 className="fw-bold text-primary mb-2">
+                        Discount Periods
+                      </h6>
+                      <Table bordered responsive>
+                        <thead>
+                          <tr className="table-light">
+                            <th>Validity From</th>
+                            <th>Validity To</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedPromo.promotionValidityDTO.discountValidities?.map(
+                            (v, i) => (
+                              <tr key={i}>
+                                <td>{v.validityFrom || "—"}</td>
+                                <td>{v.validityTo || "—"}</td>
+                                <td>
+                                  <Badge bg="success">Live</Badge>
+                                </td>
+                              </tr>
+                            )
+                          )}
+                        </tbody>
+                      </Table>
+
+                      <h6 className="fw-bold text-primary mt-4 mb-2">
+                        BlackOut
+                      </h6>
+                      <Table bordered responsive>
+                        <thead>
+                          <tr className="table-light">
+                            <th>BlackOut From</th>
+                            <th>BlackOut To</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedPromo.promotionValidityDTO.blackOutValidities?.map(
+                            (b, i) => (
+                              <tr key={i}>
+                                <td>{b.blackOutFrom || "—"}</td>
+                                <td>{b.blackOutTo || "—"}</td>
+                                <td>
+                                  <Badge bg="secondary">—</Badge>
+                                </td>
+                              </tr>
+                            )
+                          )}
+                        </tbody>
+                      </Table>
+                    </>
+                  )}
+                </>
+              ) : (
+                <p className="text-muted text-center">
+                  No validity data available.
+                </p>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="danger"
+                onClick={() => setShowValidityModal(false)}
+              >
+                ✖ Cancel
+              </Button>
+            </Modal.Footer>
+          </Modal>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default Promotion;
