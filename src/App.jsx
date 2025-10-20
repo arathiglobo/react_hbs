@@ -68,6 +68,7 @@ import Policy from "./pages/HotelActions/Policy/Policy";
 import CreateContractRate from "./pages/HotelActions/ContractRate/CreateContractRate";
 import EditContractRate from "./pages/HotelActions/ContractRate/EditContractRate";
 import CopyContractRate from "./pages/HotelActions/ContractRate/CopyContractRate";
+import OfferZone from "./pages/OfferZone";
 
 
 
@@ -176,8 +177,6 @@ export default function App() {
      
        
 
-
-
        {/* Registration */}
        <Route path="/hotel-booking-page" element={<HotelBookingPage/>} />
        <Route path="/registration/agent" element={<AgentReg />} />
@@ -206,13 +205,12 @@ export default function App() {
       <Route path="/hotel-actions/hotel/:id/contract-rate/:contractRateId/edit" element={<EditContractRate />} />
       <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/copy" element={<CopyContractRate />} />
       <Route path="/hotel-actions/:id/promotions" element={<Promotion />} />
-      
-
-
-
       <Route path="/hotel-actions/:id/hotel-policy" element={<Policy />} />
-    
+      
+      
+      {/* sidebarMenus    */}
       <Route path="/calendar" element={<Calendar />} />
+      <Route path="/offer" element={<OfferZone />} />
 
       </Routes>
 
