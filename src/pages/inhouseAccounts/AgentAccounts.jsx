@@ -38,7 +38,7 @@ export default function AgentAccounts() {
   const [paymentType, setPaymentType] = useState("");
   const [remarks, setRemarks] = useState("");
   const [selectedAgent, setSelectedAgent] = useState(null);
-  const [allAgents, setAllAgents] = useState(null);
+  const [allAgents, setAllAgents] = useState([]);
 
 
   const nextId = useMemo(
@@ -142,7 +142,8 @@ export default function AgentAccounts() {
       );
 
       if (res.data && Array.isArray(res.data)) {
-        setItems(res.data);
+        setAllAgents(res.data);
+        setItems(res.data); // Keep this for compatibility
         if (res.data.length < 10) {
           setTotalPages(pageNum + 1);
         } else {
@@ -150,12 +151,14 @@ export default function AgentAccounts() {
         }
         setPage(pageNum);
       } else {
+        setAllAgents([]);
         setItems([]);
         setTotalPages(0);
         setPage(0);
       }
     } catch (err) {
       toast.error("Failed to load agent accounts");
+      setAllAgents([]);
       setItems([]);
       setTotalPages(0);
       setPage(0);
@@ -198,7 +201,6 @@ export default function AgentAccounts() {
 
       if (saveRes.data !== 0) {
         toast.success("Amount Receive added Successfully!");
-        await fetchAgentAccountsList(page, search);
         closeModal();
       }
     } catch (error) {
@@ -268,11 +270,15 @@ export default function AgentAccounts() {
   };
 
 
-  const handlePaymentHistory = (agentId) => {
+  const handlePaymentHistory = (item) => {
+
+    console.log("agent item::: ", item);
+    const agentId = item.agentId;
     navigate(`/inhouse-accounts/agent-payment-history/${agentId}`);
   };
 
-  const handleCurrency = (agentId) => {
+  const handleCurrency = (item) => {
+      const agentId = item.agentId;
     navigate(`/inhouse-accounts/agent-auto-generated-invoice/${agentId}`);
   };
 
@@ -340,7 +346,7 @@ export default function AgentAccounts() {
                   </tr>
                 </thead>
                 <tbody>
-                  {allAgents.map((item, index) => (
+                  {allAgents && Array.isArray(allAgents) && allAgents.map((item, index) => (
                     <tr key={item.id}>
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.agentName}</td>
@@ -358,13 +364,13 @@ export default function AgentAccounts() {
                           <FaHistory
                             className="text-info"
                             style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => handlePaymentHistory(item.id)}
+                            onClick={() => handlePaymentHistory(item)}
                             title="Payment History"
                           />
                           <FaDollarSign
                             className="text-warning"
                             style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => handleCurrency(item.id)}
+                            onClick={() => handleCurrency(item)}
                             title="Auto Generated Invoice"
                           />
                         </div>
@@ -384,7 +390,7 @@ export default function AgentAccounts() {
                       </td>
                     </tr>
                   )}
-                  {items.length === 0 && !isLoading && (
+                  {(!allAgents || allAgents.length === 0) && !isLoading && (
                     <tr>
                       <td colSpan={6} className="text-center text-muted py-4">
                         No agent accounts found.
@@ -399,7 +405,7 @@ export default function AgentAccounts() {
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
                   <div>
                     <small className="text-muted">
-                      Showing {items.length} of {totalPages * 10} agents
+                      Showing {allAgents ? allAgents.length : 0} of {totalPages * 10} agents
                     </small>
                   </div>
                   <div>

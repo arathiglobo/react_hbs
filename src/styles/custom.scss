@@ -97,14 +97,25 @@ body{
 
 /* Open submenu upwards */
 .nav-item-has-children.submenu-up .submenu {
-  top: auto;
+top: auto;
   bottom: 100%;
   left: 100%;
   transform: none;
 }
 
-.nav-item-has-children:hover > .submenu{
+/* Show submenu when JavaScript state is active */
+.nav-item-has-children .submenu.show{
+  display: block !important;
+}
+
+/* Keep hover for non-JS controlled menus */
+.nav-item-has-children:hover > .submenu:not(.show){
   display: block;
+}
+
+/* Ensure submenu stays open when hovering over it */
+.nav-item-has-children .submenu.show:hover{
+  display: block !important;
 }
 
 /* Group headers (like "Basic settings") */

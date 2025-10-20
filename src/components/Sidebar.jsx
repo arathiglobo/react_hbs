@@ -12,12 +12,14 @@ export default function Sidebar() {
 
 
   const toggleGroup = (groupKey) => {
-  setOpenGroups((prev) => {
-    const newOpenGroups = {};
-    newOpenGroups[groupKey] = !prev[groupKey];
-    return newOpenGroups;
-  });
-};
+    console.log('Toggling group:', groupKey); // Debug log
+    setOpenGroups((prev) => {
+      const newOpenGroups = { ...prev }; // Keep existing state
+      newOpenGroups[groupKey] = !prev[groupKey];
+      console.log('New open groups:', newOpenGroups); // Debug log
+      return newOpenGroups;
+    });
+  };
 
   // Get roles as an array
   const storedRoles = (localStorage.getItem("userRole") || "")
@@ -311,6 +313,8 @@ export default function Sidebar() {
                   className="d-flex align-items-center justify-content-between"
                   onClick={hasChildren || hasGroups ? (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Clicked on:', item.label); // Debug log
                     const groupKey = item.label;
                     toggleGroup(groupKey);
                   } : undefined}
@@ -327,8 +331,14 @@ export default function Sidebar() {
                   )}
                 </Nav.Link>
 
-                {(hasChildren || hasGroups) && openGroups[item.label] && (
-                  <div className="submenu">
+                {(hasChildren || hasGroups) && (
+                  <div 
+                    className={`submenu ${openGroups[item.label] ? 'show' : ''}`}
+                    style={{ 
+                      display: openGroups[item.label] ? 'block' : 'none',
+                      zIndex: 9999 
+                    }}
+                  >
                     {hasChildren &&
                       item.children.map((child) => (
                         <Nav.Link
@@ -336,6 +346,13 @@ export default function Sidebar() {
                           to={child.to}
                           key={`${item.label}-${child.label}`}
                           className="submenu-link"
+                          style={{ 
+                            display: 'block',
+                            padding: '8px 12px',
+                            color: '#111827',
+                            textDecoration: 'none',
+                            cursor: 'pointer'
+                          }}
                         >
                           {child.label}
                         </Nav.Link>
@@ -415,8 +432,14 @@ export default function Sidebar() {
                     )}
                   </Nav.Link>
 
-                  {(hasChildren || hasGroups) && openGroups[item.label] && (
-                    <div className="submenu">
+                  {(hasChildren || hasGroups) && (
+                    <div 
+                      className={`submenu ${openGroups[item.label] ? 'show' : ''}`}
+                      style={{ 
+                        display: openGroups[item.label] ? 'block' : 'none',
+                        zIndex: 9999 
+                      }}
+                    >
                       {hasChildren &&
                         item.children.map((child) => (
                           <Nav.Link
@@ -425,6 +448,13 @@ export default function Sidebar() {
                             key={`${item.label}-mobile-${child.label}`}
                             onClick={handleClose}
                             className="submenu-link"
+                            style={{ 
+                              display: 'block',
+                              padding: '8px 12px',
+                              color: '#111827',
+                              textDecoration: 'none',
+                              cursor: 'pointer'
+                            }}
                           >
                             {child.label}
                           </Nav.Link>
