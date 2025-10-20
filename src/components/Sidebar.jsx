@@ -305,15 +305,29 @@ export default function Sidebar() {
                 key={item.label}
                 className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${(item.label === "Report" || item.label === "Inhouse Accounts") ? "submenu-up" : ""}`}
               >
-                <Nav.Link as={Link} to={item.to || "#"} className="d-flex align-items-center justify-content-between">
+                <Nav.Link 
+                  as={hasChildren || hasGroups ? "div" : Link} 
+                  to={hasChildren || hasGroups ? undefined : (item.to || "#")} 
+                  className="d-flex align-items-center justify-content-between"
+                  onClick={hasChildren || hasGroups ? (e) => {
+                    e.preventDefault();
+                    const groupKey = item.label;
+                    toggleGroup(groupKey);
+                  } : undefined}
+                  style={{ cursor: hasChildren || hasGroups ? "pointer" : "default" }}
+                >
                   <span className="d-flex align-items-center">
                     <span className="me-2">{getIcon(item.label)}</span>
                     <span>{item.label}</span>
                   </span>
-                  {(hasChildren || hasGroups) && <span className="caret">▾</span>}
+                  {(hasChildren || hasGroups) && (
+                    <span className="caret">
+                      {openGroups[item.label] ? "▴" : "▾"}
+                    </span>
+                  )}
                 </Nav.Link>
 
-                {(hasChildren || hasGroups) && (
+                {(hasChildren || hasGroups) && openGroups[item.label] && (
                   <div className="submenu">
                     {hasChildren &&
                       item.children.map((child) => (
@@ -383,11 +397,25 @@ export default function Sidebar() {
 
               return (
                 <Nav.Item key={item.label} className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""}`}>
-                  <Nav.Link as={Link} to={item.to || "#"} onClick={handleClose}>
+                  <Nav.Link 
+                    as={hasChildren || hasGroups ? "div" : Link} 
+                    to={hasChildren || hasGroups ? undefined : (item.to || "#")} 
+                    onClick={hasChildren || hasGroups ? (e) => {
+                      e.preventDefault();
+                      const groupKey = item.label;
+                      toggleGroup(groupKey);
+                    } : handleClose}
+                    style={{ cursor: hasChildren || hasGroups ? "pointer" : "default" }}
+                  >
                     {getIcon(item.label)} {item.label}
+                    {(hasChildren || hasGroups) && (
+                      <span className="caret ms-2">
+                        {openGroups[item.label] ? "▴" : "▾"}
+                      </span>
+                    )}
                   </Nav.Link>
 
-                  {(hasChildren || hasGroups) && (
+                  {(hasChildren || hasGroups) && openGroups[item.label] && (
                     <div className="submenu">
                       {hasChildren &&
                         item.children.map((child) => (
