@@ -69,6 +69,7 @@ import CreateContractRate from "./pages/HotelActions/ContractRate/CreateContract
 import EditContractRate from "./pages/HotelActions/ContractRate/EditContractRate";
 import CopyContractRate from "./pages/HotelActions/ContractRate/CopyContractRate";
 import OfferZone from "./pages/OfferZone";
+import OfferImageUpload from "./pages/OfferImageUpload";
 
 
 
@@ -211,6 +212,7 @@ export default function App() {
       {/* sidebarMenus    */}
       <Route path="/calendar" element={<Calendar />} />
       <Route path="/offer" element={<OfferZone />} />
+      <Route path="/upload-offer-image" element={<OfferImageUpload />} />
 
       </Routes>
 
