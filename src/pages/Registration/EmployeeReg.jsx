@@ -721,6 +721,8 @@ const EmployeeReg = () => {
   };
 
   const handleLoginSubmit = async () => {
+
+   
     let isValid = true;
     const errors = {
       username: "",
@@ -773,7 +775,7 @@ const EmployeeReg = () => {
         setIsLoading(true);
 
         let activeUserRole = localStorage.getItem("currentActiveRole");
-         console.log("rolesList::" , rolesList)
+         console.log("activeUserRole::" , activeUserRole)
 
         let activeRoleObj = rolesList.find((role) => role.roleName === "STAFF");
         console.log("activeRoleObj::" , activeRoleObj)

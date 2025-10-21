@@ -7,6 +7,7 @@ const DashboardRedirections = (role, navigate) => {
     "ADMIN": "/adminDashboard",
     "AGENT": "/agentDashboard",
     "STAFF": "/staffDashboard",
+    "EXTRANET":"/extranetDashboard",
     // Add more roles as needed
   };
 

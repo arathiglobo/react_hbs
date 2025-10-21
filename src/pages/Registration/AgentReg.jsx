@@ -1118,7 +1118,7 @@ const AgentReg = () => {
 
         let activeUserRole = localStorage.getItem("currentActiveRole");
        // console.log("currentActiveRole::", activeUserRole);
-       // console.log("roleslist::", rolesList);
+        console.log("roleslist::", rolesList);
 
         let activeRoleObj = rolesList.find((role) => role.roleName === "AGENT");
 
@@ -1129,7 +1129,7 @@ const AgentReg = () => {
          // console.log("activeRoleObj:", activeRoleObj);
 
           loginPayload = {
-            userId: editing.id,
+            userId: editing.id,   // Agent ID
             userTypeId: activeRoleObj.id,
             userName: loginFormData.username,
             userRoleIds: loginFormData.userroles,

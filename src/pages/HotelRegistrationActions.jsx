@@ -61,6 +61,12 @@ const HotelRegistrationActions = () => {
   const [hotelData, setHotelData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [loginErrors, setLoginErrors] = useState({
+    username: "",
+    password: "",
+    repassword: "",
+    userroles: "",
+  });
 
   // Modal states
   const [showMailCenterModal, setShowMailCenterModal] = useState(false);
@@ -68,13 +74,14 @@ const HotelRegistrationActions = () => {
   const [showImageUploadModal, setShowImageUploadModal] = useState(false);
   const [showRoomSearchModal, setShowRoomSearchModal] = useState(false);
   const [mailCenterData, setMailCenterData] = useState([]);
-  
+
   // Image upload states
   const [uploadedImages, setUploadedImages] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingImages, setIsLoadingImages] = useState(false);
   const [editingImage, setEditingImage] = useState(null);
+  const [rolesList, setUserRolesList] = useState([]);
 
   // Room search states
   const [roomSearchForm, setRoomSearchForm] = useState({
@@ -83,7 +90,7 @@ const HotelRegistrationActions = () => {
     nights: 1,
     rooms: [{ adults: 1, children: 0, childAges: [] }],
     nationality: null,
-    agent: ""
+    agent: "",
   });
   const [roomSearchResults, setRoomSearchResults] = useState([]);
   const [isRoomSearchLoading, setIsRoomSearchLoading] = useState(false);
@@ -94,28 +101,31 @@ const HotelRegistrationActions = () => {
 
   console.log("hotel complete data::", hotelData);
 
-  // Mail Center data
-  useEffect(() => {
-    if (hotelData?.contactDetails) {
-      console.log("hotelData contact details::", hotelData.contactDetails);
-      const formattedData = hotelData.contactDetails.map((item) => ({
-        id: item.id,
-        userType: "Hotel Contact", // you can change this dynamically if needed
-        username: item.contactPerson || "N/A",
-        contactNumber: item.mobileNumber || item.teleNumber || "N/A",
-        mailId: item.personalEmail || "N/A",
-        mailType: item.mailTyIds || "N/A",
-      }));
-      setMailCenterData(formattedData);
-    }
-  }, [hotelData]);
+  // Mail Center data - now fetched when modal opens
+  // Removed the old useEffect as we now fetch data dynamically
 
   // Login Details form data
   const [loginFormData, setLoginFormData] = useState({
     username: "",
     password: "",
     repassword: "",
+    userroles: [],
   });
+
+  // Track if login details have been saved and store saved username
+  const [loginDetailsSaved, setLoginDetailsSaved] = useState(false);
+  const [savedUsername, setSavedUsername] = useState("");
+
+  // Mail center save loading state
+  const [isMailCenterSaving, setIsMailCenterSaving] = useState(false);
+  const [mailCenterValidationError, setMailCenterValidationError] = useState("");
+  const [isMailCenterSaved, setIsMailCenterSaved] = useState(false);
+  const [isLoadingMailCenterData, setIsLoadingMailCenterData] = useState(false);
+
+  // Login details loading state
+  const [isLoadingLoginData, setIsLoadingLoginData] = useState(false);
+
+ 
 
   const navigationTabs = [
     { id: "basic-details", label: "Basic details", icon: FaUser },
@@ -132,11 +142,16 @@ const HotelRegistrationActions = () => {
   ];
 
   const actions = [
-    { label: "Mail center", icon: FaAt, status: "success", count: null },
+    { 
+      label: "Mail center", 
+      icon: FaAt, 
+      status: isMailCenterSaved ? "success" : "pending", 
+      count: null 
+    },
     {
       label: "Login Details",
       icon: FaArrowRight,
-      status: "success",
+      status: isMailCenterSaved ? (loginDetailsSaved ? "success" : "pending") : "disabled",
       count: null,
     },
     {
@@ -220,6 +235,28 @@ const HotelRegistrationActions = () => {
     loadDropdownData();
   }, []);
 
+  // Check for previously saved mail center (login details are now fetched when modal opens)
+  useEffect(() => {
+    const checkMailCenterStatus = async () => {
+      try {
+        // Check if mail center has been saved for this hotel
+        const mailCenterResponse = await axiosInstance.get(`/api/hotels/getMailCentre/${id}`);
+        console.log("Mail center check response:", mailCenterResponse.data);
+        if (mailCenterResponse.data && Array.isArray(mailCenterResponse.data) && mailCenterResponse.data.length > 0) {
+          setIsMailCenterSaved(true);
+        }
+      } catch (error) {
+        // If no data found or error, that's fine - user hasn't saved yet
+        console.log("No saved mail center data found for this hotel");
+      }
+    };
+
+    console.log("Checking mail center status for hotelId:", id);
+    if (id) {
+      checkMailCenterStatus();
+    }
+  }, [id]);
+
   const getAmenityIcon = (amenityId) => {
     const iconMap = {
       1: FaSwimmingPool,
@@ -253,12 +290,12 @@ const HotelRegistrationActions = () => {
                           src={hotelData.image360}
                           alt={hotelData.hotelName}
                           className="hotel-main-image"
-                          style={{ 
-                            width: "130%", 
-                            height: "300px", 
+                          style={{
+                            width: "130%",
+                            height: "300px",
                             objectFit: "cover",
                             borderRadius: "8px",
-                            boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
+                            boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
                           }}
                           onError={(e) => {
                             e.target.style.display = "none";
@@ -268,11 +305,11 @@ const HotelRegistrationActions = () => {
                       ) : null}
                       <div
                         className="no-image-placeholder"
-                        style={{ 
+                        style={{
                           display: hotelData.image360 ? "none" : "flex",
                           width: "130%",
                           height: "300px",
-                          borderRadius: "8px"
+                          borderRadius: "8px",
                         }}
                       >
                         <FaImages className="placeholder-icon" />
@@ -280,36 +317,42 @@ const HotelRegistrationActions = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Right Column - Hotel Info */}
                   <div className="col-md-6">
                     <div className="hotel-info">
                       {/* Hotel Name */}
                       <h3 className="hotel-name mb-3">{hotelData.hotelName}</h3>
-                      
+
                       {/* Hotel Address */}
                       <div className="hotel-location mb-4">
                         <FaMapMarkerAlt className="location-icon" />
                         <span>{hotelData.address}</span>
                       </div>
-                      
+
                       {/* Overview */}
                       <div className="hotel-overview mb-4">
                         <h5>Overview</h5>
                         <p className="overview-text">
-                          {hotelData.hotelDescription || "No description available"}
+                          {hotelData.hotelDescription ||
+                            "No description available"}
                         </p>
                       </div>
-                      
+
                       {/* Amenities */}
                       <div className="amenities-section">
                         <h5 className="mb-3">Amenities</h5>
                         <div className="amenities-grid">
                           {hotelData.amenities &&
                             hotelData.amenities.map((amenity) => {
-                              const IconComponent = getAmenityIcon(amenity.amenityId);
+                              const IconComponent = getAmenityIcon(
+                                amenity.amenityId
+                              );
                               return (
-                                <div key={amenity.amenityId} className="amenity-item">
+                                <div
+                                  key={amenity.amenityId}
+                                  className="amenity-item"
+                                >
                                   <IconComponent className="amenity-icon" />
                                   <span>{amenity.amenityName}</span>
                                 </div>
@@ -472,6 +515,10 @@ const HotelRegistrationActions = () => {
   const getStatusIcon = (action) => {
     if (action.status === "success") {
       return <FaCheck className="status-icon success" />;
+    } else if (action.status === "pending") {
+      return <FaExclamationTriangle className="status-icon warning" />;
+    } else if (action.status === "disabled") {
+      return <FaUnlink className="status-icon disabled" />;
     } else if (action.status === "count") {
       return (
         <Badge
@@ -488,15 +535,28 @@ const HotelRegistrationActions = () => {
   // Modal handlers
   const handleActionClick = (actionLabel) => {
     if (actionLabel === "Mail center") {
+      fetchExistingMailCenterData(); // Fetch existing data when opening modal
       setShowMailCenterModal(true);
     } else if (actionLabel === "Login Details") {
+      // Check if mail center has been saved first
+      if (!isMailCenterSaved) {
+        toast.error("Please add mail center first, then you can add login details");
+        return;
+      }
+
+      console.log("=== LOGIN MODAL OPENING ===");
+      console.log("Current form data before API call:", loginFormData);
+      console.log("Current saved username:", savedUsername);
+      console.log("Current loginDetailsSaved:", loginDetailsSaved);
+      
+      // Fetch existing login data when opening modal
+      fetchExistingLoginData();
       setShowLoginDetailsModal(true);
-    } 
-    
+    }
+
     // else if (actionLabel === "Image Upload") {
     //    handleImageUploadClick();
-    // } 
-    
+    // }
     else if (actionLabel === "Occupancy & Minimum length") {
       navigate(`/hotel-actions/${id}/occupancy-and-minimumlength`);
     } else if (actionLabel === "Hotel Edit") {
@@ -511,19 +571,19 @@ const HotelRegistrationActions = () => {
       navigate(`/hotel-actions/${id}/promotions`);
     } else if (actionLabel === "Policy") {
       navigate(`/hotel-actions/${id}/hotel-policy`);
-    }else if (actionLabel === "Validity Periods") {
+    } else if (actionLabel === "Validity Periods") {
       navigate(`/hotel-actions/${id}/validity-period-details`);
-    }else if (actionLabel === "Book Hotel") {
+    } else if (actionLabel === "Book Hotel") {
       setShowRoomSearchModal(true);
       // Pre-populate search form with hotel data
-      setRoomSearchForm(prev => ({
+      setRoomSearchForm((prev) => ({
         ...prev,
         checkIn: "",
         checkOut: "",
         nights: 1,
         rooms: [{ adults: 1, children: 0, childAges: [] }],
         nationality: null,
-        agent: ""
+        agent: "",
       }));
     }
   };
@@ -540,14 +600,14 @@ const HotelRegistrationActions = () => {
   const today = formatDate(new Date());
 
   const handleRoomSearchFormChange = (field, value) => {
-    setRoomSearchForm(prev => ({
+    setRoomSearchForm((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
-    
+
     // Clear error for this field
     if (roomSearchErrors[field]) {
-      setRoomSearchErrors(prev => {
+      setRoomSearchErrors((prev) => {
         const { [field]: _omit, ...rest } = prev;
         return rest;
       });
@@ -614,10 +674,10 @@ const HotelRegistrationActions = () => {
           currency: "AED",
           amenities: ["WiFi", "AC", "TV", "Minibar"],
           availability: 5,
-          image: "https://via.placeholder.com/300x200"
+          image: "https://via.placeholder.com/300x200",
         },
         {
-          id: "room2", 
+          id: "room2",
           roomType: "Deluxe Room",
           roomCategory: "Deluxe",
           maxOccupancy: 3,
@@ -625,7 +685,7 @@ const HotelRegistrationActions = () => {
           currency: "AED",
           amenities: ["WiFi", "AC", "TV", "Minibar", "Balcony"],
           availability: 3,
-          image: "https://via.placeholder.com/300x200"
+          image: "https://via.placeholder.com/300x200",
         },
         {
           id: "room3",
@@ -633,11 +693,11 @@ const HotelRegistrationActions = () => {
           roomCategory: "Suite",
           maxOccupancy: 4,
           price: 450,
-          currency: "AED", 
+          currency: "AED",
           amenities: ["WiFi", "AC", "TV", "Minibar", "Balcony", "Kitchenette"],
           availability: 2,
-          image: "https://via.placeholder.com/300x200"
-        }
+          image: "https://via.placeholder.com/300x200",
+        },
       ];
 
       // Simulate API call delay
@@ -646,7 +706,6 @@ const HotelRegistrationActions = () => {
         setIsRoomSearchLoading(false);
         toast.success("Room search completed!");
       }, 1500);
-
     } catch (error) {
       console.error("Error searching rooms:", error);
       toast.error("Failed to search rooms");
@@ -654,52 +713,379 @@ const HotelRegistrationActions = () => {
     }
   };
 
-  const handleMailTypeChange = (id, newMailType) => {
+  const fetchExistingMailCenterData = async () => {
+    setIsLoadingMailCenterData(true);
+    try {
+      const response = await axiosInstance.get(`/api/hotels/getMailCentre/${id}`);
+      console.log("Mail center fetch response:", response.data);
+      
+      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+        // If we have existing mail center data, populate the form
+        // Note: API returns an array of objects
+        const existingData = response.data.map(item => {
+          console.log("Processing item:", item);
+          console.log("mailTyIds from API:", item.mailTyIds);
+          
+          const mappedItem = {
+            id: item.id,
+            userType: "Hotel Contact",
+            username: item.contactPerson || "",
+            contactNumber: item.mobileNumber || item.teleNumber || "",
+            mailId: item.personalEmail || "",
+            mailType: item.mailTyIds ? item.mailTyIds.map(id => id.toString()) : []
+          };
+          
+          console.log("Mapped item:", mappedItem);
+          return mappedItem;
+        });
+        
+        console.log("Mapped existing data:", existingData);
+        setMailCenterData(existingData);
+        setIsMailCenterSaved(true);
+      } else {
+        // If no existing data, use the contact details from hotel data
+        if (hotelData?.contactDetails) {
+          const formattedData = hotelData.contactDetails.map((item) => ({
+            id: item.id,
+            userType: "Hotel Contact",
+            username: item.contactPerson || "",
+            contactNumber: item.mobileNumber || item.teleNumber || "",
+            mailId: item.personalEmail || "",
+            mailType: []
+          }));
+          setMailCenterData(formattedData);
+        }
+        setIsMailCenterSaved(false);
+      }
+    } catch (error) {
+      console.error("Error fetching mail center data:", error);
+      // Fallback to contact details if API fails
+      if (hotelData?.contactDetails) {
+        const formattedData = hotelData.contactDetails.map((item) => ({
+          id: item.id,
+          userType: "Hotel Contact",
+          username: item.contactPerson || "",
+          contactNumber: item.mobileNumber || item.teleNumber || "",
+          mailId: item.personalEmail || "",
+          mailType: []
+        }));
+        setMailCenterData(formattedData);
+      }
+      setIsMailCenterSaved(false);
+    } finally {
+      setIsLoadingMailCenterData(false);
+    }
+  };
+
+  const fetchExistingLoginData = async () => {
+    console.log("=== FETCHING LOGIN DATA ===");
+    console.log("Form data at start of fetch:", loginFormData);
+    setIsLoadingLoginData(true);
+    
+    try {
+      const response = await axiosInstance.post(`/auth/checkRegisteredUserExist/${id}`);
+      console.log("Login check response:", response.data);
+      
+      // If API returns successful response with username
+      if (response.data && response.data.username) {
+        console.log("User found - pre-filling username:", response.data.username);
+        setLoginFormData({
+          username: response.data.username,
+          password: "",
+          repassword: "",
+          userroles: []
+        });
+        setLoginDetailsSaved(true);
+        setSavedUsername(response.data.username);
+      } else {
+        // API returned success but no username - treat as new user
+        console.log("API success but no username - treating as new user");
+        setLoginFormData({
+          username: "",
+          password: "",
+          repassword: "",
+          userroles: []
+        });
+        setLoginDetailsSaved(false);
+        setSavedUsername("");
+      }
+    } catch (error) {
+      console.error("Error fetching login data:", error);
+      
+      // Check if it's a 400 error with "User is not Registered" message
+      if (error.response && error.response.status === 400 && 
+          error.response.data && error.response.data.message && 
+          error.response.data.message.includes("User is not Registered")) {
+        console.log("User is not registered (400 error) - showing empty form for new registration");
+        console.log("Current form data before clearing:", loginFormData);
+        // User is not registered, show empty fields for new registration
+        setLoginFormData({
+          username: "",
+          password: "",
+          repassword: "",
+          userroles: []
+        });
+        setLoginDetailsSaved(false);
+        setSavedUsername("");
+        console.log("Form data cleared - should now be empty");
+      } else {
+        // Other errors - also assume user is not registered
+        console.log("Other error - treating as new user");
+        console.log("Current form data before clearing:", loginFormData);
+        setLoginFormData({
+          username: "",
+          password: "",
+          repassword: "",
+          userroles: []
+        });
+        setLoginDetailsSaved(false);
+        setSavedUsername("");
+        console.log("Form data cleared - should now be empty");
+      }
+    } finally {
+      setIsLoadingLoginData(false);
+    }
+  };
+
+  const handleMailTypeChange = (id, selectedOptions) => {
+    // Convert selected options to array of values
+    const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
+    
     setMailCenterData((prevData) =>
       prevData.map((item) =>
-        item.id === id ? { ...item, mailType: newMailType } : item
+        item.id === id ? { ...item, mailType: selectedValues } : item
       )
     );
+    
+    // Clear validation error when user selects mail types
+    if (selectedValues.length > 0) {
+      setMailCenterValidationError("");
+    }
+  };
+
+  const handleMailCenterSave = async () => {
+    // Validate that at least one mail type is selected
+    const selectedMailTypes = mailCenterData.filter(item => 
+      item.mailType && 
+      Array.isArray(item.mailType) && 
+      item.mailType.length > 0
+    );
+    
+    if (selectedMailTypes.length === 0) {
+      setMailCenterValidationError("Please select at least one mail type");
+      return;
+    }
+
+    // Clear any previous validation errors
+    setMailCenterValidationError("");
+
+    setIsMailCenterSaving(true);
+    try {
+      // Prepare the payload according to HotelMailCentreDTO structure
+      // Get all contact details that have mail types selected
+      const mailTypeData = selectedMailTypes.map(item => ({
+        hotelContactDetailsId: item.id,
+        mailCentreIds: item.mailType.map(type => parseInt(type))
+      }));
+
+      // If we have multiple contacts with mail types, we might need to send multiple requests
+      // For now, let's send the first one or combine them
+      const mailCentrePayload = mailTypeData[0]; // Send the first contact's mail type
+
+      console.log("Mail Centre Payload:", mailCentrePayload);
+
+      const response = await axiosInstance.post(
+        `/api/hotels/addMailCentre/${id}`,
+        mailCentrePayload
+      );
+
+      if (response.data) {
+        toast.success("Mail added successfully!");
+        setIsMailCenterSaved(true); // Mark mail center as saved
+        setShowMailCenterModal(false);
+      } else {
+        toast.error("Failed to save mail center data");
+      }
+    } catch (error) {
+      console.error("Error saving mail center data:", error);
+      toast.error(
+        `Failed to save mail center data: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsMailCenterSaving(false);
+    }
   };
 
   const handleLoginFormChange = (field, value) => {
-    setLoginFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    console.log("Form change detected:", field, "=", value);
+    setLoginFormData((prev) => {
+      const newData = {
+        ...prev,
+        [field]: value,
+      };
+      console.log("New form data:", newData);
+      return newData;
+    });
   };
 
-  const handleLoginSave = () => {
-    if (loginFormData.password !== loginFormData.repassword) {
-      toast.error("Passwords do not match!");
-      return;
+  useEffect(() => {
+    const userRolesList = async () => {
+      try {
+        const rolesRes = await axiosInstance.get("/api/userRoles");
+
+        setUserRolesList(rolesRes.data);
+      } catch (error) {
+        console.log("User roles  api call error::", error);
+      }
+    };
+
+    userRolesList();
+  }, []);
+
+  const handleLoginSave = async () => {
+    console.log("its handleLoginSave click");
+    console.log("loginFormData::" ,loginFormData);
+   
+    let isValid = true;
+    const errors = {
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: "",
+    };
+
+    if (!loginFormData.username.trim()) {
+      errors.username = "Username is required";
+      isValid = false;
+    } else if (loginFormData.username.length < 4) {
+      errors.username = "Username must be at least 4 characters long";
+      isValid = false;
+    } else if (!/^[a-zA-Z0-9_]+$/.test(loginFormData.username)) {
+      errors.username =
+        "Username can only contain letters, numbers, and underscores";
+      isValid = false;
     }
-    if (!loginFormData.username || !loginFormData.password) {
-      toast.error("Please fill in all fields!");
-      return;
+
+    // Password validation - only required for new saves or when password is provided
+    if (loginFormData.password) {
+      if (loginFormData.password.length < 8) {
+        errors.password = "Password must be at least 8 characters long";
+        isValid = false;
+      } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(loginFormData.password)) {
+        errors.password =
+          "Password must contain at least one uppercase letter and one number";
+        isValid = false;
+      }
+
+      if (!loginFormData.repassword) {
+        errors.repassword = "Please confirm your password";
+        isValid = false;
+      } else if (loginFormData.password !== loginFormData.repassword) {
+        errors.repassword = "Passwords do not match";
+        isValid = false;
+      }
+    } else if (!loginDetailsSaved) {
+      // Password is required only for first-time saves
+      errors.password = "Password is required";
+      isValid = false;
     }
-    // Here you would typically save to API
-    toast.success("Login details saved successfully!");
+
+    // User roles validation - set default if not provided
+    if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
+      // Set default user role for hotel extranet users
+      loginFormData.userroles = [1]; // Assuming 1 is the default hotel role ID
+    }
+
+    setLoginErrors(errors);
+
+    if (isValid) {
+      try {
+        // setIsLoading(true);
+
+        let activeUserRole = localStorage.getItem("currentActiveRole");
+        console.log("currentActiveRole::", activeUserRole);
+        console.log("roleslist::", rolesList);
+
+        let activeRoleObj = rolesList.find(
+          (role) => role.roleName === "EXTRANET"
+        );
+
+        let loginPayload = null;
+
+        if (activeRoleObj) {
+           console.log("Active role exists in rolesList:", activeUserRole);
+           console.log("activeRoleObj:", activeRoleObj);
+
+          loginPayload = {
+            userId: id, // Hotel ID
+            userTypeId: activeRoleObj.id,
+            userName: loginFormData.username,
+            userRoleIds: loginFormData.userroles,
+          };
+
+          if (loginFormData.password) {
+            loginPayload.password = loginFormData.password;
+          }
+        } else {
+          // console.log("Active role not found in rolesList");
+        }
+
+        const response = await axiosInstance.post(
+          "/auth/register",
+          loginPayload
+        );
+        // console.log("login register success::", response);
+
+        if (response.data) {
+          toast.success("Login credentials saved successfully!");
+          // Track that login details have been saved and store the username
+          setLoginDetailsSaved(true);
+          setSavedUsername(loginFormData.username);
+          // setLoginErrors({});
+          closeLoginModal();
+          // await fetchAgentList(page, search);
+        } else {
+          toast.error(
+            "Something went wrong!!Failed to save login credentials."
+          );
+        }
+      } catch (error) {
+        console.error("Login submission failed:", error);
+        toast.error(
+          `Failed to save login credentials: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      toast.error("Please fix the errors in the form");
+    }
+  };
+
+  const closeLoginModal = () => {
     setShowLoginDetailsModal(false);
-    setLoginFormData({ username: "", password: "", repassword: "" });
   };
 
   const handleLoginCancel = () => {
     setShowLoginDetailsModal(false);
-    setLoginFormData({ username: "", password: "", repassword: "" });
+    setLoginFormData({ username: "", password: "", repassword: "", userroles: [] });
   };
 
   // Image upload handlers
   const handleFileSelect = (event) => {
     const file = event.target.files[0]; // Get only the first file
-    
+
     if (!file) return;
-    
-    if (!file.type.startsWith('image/')) {
+
+    if (!file.type.startsWith("image/")) {
       toast.error("Please select only image files");
       return;
     }
-    
+
     // Clear previous selection and set new single file
     setSelectedFiles([file]);
   };
@@ -720,10 +1106,10 @@ const HotelRegistrationActions = () => {
   //   try {
   //     const formData = new FormData();
   //     const file = selectedFiles[0]; // Get the first (and only) file
-      
+
   //     // Match backend DTO structure
   //     formData.append('image1', file);
-    
+
   //     const response = await axiosInstance.post(`/api/hotelInventory/imageUpload/${id}/save`, formData, {
   //       headers: {
   //         'Content-Type': 'multipart/form-data',
@@ -751,10 +1137,9 @@ const HotelRegistrationActions = () => {
   // };
 
   const removeSelectedFile = (index) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
- 
   // const handleImageUploadClick = () => {
   //   setShowImageUploadModal(true);
   //   fetchUploadedImages();
@@ -777,7 +1162,7 @@ const HotelRegistrationActions = () => {
   // Delete image
   // const handleDeleteImage = async (imageId) => {
   //   if (!window.confirm("Are you sure you want to delete this image?")) return;
-    
+
   //   try {
   //     await axiosInstance.delete(`/api/hotelInventory/imageUpload/${id}/${imageId}`);
   //     toast.success("Image deleted successfully!");
@@ -799,9 +1184,9 @@ const HotelRegistrationActions = () => {
   //   try {
   //     const formData = new FormData();
   //     const file = selectedFiles[0];
-      
+
   //     formData.append('image1', file);
-     
+
   //     const response = await axiosInstance.put(`/api/hotelInventory/imageUpload/${id}/${editingImage.id}`, formData, {
   //       headers: {
   //         'Content-Type': 'multipart/form-data',
@@ -950,11 +1335,12 @@ const HotelRegistrationActions = () => {
                               style={{
                                 cursor:
                                   action.label === "Mail center" ||
-                                  action.label === "Login Details" ||
+                                  (action.label === "Login Details" && action.status !== "disabled") ||
                                   // action.label === "Image Upload" ||
                                   action.label === "Hotel Edit"
                                     ? "pointer"
                                     : "default",
+                                opacity: action.status === "disabled" ? 0.5 : 1,
                               }}
                             >
                               <div className="action-content">
@@ -980,8 +1366,13 @@ const HotelRegistrationActions = () => {
       {/* Mail Center Modal */}
       <Modal
         show={showMailCenterModal}
-        onHide={() => setShowMailCenterModal(false)}
-        size="lg"
+        onHide={() => {
+          setShowMailCenterModal(false);
+          setMailCenterValidationError(""); // Clear validation error when closing
+        }}
+        size="xl"
+        backdrop="static"
+        keyboard={false}
       >
         <Modal.Header closeButton>
           <Modal.Title>
@@ -990,76 +1381,147 @@ const HotelRegistrationActions = () => {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Table responsive striped hover>
-            <thead>
-              <tr>
-                <th>User Type</th>
-                <th>Username</th>
-                <th>Contact Number</th>
-                <th>Mail ID</th>
-                <th>Mail Type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mailCenterData.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <Form.Control
-                      type="text"
-                      value={item.userType}
-                      readOnly
-                      className="border-0 bg-transparent"
-                    />
-                  </td>
-                  <td>
-                    <Form.Control
-                      type="text"
-                      value={item.username}
-                      readOnly
-                      className="border-0 bg-transparent"
-                    />
-                  </td>
-                  <td>
-                    <Form.Control
-                      type="text"
-                      value={item.contactNumber}
-                      readOnly
-                      className="border-0 bg-transparent"
-                    />
-                  </td>
-                  <td>
-                    <Form.Control
-                      type="text"
-                      value={item.mailId}
-                      readOnly
-                      className="border-0 bg-transparent"
-                    />
-                  </td>
-                  <td>
-                    <Form.Select
-                      value={item.mailType}
-                      onChange={(e) =>
-                        handleMailTypeChange(item.id, e.target.value)
-                      }
-                      size="sm"
-                    >
-                      <option value="login credentials">
-                        Login Credentials
-                      </option>
-                      <option value="voucher">Voucher</option>
-                    </Form.Select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+          {isLoadingMailCenterData ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" variant="primary" />
+              <p className="mt-2 text-muted">Loading mail center data...</p>
+            </div>
+          ) : (
+            <>
+              <Table responsive striped hover>
+                <thead>
+                  <tr>
+                    <th>User Type</th>
+                    <th>Username</th>
+                    <th>Contact Number</th>
+                    <th>Mail ID</th>
+                    <th>Mail Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mailCenterData.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <Form.Control
+                          type="text"
+                          value={item.userType}
+                          readOnly
+                          className="border-0 bg-transparent"
+                        />
+                      </td>
+                      <td>
+                        <Form.Control
+                          type="text"
+                          value={item.username}
+                          readOnly
+                          className="border-0 bg-transparent"
+                        />
+                      </td>
+                      <td>
+                        <Form.Control
+                          type="text"
+                          value={item.contactNumber}
+                          readOnly
+                          className="border-0 bg-transparent"
+                        />
+                      </td>
+                      <td>
+                        <Form.Control
+                          type="text"
+                          value={item.mailId}
+                          readOnly
+                          className="border-0 bg-transparent"
+                        />
+                      </td>
+                      <td>
+                        <Select
+                          isMulti
+                          options={[
+                            { value: "1", label: "Login Credentials" },
+                            { value: "2", label: "Voucher" }
+                          ]}
+                          value={(() => {
+                            console.log("Dropdown value calculation for item:", item);
+                            console.log("item.mailType:", item.mailType);
+                            
+                            if (item.mailType && item.mailType.length > 0) {
+                              const mappedValues = item.mailType.map(type => {
+                                console.log("Mapping mail type:", type);
+                                return {
+                                  value: type,
+                                  label: type === "1" ? "Login Credentials" : "Voucher"
+                                };
+                              });
+                              console.log("Final mapped values:", mappedValues);
+                              return mappedValues;
+                            }
+                            console.log("No mailType, returning empty array");
+                            return [];
+                          })()}
+                          onChange={(selectedOptions) =>
+                            handleMailTypeChange(item.id, selectedOptions)
+                          }
+                          placeholder="Select mail types..."
+                          isClearable
+                          className="modern-select"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              minHeight: "32px",
+                              fontSize: "14px",
+                              border: "1px solid #dee2e6",
+                              "&:hover": { borderColor: "#86b7fe" },
+                            }),
+                            multiValue: (base) => ({
+                              ...base,
+                              fontSize: "12px",
+                            }),
+                            multiValueLabel: (base) => ({
+                              ...base,
+                              fontSize: "12px",
+                            }),
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+              {mailCenterValidationError && (
+                <div className="alert alert-danger mt-3 mb-0" role="alert">
+                  <small className="fw-bold">{mailCenterValidationError}</small>
+                </div>
+              )}
+            </>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button
             variant="secondary"
-            onClick={() => setShowMailCenterModal(false)}
+            onClick={() => {
+              setShowMailCenterModal(false);
+              setMailCenterValidationError(""); // Clear validation error when closing
+            }}
           >
             Close
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleMailCenterSave}
+            disabled={isMailCenterSaving}
+          >
+            {isMailCenterSaving ? (
+              <>
+                <Spinner
+                  animation="border"
+                  size="sm"
+                  className="me-2"
+                />
+                Saving...
+              </>
+            ) : (
+              "Save"
+            )}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -1073,16 +1535,41 @@ const HotelRegistrationActions = () => {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form>
+          {isLoadingLoginData ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" variant="primary" />
+              <p className="mt-2 text-muted">Loading login details...</p>
+            </div>
+          ) : (
+            <Form>
+            {/* Debug info - remove this later */}
+            <div className="text-muted small mb-3">
+              Debug: loginDetailsSaved = {loginDetailsSaved.toString()}, savedUsername = "{savedUsername}"<br/>
+              Form Data: username = "{loginFormData.username}", password = "{loginFormData.password ? '***' : 'empty'}"
+            </div>
+            {loginDetailsSaved && (
+              <div className="alert alert-info mb-3" role="alert">
+                <small><strong>Existing User:</strong> Username is pre-filled. Leave password fields empty to keep current password, or enter new password to update.</small>
+              </div>
+            )}
+            {!loginDetailsSaved && (
+              <div className="alert alert-warning mb-3" role="alert">
+                <small><strong>New User:</strong> Please fill in all fields to create new login credentials.</small>
+              </div>
+            )}
             <Form.Group className="mb-3">
               <Form.Label>Username</Form.Label>
               <Form.Control
                 type="text"
                 placeholder="Enter username"
-                value={loginFormData.username}
-                onChange={(e) =>
-                  handleLoginFormChange("username", e.target.value)
-                }
+                value={(() => {
+                  console.log("Username field value being rendered:", loginFormData.username);
+                  return loginFormData.username;
+                })()}
+                onChange={(e) => {
+                  console.log("Username field onChange triggered with value:", e.target.value);
+                  handleLoginFormChange("username", e.target.value);
+                }}
               />
             </Form.Group>
             <Form.Group className="mb-3">
@@ -1108,6 +1595,7 @@ const HotelRegistrationActions = () => {
               />
             </Form.Group>
           </Form>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={handleLoginCancel}>
@@ -1119,240 +1607,268 @@ const HotelRegistrationActions = () => {
         </Modal.Footer>
       </Modal>
 
-        {/* Image Upload Modal - Currently Disabled */}
+      {/* Image Upload Modal - Currently Disabled */}
 
-        {/* Room Search Modal */}
-        <Modal
-          show={showRoomSearchModal}
-          onHide={() => setShowRoomSearchModal(false)}
-          size="xl"
-          scrollable
-        >
-          <Modal.Header closeButton>
-            <Modal.Title>
-              <FaBed className="me-2" />
-              Search Rooms - {hotelData?.hotelName || "Hotel"}
-            </Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            {/* Search Form */}
-            <Card className="mb-4">
-              <Card.Body>
-                <h5 className="mb-3">Search Criteria</h5>
-                <Form onSubmit={handleRoomSearch}>
-                  <Row className="g-3">
-                    <Col md={6}>
-                      <Form.Group>
-                        <Form.Label>Nationality</Form.Label>
-                        <Select
-                          options={nationalityList}
-                          value={roomSearchForm.nationality}
-                          onChange={(option) => handleRoomSearchFormChange("nationality", option)}
-                          placeholder="Select nationality"
-                          isSearchable
-                          isClearable
-                          className="modern-select"
-                          menuPortalTarget={document.body}
-                          styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 }),
-                            control: (base) => ({
-                              ...base,
-                              minHeight: "38px",
-                              border: "1px solid #dee2e6",
-                              "&:hover": { borderColor: "#86b7fe" },
-                            }),
-                          }}
-                        />
-                        {roomSearchErrors.nationality && (
-                          <div className="text-danger small mt-1">
-                            {roomSearchErrors.nationality}
-                          </div>
-                        )}
-                      </Form.Group>
-                    </Col>
+      {/* Room Search Modal */}
+      <Modal
+        show={showRoomSearchModal}
+        onHide={() => setShowRoomSearchModal(false)}
+        size="xl"
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <FaBed className="me-2" />
+            Search Rooms - {hotelData?.hotelName || "Hotel"}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {/* Search Form */}
+          <Card className="mb-4">
+            <Card.Body>
+              <h5 className="mb-3">Search Criteria</h5>
+              <Form onSubmit={handleRoomSearch}>
+                <Row className="g-3">
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label>Nationality</Form.Label>
+                      <Select
+                        options={nationalityList}
+                        value={roomSearchForm.nationality}
+                        onChange={(option) =>
+                          handleRoomSearchFormChange("nationality", option)
+                        }
+                        placeholder="Select nationality"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "38px",
+                            border: "1px solid #dee2e6",
+                            "&:hover": { borderColor: "#86b7fe" },
+                          }),
+                        }}
+                      />
+                      {roomSearchErrors.nationality && (
+                        <div className="text-danger small mt-1">
+                          {roomSearchErrors.nationality}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
 
-                    <Col md={6}>
-                      <Form.Group>
-                        <Form.Label>Agent</Form.Label>
-                        <Form.Select
-                          value={roomSearchForm.agent}
-                          onChange={(e) => handleRoomSearchFormChange("agent", e.target.value)}
-                        >
-                          <option value="">Select Agent</option>
-                          {agents.map((agent) => (
-                            <option key={agent.id} value={agent.id}>
-                              {agent.companyName}
-                            </option>
-                          ))}
-                        </Form.Select>
-                        {roomSearchErrors.agent && (
-                          <div className="text-danger small mt-1">
-                            {roomSearchErrors.agent}
-                          </div>
-                        )}
-                      </Form.Group>
-                    </Col>
-
-                    <Col md={4}>
-                      <Form.Group>
-                        <Form.Label>Check-in Date</Form.Label>
-                        <Form.Control
-                          type="date"
-                          value={roomSearchForm.checkIn}
-                          min={today}
-                          onChange={(e) => {
-                            const newCheckIn = e.target.value;
-                            handleRoomSearchFormChange("checkIn", newCheckIn);
-                            if (!roomSearchForm.checkOut || new Date(newCheckIn) >= new Date(roomSearchForm.checkOut)) {
-                              handleRoomSearchFormChange("checkOut", formatDate(getTomorrow(new Date(newCheckIn))));
-                            }
-                          }}
-                        />
-                        {roomSearchErrors.checkIn && (
-                          <div className="text-danger small mt-1">
-                            {roomSearchErrors.checkIn}
-                          </div>
-                        )}
-                      </Form.Group>
-                    </Col>
-
-                    <Col md={4}>
-                      <Form.Group>
-                        <Form.Label>Check-out Date</Form.Label>
-                        <Form.Control
-                          type="date"
-                          value={roomSearchForm.checkOut}
-                          min={roomSearchForm.checkIn ? formatDate(getTomorrow(new Date(roomSearchForm.checkIn))) : formatDate(getTomorrow())}
-                          onChange={(e) => handleRoomSearchFormChange("checkOut", e.target.value)}
-                        />
-                        {roomSearchErrors.checkOut && (
-                          <div className="text-danger small mt-1">
-                            {roomSearchErrors.checkOut}
-                          </div>
-                        )}
-                      </Form.Group>
-                    </Col>
-
-                    <Col md={4}>
-                      <Form.Group>
-                        <Form.Label>Nights</Form.Label>
-                        <Form.Control
-                          type="number"
-                          min={1}
-                          max={60}
-                          value={roomSearchForm.nights}
-                          onChange={(e) => handleNightsChange(e.target.value)}
-                        />
-                      </Form.Group>
-                    </Col>
-                  </Row>
-
-                  <Row className="mt-3">
-                    <Col className="d-flex justify-content-center">
-                      <Button
-                        type="submit"
-                        variant="primary"
-                        disabled={isRoomSearchLoading}
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label>Agent</Form.Label>
+                      <Form.Select
+                        value={roomSearchForm.agent}
+                        onChange={(e) =>
+                          handleRoomSearchFormChange("agent", e.target.value)
+                        }
                       >
-                        {isRoomSearchLoading ? (
-                          <>
-                            <Spinner animation="border" size="sm" className="me-2" />
-                            Searching Rooms...
-                          </>
-                        ) : (
-                          <>
-                            <FaSearch className="me-2" />
-                            Search Rooms
-                          </>
-                        )}
-                      </Button>
-                    </Col>
+                        <option value="">Select Agent</option>
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.companyName}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {roomSearchErrors.agent && (
+                        <div className="text-danger small mt-1">
+                          {roomSearchErrors.agent}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  <Col md={4}>
+                    <Form.Group>
+                      <Form.Label>Check-in Date</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={roomSearchForm.checkIn}
+                        min={today}
+                        onChange={(e) => {
+                          const newCheckIn = e.target.value;
+                          handleRoomSearchFormChange("checkIn", newCheckIn);
+                          if (
+                            !roomSearchForm.checkOut ||
+                            new Date(newCheckIn) >=
+                              new Date(roomSearchForm.checkOut)
+                          ) {
+                            handleRoomSearchFormChange(
+                              "checkOut",
+                              formatDate(getTomorrow(new Date(newCheckIn)))
+                            );
+                          }
+                        }}
+                      />
+                      {roomSearchErrors.checkIn && (
+                        <div className="text-danger small mt-1">
+                          {roomSearchErrors.checkIn}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  <Col md={4}>
+                    <Form.Group>
+                      <Form.Label>Check-out Date</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={roomSearchForm.checkOut}
+                        min={
+                          roomSearchForm.checkIn
+                            ? formatDate(
+                                getTomorrow(new Date(roomSearchForm.checkIn))
+                              )
+                            : formatDate(getTomorrow())
+                        }
+                        onChange={(e) =>
+                          handleRoomSearchFormChange("checkOut", e.target.value)
+                        }
+                      />
+                      {roomSearchErrors.checkOut && (
+                        <div className="text-danger small mt-1">
+                          {roomSearchErrors.checkOut}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  <Col md={4}>
+                    <Form.Group>
+                      <Form.Label>Nights</Form.Label>
+                      <Form.Control
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={roomSearchForm.nights}
+                        onChange={(e) => handleNightsChange(e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Row className="mt-3">
+                  <Col className="d-flex justify-content-center">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={isRoomSearchLoading}
+                    >
+                      {isRoomSearchLoading ? (
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Searching Rooms...
+                        </>
+                      ) : (
+                        <>
+                          <FaSearch className="me-2" />
+                          Search Rooms
+                        </>
+                      )}
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
+            </Card.Body>
+          </Card>
+
+          {/* Search Results */}
+          {hasRoomSearched && (
+            <Card>
+              <Card.Body>
+                <h5 className="mb-3">Available Rooms</h5>
+                {isRoomSearchLoading ? (
+                  <div className="text-center py-4">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-2 text-muted">Searching for rooms...</p>
+                  </div>
+                ) : roomSearchResults.length > 0 ? (
+                  <Row className="g-3">
+                    {roomSearchResults.map((room) => (
+                      <Col md={6} key={room.id}>
+                        <Card className="h-100">
+                          <Card.Img
+                            variant="top"
+                            src={room.image}
+                            alt={room.roomType}
+                            style={{ height: "200px", objectFit: "cover" }}
+                          />
+                          <Card.Body>
+                            <Card.Title className="h6">
+                              {room.roomType}
+                            </Card.Title>
+                            <Card.Text>
+                              <small className="text-muted">
+                                <FaUsers className="me-1" />
+                                Max Occupancy: {room.maxOccupancy}
+                              </small>
+                              <br />
+                              <small className="text-muted">
+                                <FaBed className="me-1" />
+                                Category: {room.roomCategory}
+                              </small>
+                              <br />
+                              <small className="text-muted">
+                                Available: {room.availability} rooms
+                              </small>
+                            </Card.Text>
+                            <div className="d-flex justify-content-between align-items-center">
+                              <div>
+                                <strong className="text-primary">
+                                  {room.currency} {room.price}
+                                </strong>
+                                <small className="text-muted d-block">
+                                  per night
+                                </small>
+                              </div>
+                              <Button variant="outline-primary" size="sm">
+                                Book Now
+                              </Button>
+                            </div>
+                            <div className="mt-2">
+                              <small className="text-muted">
+                                Amenities: {room.amenities.join(", ")}
+                              </small>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      </Col>
+                    ))}
                   </Row>
-                </Form>
+                ) : (
+                  <div className="text-center py-4">
+                    <FaBed className="display-4 text-muted mb-3" />
+                    <h5>No rooms available</h5>
+                    <p className="text-muted">
+                      No rooms found for the selected criteria. Try adjusting
+                      your search parameters.
+                    </p>
+                  </div>
+                )}
               </Card.Body>
             </Card>
-
-            {/* Search Results */}
-            {hasRoomSearched && (
-              <Card>
-                <Card.Body>
-                  <h5 className="mb-3">Available Rooms</h5>
-                  {isRoomSearchLoading ? (
-                    <div className="text-center py-4">
-                      <Spinner animation="border" variant="primary" />
-                      <p className="mt-2 text-muted">Searching for rooms...</p>
-                    </div>
-                  ) : roomSearchResults.length > 0 ? (
-                    <Row className="g-3">
-                      {roomSearchResults.map((room) => (
-                        <Col md={6} key={room.id}>
-                          <Card className="h-100">
-                            <Card.Img
-                              variant="top"
-                              src={room.image}
-                              alt={room.roomType}
-                              style={{ height: "200px", objectFit: "cover" }}
-                            />
-                            <Card.Body>
-                              <Card.Title className="h6">{room.roomType}</Card.Title>
-                              <Card.Text>
-                                <small className="text-muted">
-                                  <FaUsers className="me-1" />
-                                  Max Occupancy: {room.maxOccupancy}
-                                </small>
-                                <br />
-                                <small className="text-muted">
-                                  <FaBed className="me-1" />
-                                  Category: {room.roomCategory}
-                                </small>
-                                <br />
-                                <small className="text-muted">
-                                  Available: {room.availability} rooms
-                                </small>
-                              </Card.Text>
-                              <div className="d-flex justify-content-between align-items-center">
-                                <div>
-                                  <strong className="text-primary">
-                                    {room.currency} {room.price}
-                                  </strong>
-                                  <small className="text-muted d-block">per night</small>
-                                </div>
-                                <Button variant="outline-primary" size="sm">
-                                  Book Now
-                                </Button>
-                              </div>
-                              <div className="mt-2">
-                                <small className="text-muted">
-                                  Amenities: {room.amenities.join(", ")}
-                                </small>
-                              </div>
-                            </Card.Body>
-                          </Card>
-                        </Col>
-                      ))}
-                    </Row>
-                  ) : (
-                    <div className="text-center py-4">
-                      <FaBed className="display-4 text-muted mb-3" />
-                      <h5>No rooms available</h5>
-                      <p className="text-muted">
-                        No rooms found for the selected criteria. Try adjusting your search parameters.
-                      </p>
-                    </div>
-                  )}
-                </Card.Body>
-              </Card>
-            )}
-          </Modal.Body>
-          <Modal.Footer>
-            <Button
-              variant="secondary"
-              onClick={() => setShowRoomSearchModal(false)}
-            >
-              Close
-            </Button>
-          </Modal.Footer>
-        </Modal>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowRoomSearchModal(false)}
+          >
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

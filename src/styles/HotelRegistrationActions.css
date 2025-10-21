@@ -358,6 +358,14 @@
   color: #28a745;
 }
 
+.status-icon.warning {
+  color: #ffc107;
+}
+
+.status-icon.disabled {
+  color: #6c757d;
+}
+
 .status-badge {
   font-size: 12px;
   font-weight: 600;
