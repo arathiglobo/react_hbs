@@ -101,7 +101,7 @@ const HotelRegistrationActions = () => {
   const [stateList, setStateList] = useState([]);
   const [placeList, setPlaceList] = useState([]);
 
-  console.log("hotel complete data::", hotelData);
+   console.log("hotel complete data::", hotelData);
 
   // Mail Center data - now fetched when modal opens
   // Removed the old useEffect as we now fetch data dynamically
@@ -198,7 +198,7 @@ const HotelRegistrationActions = () => {
         setIsLoading(true);
         const response = await axiosInstance.get(`/api/hotels/${id}`);
         setHotelData(response.data);
-        console.log("Hotel Data:", response.data);
+        // console.log("Hotel Data:", response.data);
         setError(null);
       } catch (error) {
         console.error("Error fetching hotel data:", error);
@@ -216,8 +216,8 @@ const HotelRegistrationActions = () => {
 
   // Reset login-related state when hotel ID changes
   useEffect(() => {
-    console.log("Hotel ID changed to:", id);
-    console.log("Resetting login state for new hotel");
+    // console.log("Hotel ID changed to:", id);
+    // console.log("Resetting login state for new hotel");
     
     // Reset all login-related state variables
     setLoginFormData({
@@ -237,7 +237,7 @@ const HotelRegistrationActions = () => {
       userroles: "",
     });
     
-    console.log("✅ Login state reset for hotel ID:", id);
+    // console.log("✅ Login state reset for hotel ID:", id);
   }, [id]);
 
   // Load nationality and agent data
@@ -292,21 +292,23 @@ const HotelRegistrationActions = () => {
       try {
         // Check if mail center has been saved for this hotel
         const mailCenterResponse = await axiosInstance.get(`/api/hotels/getMailCentre/${id}`);
-        console.log("Mail center check response:", mailCenterResponse.data);
+        // console.log("Mail center check response:", mailCenterResponse.data);
         if (mailCenterResponse.data && Array.isArray(mailCenterResponse.data) && mailCenterResponse.data.length > 0) {
           setIsMailCenterSaved(true);
         }
       } catch (error) {
         // If no data found or error, that's fine - user hasn't saved yet
-        console.log("No saved mail center data found for this hotel");
+        // console.log("No saved mail center data found for this hotel");
       }
     };
 
-    console.log("Checking mail center status for hotelId:", id);
+    // console.log("Checking mail center status for hotelId:", id);
     if (id) {
       checkMailCenterStatus();
     }
   }, [id]);
+
+ 
 
   const getAmenityIcon = (amenityId) => {
     const iconMap = {
@@ -527,7 +529,7 @@ const HotelRegistrationActions = () => {
             {hotelData.roomCategories && hotelData.roomCategories.length > 0 ? (
               hotelData.roomCategories.map(
                 (room, index) => (
-                  console.log("room::##", room),
+                  // console.log("room::##", room),
                   (
                     <div key={index} className="room-item">
                       <div className="content-item">
@@ -612,11 +614,11 @@ const HotelRegistrationActions = () => {
         return;
       }
 
-      console.log("=== LOGIN MODAL OPENING ===");
-      console.log("Hotel ID:", id);
-      console.log("Current form data before clearing:", loginFormData);
-      console.log("Current saved username:", savedUsername);
-      console.log("Current loginDetailsSaved:", loginDetailsSaved);
+      // console.log("=== LOGIN MODAL OPENING ===");
+      // console.log("Hotel ID:", id);
+      // console.log("Current form data before clearing:", loginFormData);
+      // console.log("Current saved username:", savedUsername);
+      // console.log("Current loginDetailsSaved:", loginDetailsSaved);
       
       // COMPLETELY reset all login-related state to ensure clean slate
       const emptyFormData = {
@@ -625,21 +627,21 @@ const HotelRegistrationActions = () => {
         repassword: "",
         userroles: []
       };
-      console.log("🔧 Resetting form data to:", emptyFormData);
+      // console.log("🔧 Resetting form data to:", emptyFormData);
       setLoginFormData(emptyFormData);
       setLoginDetailsSaved(false);
       setSavedUsername("");
       setLoginFormKey(prev => prev + 1); // Force form re-render
       setFormTimestamp(Date.now()); // Update timestamp for unique keys
-      console.log("✅ All login state reset - form should be completely empty");
-      console.log("About to call API: auth/checkRegisteredUserExist/" + id);
+      // console.log("✅ All login state reset - form should be completely empty");
+      // console.log("About to call API: auth/checkRegisteredUserExist/" + id);
       
       // Show modal first, then fetch data
       setShowLoginDetailsModal(true);
       
       // Fetch existing login data after modal is shown with a longer delay
       setTimeout(() => {
-        console.log("🔄 About to fetch existing login data...");
+        // console.log("🔄 About to fetch existing login data...");
         fetchExistingLoginData();
       }, 200);
     }
@@ -807,14 +809,14 @@ const HotelRegistrationActions = () => {
     setIsLoadingMailCenterData(true);
     try {
       const response = await axiosInstance.get(`/api/hotels/getMailCentre/${id}`);
-      console.log("Mail center fetch response:", response.data);
+      // console.log("Mail center fetch response:", response.data);
       
       if (response.data && Array.isArray(response.data) && response.data.length > 0) {
         // If we have existing mail center data, populate the form
         // Note: API returns an array of objects
         const existingData = response.data.map(item => {
-          console.log("Processing item:", item);
-          console.log("mailTyIds from API:", item.mailTyIds);
+          // console.log("Processing item:", item);
+          // console.log("mailTyIds from API:", item.mailTyIds);
           
           const mappedItem = {
             id: item.id,
@@ -825,11 +827,11 @@ const HotelRegistrationActions = () => {
             mailType: item.mailTyIds ? item.mailTyIds.map(id => id.toString()) : []
           };
           
-          console.log("Mapped item:", mappedItem);
+          // console.log("Mapped item:", mappedItem);
           return mappedItem;
         });
         
-        console.log("Mapped existing data:", existingData);
+        // console.log("Mapped existing data:", existingData);
         setMailCenterData(existingData);
         setIsMailCenterSaved(true);
       } else {
@@ -868,21 +870,21 @@ const HotelRegistrationActions = () => {
   };
 
   const fetchExistingLoginData = async () => {
-    console.log("=== FETCHING LOGIN DATA ===");
-    console.log("Hotel ID:", id);
-    console.log("Form data at start of fetch:", loginFormData);
+    // console.log("=== FETCHING LOGIN DATA ===");
+    // console.log("Hotel ID:", id);
+    // console.log("Form data at start of fetch:", loginFormData);
     setIsLoadingLoginData(true);
     
     try {
      
       const response = await axiosInstance.post(`/auth/checkRegisteredUserExist/${id}`);
-      console.log("Login check response for hotel ID", id, ":", response.data);
+      // console.log("Login check response for hotel ID", id, ":", response.data);
       
       // Scenario 1: API returns successful response with userName (existing user)
       // Expected response: { "userId": 4, "userName": "kumar", "password": null, "userRoles": null }
       if (response.data && response.data.userName) {
-        console.log("✅ Existing user found for hotel ID", id, "- pre-filling username:", response.data.userName);
-        console.log("Full response data:", response.data);
+        // console.log("✅ Existing user found for hotel ID", id, "- pre-filling username:", response.data.userName);
+        // console.log("Full response data:", response.data);
         
         // Pre-fill username, keep password fields empty
         const newFormData = {
@@ -891,20 +893,20 @@ const HotelRegistrationActions = () => {
           repassword: "",
           userroles: response.data.userRoles || []
         };
-        console.log("🔧 Setting form data to:", newFormData);
+        // console.log("🔧 Setting form data to:", newFormData);
         setLoginFormData(newFormData);
         setLoginDetailsSaved(true);
         setSavedUsername(response.data.userName);
         setLoginFormKey(prev => prev + 1); // Force form re-render
         setFormTimestamp(Date.now()); // Update timestamp for unique keys
-        console.log("✅ Form populated with existing user data for hotel ID", id, "- username:", response.data.userName);
+        // console.log("✅ Form populated with existing user data for hotel ID", id, "- username:", response.data.userName);
       } else {
         // API returned success but no userName - this shouldn't happen but handle it
-        console.log("⚠️ API success but no userName for hotel ID", id, "- keeping form empty");
+        // console.log("⚠️ API success but no userName for hotel ID", id, "- keeping form empty");
         setLoginDetailsSaved(false);
         setSavedUsername("");
         setLoginFormKey(prev => prev + 1); // Force form re-render
-        console.log("Form remains empty - no userName in response for hotel ID", id);
+        // console.log("Form remains empty - no userName in response for hotel ID", id);
       }
     } catch (error) {
       console.error("❌ Error fetching login data for hotel ID", id, ":", error);
@@ -914,29 +916,29 @@ const HotelRegistrationActions = () => {
       if (error.response && error.response.status === 400 && 
           error.response.data && error.response.data.message && 
           error.response.data.message.includes("User is not Registered")) {
-        console.log("✅ User is not registered (400 error) for hotel ID", id, "- this is a new user");
-        console.log("Error response:", error.response.data);
+        // console.log("✅ User is not registered (400 error) for hotel ID", id, "- this is a new user");
+        // console.log("Error response:", error.response.data);
         
         // Keep all fields empty for new user
-        console.log("🔧 Setting form data to empty for new user for hotel ID", id, "...");
+        // console.log("🔧 Setting form data to empty for new user for hotel ID", id, "...");
         const emptyFormData = {
           username: "",
           password: "",
           repassword: "",
           userroles: []
         };
-        console.log("🔧 Setting form data to:", emptyFormData);
+        // console.log("🔧 Setting form data to:", emptyFormData);
         setLoginFormData(emptyFormData);
         setLoginDetailsSaved(false);
         setSavedUsername("");
         setLoginFormKey(prev => prev + 1); // Force form re-render
         setFormTimestamp(Date.now()); // Update timestamp for unique keys
-        console.log("✅ Form data set to empty for hotel ID", id, "- username: '', password: '', repassword: ''");
-        console.log("✅ Form remains empty for new user registration for hotel ID", id);
+        // console.log("✅ Form data set to empty for hotel ID", id, "- username: '', password: '', repassword: ''");
+        // console.log("✅ Form remains empty for new user registration for hotel ID", id);
       } else {
         // Other errors - also keep form empty
-        console.log("⚠️ Other error occurred for hotel ID", id, "- keeping form empty");
-        console.log("Error details:", error.response?.data || error.message);
+        // console.log("⚠️ Other error occurred for hotel ID", id, "- keeping form empty");
+        // console.log("Error details:", error.response?.data || error.message);
         
         const errorFormData = {
           username: "",
@@ -944,13 +946,13 @@ const HotelRegistrationActions = () => {
           repassword: "",
           userroles: []
         };
-        console.log("🔧 Setting form data to:", errorFormData);
+        // console.log("🔧 Setting form data to:", errorFormData);
         setLoginFormData(errorFormData);
         setLoginDetailsSaved(false);
         setSavedUsername("");
         setLoginFormKey(prev => prev + 1); // Force form re-render
         setFormTimestamp(Date.now()); // Update timestamp for unique keys
-        console.log("Form remains empty due to other error for hotel ID", id);
+        // console.log("Form remains empty due to other error for hotel ID", id);
       }
     } finally {
       setIsLoadingLoginData(false);
@@ -1002,7 +1004,7 @@ const HotelRegistrationActions = () => {
       // For now, let's send the first one or combine them
       const mailCentrePayload = mailTypeData[0]; // Send the first contact's mail type
 
-      console.log("Mail Centre Payload:", mailCentrePayload);
+      // console.log("Mail Centre Payload:", mailCentrePayload);
 
       const response = await axiosInstance.post(
         `/api/hotels/addMailCentre/${id}`,
@@ -1029,13 +1031,13 @@ const HotelRegistrationActions = () => {
   };
 
   const handleLoginFormChange = (field, value) => {
-    console.log("Form change detected:", field, "=", value);
+    // console.log("Form change detected:", field, "=", value);
     setLoginFormData((prev) => {
       const newData = {
         ...prev,
         [field]: value,
       };
-      console.log("New form data:", newData);
+      // console.log("New form data:", newData);
       return newData;
     });
   };
@@ -1047,7 +1049,7 @@ const HotelRegistrationActions = () => {
 
         setUserRolesList(rolesRes.data);
       } catch (error) {
-        console.log("User roles  api call error::", error);
+        // console.log("User roles  api call error::", error);
       }
     };
 
@@ -1055,8 +1057,8 @@ const HotelRegistrationActions = () => {
   }, []);
 
   const handleLoginSave = async () => {
-    console.log("its handleLoginSave click");
-    console.log("loginFormData::" ,loginFormData);
+    // console.log("its handleLoginSave click");
+    // console.log("loginFormData::" ,loginFormData);
    
     let isValid = true;
     const errors = {
@@ -1115,8 +1117,8 @@ const HotelRegistrationActions = () => {
         // setIsLoading(true);
 
         let activeUserRole = localStorage.getItem("currentActiveRole");
-        console.log("currentActiveRole::", activeUserRole);
-        console.log("roleslist::", rolesList);
+        // console.log("currentActiveRole::", activeUserRole);
+        // console.log("roleslist::", rolesList);
 
         let activeRoleObj = rolesList.find(
           (role) => role.roleName === "EXTRANET"
@@ -1125,8 +1127,8 @@ const HotelRegistrationActions = () => {
         let loginPayload = null;
 
         if (activeRoleObj) {
-           console.log("Active role exists in rolesList:", activeUserRole);
-           console.log("activeRoleObj:", activeRoleObj);
+           // console.log("Active role exists in rolesList:", activeUserRole);
+           // console.log("activeRoleObj:", activeRoleObj);
 
           loginPayload = {
             userId: id, // Hotel ID
@@ -1139,14 +1141,14 @@ const HotelRegistrationActions = () => {
             loginPayload.password = loginFormData.password;
           }
         } else {
-          // console.log("Active role not found in rolesList");
+          // // console.log("Active role not found in rolesList");
         }
 
         const response = await axiosInstance.post(
           "/auth/register",
           loginPayload
         );
-        // console.log("login register success::", response);
+        // // console.log("login register success::", response);
 
         if (response.data) {
           toast.success("Login credentials saved successfully!");
@@ -1551,21 +1553,21 @@ const HotelRegistrationActions = () => {
                             { value: "2", label: "Voucher" }
                           ]}
                           value={(() => {
-                            console.log("Dropdown value calculation for item:", item);
-                            console.log("item.mailType:", item.mailType);
+                            // console.log("Dropdown value calculation for item:", item);
+                            // console.log("item.mailType:", item.mailType);
                             
                             if (item.mailType && item.mailType.length > 0) {
                               const mappedValues = item.mailType.map(type => {
-                                console.log("Mapping mail type:", type);
+                                // console.log("Mapping mail type:", type);
                                 return {
                                   value: type,
                                   label: type === "1" ? "Login Credentials" : "Voucher"
                                 };
                               });
-                              console.log("Final mapped values:", mappedValues);
+                              // console.log("Final mapped values:", mappedValues);
                               return mappedValues;
                             }
-                            console.log("No mailType, returning empty array");
+                            // console.log("No mailType, returning empty array");
                             return [];
                           })()}
                           onChange={(selectedOptions) =>
@@ -1673,7 +1675,7 @@ const HotelRegistrationActions = () => {
                 value={loginFormData.username}
                 autoComplete="off"
                 onChange={(e) => {
-                  console.log("Username field onChange triggered with value:", e.target.value);
+                  // console.log("Username field onChange triggered with value:", e.target.value);
                   handleLoginFormChange("username", e.target.value);
                 }}
               />

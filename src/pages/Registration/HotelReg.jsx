@@ -170,6 +170,8 @@ const HotelReg = () => {
   const [roomCategories, setRoomCategories] = useState([]);
   const [roomTypes, setRoomTypes] = useState([]);
   const [filteredRoomTypes, setFilteredRoomTypes] = useState({});
+  const [masterAmenityData, setMasterAmenityData] = useState({});
+
 
   // Form data state
   const [formData, setFormData] = useState({
@@ -245,6 +247,12 @@ const loadHotelData = async () => {
   try {
     setIsLoadingHotelData(true);
 
+    // Ensure amenities are loaded first
+    if (amenities.length === 0) {
+      console.log("Amenities not loaded yet, loading amenities first...");
+      await loadAmenities();
+    }
+
     const response = await axiosInstance.get(`/api/hotels/${id}`);
     const hotelData = response.data;
 
@@ -277,7 +285,12 @@ const loadHotelData = async () => {
     // Ensure amenityIds are numbers and properly mapped
     const amenityIds = hotelData.amenities?.map((amenity) => {
       // Convert to number to ensure proper comparison
-      return Number(amenity.amenityId);
+      console.log("Processing hotel amenity:", amenity);
+      console.log("amenity.amenityId:", amenity.amenityId);
+      console.log("amenity.amenitiesId:", amenity.amenitiesId);
+      const id = Number(amenity.amenityId || amenity.amenitiesId);
+      console.log("Final processed ID:", id);
+      return id;
     }) || [];
     
     console.log("Raw hotelData.amenities:", hotelData.amenities);
@@ -292,18 +305,34 @@ const loadHotelData = async () => {
     console.log("Hotel data placeId:", hotelData.placeId);
     console.log("Hotel data stateId:", hotelData.stateId);
     
-    // Check if amenities match
+    // Additional debug: show first few amenities
     if (amenities.length > 0) {
+      console.log("First 3 amenities:", amenities.slice(0, 3));
+      console.log("All amenity IDs in loaded amenities:", amenities.map(a => a.amenitiesId || a.amenityId));
+      console.log("Looking for amenity IDs:", amenityIds);
+      
+      // Check if the amenity IDs from hotel data exist in loaded amenities
+      amenityIds.forEach(amenityId => {
+        const found = amenities.find(a => (a.amenitiesId || a.amenityId) == amenityId);
+        console.log(`Amenity ID ${amenityId}: ${found ? 'FOUND' : 'NOT FOUND'} in loaded amenities`);
+        if (found) {
+          console.log(`  Found amenity: ${found.amenityName} (ID: ${found.amenitiesId || found.amenityId})`);
+        }
+      });
+    }
+    
+    // Check if amenities match
+    if (hotelData.amenities.length > 0) {
       console.log("Checking amenity matches:");
       amenityIds.forEach(amenityId => {
         // Try both field names: amenitiesId and amenityId
-        const foundAmenity = amenities.find(a => 
+        const foundAmenity = hotelData.amenities.find(a => 
           a.amenitiesId === amenityId || a.amenityId === amenityId
         );
         console.log(`Amenity ID ${amenityId}:`, foundAmenity ? 'FOUND' : 'NOT FOUND', foundAmenity);
       });
     }
-    console.log("=== END AMENITIES DEBUG ===");
+    console.log("=== END AMENITIES DEBUG ===" ,amenityIds );
 
     const weekDays = {
       id: hotelData.weekDays?.id ?? "",
@@ -645,10 +674,61 @@ const loadHotelData = async () => {
   // Load amenities
   const loadAmenities = async () => {
     try {
-      const response = await axiosInstance.get("/api/hotelAmenity");
-      console.log("Amenities response:", response.data);
-      console.log("First amenity structure:", response.data?.[0]);
-      setAmenities(response.data || []);
+      // Try different approaches to get all amenities
+      console.log("=== LOADING AMENITIES ===");
+      
+      // First try: without pagination parameters
+      try {
+        const response1 = await axiosInstance.get("/api/hotelAmenity");
+        console.log("Response without pagination:", response1.data);
+        console.log("Length without pagination:", response1.data?.length);
+      } catch (e) {
+        console.log("Error without pagination:", e);
+      }
+      
+      // Second try: with high limit
+      try {
+        const response2 = await axiosInstance.get("/api/hotelAmenity?page=0&limit=1000");
+        console.log("Response with high limit:", response2.data);
+        console.log("Length with high limit:", response2.data?.length);
+        console.log("First amenity structure:", response2.data?.[0]);
+        console.log("Total amenities from API:", response2.data?.length);
+        console.log("Amenity ID range:", response2.data?.map(a => a.amenitiesId || a.amenityId).sort((a, b) => a - b));
+        setAmenities(response2.data || []);
+      } catch (e) {
+        console.log("Error with high limit:", e);
+      }
+      
+      // Third try: try to get all pages
+      try {
+        let allAmenities = [];
+        let page = 0;
+        let hasMore = true;
+        
+        while (hasMore) {
+          const response = await axiosInstance.get(`/api/hotelAmenity?page=${page}&limit=100`);
+          console.log(`Page ${page} response:`, response.data);
+          
+          if (response.data && response.data.length > 0) {
+            allAmenities = [...allAmenities, ...response.data];
+            page++;
+            hasMore = response.data.length === 100; // If we get less than 100, we're done
+          } else {
+            hasMore = false;
+          }
+        }
+        
+        console.log("All amenities from pagination:", allAmenities);
+        console.log("Total amenities from pagination:", allAmenities.length);
+        console.log("Amenity ID range from pagination:", allAmenities.map(a => a.amenitiesId || a.amenityId).sort((a, b) => a - b));
+        
+        if (allAmenities.length > 0) {
+          setAmenities(allAmenities);
+        }
+      } catch (e) {
+        console.log("Error with pagination:", e);
+      }
+      
     } catch (error) {
       console.error("Error loading amenities:", error);
       toast.error("Failed to load amenities");
@@ -2593,6 +2673,18 @@ const handleAmenityChange = (e) => {
                             // Handle both field name possibilities: amenitiesId and amenityId
                             const amenityId = amenity.amenitiesId || amenity.amenityId;
                             const isChecked = formData.amenityIds.includes(Number(amenityId));
+                            
+                            // Enhanced debugging for specific amenity IDs
+                            if (amenityId == 38 || amenityId == 39) {
+                              console.log(`=== DEBUGGING AMENITY ID ${amenityId} ===`);
+                              console.log(`Amenity object:`, amenity);
+                              console.log(`Extracted amenityId:`, amenityId);
+                              console.log(`formData.amenityIds:`, formData.amenityIds);
+                              console.log(`Number(amenityId):`, Number(amenityId));
+                              console.log(`formData.amenityIds.includes(Number(amenityId)):`, isChecked);
+                              console.log(`=== END DEBUGGING AMENITY ID ${amenityId} ===`);
+                            }
+                            
                             console.log(`Amenity ${amenity.amenityName} (ID: ${amenityId}): checked=${isChecked}, formData.amenityIds=`, formData.amenityIds);
                             return (
                               <Col
@@ -2612,6 +2704,26 @@ const handleAmenityChange = (e) => {
                             );
                           })}
                         </Row>
+                        {/* Debug info for amenities */}
+                        <div className="mt-3 p-2 bg-light rounded">
+                          <small className="text-muted">
+                            <strong>Debug Info:</strong><br/>
+                            Total amenities loaded: {amenities.length}<br/>
+                            Form amenityIds: {JSON.stringify(formData.amenityIds)}<br/>
+                            {amenities.length > 0 && (
+                              <>
+                                First amenity: {amenities[0].amenityName} (ID: {amenities[0].amenitiesId || amenities[0].amenityId})<br/>
+                                Last amenity: {amenities[amenities.length - 1].amenityName} (ID: {amenities[amenities.length - 1].amenitiesId || amenities[amenities.length - 1].amenityId})<br/>
+                                <br/>
+                                <strong>All Amenity IDs:</strong> {amenities.map(a => a.amenitiesId || a.amenityId).sort((a, b) => a - b).join(', ')}<br/>
+                                <br/>
+                                <strong>Looking for IDs:</strong> {formData.amenityIds.join(', ')}<br/>
+                                <br/>
+                                <strong>Missing IDs:</strong> {formData.amenityIds.filter(id => !amenities.some(a => (a.amenitiesId || a.amenityId) == id)).join(', ') || 'None'}
+                              </>
+                            )}
+                          </small>
+                        </div>
                       </div>
                     </Tab>
 
