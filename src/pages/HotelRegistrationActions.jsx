@@ -126,6 +126,8 @@ const HotelRegistrationActions = () => {
 
   // Login details loading state
   const [isLoadingLoginData, setIsLoadingLoginData] = useState(false);
+  const [loginFormKey, setLoginFormKey] = useState(0);
+  const [formTimestamp, setFormTimestamp] = useState(Date.now());
 
 
  
@@ -210,6 +212,32 @@ const HotelRegistrationActions = () => {
     if (id) {
       fetchHotelData();
     }
+  }, [id]);
+
+  // Reset login-related state when hotel ID changes
+  useEffect(() => {
+    console.log("Hotel ID changed to:", id);
+    console.log("Resetting login state for new hotel");
+    
+    // Reset all login-related state variables
+    setLoginFormData({
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: []
+    });
+    setLoginDetailsSaved(false);
+    setSavedUsername("");
+    setLoginFormKey(prev => prev + 1);
+    setFormTimestamp(Date.now()); // Update timestamp for unique keys
+    setLoginErrors({
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: "",
+    });
+    
+    console.log("✅ Login state reset for hotel ID:", id);
   }, [id]);
 
   // Load nationality and agent data
@@ -585,28 +613,35 @@ const HotelRegistrationActions = () => {
       }
 
       console.log("=== LOGIN MODAL OPENING ===");
+      console.log("Hotel ID:", id);
       console.log("Current form data before clearing:", loginFormData);
       console.log("Current saved username:", savedUsername);
       console.log("Current loginDetailsSaved:", loginDetailsSaved);
       
-      // COMPLETELY reset all login-related state
-      setLoginFormData({
+      // COMPLETELY reset all login-related state to ensure clean slate
+      const emptyFormData = {
         username: "",
         password: "",
         repassword: "",
         userroles: []
-      });
+      };
+      console.log("🔧 Resetting form data to:", emptyFormData);
+      setLoginFormData(emptyFormData);
       setLoginDetailsSaved(false);
       setSavedUsername("");
-      console.log("All login state reset - form should be completely empty");
+      setLoginFormKey(prev => prev + 1); // Force form re-render
+      setFormTimestamp(Date.now()); // Update timestamp for unique keys
+      console.log("✅ All login state reset - form should be completely empty");
+      console.log("About to call API: auth/checkRegisteredUserExist/" + id);
       
       // Show modal first, then fetch data
       setShowLoginDetailsModal(true);
       
-      // Fetch existing login data after modal is shown
+      // Fetch existing login data after modal is shown with a longer delay
       setTimeout(() => {
+        console.log("🔄 About to fetch existing login data...");
         fetchExistingLoginData();
-      }, 100);
+      }, 200);
     }
 
     // else if (actionLabel === "Image Upload") {
@@ -834,53 +869,88 @@ const HotelRegistrationActions = () => {
 
   const fetchExistingLoginData = async () => {
     console.log("=== FETCHING LOGIN DATA ===");
+    console.log("Hotel ID:", id);
     console.log("Form data at start of fetch:", loginFormData);
     setIsLoadingLoginData(true);
     
     try {
+     
       const response = await axiosInstance.post(`/auth/checkRegisteredUserExist/${id}`);
-      console.log("Login check response:", response.data);
+      console.log("Login check response for hotel ID", id, ":", response.data);
       
-      // Check if API returns successful response with userName (existing user)
+      // Scenario 1: API returns successful response with userName (existing user)
+      // Expected response: { "userId": 4, "userName": "kumar", "password": null, "userRoles": null }
       if (response.data && response.data.userName) {
-        console.log("Existing user found - pre-filling username:", response.data.userName);
-        // ONLY set data if API returns userName
-        setLoginFormData({
+        console.log("✅ Existing user found for hotel ID", id, "- pre-filling username:", response.data.userName);
+        console.log("Full response data:", response.data);
+        
+        // Pre-fill username, keep password fields empty
+        const newFormData = {
           username: response.data.userName,
           password: "",
           repassword: "",
           userroles: response.data.userRoles || []
-        });
+        };
+        console.log("🔧 Setting form data to:", newFormData);
+        setLoginFormData(newFormData);
         setLoginDetailsSaved(true);
         setSavedUsername(response.data.userName);
-        console.log("Form populated with existing user data");
+        setLoginFormKey(prev => prev + 1); // Force form re-render
+        setFormTimestamp(Date.now()); // Update timestamp for unique keys
+        console.log("✅ Form populated with existing user data for hotel ID", id, "- username:", response.data.userName);
       } else {
-        // API returned success but no userName - keep form empty
-        console.log("API success but no userName - keeping form empty for new user");
-        // Don't change form data - keep it empty
+        // API returned success but no userName - this shouldn't happen but handle it
+        console.log("⚠️ API success but no userName for hotel ID", id, "- keeping form empty");
         setLoginDetailsSaved(false);
         setSavedUsername("");
-        console.log("Form remains empty for new user");
+        setLoginFormKey(prev => prev + 1); // Force form re-render
+        console.log("Form remains empty - no userName in response for hotel ID", id);
       }
     } catch (error) {
-      console.error("Error fetching login data:", error);
+      console.error("❌ Error fetching login data for hotel ID", id, ":", error);
       
-      // Check if it's a 400 error with "User is not Registered" message
+      // Scenario 2: API returns 400 error (new user)
+      // Expected error response: { "status": 400, "error": "Bad Request", "message": "User is not Registered for id : 8", "timestamp": "..." }
       if (error.response && error.response.status === 400 && 
           error.response.data && error.response.data.message && 
           error.response.data.message.includes("User is not Registered")) {
-        console.log("User is not registered (400 error) - keeping form empty for new registration");
-        // Don't change form data - keep it empty
+        console.log("✅ User is not registered (400 error) for hotel ID", id, "- this is a new user");
+        console.log("Error response:", error.response.data);
+        
+        // Keep all fields empty for new user
+        console.log("🔧 Setting form data to empty for new user for hotel ID", id, "...");
+        const emptyFormData = {
+          username: "",
+          password: "",
+          repassword: "",
+          userroles: []
+        };
+        console.log("🔧 Setting form data to:", emptyFormData);
+        setLoginFormData(emptyFormData);
         setLoginDetailsSaved(false);
         setSavedUsername("");
-        console.log("Form remains empty for new user (400 error)");
+        setLoginFormKey(prev => prev + 1); // Force form re-render
+        setFormTimestamp(Date.now()); // Update timestamp for unique keys
+        console.log("✅ Form data set to empty for hotel ID", id, "- username: '', password: '', repassword: ''");
+        console.log("✅ Form remains empty for new user registration for hotel ID", id);
       } else {
         // Other errors - also keep form empty
-        console.log("Other error - keeping form empty for new user");
-        // Don't change form data - keep it empty
+        console.log("⚠️ Other error occurred for hotel ID", id, "- keeping form empty");
+        console.log("Error details:", error.response?.data || error.message);
+        
+        const errorFormData = {
+          username: "",
+          password: "",
+          repassword: "",
+          userroles: []
+        };
+        console.log("🔧 Setting form data to:", errorFormData);
+        setLoginFormData(errorFormData);
         setLoginDetailsSaved(false);
         setSavedUsername("");
-        console.log("Form remains empty for new user (other error)");
+        setLoginFormKey(prev => prev + 1); // Force form re-render
+        setFormTimestamp(Date.now()); // Update timestamp for unique keys
+        console.log("Form remains empty due to other error for hotel ID", id);
       }
     } finally {
       setIsLoadingLoginData(false);
@@ -1581,13 +1651,8 @@ const HotelRegistrationActions = () => {
               <p className="mt-2 text-muted">Loading login details...</p>
             </div>
           ) : (
-            <Form key={`login-form-${showLoginDetailsModal}`}>
-            {/* Debug info - remove this later */}
-            <div className="text-muted small mb-3">
-              Debug: loginDetailsSaved = {loginDetailsSaved.toString()}, savedUsername = "{savedUsername}"<br/>
-              Form Data: username = "{loginFormData.username}", password = "{loginFormData.password ? '***' : 'empty'}"<br/>
-              API Response: Check console for detailed API response
-            </div>
+            <Form key={`login-form-${loginFormKey}-${formTimestamp}`}>
+           
             {loginDetailsSaved && (
               <div className="alert alert-info mb-3" role="alert">
                 <small><strong>Existing User:</strong> Username is pre-filled. Leave password fields empty to keep current password, or enter new password to update.</small>
@@ -1601,13 +1666,12 @@ const HotelRegistrationActions = () => {
             <Form.Group className="mb-3">
               <Form.Label>Username</Form.Label>
               <Form.Control
-                key={`username-${showLoginDetailsModal}-${loginFormData.username}`}
+                key={`username-${loginFormKey}-${id}-${formTimestamp}`}
+                name={`username-${id}-${formTimestamp}`}
                 type="text"
                 placeholder="Enter username"
-                value={(() => {
-                  console.log("Username field value being rendered:", loginFormData.username);
-                  return loginFormData.username;
-                })()}
+                value={loginFormData.username}
+                autoComplete="off"
                 onChange={(e) => {
                   console.log("Username field onChange triggered with value:", e.target.value);
                   handleLoginFormChange("username", e.target.value);
@@ -1617,10 +1681,12 @@ const HotelRegistrationActions = () => {
             <Form.Group className="mb-3">
               <Form.Label>Password</Form.Label>
               <Form.Control
-                key={`password-${showLoginDetailsModal}-${loginFormData.password}`}
+                key={`password-${loginFormKey}-${id}-${formTimestamp}`}
+                name={`password-${id}-${formTimestamp}`}
                 type="password"
                 placeholder="Enter password"
                 value={loginFormData.password}
+                autoComplete="new-password"
                 onChange={(e) =>
                   handleLoginFormChange("password", e.target.value)
                 }
@@ -1629,10 +1695,12 @@ const HotelRegistrationActions = () => {
             <Form.Group className="mb-3">
               <Form.Label>Re-enter Password</Form.Label>
               <Form.Control
-                key={`repassword-${showLoginDetailsModal}-${loginFormData.repassword}`}
+                key={`repassword-${loginFormKey}-${id}-${formTimestamp}`}
+                name={`repassword-${id}-${formTimestamp}`}
                 type="password"
                 placeholder="Re-enter password"
                 value={loginFormData.repassword}
+                autoComplete="new-password"
                 onChange={(e) =>
                   handleLoginFormChange("repassword", e.target.value)
                 }

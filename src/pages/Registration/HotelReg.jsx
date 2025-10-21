@@ -279,7 +279,11 @@ const loadHotelData = async () => {
       // Convert to number to ensure proper comparison
       return Number(amenity.amenityId);
     }) || [];
+    
+    console.log("Raw hotelData.amenities:", hotelData.amenities);
+    console.log("Processed amenityIds:", amenityIds);
 
+    console.log("=== AMENITIES DEBUG ===");
     console.log("Amenity IDs from API:", amenityIds);
     console.log("Amenities from API:", hotelData.amenities);
     console.log("Available amenities for comparison:", amenities);
@@ -287,6 +291,19 @@ const loadHotelData = async () => {
     console.log("Amenities length:", amenities.length);
     console.log("Hotel data placeId:", hotelData.placeId);
     console.log("Hotel data stateId:", hotelData.stateId);
+    
+    // Check if amenities match
+    if (amenities.length > 0) {
+      console.log("Checking amenity matches:");
+      amenityIds.forEach(amenityId => {
+        // Try both field names: amenitiesId and amenityId
+        const foundAmenity = amenities.find(a => 
+          a.amenitiesId === amenityId || a.amenityId === amenityId
+        );
+        console.log(`Amenity ID ${amenityId}:`, foundAmenity ? 'FOUND' : 'NOT FOUND', foundAmenity);
+      });
+    }
+    console.log("=== END AMENITIES DEBUG ===");
 
     const weekDays = {
       id: hotelData.weekDays?.id ?? "",
@@ -310,7 +327,7 @@ const loadHotelData = async () => {
     console.log("Processed weekDays:", weekDays);
 
     // Set the main form data first
-    setFormData({
+    const formDataToSet = {
       hotelName: hotelData.hotelName ?? "",
       hotelDescription: hotelData.hotelDescription ?? "",
       image360: hotelData.image360 ?? "",
@@ -338,17 +355,24 @@ const loadHotelData = async () => {
       rooms,
       termsAndConditions,
       amenityIds, // This should now contain [7, 8, 9] as numbers
-    });
+    };
+    
+    console.log("=== SETTING FORM DATA ===");
+    console.log("About to set formData with stateId:", formDataToSet.stateId, "placeId:", formDataToSet.placeId);
+    setFormData(formDataToSet);
+    console.log("Form data set successfully");
 
     // Step 2: Load dependent data after setting the form data
     // Load provinces first, then places
     if (hotelData.countryId) {
+      console.log("=== LOADING DEPENDENT DATA ===");
       console.log("Loading provinces for country:", hotelData.countryId);
       try {
         const provincesResponse = await axiosInstance.get(
           `/api/province/getByCountryId/${hotelData.countryId}`
         );
         console.log("Provinces loaded:", provincesResponse.data);
+        console.log("Setting provinces state...");
         setProvinces(provincesResponse.data || []);
         
         // After provinces are loaded, load places if stateId exists
@@ -362,11 +386,17 @@ const loadHotelData = async () => {
           const loadedPlaces = placesResponse.data || [];
           console.log("Available place IDs:", loadedPlaces.map(p => p.id));
           console.log("Available place names:", loadedPlaces.map(p => p.name));
+          console.log("Setting places state...");
           setPlaces(loadedPlaces);
+        } else {
+          console.log("No stateId found, skipping places loading");
         }
       } catch (error) {
         console.error("Error loading dependent data:", error);
       }
+      console.log("=== END LOADING DEPENDENT DATA ===");
+    } else {
+      console.log("No countryId found, skipping dependent data loading");
     }
 
   } catch (error) {
@@ -406,43 +436,71 @@ const loadHotelData = async () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   useEffect(() => {
-    if (formData.countryId) {
-      if (!isInitialLoad) {
-        loadProvinces(formData.countryId);
-        setPlaces([]);
-        setFormData((prev) => ({ ...prev, stateId: "", placeId: "" }));
-      } else {
-        loadProvinces(formData.countryId);
-      }
+    console.log("=== COUNTRY USEEFFECT TRIGGERED ===");
+    console.log("formData.countryId:", formData.countryId);
+    console.log("isInitialLoad:", isInitialLoad);
+    console.log("Current formData.stateId:", formData.stateId);
+    console.log("Current formData.placeId:", formData.placeId);
+    
+    // Only run this effect if it's not the initial load
+    if (formData.countryId && !isInitialLoad) {
+      console.log("Loading provinces for user change");
+      loadProvinces(formData.countryId);
+      setPlaces([]);
+      setFormData((prev) => ({ ...prev, stateId: "", placeId: "" }));
+    } else if (isInitialLoad) {
+      console.log("Skipping country useEffect during initial load");
     }
+    console.log("=== END COUNTRY USEEFFECT ===");
   }, [formData.countryId, isInitialLoad]);
 
   useEffect(() => {
-    if (formData.stateId) {
-      if (!isInitialLoad) {
-        loadPlaces(formData.stateId);
-        setFormData((prev) => ({ ...prev, placeId: "" }));
-      } else {
-        loadPlaces(formData.stateId);
-      }
+    console.log("=== STATE USEEFFECT TRIGGERED ===");
+    console.log("formData.stateId:", formData.stateId);
+    console.log("isInitialLoad:", isInitialLoad);
+    console.log("Current formData.placeId:", formData.placeId);
+    
+    // Only run this effect if it's not the initial load
+    if (formData.stateId && !isInitialLoad) {
+      console.log("Loading places for user change");
+      loadPlaces(formData.stateId);
+      setFormData((prev) => ({ ...prev, placeId: "" }));
+    } else if (isInitialLoad) {
+      console.log("Skipping state useEffect during initial load");
     }
+    console.log("=== END STATE USEEFFECT ===");
   }, [formData.stateId, isInitialLoad]);
 
   // After hotel data is loaded for edit, set isInitialLoad to false
   useEffect(() => {
+    console.log("=== INITIAL LOAD USEEFFECT ===");
+    console.log("isLoadingHotelData:", isLoadingHotelData);
+    console.log("isInitialLoad:", isInitialLoad);
     if (!isLoadingHotelData && isInitialLoad) {
+      console.log("Setting isInitialLoad to false - initial data loading complete");
       setIsInitialLoad(false);
     }
+    console.log("=== END INITIAL LOAD USEEFFECT ===");
   }, [isLoadingHotelData, isInitialLoad]);
 
   // Force re-render when provinces or places are loaded
   useEffect(() => {
+    console.log("=== PROVINCES USEEFFECT ===");
+    console.log("Provinces length:", provinces.length);
+    console.log("FormData countryId:", formData.countryId);
+    console.log("FormData stateId:", formData.stateId);
     if (provinces.length > 0 && formData.countryId) {
       console.log("Provinces updated, current formData.stateId:", formData.stateId);
+      console.log("Available provinces:", provinces.map(p => ({ id: p.id, name: p.stateName })));
     }
+    console.log("=== END PROVINCES USEEFFECT ===");
   }, [provinces, formData.countryId, formData.stateId]);
 
   useEffect(() => {
+    console.log("=== PLACES USEEFFECT ===");
+    console.log("Places length:", places.length);
+    console.log("FormData stateId:", formData.stateId);
+    console.log("FormData placeId:", formData.placeId);
     if (places.length > 0 && formData.stateId) {
       console.log("Places updated, current formData.placeId:", formData.placeId);
       console.log("Available places:", places.map(p => ({ id: p.id, name: p.name })));
@@ -485,6 +543,7 @@ const loadHotelData = async () => {
         }
       }
     }
+    console.log("=== END PLACES USEEFFECT ===");
   }, [places, formData.stateId, formData.placeId]);
 
   // Load currencies
@@ -588,6 +647,7 @@ const loadHotelData = async () => {
     try {
       const response = await axiosInstance.get("/api/hotelAmenity");
       console.log("Amenities response:", response.data);
+      console.log("First amenity structure:", response.data?.[0]);
       setAmenities(response.data || []);
     } catch (error) {
       console.error("Error loading amenities:", error);
@@ -1041,7 +1101,7 @@ const handleAmenityChange = (e) => {
       // Transform amenities data
       const hotelAmenities = formData.amenityIds.map((amenityId) => {
         const amenity = amenities.find(
-          (a) => a.amenitiesId === parseInt(amenityId)
+          (a) => (a.amenitiesId === parseInt(amenityId)) || (a.amenityId === parseInt(amenityId))
         );
         return {
           amenityId: parseInt(amenityId),
@@ -1266,7 +1326,7 @@ const handleAmenityChange = (e) => {
       // Amenities
       formData.amenityIds.forEach((amenityId, index) => {
         const amenity = amenities.find(
-          (a) => a.amenitiesId === parseInt(amenityId)
+          (a) => (a.amenitiesId === parseInt(amenityId)) || (a.amenityId === parseInt(amenityId))
         );
         formDataToSend.append(
           `amenities[${index}].amenityId`,
@@ -1930,7 +1990,7 @@ const handleAmenityChange = (e) => {
                               >
                                 <option value="">Select State/Province</option>
                                 {provinces.map((province) => {
-                                  console.log("Rendering province:", province);
+                                  console.log("Rendering province:", province, "formData.stateId:", formData.stateId, "match:", province.id == formData.stateId);
                                   return (
                                     <option key={province.id} value={province.id}>
                                       {province.stateName}
@@ -1965,7 +2025,7 @@ const handleAmenityChange = (e) => {
                                 {places.map((place) => {
                                   console.log("Rendering place:", place, "formData.placeId:", formData.placeId, "match:", place.id == formData.placeId);
                                   return (
-                                    <option key={place.id} value={place.id} selected={place.id == formData.placeId}>
+                                    <option key={place.id} value={place.id}>
                                       {place.name}
                                     </option>
                                   );
@@ -2529,24 +2589,28 @@ const handleAmenityChange = (e) => {
                     >
                       <div className="p-4">
                         <Row>
-                          {amenities.map((amenity) => (
-                            <Col
-                              md={4}
-                              key={amenity.amenitiesId}
-                              className="mb-3"
-                            >
-                              <Form.Check
-                                type="checkbox"
-                                id={`amenity-${amenity.amenitiesId}`}
-                                value={amenity.amenitiesId}
-                                label={amenity.amenityName}
-                                checked={formData.amenityIds.includes(
-                                  Number(amenity.amenitiesId)
-                                )}
-                                onChange={handleAmenityChange}
-                              />
-                            </Col>
-                          ))}
+                          {amenities.map((amenity) => {
+                            // Handle both field name possibilities: amenitiesId and amenityId
+                            const amenityId = amenity.amenitiesId || amenity.amenityId;
+                            const isChecked = formData.amenityIds.includes(Number(amenityId));
+                            console.log(`Amenity ${amenity.amenityName} (ID: ${amenityId}): checked=${isChecked}, formData.amenityIds=`, formData.amenityIds);
+                            return (
+                              <Col
+                                md={4}
+                                key={amenityId}
+                                className="mb-3"
+                              >
+                                <Form.Check
+                                  type="checkbox"
+                                  id={`amenity-${amenityId}`}
+                                  value={amenityId}
+                                  label={amenity.amenityName}
+                                  checked={isChecked}
+                                  onChange={handleAmenityChange}
+                                />
+                              </Col>
+                            );
+                          })}
                         </Row>
                       </div>
                     </Tab>
