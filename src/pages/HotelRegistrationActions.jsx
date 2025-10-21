@@ -98,6 +98,8 @@ const HotelRegistrationActions = () => {
   const [roomSearchErrors, setRoomSearchErrors] = useState({});
   const [nationalityList, setNationalityList] = useState([]);
   const [agents, setAgents] = useState([]);
+  const [stateList, setStateList] = useState([]);
+  const [placeList, setPlaceList] = useState([]);
 
   console.log("hotel complete data::", hotelData);
 
@@ -124,6 +126,7 @@ const HotelRegistrationActions = () => {
 
   // Login details loading state
   const [isLoadingLoginData, setIsLoadingLoginData] = useState(false);
+
 
  
 
@@ -227,6 +230,26 @@ const HotelRegistrationActions = () => {
         // Load agents
         const agentResponse = await axiosInstance.get("/api/agent");
         setAgents(agentResponse.data || []);
+
+        // Load states
+        const statesResponse = await axiosInstance.get("/api/states");
+        const stateOptions = Array.isArray(statesResponse.data)
+          ? statesResponse.data.map((state) => ({
+              value: state.id,
+              label: state.name,
+            }))
+          : [];
+        setStateList(stateOptions);
+
+        // Load places
+        const placesResponse = await axiosInstance.get("/api/places");
+        const placeOptions = Array.isArray(placesResponse.data)
+          ? placesResponse.data.map((place) => ({
+              value: place.id,
+              label: place.name,
+            }))
+          : [];
+        setPlaceList(placeOptions);
       } catch (error) {
         console.error("Error loading dropdown data:", error);
       }
@@ -271,6 +294,18 @@ const HotelRegistrationActions = () => {
     return iconMap[amenityId] || FaCheck;
   };
 
+  // Helper function to get state name from ID
+  const getStateName = (stateId) => {
+    const state = stateList.find(s => s.value === stateId);
+    return state ? state.label : `State ID: ${stateId}`;
+  };
+
+  // Helper function to get place name from ID
+  const getPlaceName = (placeId) => {
+    const place = placeList.find(p => p.value === placeId);
+    return place ? place.label : `Place ID: ${placeId}`;
+  };
+
   const renderContent = () => {
     if (!hotelData) return null;
 
@@ -291,7 +326,7 @@ const HotelRegistrationActions = () => {
                           alt={hotelData.hotelName}
                           className="hotel-main-image"
                           style={{
-                            width: "130%",
+                            width: "100%",
                             height: "300px",
                             objectFit: "cover",
                             borderRadius: "8px",
@@ -307,7 +342,7 @@ const HotelRegistrationActions = () => {
                         className="no-image-placeholder"
                         style={{
                           display: hotelData.image360 ? "none" : "flex",
-                          width: "130%",
+                          width: "100%",
                           height: "300px",
                           borderRadius: "8px",
                         }}
@@ -327,7 +362,12 @@ const HotelRegistrationActions = () => {
                       {/* Hotel Address */}
                       <div className="hotel-location mb-4">
                         <FaMapMarkerAlt className="location-icon" />
-                        <span>{hotelData.address}</span>
+                        <div className="location-details">
+                          <div>{hotelData.address}</div>
+                          <div className="location-additional">
+                            {getStateName(hotelData.stateId)}, {getPlaceName(hotelData.placeId)}
+                          </div>
+                        </div>
                       </div>
 
                       {/* Overview */}
@@ -545,13 +585,28 @@ const HotelRegistrationActions = () => {
       }
 
       console.log("=== LOGIN MODAL OPENING ===");
-      console.log("Current form data before API call:", loginFormData);
+      console.log("Current form data before clearing:", loginFormData);
       console.log("Current saved username:", savedUsername);
       console.log("Current loginDetailsSaved:", loginDetailsSaved);
       
-      // Fetch existing login data when opening modal
-      fetchExistingLoginData();
+      // COMPLETELY reset all login-related state
+      setLoginFormData({
+        username: "",
+        password: "",
+        repassword: "",
+        userroles: []
+      });
+      setLoginDetailsSaved(false);
+      setSavedUsername("");
+      console.log("All login state reset - form should be completely empty");
+      
+      // Show modal first, then fetch data
       setShowLoginDetailsModal(true);
+      
+      // Fetch existing login data after modal is shown
+      setTimeout(() => {
+        fetchExistingLoginData();
+      }, 100);
     }
 
     // else if (actionLabel === "Image Upload") {
@@ -786,28 +841,26 @@ const HotelRegistrationActions = () => {
       const response = await axiosInstance.post(`/auth/checkRegisteredUserExist/${id}`);
       console.log("Login check response:", response.data);
       
-      // If API returns successful response with username
-      if (response.data && response.data.username) {
-        console.log("User found - pre-filling username:", response.data.username);
+      // Check if API returns successful response with userName (existing user)
+      if (response.data && response.data.userName) {
+        console.log("Existing user found - pre-filling username:", response.data.userName);
+        // ONLY set data if API returns userName
         setLoginFormData({
-          username: response.data.username,
+          username: response.data.userName,
           password: "",
           repassword: "",
-          userroles: []
+          userroles: response.data.userRoles || []
         });
         setLoginDetailsSaved(true);
-        setSavedUsername(response.data.username);
+        setSavedUsername(response.data.userName);
+        console.log("Form populated with existing user data");
       } else {
-        // API returned success but no username - treat as new user
-        console.log("API success but no username - treating as new user");
-        setLoginFormData({
-          username: "",
-          password: "",
-          repassword: "",
-          userroles: []
-        });
+        // API returned success but no userName - keep form empty
+        console.log("API success but no userName - keeping form empty for new user");
+        // Don't change form data - keep it empty
         setLoginDetailsSaved(false);
         setSavedUsername("");
+        console.log("Form remains empty for new user");
       }
     } catch (error) {
       console.error("Error fetching login data:", error);
@@ -816,31 +869,18 @@ const HotelRegistrationActions = () => {
       if (error.response && error.response.status === 400 && 
           error.response.data && error.response.data.message && 
           error.response.data.message.includes("User is not Registered")) {
-        console.log("User is not registered (400 error) - showing empty form for new registration");
-        console.log("Current form data before clearing:", loginFormData);
-        // User is not registered, show empty fields for new registration
-        setLoginFormData({
-          username: "",
-          password: "",
-          repassword: "",
-          userroles: []
-        });
+        console.log("User is not registered (400 error) - keeping form empty for new registration");
+        // Don't change form data - keep it empty
         setLoginDetailsSaved(false);
         setSavedUsername("");
-        console.log("Form data cleared - should now be empty");
+        console.log("Form remains empty for new user (400 error)");
       } else {
-        // Other errors - also assume user is not registered
-        console.log("Other error - treating as new user");
-        console.log("Current form data before clearing:", loginFormData);
-        setLoginFormData({
-          username: "",
-          password: "",
-          repassword: "",
-          userroles: []
-        });
+        // Other errors - also keep form empty
+        console.log("Other error - keeping form empty for new user");
+        // Don't change form data - keep it empty
         setLoginDetailsSaved(false);
         setSavedUsername("");
-        console.log("Form data cleared - should now be empty");
+        console.log("Form remains empty for new user (other error)");
       }
     } finally {
       setIsLoadingLoginData(false);
@@ -1541,11 +1581,12 @@ const HotelRegistrationActions = () => {
               <p className="mt-2 text-muted">Loading login details...</p>
             </div>
           ) : (
-            <Form>
+            <Form key={`login-form-${showLoginDetailsModal}`}>
             {/* Debug info - remove this later */}
             <div className="text-muted small mb-3">
               Debug: loginDetailsSaved = {loginDetailsSaved.toString()}, savedUsername = "{savedUsername}"<br/>
-              Form Data: username = "{loginFormData.username}", password = "{loginFormData.password ? '***' : 'empty'}"
+              Form Data: username = "{loginFormData.username}", password = "{loginFormData.password ? '***' : 'empty'}"<br/>
+              API Response: Check console for detailed API response
             </div>
             {loginDetailsSaved && (
               <div className="alert alert-info mb-3" role="alert">
@@ -1560,6 +1601,7 @@ const HotelRegistrationActions = () => {
             <Form.Group className="mb-3">
               <Form.Label>Username</Form.Label>
               <Form.Control
+                key={`username-${showLoginDetailsModal}-${loginFormData.username}`}
                 type="text"
                 placeholder="Enter username"
                 value={(() => {
@@ -1575,6 +1617,7 @@ const HotelRegistrationActions = () => {
             <Form.Group className="mb-3">
               <Form.Label>Password</Form.Label>
               <Form.Control
+                key={`password-${showLoginDetailsModal}-${loginFormData.password}`}
                 type="password"
                 placeholder="Enter password"
                 value={loginFormData.password}
@@ -1586,6 +1629,7 @@ const HotelRegistrationActions = () => {
             <Form.Group className="mb-3">
               <Form.Label>Re-enter Password</Form.Label>
               <Form.Control
+                key={`repassword-${showLoginDetailsModal}-${loginFormData.repassword}`}
                 type="password"
                 placeholder="Re-enter password"
                 value={loginFormData.repassword}

@@ -221,6 +221,11 @@ const HotelReg = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [isLoadingHotelData, setIsLoadingHotelData] = useState(false);
 
+  // Debug: Monitor formData.weekDays changes
+  useEffect(() => {
+    console.log("formData.weekDays changed:", formData.weekDays);
+  }, [formData.weekDays]);
+
   // Weekdays configuration
   const weekdays = [
     { key: "wdSunday", label: "Sunday" },
@@ -671,6 +676,7 @@ const loadHotelData = async () => {
 
   const handleWeekdayChange = (e) => {
     const { name, checked } = e.target;
+    console.log(`Weekday change: ${name} = ${checked}`);
     setFormData((prev) => ({
       ...prev,
       weekDays: {
@@ -682,13 +688,18 @@ const loadHotelData = async () => {
 
   const handleWeekEndDayChange = (e) => {
     const { name, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      weekDays: {
+    console.log(`Weekend day change: ${name} = ${checked}`);
+    setFormData((prev) => {
+      const updatedWeekDays = {
         ...prev.weekDays,
         [name]: checked,
-      },
-    }));
+      };
+      console.log(`Updated weekDays:`, updatedWeekDays);
+      return {
+        ...prev,
+        weekDays: updatedWeekDays,
+      };
+    });
   };
 
   //Amenity managenment
@@ -1158,13 +1169,20 @@ const handleAmenityChange = (e) => {
       });
 
       // Week days
+      console.log("=== WEEKDAYS DEBUG ===");
+      console.log("Complete formData.weekDays:", formData.weekDays);
+      console.log("WeekDays data being sent:", formData.weekDays);
       formDataToSend.append("weekDays.id", formData.weekDays.id || "");
       Object.keys(formData.weekDays).forEach((key) => {
-        formDataToSend.append(
-          `weekDays.${key}`,
-          formData.weekDays[key].toString()
-        );
+        if (key !== 'id') { // Skip id as it's already appended above
+          console.log(`Appending weekDays.${key}: ${formData.weekDays[key]} (${typeof formData.weekDays[key]})`);
+          formDataToSend.append(
+            `weekDays.${key}`,
+            formData.weekDays[key].toString()
+          );
+        }
       });
+      console.log("=== END WEEKDAYS DEBUG ===");
 
       // Room categories
       roomCategories.forEach((room, catIndex) => {
@@ -2466,12 +2484,11 @@ const handleAmenityChange = (e) => {
                               </span>
                               <div className="d-flex gap-4">
                                 {weekdays.map((day) => {
-                                  const fieldName = `wed${
-                                    day.key.charAt(0).toUpperCase() +
-                                    day.key.slice(1)
-                                  }`;
+                                  // Remove 'wd' prefix and capitalize first letter
+                                  const dayName = day.key.replace('wd', '');
+                                  const fieldName = `wed${dayName.charAt(0).toUpperCase() + dayName.slice(1)}`;
                                   const isChecked = formData.weekDays[fieldName];
-                                  console.log(`Weekend day ${day.label}: fieldName=${fieldName}, isChecked=${isChecked}`);
+                                  console.log(`Weekend day ${day.label}: day.key=${day.key}, dayName=${dayName}, fieldName=${fieldName}, isChecked=${isChecked}`);
                                   return (
                                     <Form.Check
                                       key={`wed-${day.key}`}
