@@ -26,7 +26,10 @@ const SpecialRates = () => {
   const [countries, setCountries] = useState([]);
   const [filteredCountries, setFilteredCountries] = useState([]);
   const [roomDetails, setRoomDetails] = useState([]);
-
+  const [hotelRoomsData, setHotelRoomsData] = useState([]);
+  const [roomRates, setRoomRates] = useState({});
+  const [hotelPromotions, setHotelPromotions] = useState([]);
+  const [seasonData, setSeasonData] = useState([]);
 
   const [formData, setFormData] = useState({
     season: "",
@@ -40,25 +43,39 @@ const SpecialRates = () => {
     minimumStay: 0,
     validityList: [{ from: "", to: "" }],
     blackoutDates: [{ from: "", to: "" }],
+    remarks: "",
+    combinedStayPay: "",
+    combinedDiscount: "",
   });
 
+  // ✅ Load hotel room data dynamically
+  const loadHotelRoomDatas = async () => {
+    try {
+      const response = await axiosInstance.get(
+        `/api/hotelRoomDetailsController/${id}`
+      );
+      console.log("Hotel Rooms Data:", response.data);
+      setHotelRoomsData(response.data || []);
+    } catch (error) {
+      toast.error("Failed to load Hotel Rooms Data");
+    }
+  };
+
   // ✅ Fetch dropdown data
-  useEffect(() => {
-    const fetchDropdowns = async () => {
-      try {
-        const [marketRes, countryRes] = await Promise.all([
-          axiosInstance.get("/api/marketType"),
-          axiosInstance.get("/api/country"),
-        ]);
-        setMarkets(marketRes.data || []);
-        setCountries(countryRes.data || []);
-        setFilteredCountries(countryRes.data || []);
-      } catch {
-        toast.error("Failed to load dropdown data");
-      }
-    };
-    fetchDropdowns();
-  }, []);
+
+  const fetchDropdowns = async () => {
+    try {
+      const [marketRes, countryRes] = await Promise.all([
+        axiosInstance.get("/api/marketType"),
+        axiosInstance.get("/api/country"),
+      ]);
+      setMarkets(marketRes.data || []);
+      setCountries(countryRes.data || []);
+      setFilteredCountries(countryRes.data || []);
+    } catch {
+      toast.error("Failed to load dropdown data");
+    }
+  };
 
   // ✅ Filter countries based on selected markets
   useEffect(() => {
@@ -74,70 +91,42 @@ const SpecialRates = () => {
   }, [formData.marketType, countries]);
 
   // ✅ Fetch room data
-  useEffect(() => {
-    const fetchRoomRates = async () => {
-      try {
-        setLoading(true);
-        const res = await axiosInstance.get(`/api/hotel/${id}/room-meal-data`);
-        const roomData = res.data || [];
 
-        const formatted = roomData.map((room) => ({
-          roomId: room.roomId,
-          roomName: room.roomName,
-          mealPlans: room.mealPlans.map((meal) => ({
-            mealPlanId: meal.mealPlanId,
-            mealName: meal.mealName,
-            single: "",
-            double: "",
-            extraAdult: "",
-            extraChild: "",
-          })),
-        }));
-
-        setRooms(formatted);
-      } catch {
-        toast.error("Failed to load room details");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchRoomRates();
-  }, [id]);
-
- useEffect(() => {
-  const fetchRoomDetails = async () => {
+  const fetchHotelPromotions = async () => {
     try {
-      const res = await axiosInstance.get(`/api/hotelRoomDetailsController/${id}`);
-      const data = res.data || [];
-
-      const formatted = data.map((room) => ({
-        id: room.id,
-        roomCategory: room.roomCategory,
-        occupancies: room.occupancyDetailsDTOs.map((occ) => ({
-          id: occ.id,
-          occupancyType: occ.occupanyType,
-          rateSingle: 0,
-          rateDouble: 0,
-          rateExtraAdult: 0,
-          rateExtraChild: 0,
-        })),
-      }));
-
-      setRoomDetails(formatted);
-    } catch (error) {
-      toast.error("Failed to fetch room contract details");
+      setLoading(true);
+      const res = await axiosInstance.get(`api/hotelPromotions/${id}`);
+      const hotelPromotionsData = res.data || [];
+      setHotelPromotions(hotelPromotionsData);
+    } catch {
+      toast.error("Failed to load hotelpromotions");
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (id) fetchRoomDetails();
-}, [id]);
-const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
-  const updated = [...roomDetails];
-  updated[roomIndex].occupancies[occIndex][field] = value;
-  setRoomDetails(updated);
-};
+    const seasonList = async () => {
+    try {
+      setLoading(true);
+      const seasonRes = await axiosInstance.get(`api/seasonType`);
+      console.log("seasonRes::",seasonRes.data);
+      if(seasonRes.data){
+         setSeasonData(seasonRes.data);
+      }
+     
+    } catch {
+      toast.error("Failed to load seasons");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-
+  useEffect(() => {
+    fetchDropdowns();
+    loadHotelRoomDatas();
+    fetchHotelPromotions();
+    seasonList();
+  }, []);
 
   // ✅ Handlers
   const handleMealRateChange = (roomIndex, mealIndex, field, value) => {
@@ -164,13 +153,6 @@ const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
     updated[index][key] = value;
     setFormData({ ...formData, [field]: updated });
   };
-
-  const handleContractRateChange = (roomIndex, occIndex, value) => {
-  const updated = [...roomDetails];
-  updated[roomIndex].occupancies[occIndex].rate = value;
-  setRoomDetails(updated);
-};
-
 
   // ✅ Submit
   const handleSubmit = async (e) => {
@@ -202,25 +184,51 @@ const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
         isType: "B",
       }));
 
-      const specialRateRoomDTO = rooms.flatMap((room) =>
-  room.mealPlans.map((meal) => ({
-    hotelRoomcategoryId: String(room.roomId),
-    hotelRoomTypeId: String(room.roomId),
-    ocuppancyTypeIid: String(meal.occupancyId),
-    rate: meal.single || meal.double || "0",
-    extraBed: !!meal.extraAdult || !!meal.extraChild,
-    meal: true,
-    adultrate: meal.extraAdult || "",
-    childrate: meal.extraChild || "",
-  }))
-);
+      // Create special rate room DTO from dynamic hotel rooms data
+      const specialRateRoomDTO = hotelRoomsData.flatMap(
+        (roomCategory) =>
+          roomCategory.roomTypeDetailsDTOs?.flatMap(
+            (roomType) =>
+              roomCategory.occupancyDetailsDTOs?.map((occupancy) => {
+                const rateKey = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`;
+                const rate = roomRates[rateKey] || "0";
+                return {
+                  hotelRoomcategoryId: String(roomCategory.rommCategoryId),
+                  hotelRoomTypeId: String(roomType.roomTypeId),
+                  ocuppancyTypeIid: String(occupancy.id),
+                  rate: rate,
+                  extraBed: false, // Set based on occupancy type if needed
+                  meal: false, // This is for room rates, not meal rates
+                  adultrate: "",
+                  childrate: "",
+                };
+              }) || []
+          ) || []
+      );
 
+      // Also include meal plan rates if they exist
+      const mealRateDTO = rooms.flatMap((room) =>
+        room.mealPlans.map((meal) => ({
+          hotelRoomcategoryId: String(room.roomId),
+          hotelRoomTypeId: String(room.roomId),
+          ocuppancyTypeIid: String(meal.occupancyId),
+          rate: meal.single || meal.double || "0",
+          extraBed: !!meal.extraAdult || !!meal.extraChild,
+          meal: true,
+          adultrate: meal.extraAdult || "",
+          childrate: meal.extraChild || "",
+        }))
+      );
 
-      const payload = {
-        markeType: formData.marketType.map((m) => m.value),
-        excludeCountry: formData.excludeNationality.map((c) => c.value),
-        hotelId: id,
-        seasonId: formData.season,
+      // Combine both room and meal rates
+      const allSpecialRateRoomDTO = [...specialRateRoomDTO, ...mealRateDTO];
+
+      const specialratesaveReq = {
+        marketype: formData.marketType.map((m) => m.value),
+        excludeCountrys: formData.excludeNationality.map((c) => c.value),
+        promotypeArray: null,
+        hotelId: String(id),
+        seasonId: String(formData.season),
         specialrateId: "",
         rateCode: formData.rateCode.trim(),
         weekDay,
@@ -230,17 +238,25 @@ const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
         lengthStay: String(formData.minimumStay),
-        remark: "Special Rate Creation",
+        remark: formData.remarks || "",
+        combinedPromoId: formData.combinedStayPay || formData.combinedDiscount || "",
+        promotype: formData.combinedStayPay ? "SAP" : formData.combinedDiscount ? "DSR" : "",
         specialRateValidityDTO: [...validityList, ...blackoutDates],
         promotionCompulsoryDTO: [],
-        specialRateRoomDTO,
+        specialRateRoomDTO: allSpecialRateRoomDTO,
       };
 
-      console.log("Payload:", payload);
+      console.log("Payload specialratesaveReq:", specialratesaveReq);
+     
+      const response = await axiosInstance.post(
+        "/api/hotelSpecialRate/save",
+        specialratesaveReq
+      );
 
-      await axiosInstance.post("/api/hotelSpecialRate/save", payload);
-      toast.success("Special Rate Saved Successfully!");
-      navigate(`/registration/hotel/${id}/promotion`);
+      if (response.data) {
+        toast.success("Special Rate Saved Successfully!");
+        navigate(`/hotel-actions/${id}/promotions`);
+      }
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to save special rate");
@@ -289,15 +305,14 @@ const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
                           }
                           className="rounded-pill"
                         >
-                          <option value="">Select Season</option>
-                          <option value="1">Peak</option>
-                          <option value="2">Mid</option>
-                          <option value="3">Low</option>
-                          <option value="4">High</option>
-                          <option value="5">Shoulder</option>
-                          <option value="6">High High</option>
-                          <option value="7">Festive</option>
-
+                            <option value="">Select Season</option>
+                            {seasonData?.map(
+                                       (season) => (
+                                         <option key={season.seasonTypeId} value={season.seasonTypeId}>
+                                           {season.season}
+                                         </option>
+                                       )
+                                     )}
                         </Form.Select>
                       </Form.Group>
                     </Col>
@@ -491,6 +506,7 @@ const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
                               <Form.Control
                                 type="date"
                                 value={v.to}
+                                min={v.from || ""}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -551,6 +567,7 @@ const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
                               <Form.Control
                                 type="date"
                                 value={b.to}
+                                min={b.from || ""}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -669,38 +686,173 @@ const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
                     </Card>
                   ))}
 
-                  {/* ✅ Contract Rate Section */}
-{roomDetails.length > 0 && (
-  <Card className="p-3 mb-4 border shadow-sm rounded-4">
-    <h6 className="fw-bold text-primary mb-3">Contract Rate Details</h6>
+                  {/* ✅ Contract Rate Details Section */}
+                  {hotelRoomsData.length > 0 && (
+                    <Card className="p-3 mb-4 border shadow-sm rounded-4">
+                      <h6 className="fw-bold text-primary mb-3">
+                        Contract Rate Details
+                      </h6>
 
-    {roomDetails.map((room, roomIndex) => (
-      <div key={room.id} className="mb-3">
-        <h6 className="text-dark mb-2">{room.roomCategory}</h6>
-        {room.occupancies.map((occ, occIndex) => (
-          <Row key={occ.occupancyId} className="align-items-center mb-2">
-            <Col md={3}>
-              <Form.Label className="text-muted small">
-                {occ.occupancyType}
-              </Form.Label>
-            </Col>
-            <Col md={3}>
-              <Form.Control
-                type="number"
-                placeholder="Enter rate"
-                value={occ.rate}
-                onChange={(e) =>
-                  handleContractRateChange(roomIndex, occIndex, e.target.value)
-                }
-              />
-            </Col>
-          </Row>
-        ))}
-      </div>
-    ))}
-  </Card>
-)}
+                      {hotelRoomsData.map((roomCategory, roomIndex) => (
+                        <Card
+                          key={roomCategory.rommCategoryId}
+                          className="mb-3 border"
+                        >
+                          <Card.Header className="bg-light">
+                            <Form.Check
+                              type="checkbox"
+                              id={`room-category-${roomCategory.rommCategoryId}`}
+                              label={`${roomCategory.roomCategory?.toUpperCase()}`}
+                              defaultChecked
+                              className="fw-bold text-primary"
+                            />
+                          </Card.Header>
+                          <Card.Body>
+                            {/* Room Types and Occupancy Rates Table */}
+                            <div className="table-responsive">
+                              <table className="table table-bordered">
+                                <thead className="table-light">
+                                  <tr>
+                                    <th>Room Type</th>
+                                    {roomCategory.occupancyDetailsDTOs?.map(
+                                      (occupancy) => (
+                                        <th key={occupancy.id}>
+                                          {occupancy.occupanyType}
+                                        </th>
+                                      )
+                                    )}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {roomCategory.roomTypeDetailsDTOs?.map(
+                                    (roomType, roomTypeIndex) => (
+                                      <tr key={roomType.roomTypeId}>
+                                        <td className="fw-semibold">
+                                          {roomType.roomTypeName}
+                                        </td>
+                                        {roomCategory.occupancyDetailsDTOs?.map(
+                                          (occupancy, occIndex) => (
+                                            <td key={occupancy.id}>
+                                              <Form.Control
+                                                type="number"
+                                                placeholder="0"
+                                                value={
+                                                  roomRates[
+                                                    `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
+                                                  ] || ""
+                                                }
+                                                onChange={(e) => {
+                                                  const key = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`;
+                                                  setRoomRates((prev) => ({
+                                                    ...prev,
+                                                    [key]: e.target.value,
+                                                  }));
+                                                }}
+                                                size="sm"
+                                              />
+                                            </td>
+                                          )
+                                        )}
+                                      </tr>
+                                    )
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      ))}
+                    </Card>
+                  )}
 
+                  {/* ✅ Additional Fields Section */}
+                  <Card className="p-3 mb-4 border shadow-sm rounded-4">
+                    <h6 className="fw-bold text-primary mb-3">
+                      Additional Details
+                    </h6>
+                    <Row className="g-3">
+                      {/* Remarks */}
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label>Remarks</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            placeholder="Enter remarks..."
+                            value={formData.remarks || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                remarks: e.target.value,
+                              })
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+
+                      {/* Combined with Stay Pay */}
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Combined with Stay Pay</Form.Label>
+                          <Form.Select
+                            value={formData.combinedStayPay || ""}
+                            onChange={(e) => {
+                              const selectedValue = e.target.value;
+                              setFormData({
+                                ...formData,
+                                combinedStayPay: selectedValue,
+                                // Clear the other field when this one is selected
+                                combinedDiscount: selectedValue ? "" : formData.combinedDiscount,
+                              });
+                            }}
+                          >
+                            <option value="">SELECT</option>
+                            {Array.isArray(hotelPromotions) &&
+                              hotelPromotions
+                                .filter(
+                                  (promo) => promo.promotionType === "StayPay"
+                                )
+                                .map((promo) => (
+                                  <option key={promo.id} value={promo.id}>
+                                    {promo.promotionCode}
+                                  </option>
+                                ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+
+                      {/* Combined with Discount */}
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Combined with Discount</Form.Label>
+                          <Form.Select
+                            value={formData.combinedDiscount || ""}
+                            onChange={(e) => {
+                              const selectedValue = e.target.value;
+                              setFormData({
+                                ...formData,
+                                combinedDiscount: selectedValue,
+                                // Clear the other field when this one is selected
+                                combinedStayPay: selectedValue ? "" : formData.combinedStayPay,
+                              });
+                            }}
+                          >
+                            <option value="">SELECT</option>
+                            {Array.isArray(hotelPromotions) &&
+                              hotelPromotions
+                                .filter(
+                                  (promo) => promo.promotionType === "Discount"
+                                )
+                                .map((promo) => (
+                                  <option key={promo.id} value={promo.id}>
+                                    {promo.promotionCode}
+                                  </option>
+                                ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card>
 
                   {/* ✅ Buttons */}
                   <div className="d-flex justify-content-end gap-3 mt-4 pt-3 border-top">
@@ -730,359 +882,3 @@ const handleRoomRateChange = (roomIndex, occIndex, field, value) => {
 };
 
 export default SpecialRates;
-
-
-
-
-
-
-// import React, { useEffect, useState } from "react";
-// import { useParams, useNavigate } from "react-router-dom";
-// import {
-//   Container,
-//   Table,
-//   Button,
-//   Modal,
-//   Form,
-//   Spinner,
-//   Badge,
-//   Card,
-// } from "react-bootstrap";
-// import { FaArrowLeft, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
-// import axiosInstance from "../../../components/AxiosInstance";
-// import { toast } from "react-hot-toast";
-// import Sidebar from "../../../components/Sidebar";
-// import Topbar from "../../../components/TopBar";
-
-// const Promotion = () => {
-//   const { id } = useParams(); // hotelId
-//   const navigate = useNavigate();
-
-//   const [promotions, setPromotions] = useState([]);
-//   const [loading, setLoading] = useState(false);
-//   const [showModal, setShowModal] = useState(false);
-//   const [searchTerm, setSearchTerm] = useState("");
-
-//   const [formData, setFormData] = useState({
-//     type: "", // selected promotion type
-//   });
-
-//   // ✅ Fetch all promotions
-//   const fetchPromotions = async () => {
-//     try {
-//       setLoading(true);
-//       const res = await axiosInstance.get(`/api/hotelPromotions/${id}`);
-//       setPromotions(res.data || []);
-//     } catch (error) {
-//       console.error("Error fetching promotions:", error);
-//       toast.error("Failed to load promotions");
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (id) fetchPromotions();
-//   }, [id]);
-
-//   // ✅ Create button → open modal
-//   const handleCreate = () => {
-//     setFormData({ type: "" });
-//     setShowModal(true);
-//   };
-
-//   // ✅ Delete promotion
-//   const handleDelete = async (promo) => {
-//     if (!window.confirm("Are you sure you want to delete this promotion?")) return;
-
-//     let endpoint = "";
-
-//     // ✅ Match each working backend endpoint exactly
-//     switch (promo.promotionType) {
-//       case "Special Rates":
-//         endpoint = `/api/hotelSpecialRate/${promo.id}`;
-//         break;
-
-//       case "Discount":
-//       case "Discount Promotion":
-//         endpoint = `/api/discount/${promo.id}`;
-//         break;
-
-//       case "StayPay":
-//       case "Stay Pay Promotion":
-//         endpoint = `/api/hotelStaypay/${promo.id}`;
-//         break;
-
-//       default:
-//         toast.error("Unknown promotion type");
-//         return;
-//     }
-
-//     try {
-//       console.log("🟢 Deleting:", endpoint);
-//       const res = await axiosInstance.delete(endpoint);
-//       console.log("✅ Delete success:", res.status);
-//       toast.success(`${promo.promotionType} deleted successfully`);
-//       fetchPromotions(); // Refresh list after delete
-//     } catch (error) {
-//       console.error("❌ Delete Error:", error.response || error);
-//       if (error?.response?.status === 403) {
-//         toast.error("Forbidden: Check backend role permissions");
-//       } else {
-//         toast.error("Failed to delete promotion");
-//       }
-//     }
-//   };
-
-//   // ✅ Handle navigation for creation
-//   const handleGo = () => {
-//     if (!formData.type) return toast.error("Please select a promotion type");
-
-//     switch (formData.type) {
-//       case "special-rates":
-//         navigate(`/registration/hotel/${id}/promotion/special`);
-//         break;
-//       case "discount-promotion":
-//         navigate(`/registration/hotel/${id}/promotion/discount`);
-//         break;
-//       case "stay-pay-promotion":
-//         navigate(`/registration/hotel/${id}/promotion/staypay`);
-//         break;
-//       default:
-//         break;
-//     }
-//     setShowModal(false);
-//   };
-
-//   // ✅ Render Validity Periods
-//   const renderValidity = (promo) => {
-//     const { discountValidities = [], blackOutValidities = [] } =
-//       promo.promotionValidityDTO || {};
-
-//     return (
-//       <>
-//         {discountValidities.length > 0 ? (
-//           <>
-//             <strong>Discount:</strong>
-//             <ul className="mb-1">
-//               {discountValidities.map((v, i) => (
-//                 <li key={i}>
-//                   {v.validityFrom} → {v.validityTo}
-//                 </li>
-//               ))}
-//             </ul>
-//           </>
-//         ) : (
-//           <span className="text-muted">—</span>
-//         )}
-
-//         {blackOutValidities.length > 0 && (
-//           <>
-//             <strong>Blackout:</strong>
-//             <ul>
-//               {blackOutValidities.map((b, i) => (
-//                 <li key={i}>
-//                   {b.blackOutFrom} → {b.blackOutTo}
-//                 </li>
-//               ))}
-//             </ul>
-//           </>
-//         )}
-//       </>
-//     );
-//   };
-
-//   // ✅ Filter promotions by name
-//   const filteredPromotions = promotions.filter((promo) =>
-//     promo.promotionName?.toLowerCase().includes(searchTerm.toLowerCase())
-//   );
-
-//   return (
-//     <div className="min-vh-100 bg-light d-flex flex-column">
-//       <Topbar />
-//       <div className="d-flex flex-grow-1">
-//         <Sidebar />
-
-//         <main className="flex-grow-1 p-4">
-//           <Container fluid>
-//             <Card className="shadow-sm rounded-xl">
-//               <Card.Header className="d-flex justify-content-between align-items-center">
-//                 <div className="d-flex align-items-center gap-2">
-//                   <Button
-//                     variant="link"
-//                     className="text-decoration-none text-dark"
-//                     onClick={() => navigate(-1)}
-//                   >
-//                     <FaArrowLeft /> Back
-//                   </Button>
-//                   <h5 className="fw-semibold mb-0">Promotions</h5>
-//                 </div>
-
-//                 {/* Search bar */}
-//                 <Form.Group className="position-relative w-25">
-//                   <Form.Control
-//                     type="text"
-//                     placeholder="Search promotion by name..."
-//                     value={searchTerm}
-//                     onChange={(e) => setSearchTerm(e.target.value)}
-//                   />
-//                   {searchTerm && (
-//                     <button
-//                       type="button"
-//                       className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
-//                       style={{
-//                         border: "none",
-//                         background: "none",
-//                         color: "#6c757d",
-//                         padding: "0 12px",
-//                       }}
-//                       onClick={() => setSearchTerm("")}
-//                       title="Clear search"
-//                     >
-//                       <i className="fas fa-times"></i>
-//                     </button>
-//                   )}
-//                 </Form.Group>
-
-//                 <Button className="btn-green" onClick={handleCreate}>
-//                   + Create
-//                 </Button>
-//               </Card.Header>
-
-//               <Card.Body className="p-0">
-//                 {loading ? (
-//                   <div className="text-center py-5">
-//                     <Spinner animation="border" variant="primary" />
-//                   </div>
-//                 ) : (
-//                   <Table responsive hover striped className="mb-0 align-middle">
-//                     <thead className="table-light">
-//                       <tr>
-//                         <th>#</th>
-//                         <th>Type</th>
-//                         <th>Name</th>
-//                         <th>Validity</th>
-//                         <th>Promotion Code</th>
-//                         <th>Day Type</th>
-//                         <th>Status</th>
-//                         <th>Actions</th>
-//                       </tr>
-//                     </thead>
-//                     <tbody>
-//                       {filteredPromotions.length > 0 ? (
-//                         filteredPromotions.map((promo, index) => (
-//                           <tr key={`${promo.id}-${index}`}>
-//                             <td>{index + 1}</td>
-//                             <td>{promo.promotionType || "—"}</td>
-//                             <td>{promo.promotionName || "—"}</td>
-//                             <td>{renderValidity(promo)}</td>
-//                             <td>{promo.promotionCode || "—"}</td>
-//                             <td>{promo.dayType || "—"}</td>
-//                             <td>
-//                               <Badge bg={promo.status ? "success" : "secondary"}>
-//                                 {promo.status ? "Active" : "Inactive"}
-//                               </Badge>
-//                             </td>
-//                             <td>
-//                               <div className="d-flex gap-2">
-//                                 <FaEdit
-//                                   className="text-primary"
-//                                   style={{ cursor: "pointer", fontSize: "18px" }}
-//                                   onClick={() =>
-//                                     navigate(
-//                                       `/registration/hotel/${id}/promotion/${promo.id}/edit`
-//                                     )
-//                                   }
-//                                   title="Edit"
-//                                 />
-//                                 <FaTrash
-//                                   className="text-danger"
-//                                   style={{ cursor: "pointer", fontSize: "18px" }}
-//                                   onClick={() => handleDelete(promo)}
-//                                   title="Delete"
-//                                 />
-//                               </div>
-//                             </td>
-//                           </tr>
-//                         ))
-//                       ) : (
-//                         <tr>
-//                           <td colSpan={8} className="text-center text-muted py-3">
-//                             No promotions found
-//                           </td>
-//                         </tr>
-//                       )}
-//                     </tbody>
-//                   </Table>
-//                 )}
-//               </Card.Body>
-//             </Card>
-
-//             {/* Modal for selecting promotion type */}
-//             <Modal show={showModal} onHide={() => setShowModal(false)} centered>
-//               <Modal.Header className="bg-primary text-white">
-//                 <Modal.Title>Select Promotion Type</Modal.Title>
-//               </Modal.Header>
-
-//               <Modal.Body>
-//                 <Form>
-//                   <Form.Label className="fw-semibold text-danger">
-//                     * Choose one:
-//                   </Form.Label>
-//                   <div className="mt-2">
-//                     <Form.Check
-//                       type="radio"
-//                       id="specialRates"
-//                       name="promotionType"
-//                       label="Special Rates"
-//                       value="special-rates"
-//                       checked={formData.type === "special-rates"}
-//                       onChange={(e) =>
-//                         setFormData({ ...formData, type: e.target.value })
-//                       }
-//                       className="mb-2"
-//                     />
-//                     <Form.Check
-//                       type="radio"
-//                       id="discountPromotion"
-//                       name="promotionType"
-//                       label="Discount Promotion"
-//                       value="discount-promotion"
-//                       checked={formData.type === "discount-promotion"}
-//                       onChange={(e) =>
-//                         setFormData({ ...formData, type: e.target.value })
-//                       }
-//                       className="mb-2"
-//                     />
-//                     <Form.Check
-//                       type="radio"
-//                       id="stayPayPromotion"
-//                       name="promotionType"
-//                       label="Stay Pay Promotion"
-//                       value="stay-pay-promotion"
-//                       checked={formData.type === "stay-pay-promotion"}
-//                       onChange={(e) =>
-//                         setFormData({ ...formData, type: e.target.value })
-//                       }
-//                     />
-//                   </div>
-//                 </Form>
-//               </Modal.Body>
-
-//               <Modal.Footer className="justify-content-between">
-//                 <Button variant="danger" onClick={() => setShowModal(false)}>
-//                   ✖ Cancel
-//                 </Button>
-//                 <Button variant="success" onClick={handleGo}>
-//                   Go →
-//                 </Button>
-//               </Modal.Footer>
-//             </Modal>
-//           </Container>
-//         </main>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default Promotion;

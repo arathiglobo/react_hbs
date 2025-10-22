@@ -88,13 +88,13 @@ const Promotion = () => {
     if (!formData.type) return toast.error("Please select a promotion type");
     switch (formData.type) {
       case "special-rates":
-        navigate(`/registration/hotel/${id}/promotion/special`);
+        navigate(`/hotel-actions/${id}/promotion/special-rate/save`);
         break;
       case "discount-promotion":
-        navigate(`/registration/hotel/${id}/promotion/discount`);
+        navigate(`/hotel-actions/${id}/promotion/discount/save`);
         break;
       case "stay-pay-promotion":
-        navigate(`/registration/hotel/${id}/promotion/staypay`);
+        navigate(`/hotel-actions/${id}/promotion/staypay/save`);
         break;
       default:
         break;
@@ -237,18 +237,18 @@ const Promotion = () => {
                                 const type = promo.promotionType?.toLowerCase();
                                 if (type.includes("special")) {
                                   navigate(
-                                    `/registration/hotel/${id}/promotion/special/${promo.id}/edit`
+                                    `/hotel-actions/${id}/promotion/special-rate/edit/${promo.id}`
                                   );
                                 } else if (type.includes("discount")) {
                                   navigate(
-                                    `/registration/hotel/${id}/promotion/discount/${promo.id}/edit`
+                                   `/hotel-actions/${id}/promotion/discount/edit/${promo.id}`
                                   );
                                 } else if (
                                   type.includes("staypay") ||
                                   type.includes("stay pay")
                                 ) {
                                   navigate(
-                                    `/registration/hotel/${id}/promotion/staypay/${promo.id}/edit`
+                                   `/hotel-actions/${id}/promotion/staypay/edit/${promo.id}`
                                   );
                                 } else {
                                   toast.error("Unknown promotion type");

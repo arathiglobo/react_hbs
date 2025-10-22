@@ -18,7 +18,8 @@ import { toast } from "react-hot-toast";
 
 export default function EditSpecialRates() {
   const navigate = useNavigate();
-  const { id, rateId } = useParams();
+  const { id, editId } = useParams();
+
 
   const [loading, setLoading] = useState(false);
   const [markets, setMarkets] = useState([]);
@@ -26,6 +27,10 @@ export default function EditSpecialRates() {
   const [filteredCountries, setFilteredCountries] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [roomDetails, setRoomDetails] = useState([]);
+  const [hotelRoomsData, setHotelRoomsData] = useState([]);
+  const [roomRates, setRoomRates] = useState({});
+  const [hotelPromotions, setHotelPromotions] = useState([]);
+  const [seasonData, setSeasonData] = useState([]);
 
   const [formData, setFormData] = useState({
     season: "",
@@ -39,24 +44,71 @@ export default function EditSpecialRates() {
     minimumStay: 0,
     validityList: [{ from: "", to: "" }],
     blackoutDates: [{ from: "", to: "" }],
+    remarks: "",
+    combinedStayPay: "",
+    combinedDiscount: "",
   });
 
-  // ✅ Fetch dropdown data
-  useEffect(() => {
-    const fetchDropdowns = async () => {
-      try {
-        const [marketRes, countryRes] = await Promise.all([
-          axiosInstance.get("/api/marketType"),
-          axiosInstance.get("/api/country"),
-        ]);
-        setMarkets(marketRes.data || []);
-        setCountries(countryRes.data || []);
-        setFilteredCountries(countryRes.data || []);
-      } catch {
-        toast.error("Failed to load dropdown data");
+  // ✅ Load hotel room data dynamically
+  const loadHotelRoomDatas = async () => {
+    try {
+      const response = await axiosInstance.get(
+        `/api/hotelRoomDetailsController/${id}`
+      );
+       // console.log("Hotel Rooms Data:", response.data);
+      setHotelRoomsData(response.data || []);
+    } catch (error) {
+      toast.error("Failed to load Hotel Rooms Data");
+    }
+  };
+
+  const fetchDropdowns = async () => {
+    try {
+      const [marketRes, countryRes] = await Promise.all([
+        axiosInstance.get("/api/marketType"),
+        axiosInstance.get("/api/country"),
+      ]);
+      setMarkets(marketRes.data || []);
+      setCountries(countryRes.data || []);
+      setFilteredCountries(countryRes.data || []);
+    } catch {
+      toast.error("Failed to load dropdown data");
+    }
+  };
+
+  const fetchHotelPromotions = async () => {
+    try {
+      setLoading(true);
+      const res = await axiosInstance.get(`api/hotelPromotions/${id}`);
+      const hotelPromotionsData = res.data || [];
+      setHotelPromotions(hotelPromotionsData);
+    } catch {
+      toast.error("Failed to load hotelpromotions");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const seasonList = async () => {
+    try {
+      setLoading(true);
+      const seasonRes = await axiosInstance.get(`api/seasonType`);
+       // console.log("seasonRes::", seasonRes.data);
+      if (seasonRes.data) {
+        setSeasonData(seasonRes.data);
       }
-    };
+    } catch {
+      toast.error("Failed to load seasons");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDropdowns();
+    loadHotelRoomDatas();
+    fetchHotelPromotions();
+    seasonList();
   }, []);
 
   // ✅ Filter countries based on selected markets
@@ -72,59 +124,136 @@ export default function EditSpecialRates() {
     }
   }, [formData.marketType, countries]);
 
-  // ✅ Fetch Special Rate + Room + Contract Details
+  // ✅ Fetch Special Rate Data for Edit
+  const fetchSpecialRateData = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get(
+        `/api/hotelSpecialRate/${editId}`
+      );
+      const specialData = response.data;
+        console.log("Special Rate Data for Edit:", specialData);
+        console.log("Combined fields from API - combinedPromoId:", specialData.combinedPromoId, "promotype:", specialData.promotype);
+
+      // Convert date format from DD-MM-YYYY to YYYY-MM-DD for date inputs
+      const convertDateForInput = (dateStr) => {
+        if (!dateStr) return "";
+        const parts = dateStr.split("-");
+        if (parts.length === 3) {
+          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(
+            2,
+            "0"
+          )}`;
+        }
+        return dateStr;
+      };
+
+      // Prefill form data with existing values
+      setFormData({
+        season: String(specialData.seasonId || ""),
+        rateCode: specialData.rateCode || "",
+        marketType:
+          specialData.marketype?.map((m) => ({
+            value: m,
+            label:
+              markets.find((x) => x.marketTypeId === m)?.name || `Market ${m}`,
+          })) || [],
+        excludeNationality:
+          specialData.excludeCountrys?.map((id) => ({
+            value: id,
+            label: countries.find((c) => c.id === id)?.name || `Country ${id}`,
+          })) || [],
+        isRefundable: specialData.isRefund || false,
+        weekType:
+          specialData.allDays === 1
+            ? "all"
+            : specialData.weekDay === 1
+            ? "weekdays"
+            : "weekends",
+        bookByDate: convertDateForInput(specialData.bookDate) || "",
+        bookByPriorDays: specialData.bookDay || "",
+        minimumStay: specialData.lengthStay || 0,
+        validityList: specialData.specialRateValidityDTO
+          ?.filter((v) => v.isType === "V")
+          ?.map((v) => ({
+            from: convertDateForInput(v.validityFrom) || "",
+            to: convertDateForInput(v.validityTo) || "",
+          })) || [{ from: "", to: "" }],
+        blackoutDates: specialData.specialRateValidityDTO
+          ?.filter((v) => v.isType === "B")
+          ?.map((b) => ({
+            from: convertDateForInput(b.validityFrom) || "",
+            to: convertDateForInput(b.validityTo) || "",
+          })) || [{ from: "", to: "" }],
+        remarks: specialData.remark || "",
+        combinedStayPay: specialData.promotype === "SAP" ? specialData.combinedPromoId || "" : "",
+        combinedDiscount: specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "",
+      });
+
+        console.log("Form data set - combinedStayPay:", specialData.promotype === "SAP" ? specialData.combinedPromoId || "" : "", "combinedDiscount:", specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "");
+
+      // Load existing room rates if available
+      if (specialData.specialRateRoomDTO) {
+        const existingRates = {};
+        specialData.specialRateRoomDTO.forEach((rate) => {
+          const key = `${rate.hotelRoomcategoryId}_${rate.hotelRoomTypeId}_${rate.ocuppancyTypeIid}`;
+          existingRates[key] = rate.rate;
+        });
+        setRoomRates(existingRates);
+         // console.log("Loaded existing room rates:", existingRates);
+      }
+    } catch (err) {
+      console.error("Error loading special rate data:", err);
+      toast.error("Failed to load special rate details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
+   if (id && editId) {
+       // console.log("Both id and editId are available, fetching data...");
+      fetchSpecialRateData();
+    } else {
+       // console.log("Missing parameters - id:", id, "editId:", editId);
+    }
+  }, [id, editId]);
+
+  // ✅ Re-populate form when markets and countries are loaded
+  useEffect(() => {
+    const repopulateFormData = async () => {
+      if (!editId || !markets.length || !countries.length) return;
+
       try {
-        setLoading(true);
+        const response = await axiosInstance.get(
+          `/api/hotelSpecialRate/${editId}`
+        );
+        const specialData = response.data;
 
-        const [specialRateRes, roomMealRes, roomDetailsRes] = await Promise.all([
-          axiosInstance.get(`/api/hotelSpecialRate/${rateId}`),
-          axiosInstance.get(`/api/hotel/${id}/room-meal-data`),
-          axiosInstance.get(`/api/hotelRoomDetailsController/${id}`),
-        ]);
+        // Convert date format from DD-MM-YYYY to YYYY-MM-DD for date inputs
+        const convertDateForInput = (dateStr) => {
+          if (!dateStr) return "";
+          const parts = dateStr.split("-");
+          if (parts.length === 3) {
+            return `${parts[2]}-${parts[1].padStart(
+              2,
+              "0"
+            )}-${parts[0].padStart(2, "0")}`;
+          }
+          return dateStr;
+        };
 
-        const specialData = specialRateRes.data;
-        const roomData = roomMealRes.data || [];
-        const roomDetailsData = roomDetailsRes.data || [];
-
-        // 🟢 Rooms + Meal Plans
-        const formattedRooms = roomData.map((room) => ({
-          roomId: room.roomId,
-          roomName: room.roomName,
-          mealPlans: room.mealPlans.map((meal) => ({
-            mealPlanId: meal.mealPlanId,
-            mealName: meal.mealName,
-            single: "",
-            double: "",
-            extraAdult: "",
-            extraChild: "",
-          })),
-        }));
-
-        // 🟢 Contract Rates
-        const formattedRoomDetails = roomDetailsData.map((room) => ({
-          id: room.id,
-          roomCategory: room.roomCategory,
-          occupancies: room.occupancyDetailsDTOs.map((occ) => ({
-            id: occ.id,
-            occupancyType: occ.occupanyType,
-            rate: 0,
-          })),
-        }));
-
-        setRooms(formattedRooms);
-        setRoomDetails(formattedRoomDetails);
-
-        // 🟢 Prefill Form Data
-        setFormData({
-          season: specialData.seasonId || "",
+        // Update form data with proper market and country labels
+        setFormData((prev) => ({
+          ...prev,
+          season: String(specialData.seasonId || ""),
           rateCode: specialData.rateCode || "",
           marketType:
             specialData.marketype?.map((m) => ({
               value: m,
               label:
-                markets.find((x) => x.marketTypeId === m)?.name || `Market ${m}`,
+                markets.find((x) => x.marketTypeId === m)?.name ||
+                `Market ${m}`,
             })) || [],
           excludeNationality:
             specialData.excludeCountrys?.map((id) => ({
@@ -139,34 +268,48 @@ export default function EditSpecialRates() {
               : specialData.weekDay === 1
               ? "weekdays"
               : "weekends",
-          bookByDate: specialData.bookDate || "",
+          bookByDate: convertDateForInput(specialData.bookDate) || "",
           bookByPriorDays: specialData.bookDay || "",
           minimumStay: specialData.lengthStay || 0,
-          validityList:
-            specialData.specialRateValidityDTO
-              ?.filter((v) => v.isType === "V")
-              ?.map((v) => ({
-                from: v.validityFrom || "",
-                to: v.validityTo || "",
-              })) || [{ from: "", to: "" }],
-          blackoutDates:
-            specialData.specialRateValidityDTO
-              ?.filter((v) => v.isType === "B")
-              ?.map((b) => ({
-                from: b.validityFrom || "",
-                to: b.validityTo || "",
-              })) || [{ from: "", to: "" }],
-        });
+          validityList: specialData.specialRateValidityDTO
+            ?.filter((v) => v.isType === "V")
+            ?.map((v) => ({
+              from: convertDateForInput(v.validityFrom) || "",
+              to: convertDateForInput(v.validityTo) || "",
+            })) || [{ from: "", to: "" }],
+          blackoutDates: specialData.specialRateValidityDTO
+            ?.filter((v) => v.isType === "B")
+            ?.map((b) => ({
+              from: convertDateForInput(b.validityFrom) || "",
+              to: convertDateForInput(b.validityTo) || "",
+            })) || [{ from: "", to: "" }],
+          remarks: specialData.remark || "",
+          combinedStayPay: specialData.promotype === "SAP" ? specialData.combinedPromoId || "" : "",
+          combinedDiscount: specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "",
+        }));
+
+        // Load existing room rates if available
+        if (specialData.specialRateRoomDTO) {
+          const existingRates = {};
+          specialData.specialRateRoomDTO.forEach((rate) => {
+            const key = `${rate.hotelRoomcategoryId}_${rate.hotelRoomTypeId}_${rate.ocuppancyTypeIid}`;
+            existingRates[key] = rate.rate;
+          });
+          setRoomRates(existingRates);
+           // console.log("Re-populated existing room rates:", existingRates);
+        }
       } catch (err) {
-        console.error(err);
-        toast.error("Failed to load special rate details");
-      } finally {
-        setLoading(false);
+        console.error("Error re-populating form data:", err);
       }
     };
 
-    if (id && rateId) fetchData();
-  }, [id, rateId, markets, countries]);
+    repopulateFormData();
+  }, [editId, markets, countries]);
+
+  // ✅ Debug form data changes
+  useEffect(() => {
+      console.log("Form data changed - combinedStayPay:", formData.combinedStayPay, "combinedDiscount:", formData.combinedDiscount);
+  }, [formData.combinedStayPay, formData.combinedDiscount]);
 
   // ✅ Handlers
   const handleMealRateChange = (roomIndex, mealIndex, field, value) => {
@@ -230,11 +373,34 @@ export default function EditSpecialRates() {
         isType: "B",
       }));
 
-      const specialRateRoomDTO = rooms.flatMap((room) =>
+      // Create special rate room DTO from dynamic hotel rooms data
+      const specialRateRoomDTO = hotelRoomsData.flatMap(
+        (roomCategory) =>
+          roomCategory.roomTypeDetailsDTOs?.flatMap(
+            (roomType) =>
+              roomCategory.occupancyDetailsDTOs?.map((occupancy) => {
+                const rateKey = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`;
+                const rate = roomRates[rateKey] || "0";
+                return {
+                  hotelRoomcategoryId: String(roomCategory.rommCategoryId),
+                  hotelRoomTypeId: String(roomType.roomTypeId),
+                  ocuppancyTypeIid: String(occupancy.id),
+                  rate: rate,
+                  extraBed: false,
+                  meal: false,
+                  adultrate: "",
+                  childrate: "",
+                };
+              }) || []
+          ) || []
+      );
+
+      // Also include meal plan rates if they exist
+      const mealRateDTO = rooms.flatMap((room) =>
         room.mealPlans.map((meal) => ({
           hotelRoomcategoryId: String(room.roomId),
           hotelRoomTypeId: String(room.roomId),
-          ocuppancyTypeIid: "15",
+          ocuppancyTypeIid: String(meal.occupancyId),
           rate: meal.single || meal.double || "0",
           extraBed: !!meal.extraAdult || !!meal.extraChild,
           meal: true,
@@ -243,12 +409,16 @@ export default function EditSpecialRates() {
         }))
       );
 
-      const payload = {
-        markeType: formData.marketType.map((m) => m.value),
-        excludeCountry: formData.excludeNationality.map((c) => c.value),
-        hotelId: id,
-        specialrateId: rateId,
-        seasonId: formData.season,
+      // Combine both room and meal rates
+      const allSpecialRateRoomDTO = [...specialRateRoomDTO, ...mealRateDTO];
+
+      const specialratesaveReq = {
+        marketype: formData.marketType.map((m) => m.value),
+        excludeCountrys: formData.excludeNationality.map((c) => c.value),
+        promotypeArray: null,
+        hotelId: String(id),
+        seasonId: String(formData.season),
+        specialrateId: String(editId),
         rateCode: formData.rateCode.trim(),
         weekDay,
         weekEnd,
@@ -257,19 +427,30 @@ export default function EditSpecialRates() {
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
         lengthStay: String(formData.minimumStay),
-        remark: "Special Rate Updated",
+        remark: formData.remarks || "",
+        combinedPromoId: formData.combinedStayPay || formData.combinedDiscount || "",
+        promotype: formData.combinedStayPay ? "SAP" : formData.combinedDiscount ? "DSR" : "",
         specialRateValidityDTO: [...validityList, ...blackoutDates],
         promotionCompulsoryDTO: [],
-        specialRateRoomDTO,
+        specialRateRoomDTO: allSpecialRateRoomDTO,
       };
 
-      console.log("🟢 Update Payload:", payload);
+       // console.log("Payload specialratesaveReq:", specialratesaveReq);
+       // console.log("Combined fields - StayPay:", formData.combinedStayPay, "Discount:", formData.combinedDiscount);
+       // console.log("Promotype logic - StayPay selected:", !!formData.combinedStayPay, "Discount selected:", !!formData.combinedDiscount);
+       // console.log("Final promotype value:", formData.combinedStayPay ? "SAP" : formData.combinedDiscount ? "DSR" : "");
 
-      await axiosInstance.put(`/api/hotelSpecialRate/update/${rateId}`, payload);
-      toast.success("Special Rate updated successfully!");
-      navigate(`/registration/hotel/${id}/promotion`);
-    } catch (err) {
-      console.error(err);
+      const response = await axiosInstance.put(
+        `/api/hotelSpecialRate/${editId}`,
+        specialratesaveReq
+      );
+
+      if (response.data) {
+        toast.success("Special Rate Updated Successfully!");
+        navigate(`/hotel-actions/${id}/promotions`);
+      }
+    } catch (error) {
+      console.error("Update error:", error);
       toast.error("Failed to update special rate");
     }
   };
@@ -319,13 +500,14 @@ export default function EditSpecialRates() {
                           className="rounded-pill"
                         >
                           <option value="">Select Season</option>
-                          <option value="1">Peak</option>
-                          <option value="2">Mid</option>
-                          <option value="3">Low</option>
-                          <option value="4">High</option>
-                          <option value="5">Shoulder</option>
-                          <option value="6">High High</option>
-                          <option value="7">Festive</option>
+                          {seasonData?.map((season) => (
+                            <option
+                              key={season.seasonTypeId}
+                              value={season.seasonTypeId}
+                            >
+                              {season.season}
+                            </option>
+                          ))}
                         </Form.Select>
                       </Form.Group>
                     </Col>
@@ -343,8 +525,8 @@ export default function EditSpecialRates() {
                           }
                           placeholder="Enter rate code"
                         />
-                        </Form.Group>
-                      </Col>
+                      </Form.Group>
+                    </Col>
 
                     <Col md={3}>
                       <Form.Group>
@@ -516,6 +698,7 @@ export default function EditSpecialRates() {
                               <Form.Control
                                 type="date"
                                 value={v.to}
+                                min={v.from || ""}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -576,6 +759,7 @@ export default function EditSpecialRates() {
                               <Form.Control
                                 type="date"
                                 value={b.to}
+                                min={b.from || ""}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -694,45 +878,175 @@ export default function EditSpecialRates() {
                     </Card>
                   ))}
 
-                  {/* ✅ Contract Rate Section */}
-                 {/* ✅ Contract Rate Section */}
-{roomDetails.length > 0 && (
-  <Card className="p-3 mb-4 border shadow-sm rounded-4">
-    <h6 className="fw-bold text-primary mb-3">Contract Rate Details</h6>
+                  {/* ✅ Contract Rate Details Section */}
+                  {hotelRoomsData.length > 0 && (
+                    <Card className="p-3 mb-4 border shadow-sm rounded-4">
+                      <h6 className="fw-bold text-primary mb-3">
+                        Contract Rate Details
+                      </h6>
 
-    {roomDetails.map((room, roomIndex) => (
-      <div key={room.id} className="mb-3">
-        <h6 className="text-dark mb-2">{room.roomCategory}</h6>
+                      {hotelRoomsData.map((roomCategory, roomIndex) => (
+                        <Card
+                          key={roomCategory.rommCategoryId}
+                          className="mb-3 border"
+                        >
+                          <Card.Header className="bg-light">
+                            <Form.Check
+                              type="checkbox"
+                              id={`room-category-${roomCategory.rommCategoryId}`}
+                              label={`${roomCategory.roomCategory?.toUpperCase()}`}
+                              defaultChecked
+                              className="fw-bold text-primary"
+                            />
+                          </Card.Header>
+                          <Card.Body>
+                            {/* Room Types and Occupancy Rates Table */}
+                            <div className="table-responsive">
+                              <table className="table table-bordered">
+                                <thead className="table-light">
+                                  <tr>
+                                    <th>Room Type</th>
+                                    {roomCategory.occupancyDetailsDTOs?.map(
+                                      (occupancy) => (
+                                        <th key={occupancy.id}>
+                                          {occupancy.occupanyType}
+                                        </th>
+                                      )
+                                    )}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {roomCategory.roomTypeDetailsDTOs?.map(
+                                    (roomType, roomTypeIndex) => (
+                                      <tr key={roomType.roomTypeId}>
+                                        <td className="fw-semibold">
+                                          {roomType.roomTypeName}
+                                        </td>
+                                        {roomCategory.occupancyDetailsDTOs?.map(
+                                          (occupancy, occIndex) => (
+                                            <td key={occupancy.id}>
+                                              <Form.Control
+                                                type="number"
+                                                placeholder="0"
+                                                value={
+                                                  roomRates[
+                                                    `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
+                                                  ] || ""
+                                                }
+                                                onChange={(e) => {
+                                                  const key = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`;
+                                                  setRoomRates((prev) => ({
+                                                    ...prev,
+                                                    [key]: e.target.value,
+                                                  }));
+                                                }}
+                                                size="sm"
+                                              />
+                                            </td>
+                                          )
+                                        )}
+                                      </tr>
+                                    )
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      ))}
+                    </Card>
+                  )}
 
-        {room.occupancies.map((occ, occIndex) => (
-          <Row key={occ.id} className="align-items-center mb-2">
-            <Col md={3}>
-              <Form.Label className="text-muted small">
-                {occ.occupancyType}
-              </Form.Label>
-            </Col>
+                  {/* ✅ Additional Fields Section */}
+                  <Card className="p-3 mb-4 border shadow-sm rounded-4">
+                    <h6 className="fw-bold text-primary mb-3">
+                      Additional Details
+                    </h6>
+                    <Row className="g-3">
+                      {/* Remarks */}
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label>Remarks</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            placeholder="Enter remarks..."
+                            value={formData.remarks || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                remarks: e.target.value,
+                              })
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
 
-            <Col md={3}>
-              <Form.Control
-                type="number"
-                placeholder="Enter rate"
-                value={occ.rate}
-                onChange={(e) =>
-                  handleContractRateChange(
-                    roomIndex,
-                    occIndex,
-                    e.target.value
-                  )
-                }
-              />
-            </Col>
-          </Row>
-        ))}
-      </div>
-    ))}
-  </Card>
-)}
+                      {/* Combined with Stay Pay */}
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Combined with Stay Pay</Form.Label>
+                          <Form.Select
+                            value={formData.combinedStayPay || ""}
+                            onChange={(e) => {
+                              const selectedValue = e.target.value;
+                               // console.log("Stay Pay changed to:", selectedValue);
+                              setFormData({
+                                ...formData,
+                                combinedStayPay: selectedValue,
+                                // Clear the other field when this one is selected
+                                combinedDiscount: selectedValue ? "" : formData.combinedDiscount,
+                              });
+                            }}
+                          >
+                            <option value="">SELECT</option>
+                            {Array.isArray(hotelPromotions) &&
+                              hotelPromotions
+                                .filter(
+                                  (promo) => promo.promotionType === "StayPay"
+                                )
+                                .map((promo) => (
+                                  <option key={promo.id} value={promo.id}>
+                                    {promo.promotionCode}
+                                  </option>
+                                ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
 
+                      {/* Combined with Discount */}
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Combined with Discount</Form.Label>
+                          <Form.Select
+                            value={formData.combinedDiscount || ""}
+                            onChange={(e) => {
+                              const selectedValue = e.target.value;
+                               // console.log("Discount changed to:", selectedValue);
+                              setFormData({
+                                ...formData,
+                                combinedDiscount: selectedValue,
+                                // Clear the other field when this one is selected
+                                combinedStayPay: selectedValue ? "" : formData.combinedStayPay,
+                              });
+                            }}
+                          >
+                            <option value="">SELECT</option>
+                            {Array.isArray(hotelPromotions) &&
+                              hotelPromotions
+                                .filter(
+                                  (promo) => promo.promotionType === "Discount"
+                                )
+                                .map((promo) => (
+                                  <option key={promo.id} value={promo.id}>
+                                    {promo.promotionCode}
+                                  </option>
+                                ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card>
 
                   {/* ✅ Buttons */}
                   <div className="d-flex justify-content-end gap-3 mt-4 pt-3 border-top">
