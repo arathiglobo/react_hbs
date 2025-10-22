@@ -49,6 +49,7 @@ const tabOrder = [
 const HotelReg = () => {
   // Stepper state
   const [activeTab, setActiveTab] = useState(tabOrder[0]);
+  const [masterAmenityIds, setMasterAmenityIds] = useState([]);  
 
   // Per-step validation logic
   const validateStep = (step) => {
@@ -225,7 +226,7 @@ const HotelReg = () => {
 
   // Debug: Monitor formData.weekDays changes
   useEffect(() => {
-    console.log("formData.weekDays changed:", formData.weekDays);
+    // console.log("formData.weekDays changed:", formData.weekDays);
   }, [formData.weekDays]);
 
   // Weekdays configuration
@@ -240,7 +241,6 @@ const HotelReg = () => {
   ];
 
   // Load hotel data for edit mode
-
 const loadHotelData = async () => {
   if (!isEditMode) return;
 
@@ -249,14 +249,13 @@ const loadHotelData = async () => {
 
     // Ensure amenities are loaded first
     if (amenities.length === 0) {
-      console.log("Amenities not loaded yet, loading amenities first...");
+      // console.log("Amenities not loaded yet, loading amenities first...");
       await loadAmenities();
     }
 
     const response = await axiosInstance.get(`/api/hotels/${id}`);
     const hotelData = response.data;
-
-    console.log("Loaded hotel data for edit:", hotelData);
+     console.log("Loaded hotel data for edit:", hotelData);
 
     // Step 1: Set the form data first with the loaded hotel data
     const rooms = hotelData.roomCategories?.map((roomCategory) => {
@@ -266,8 +265,8 @@ const loadHotelData = async () => {
           (rt) => rt.hotelRoomCategoryId === roomCategory.hotelRoomCategoryId
         ) || [];
       
-      console.log("Room Category:", roomCategory);
-      console.log("Associated Room Types:", associatedRoomTypes);
+      // console.log("Room Category:", roomCategory);
+      // console.log("Associated Room Types:", associatedRoomTypes);
       
       return {
         roomCategoryId: roomCategory.roomCategoryId ?? "",
@@ -285,54 +284,54 @@ const loadHotelData = async () => {
     // Ensure amenityIds are numbers and properly mapped
     const amenityIds = hotelData.amenities?.map((amenity) => {
       // Convert to number to ensure proper comparison
-      console.log("Processing hotel amenity:", amenity);
-      console.log("amenity.amenityId:", amenity.amenityId);
-      console.log("amenity.amenitiesId:", amenity.amenitiesId);
+      // console.log("Processing hotel amenity:", amenity);
+      // console.log("amenity.amenityId:", amenity.amenityId);
+      // console.log("amenity.amenitiesId:", amenity.amenitiesId);
       const id = Number(amenity.amenityId || amenity.amenitiesId);
-      console.log("Final processed ID:", id);
+      // console.log("Final processed ID:", id);
       return id;
     }) || [];
     
-    console.log("Raw hotelData.amenities:", hotelData.amenities);
-    console.log("Processed amenityIds:", amenityIds);
+    // console.log("Raw hotelData.amenities:", hotelData.amenities);
+    // console.log("Processed amenityIds:", amenityIds);
 
-    console.log("=== AMENITIES DEBUG ===");
-    console.log("Amenity IDs from API:", amenityIds);
-    console.log("Amenities from API:", hotelData.amenities);
-    console.log("Available amenities for comparison:", amenities);
-    console.log("Form data amenityIds:", amenityIds);
-    console.log("Amenities length:", amenities.length);
-    console.log("Hotel data placeId:", hotelData.placeId);
-    console.log("Hotel data stateId:", hotelData.stateId);
+    // console.log("=== AMENITIES DEBUG ===");
+    // console.log("Amenity IDs from API:", amenityIds);
+    // console.log("Amenities from API:", hotelData.amenities);
+    // console.log("Available amenities for comparison:", amenities);
+    // console.log("Form data amenityIds:", amenityIds);
+    // console.log("Amenities length:", amenities.length);
+    // console.log("Hotel data placeId:", hotelData.placeId);
+    // console.log("Hotel data stateId:", hotelData.stateId);
     
     // Additional debug: show first few amenities
     if (amenities.length > 0) {
-      console.log("First 3 amenities:", amenities.slice(0, 3));
-      console.log("All amenity IDs in loaded amenities:", amenities.map(a => a.amenitiesId || a.amenityId));
-      console.log("Looking for amenity IDs:", amenityIds);
+      // console.log("First 3 amenities:", amenities.slice(0, 3));
+      // console.log("All amenity IDs in loaded amenities:", amenities.map(a => a.amenitiesId || a.amenityId));
+      // console.log("Looking for amenity IDs:", amenityIds);
       
       // Check if the amenity IDs from hotel data exist in loaded amenities
       amenityIds.forEach(amenityId => {
         const found = amenities.find(a => (a.amenitiesId || a.amenityId) == amenityId);
-        console.log(`Amenity ID ${amenityId}: ${found ? 'FOUND' : 'NOT FOUND'} in loaded amenities`);
+        // console.log(`Amenity ID ${amenityId}: ${found ? 'FOUND' : 'NOT FOUND'} in loaded amenities`);
         if (found) {
-          console.log(`  Found amenity: ${found.amenityName} (ID: ${found.amenitiesId || found.amenityId})`);
+          // console.log(`  Found amenity: ${found.amenityName} (ID: ${found.amenitiesId || found.amenityId})`);
         }
       });
     }
     
     // Check if amenities match
     if (hotelData.amenities.length > 0) {
-      console.log("Checking amenity matches:");
+      // console.log("Checking amenity matches:");
       amenityIds.forEach(amenityId => {
         // Try both field names: amenitiesId and amenityId
         const foundAmenity = hotelData.amenities.find(a => 
           a.amenitiesId === amenityId || a.amenityId === amenityId
         );
-        console.log(`Amenity ID ${amenityId}:`, foundAmenity ? 'FOUND' : 'NOT FOUND', foundAmenity);
+        // console.log(`Amenity ID ${amenityId}:`, foundAmenity ? 'FOUND' : 'NOT FOUND', foundAmenity);
       });
     }
-    console.log("=== END AMENITIES DEBUG ===" ,amenityIds );
+    // console.log("=== END AMENITIES DEBUG ===" ,amenityIds );
 
     const weekDays = {
       id: hotelData.weekDays?.id ?? "",
@@ -352,8 +351,8 @@ const loadHotelData = async () => {
       wedSaturday: hotelData.weekDays?.wedSaturday ?? false,
     };
 
-    console.log("WeekDays from API:", hotelData.weekDays);
-    console.log("Processed weekDays:", weekDays);
+    // console.log("WeekDays from API:", hotelData.weekDays);
+    // console.log("Processed weekDays:", weekDays);
 
     // Set the main form data first
     const formDataToSet = {
@@ -386,46 +385,49 @@ const loadHotelData = async () => {
       amenityIds, // This should now contain [7, 8, 9] as numbers
     };
     
-    console.log("=== SETTING FORM DATA ===");
-    console.log("About to set formData with stateId:", formDataToSet.stateId, "placeId:", formDataToSet.placeId);
+    // console.log("=== SETTING FORM DATA ===");
+    // console.log("About to set formData with stateId:", formDataToSet.stateId, "placeId:", formDataToSet.placeId);
     setFormData(formDataToSet);
-    console.log("Form data set successfully");
+    // console.log("Form data set successfully");
+    
+    // Fetch master amenity IDs after hotel data is loaded
+    await fetchHotelMasterAmenityIds(hotelData);
 
     // Step 2: Load dependent data after setting the form data
     // Load provinces first, then places
     if (hotelData.countryId) {
-      console.log("=== LOADING DEPENDENT DATA ===");
-      console.log("Loading provinces for country:", hotelData.countryId);
+      // console.log("=== LOADING DEPENDENT DATA ===");
+      // console.log("Loading provinces for country:", hotelData.countryId);
       try {
         const provincesResponse = await axiosInstance.get(
           `/api/province/getByCountryId/${hotelData.countryId}`
         );
-        console.log("Provinces loaded:", provincesResponse.data);
-        console.log("Setting provinces state...");
+        // console.log("Provinces loaded:", provincesResponse.data);
+        // console.log("Setting provinces state...");
         setProvinces(provincesResponse.data || []);
         
         // After provinces are loaded, load places if stateId exists
         if (hotelData.stateId) {
-          console.log("Loading places for state:", hotelData.stateId);
+          // console.log("Loading places for state:", hotelData.stateId);
           const placesResponse = await axiosInstance.get(
             `/api/destination/getplaces/${hotelData.stateId}`
           );
-          console.log("Places loaded:", placesResponse.data);
-          console.log("Looking for placeId:", hotelData.placeId, "in places data");
+          // console.log("Places loaded:", placesResponse.data);
+          // console.log("Looking for placeId:", hotelData.placeId, "in places data");
           const loadedPlaces = placesResponse.data || [];
-          console.log("Available place IDs:", loadedPlaces.map(p => p.id));
-          console.log("Available place names:", loadedPlaces.map(p => p.name));
-          console.log("Setting places state...");
+          // console.log("Available place IDs:", loadedPlaces.map(p => p.id));
+          // console.log("Available place names:", loadedPlaces.map(p => p.name));
+          // console.log("Setting places state...");
           setPlaces(loadedPlaces);
         } else {
-          console.log("No stateId found, skipping places loading");
+          // console.log("No stateId found, skipping places loading");
         }
       } catch (error) {
         console.error("Error loading dependent data:", error);
       }
-      console.log("=== END LOADING DEPENDENT DATA ===");
+      // console.log("=== END LOADING DEPENDENT DATA ===");
     } else {
-      console.log("No countryId found, skipping dependent data loading");
+      // console.log("No countryId found, skipping dependent data loading");
     }
 
   } catch (error) {
@@ -465,82 +467,79 @@ const loadHotelData = async () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   useEffect(() => {
-    console.log("=== COUNTRY USEEFFECT TRIGGERED ===");
-    console.log("formData.countryId:", formData.countryId);
-    console.log("isInitialLoad:", isInitialLoad);
-    console.log("Current formData.stateId:", formData.stateId);
-    console.log("Current formData.placeId:", formData.placeId);
+    // console.log("=== COUNTRY USEEFFECT TRIGGERED ===");
+    // console.log("formData.countryId:", formData.countryId);
+    // console.log("isInitialLoad:", isInitialLoad);
+    // console.log("Current formData.stateId:", formData.stateId);
+    // console.log("Current formData.placeId:", formData.placeId);
     
     // Only run this effect if it's not the initial load
     if (formData.countryId && !isInitialLoad) {
-      console.log("Loading provinces for user change");
+      // console.log("Loading provinces for user change");
       loadProvinces(formData.countryId);
       setPlaces([]);
       setFormData((prev) => ({ ...prev, stateId: "", placeId: "" }));
     } else if (isInitialLoad) {
-      console.log("Skipping country useEffect during initial load");
+      // console.log("Skipping country useEffect during initial load");
     }
-    console.log("=== END COUNTRY USEEFFECT ===");
+    // console.log("=== END COUNTRY USEEFFECT ===");
   }, [formData.countryId, isInitialLoad]);
 
   useEffect(() => {
-    console.log("=== STATE USEEFFECT TRIGGERED ===");
-    console.log("formData.stateId:", formData.stateId);
-    console.log("isInitialLoad:", isInitialLoad);
-    console.log("Current formData.placeId:", formData.placeId);
+   
     
     // Only run this effect if it's not the initial load
     if (formData.stateId && !isInitialLoad) {
-      console.log("Loading places for user change");
+      // console.log("Loading places for user change");
       loadPlaces(formData.stateId);
       setFormData((prev) => ({ ...prev, placeId: "" }));
     } else if (isInitialLoad) {
-      console.log("Skipping state useEffect during initial load");
+      // console.log("Skipping state useEffect during initial load");
     }
-    console.log("=== END STATE USEEFFECT ===");
+    // console.log("=== END STATE USEEFFECT ===");
   }, [formData.stateId, isInitialLoad]);
 
   // After hotel data is loaded for edit, set isInitialLoad to false
   useEffect(() => {
-    console.log("=== INITIAL LOAD USEEFFECT ===");
-    console.log("isLoadingHotelData:", isLoadingHotelData);
-    console.log("isInitialLoad:", isInitialLoad);
+    // console.log("=== INITIAL LOAD USEEFFECT ===");
+    // console.log("isLoadingHotelData:", isLoadingHotelData);
+    // console.log("isInitialLoad:", isInitialLoad);
     if (!isLoadingHotelData && isInitialLoad) {
-      console.log("Setting isInitialLoad to false - initial data loading complete");
+      // console.log("Setting isInitialLoad to false - initial data loading complete");
       setIsInitialLoad(false);
     }
-    console.log("=== END INITIAL LOAD USEEFFECT ===");
+    // console.log("=== END INITIAL LOAD USEEFFECT ===");
   }, [isLoadingHotelData, isInitialLoad]);
 
   // Force re-render when provinces or places are loaded
   useEffect(() => {
-    console.log("=== PROVINCES USEEFFECT ===");
-    console.log("Provinces length:", provinces.length);
-    console.log("FormData countryId:", formData.countryId);
-    console.log("FormData stateId:", formData.stateId);
+    // console.log("=== PROVINCES USEEFFECT ===");
+    // console.log("Provinces length:", provinces.length);
+    // console.log("FormData countryId:", formData.countryId);
+    // console.log("FormData stateId:", formData.stateId);
     if (provinces.length > 0 && formData.countryId) {
-      console.log("Provinces updated, current formData.stateId:", formData.stateId);
-      console.log("Available provinces:", provinces.map(p => ({ id: p.id, name: p.stateName })));
+      // console.log("Provinces updated, current formData.stateId:", formData.stateId);
+      // console.log("Available provinces:", provinces.map(p => ({ id: p.id, name: p.stateName })));
     }
-    console.log("=== END PROVINCES USEEFFECT ===");
+    // console.log("=== END PROVINCES USEEFFECT ===");
   }, [provinces, formData.countryId, formData.stateId]);
 
   useEffect(() => {
-    console.log("=== PLACES USEEFFECT ===");
-    console.log("Places length:", places.length);
-    console.log("FormData stateId:", formData.stateId);
-    console.log("FormData placeId:", formData.placeId);
+    // console.log("=== PLACES USEEFFECT ===");
+    // console.log("Places length:", places.length);
+    // console.log("FormData stateId:", formData.stateId);
+    // console.log("FormData placeId:", formData.placeId);
     if (places.length > 0 && formData.stateId) {
-      console.log("Places updated, current formData.placeId:", formData.placeId);
-      console.log("Available places:", places.map(p => ({ id: p.id, name: p.name })));
+      // console.log("Places updated, current formData.placeId:", formData.placeId);
+      // console.log("Available places:", places.map(p => ({ id: p.id, name: p.name })));
       
       // Check if the current placeId exists in the loaded places
       const currentPlace = places.find(p => p.id == formData.placeId);
       if (currentPlace) {
-        console.log("Found matching place:", currentPlace);
+        // console.log("Found matching place:", currentPlace);
       } else {
-        console.log("No matching place found for placeId:", formData.placeId);
-        console.log("Available place IDs:", places.map(p => p.id));
+        // console.log("No matching place found for placeId:", formData.placeId);
+        // console.log("Available place IDs:", places.map(p => p.id));
         
         // Try to find by name if ID doesn't match
         const placeByName = places.find(p => 
@@ -553,17 +552,17 @@ const loadHotelData = async () => {
           p.name.toLowerCase().includes('umm al quwain')
         );
         if (placeByName) {
-          console.log("Found place by name:", placeByName);
+          // console.log("Found place by name:", placeByName);
           // Update the form data with the correct ID
           setFormData(prev => ({
             ...prev,
             placeId: placeByName.id
           }));
         } else {
-          console.log("No matching place found by name either");
+          // console.log("No matching place found by name either");
           // If still no match, try to find the first place as fallback
           if (places.length > 0) {
-            console.log("Using first available place as fallback:", places[0]);
+            // console.log("Using first available place as fallback:", places[0]);
             setFormData(prev => ({
               ...prev,
               placeId: places[0].id
@@ -572,14 +571,14 @@ const loadHotelData = async () => {
         }
       }
     }
-    console.log("=== END PLACES USEEFFECT ===");
+    // console.log("=== END PLACES USEEFFECT ===");
   }, [places, formData.stateId, formData.placeId]);
 
   // Load currencies
   const loadCurrencies = async () => {
     try {
       const response = await axiosInstance.get("/api/currency");
-      console.log("Currencies response:", response.data);
+      // console.log("Currencies response:", response.data);
       setCurrencies(response.data || []);
     } catch (error) {
       console.error("Error loading currencies:", error);
@@ -591,7 +590,7 @@ const loadHotelData = async () => {
   const loadHotelCategories = async () => {
     try {
       const response = await axiosInstance.get("/api/hotelcategory");
-      console.log("Hotel Categories response:", response.data);
+      // console.log("Hotel Categories response:", response.data);
       setHotelCategories(response.data || []);
     } catch (error) {
       console.error("Error loading hotel categories:", error);
@@ -603,7 +602,7 @@ const loadHotelData = async () => {
   const loadHotelTypes = async () => {
     try {
       const response = await axiosInstance.get("/api/hotelType");
-      console.log("Hotel Types response:", response.data);
+      // console.log("Hotel Types response:", response.data);
       setHotelTypes(response.data || []);
     } catch (error) {
       console.error("Error loading hotel types:", error);
@@ -615,7 +614,7 @@ const loadHotelData = async () => {
   const loadMarkupTypes = async () => {
     try {
       const response = await axiosInstance.get("/api/markupType");
-      console.log("Markup Types response:", response.data);
+      // console.log("Markup Types response:", response.data);
       setMarkupTypes(response.data || []);
     } catch (error) {
       console.error("Error loading markup types:", error);
@@ -627,7 +626,7 @@ const loadHotelData = async () => {
   const loadRegions = async () => {
     try {
       const response = await axiosInstance.get("/api/region");
-      console.log("Regions response:", response.data);
+      // console.log("Regions response:", response.data);
       setRegions(response.data || []);
     } catch (error) {
       console.error("Error loading regions:", error);
@@ -639,7 +638,7 @@ const loadHotelData = async () => {
   const loadCountries = async () => {
     try {
       const response = await axiosInstance.get("/api/country");
-      console.log("Countries response:", response.data);
+      // console.log("Countries response:", response.data);
       setCountries(response.data || []);
     } catch (error) {
       console.error("Error loading countries:", error);
@@ -651,7 +650,7 @@ const loadHotelData = async () => {
   const loadContactTypes = async () => {
     try {
       const response = await axiosInstance.get("/api/contacttype");
-      console.log("Contact Types response:", response.data);
+      // console.log("Contact Types response:", response.data);
       setContactTypes(response.data || []);
     } catch (error) {
       console.error("Error loading contact types:", error);
@@ -663,7 +662,7 @@ const loadHotelData = async () => {
   const loadBanks = async () => {
     try {
       const response = await axiosInstance.get("/api/bank");
-      console.log("Banks response:", response.data);
+      // console.log("Banks response:", response.data);
       setBanks(response.data || []);
     } catch (error) {
       console.error("Error loading banks:", error);
@@ -675,28 +674,28 @@ const loadHotelData = async () => {
   const loadAmenities = async () => {
     try {
       // Try different approaches to get all amenities
-      console.log("=== LOADING AMENITIES ===");
+      // console.log("=== LOADING AMENITIES ===");
       
       // First try: without pagination parameters
       try {
         const response1 = await axiosInstance.get("/api/hotelAmenity");
-        console.log("Response without pagination:", response1.data);
-        console.log("Length without pagination:", response1.data?.length);
+        // console.log("Response without pagination:", response1.data);
+        // console.log("Length without pagination:", response1.data?.length);
       } catch (e) {
-        console.log("Error without pagination:", e);
+        // console.log("Error without pagination:", e);
       }
       
       // Second try: with high limit
       try {
         const response2 = await axiosInstance.get("/api/hotelAmenity?page=0&limit=1000");
-        console.log("Response with high limit:", response2.data);
-        console.log("Length with high limit:", response2.data?.length);
-        console.log("First amenity structure:", response2.data?.[0]);
-        console.log("Total amenities from API:", response2.data?.length);
-        console.log("Amenity ID range:", response2.data?.map(a => a.amenitiesId || a.amenityId).sort((a, b) => a - b));
+        // console.log("Response with high limit:", response2.data);
+        // console.log("Length with high limit:", response2.data?.length);
+        // console.log("First amenity structure:", response2.data?.[0]);
+        // console.log("Total amenities from API:", response2.data?.length);
+        // console.log("Amenity ID range:", response2.data?.map(a => a.amenitiesId || a.amenityId).sort((a, b) => a - b));
         setAmenities(response2.data || []);
       } catch (e) {
-        console.log("Error with high limit:", e);
+        // console.log("Error with high limit:", e);
       }
       
       // Third try: try to get all pages
@@ -707,7 +706,7 @@ const loadHotelData = async () => {
         
         while (hasMore) {
           const response = await axiosInstance.get(`/api/hotelAmenity?page=${page}&limit=100`);
-          console.log(`Page ${page} response:`, response.data);
+          // console.log(`Page ${page} response:`, response.data);
           
           if (response.data && response.data.length > 0) {
             allAmenities = [...allAmenities, ...response.data];
@@ -718,15 +717,15 @@ const loadHotelData = async () => {
           }
         }
         
-        console.log("All amenities from pagination:", allAmenities);
-        console.log("Total amenities from pagination:", allAmenities.length);
-        console.log("Amenity ID range from pagination:", allAmenities.map(a => a.amenitiesId || a.amenityId).sort((a, b) => a - b));
+        // console.log("All amenities from pagination:", allAmenities);
+        // console.log("Total amenities from pagination:", allAmenities.length);
+        // console.log("Amenity ID range from pagination:", allAmenities.map(a => a.amenitiesId || a.amenityId).sort((a, b) => a - b));
         
         if (allAmenities.length > 0) {
           setAmenities(allAmenities);
         }
       } catch (e) {
-        console.log("Error with pagination:", e);
+        // console.log("Error with pagination:", e);
       }
       
     } catch (error) {
@@ -739,7 +738,7 @@ const loadHotelData = async () => {
   const loadRoomCategories = async () => {
     try {
       const response = await axiosInstance.get("/api/roomCategory");
-      console.log("Room Categories response:", response.data);
+      // console.log("Room Categories response:", response.data);
       setRoomCategories(response.data || []);
     } catch (error) {
       console.error("Error loading room categories:", error);
@@ -751,7 +750,7 @@ const loadHotelData = async () => {
   const loadRoomTypes = async () => {
     try {
       const response = await axiosInstance.get("/api/roomType");
-      console.log("Room Types response:", response.data);
+      // console.log("Room Types response:", response.data);
       setRoomTypes(response.data || []);
     } catch (error) {
       console.error("Error loading room types:", error);
@@ -816,7 +815,7 @@ const loadHotelData = async () => {
 
   const handleWeekdayChange = (e) => {
     const { name, checked } = e.target;
-    console.log(`Weekday change: ${name} = ${checked}`);
+    // console.log(`Weekday change: ${name} = ${checked}`);
     setFormData((prev) => ({
       ...prev,
       weekDays: {
@@ -828,13 +827,13 @@ const loadHotelData = async () => {
 
   const handleWeekEndDayChange = (e) => {
     const { name, checked } = e.target;
-    console.log(`Weekend day change: ${name} = ${checked}`);
+    // console.log(`Weekend day change: ${name} = ${checked}`);
     setFormData((prev) => {
       const updatedWeekDays = {
         ...prev.weekDays,
         [name]: checked,
       };
-      console.log(`Updated weekDays:`, updatedWeekDays);
+      // console.log(`Updated weekDays:`, updatedWeekDays);
       return {
         ...prev,
         weekDays: updatedWeekDays,
@@ -950,12 +949,44 @@ const handleAmenityChange = (e) => {
     }
   };
 
+    const fetchHotelMasterAmenityIds= async (hotelData) => {
+    
+     try {
+        // Extract amenity IDs from the loaded hotel data
+        const amenityIds = hotelData?.amenities?.map((amenity) => {
+          return Number(amenity.amenityId);
+        }) || [];
+        
+        console.log("Sending amenity IDs to backend:", amenityIds);
+        
+        const response = await axiosInstance.post(
+          `/api/hotels/${id}/fetchHotelEditAmenities`,
+          amenityIds
+        );
+        const masterAmenities = response.data || [];
+        setMasterAmenityIds(masterAmenities);
+        
+        // Update formData.amenityIds with master amenity IDs for proper checking
+        if (masterAmenities.length > 0) {
+          const masterIds = masterAmenities.map(amenity => Number(amenity.amenitiesId || amenity.amenityId));
+          console.log("Updating formData.amenityIds with master IDs:", masterIds);
+          setFormData(prev => ({
+            ...prev,
+            amenityIds: masterIds
+          }));
+        }
+      } catch (error) {
+        console.error("Error loading master amenities for hotel", error);
+            }
+      }
+
+
   // Handle room type selection (multiple selection)
   const handleRoomTypeSelection = (roomTypeId) => {
     const stringId = String(roomTypeId);
-    console.log("=== ROOM TYPE SELECTION ===");
-    console.log("Room Type ID:", stringId, "Type:", typeof stringId);
-    console.log("Current selected array:", selectedRoomTypes);
+    // console.log("=== ROOM TYPE SELECTION ===");
+    // console.log("Room Type ID:", stringId, "Type:", typeof stringId);
+    // console.log("Current selected array:", selectedRoomTypes);
 
     setSelectedRoomTypes((prev) => {
       // Create a new array to avoid mutation issues
@@ -965,14 +996,14 @@ const handleAmenityChange = (e) => {
       if (index > -1) {
         // Remove if exists
         currentArray.splice(index, 1);
-        console.log("REMOVED room type:", stringId);
+        // console.log("REMOVED room type:", stringId);
       } else {
         // Add if doesn't exist
         currentArray.push(stringId);
-        console.log("ADDED room type:", stringId);
+        // console.log("ADDED room type:", stringId);
       }
 
-      console.log("Final selected array:", currentArray);
+      // console.log("Final selected array:", currentArray);
       return currentArray;
     });
   };
@@ -1008,7 +1039,7 @@ const handleAmenityChange = (e) => {
       })),
     };
 
-    console.log("New room object:", newRoom);
+    // console.log("New room object:", newRoom);
 
     setFormData((prev) => ({
       ...prev,
@@ -1158,7 +1189,7 @@ const handleAmenityChange = (e) => {
 
       // Transform room types data
       const roomTypes = [];
-      console.log("formData.rooms::", formData.rooms);
+      // console.log("formData.rooms::", formData.rooms);
 
       formData.rooms.forEach((room, roomIndex) => {
         room.roomTypes.forEach((roomType) => {
@@ -1309,20 +1340,20 @@ const handleAmenityChange = (e) => {
       });
 
       // Week days
-      console.log("=== WEEKDAYS DEBUG ===");
-      console.log("Complete formData.weekDays:", formData.weekDays);
-      console.log("WeekDays data being sent:", formData.weekDays);
+      // console.log("=== WEEKDAYS DEBUG ===");
+      // console.log("Complete formData.weekDays:", formData.weekDays);
+      // console.log("WeekDays data being sent:", formData.weekDays);
       formDataToSend.append("weekDays.id", formData.weekDays.id || "");
       Object.keys(formData.weekDays).forEach((key) => {
         if (key !== 'id') { // Skip id as it's already appended above
-          console.log(`Appending weekDays.${key}: ${formData.weekDays[key]} (${typeof formData.weekDays[key]})`);
+          // console.log(`Appending weekDays.${key}: ${formData.weekDays[key]} (${typeof formData.weekDays[key]})`);
           formDataToSend.append(
             `weekDays.${key}`,
             formData.weekDays[key].toString()
           );
         }
       });
-      console.log("=== END WEEKDAYS DEBUG ===");
+      // console.log("=== END WEEKDAYS DEBUG ===");
 
       // Room categories
       roomCategories.forEach((room, catIndex) => {
@@ -1424,12 +1455,12 @@ const handleAmenityChange = (e) => {
       }
 
       // Log FormData for debugging
-      console.log("FormData being sent:");
+      // console.log("FormData being sent:");
       for (let [key, value] of formDataToSend.entries()) {
-        console.log(`${key}: ${value}`);
+        // console.log(`${key}: ${value}`);
       }
 
-      console.log("Submitting form data:", formDataToSend);
+      // console.log("Submitting form data:", formDataToSend);
       let response;
       if (isEditMode) {
         response = await axiosInstance.put(
@@ -1437,7 +1468,7 @@ const handleAmenityChange = (e) => {
           formDataToSend     
         );
 
-        console.log("Update response:", response);
+        // console.log("Update response:", response);
         toast.success("Hotel updated successfully!");
       } else {
         response = await axiosInstance.post("/api/hotels", formDataToSend, {
@@ -2070,7 +2101,7 @@ const handleAmenityChange = (e) => {
                               >
                                 <option value="">Select State/Province</option>
                                 {provinces.map((province) => {
-                                  console.log("Rendering province:", province, "formData.stateId:", formData.stateId, "match:", province.id == formData.stateId);
+                                  // console.log("Rendering province:", province, "formData.stateId:", formData.stateId, "match:", province.id == formData.stateId);
                                   return (
                                     <option key={province.id} value={province.id}>
                                       {province.stateName}
@@ -2103,7 +2134,7 @@ const handleAmenityChange = (e) => {
                               >
                                 <option value="">Select City</option>
                                 {places.map((place) => {
-                                  console.log("Rendering place:", place, "formData.placeId:", formData.placeId, "match:", place.id == formData.placeId);
+                                  // console.log("Rendering place:", place, "formData.placeId:", formData.placeId, "match:", place.id == formData.placeId);
                                   return (
                                     <option key={place.id} value={place.id}>
                                       {place.name}
@@ -2589,7 +2620,7 @@ const handleAmenityChange = (e) => {
                               <div className="d-flex gap-4">
                                 {weekdays.map((day) => {
                                   const isChecked = formData.weekDays[day.key];
-                                  console.log(`Weekday ${day.label}: fieldName=${day.key}, isChecked=${isChecked}`);
+                                  // console.log(`Weekday ${day.label}: fieldName=${day.key}, isChecked=${isChecked}`);
                                   return (
                                     <Form.Check
                                       key={day.key}
@@ -2628,7 +2659,7 @@ const handleAmenityChange = (e) => {
                                   const dayName = day.key.replace('wd', '');
                                   const fieldName = `wed${dayName.charAt(0).toUpperCase() + dayName.slice(1)}`;
                                   const isChecked = formData.weekDays[fieldName];
-                                  console.log(`Weekend day ${day.label}: day.key=${day.key}, dayName=${dayName}, fieldName=${fieldName}, isChecked=${isChecked}`);
+                                  // console.log(`Weekend day ${day.label}: day.key=${day.key}, dayName=${dayName}, fieldName=${fieldName}, isChecked=${isChecked}`);
                                   return (
                                     <Form.Check
                                       key={`wed-${day.key}`}
@@ -2669,6 +2700,7 @@ const handleAmenityChange = (e) => {
                     >
                       <div className="p-4">
                         <Row>
+                          {/* Show all amenities, but check the ones from masterAmenityIds in edit mode */}
                           {amenities.map((amenity) => {
                             // Handle both field name possibilities: amenitiesId and amenityId
                             const amenityId = amenity.amenitiesId || amenity.amenityId;
@@ -2676,16 +2708,16 @@ const handleAmenityChange = (e) => {
                             
                             // Enhanced debugging for specific amenity IDs
                             if (amenityId == 38 || amenityId == 39) {
-                              console.log(`=== DEBUGGING AMENITY ID ${amenityId} ===`);
-                              console.log(`Amenity object:`, amenity);
-                              console.log(`Extracted amenityId:`, amenityId);
-                              console.log(`formData.amenityIds:`, formData.amenityIds);
-                              console.log(`Number(amenityId):`, Number(amenityId));
-                              console.log(`formData.amenityIds.includes(Number(amenityId)):`, isChecked);
-                              console.log(`=== END DEBUGGING AMENITY ID ${amenityId} ===`);
+                              // console.log(`=== DEBUGGING AMENITY ID ${amenityId} ===`);
+                              // console.log(`Amenity object:`, amenity);
+                              // console.log(`Extracted amenityId:`, amenityId);
+                              // console.log(`formData.amenityIds:`, formData.amenityIds);
+                              // console.log(`Number(amenityId):`, Number(amenityId));
+                              // console.log(`formData.amenityIds.includes(Number(amenityId)):`, isChecked);
+                              // console.log(`=== END DEBUGGING AMENITY ID ${amenityId} ===`);
                             }
                             
-                            console.log(`Amenity ${amenity.amenityName} (ID: ${amenityId}): checked=${isChecked}, formData.amenityIds=`, formData.amenityIds);
+                            // console.log(`Amenity ${amenity.amenityName} (ID: ${amenityId}): checked=${isChecked}, formData.amenityIds=`, formData.amenityIds);
                             return (
                               <Col
                                 md={4}
@@ -2699,31 +2731,13 @@ const handleAmenityChange = (e) => {
                                   label={amenity.amenityName}
                                   checked={isChecked}
                                   onChange={handleAmenityChange}
+                                  className="custom-orange-checkbox"
                                 />
                               </Col>
                             );
                           })}
                         </Row>
-                        {/* Debug info for amenities */}
-                        <div className="mt-3 p-2 bg-light rounded">
-                          <small className="text-muted">
-                            <strong>Debug Info:</strong><br/>
-                            Total amenities loaded: {amenities.length}<br/>
-                            Form amenityIds: {JSON.stringify(formData.amenityIds)}<br/>
-                            {amenities.length > 0 && (
-                              <>
-                                First amenity: {amenities[0].amenityName} (ID: {amenities[0].amenitiesId || amenities[0].amenityId})<br/>
-                                Last amenity: {amenities[amenities.length - 1].amenityName} (ID: {amenities[amenities.length - 1].amenitiesId || amenities[amenities.length - 1].amenityId})<br/>
-                                <br/>
-                                <strong>All Amenity IDs:</strong> {amenities.map(a => a.amenitiesId || a.amenityId).sort((a, b) => a - b).join(', ')}<br/>
-                                <br/>
-                                <strong>Looking for IDs:</strong> {formData.amenityIds.join(', ')}<br/>
-                                <br/>
-                                <strong>Missing IDs:</strong> {formData.amenityIds.filter(id => !amenities.some(a => (a.amenitiesId || a.amenityId) == id)).join(', ') || 'None'}
-                              </>
-                            )}
-                          </small>
-                        </div>
+                       
                       </div>
                     </Tab>
 
@@ -2792,30 +2806,18 @@ const handleAmenityChange = (e) => {
                                       Room Type
                                     </Form.Label>
                                     <div className="d-flex flex-wrap gap-3">
-                                      {console.log(
-                                        "available roomtypes ::",
-                                        availableRoomTypes
-                                      )}
-                                      {console.log(
-                                        "selectedRoomTypes ::",
-                                        selectedRoomTypes
-                                      )}
+                                      
                                       {availableRoomTypes.map(
                                         (roomType, index) => {
                                           {
-                                            console.log(
-                                              "roomType:::::::::::",
-                                              roomType
-                                            );
+                                            // console.log( "roomType:::::::::::", roomType);
                                           }
                                           const uniqueId = roomType.roomtypeId;
                                           const isChecked =
                                             selectedRoomTypes.includes(
                                               String(uniqueId)
                                             );
-                                          console.log(
-                                            `RoomType ${roomType.name} (ID: ${uniqueId}) - Checked: ${isChecked}`
-                                          );
+                                         
                                           return (
                                             <div
                                               key={`${uniqueId}-${index}`}
@@ -2827,9 +2829,7 @@ const handleAmenityChange = (e) => {
                                                 id={`roomType-${uniqueId}-${index}`}
                                                 checked={isChecked}
                                                 onChange={(e) => {
-                                                  console.log(
-                                                    `Checkbox clicked for ${roomType.name}, current checked: ${e.target.checked}`
-                                                  );
+                                                  
                                                   handleRoomTypeSelection(
                                                     uniqueId
                                                   );
@@ -2856,7 +2856,7 @@ const handleAmenityChange = (e) => {
                                 <Button
                                   variant="outline-secondary"
                                   onClick={() => {
-                                    console.log("Clearing all selections");
+                                    // console.log("Clearing all selections");
                                     setSelectedRoomTypes([]);
                                   }}
                                   className="d-flex align-items-center gap-2 px-3 py-2"
@@ -2881,7 +2881,7 @@ const handleAmenityChange = (e) => {
                         </Card>
 
                         {/* Added Room Categories Display */}
-                        {console.log("formadata rooms :::", formData.rooms)}
+                     
                         {formData.rooms &&
                           formData.rooms.map((room, roomIndex) => (
                             <Card
@@ -2897,17 +2897,7 @@ const handleAmenityChange = (e) => {
                                     <div>
                                       <h6 className="mb-0 text-primary">
                                         {(() => {
-                                          console.log("Room data:", room);
-                                          console.log(
-                                            "Room category ID:",
-                                            room.roomCategoryId,
-                                            "Type:",
-                                            typeof room.roomCategoryId
-                                          );
-                                          console.log(
-                                            "Available room categories:",
-                                            roomCategories
-                                          );
+                                        
 
                                           // Find the category by matching roomCategoryId (convert to number for comparison)
                                           const foundCategory =
@@ -2917,19 +2907,12 @@ const handleAmenityChange = (e) => {
                                                 Number(room.roomCategoryId)
                                             );
 
-                                          console.log(
-                                            "Found category:",
-                                            foundCategory
-                                          );
+                                        
 
                                           const categoryName =
                                             foundCategory?.roomCategory ||
                                             `Room Category ${roomIndex + 1}`;
 
-                                          console.log(
-                                            "Final category name:",
-                                            categoryName
-                                          );
                                           return categoryName;
                                         })()}
                                       </h6>

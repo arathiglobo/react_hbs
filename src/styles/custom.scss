@@ -593,6 +593,19 @@ top: auto;
   border-left: 0;
 }
 
+/* Orange checkbox styling for amenities */
+.custom-orange-checkbox {
+  .form-check-input:checked {
+    background-color: #fd7e14 !important;
+    border-color: #fd7e14 !important;
+  }
+  
+  .form-check-input:focus {
+    border-color: #fd7e14 !important;
+    box-shadow: 0 0 0 0.25rem rgba(253, 126, 20, 0.25) !important;
+  }
+}
+
 /* Responsive improvements for booking list */
 @media (max-width: 1200px) {
   .booking-list-container {
