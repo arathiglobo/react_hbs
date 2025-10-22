@@ -727,4 +727,86 @@ top: auto;
   box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important;
 }
 
+/* Modern form controls */
+.form-control-modern {
+  border-radius: 8px !important;
+  border: 1px solid #dee2e6 !important;
+  transition: all 0.3s ease !important;
+  
+  &:focus {
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25) !important;
+  }
+}
+
+/* Modern form checks */
+.form-check-modern {
+  .form-check-input {
+    border-radius: 4px !important;
+    border: 2px solid #dee2e6 !important;
+    transition: all 0.3s ease !important;
+    
+    &:checked {
+      background-color: #0d6efd !important;
+      border-color: #0d6efd !important;
+    }
+    
+    &:focus {
+      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25) !important;
+    }
+  }
+  
+  .form-check-label {
+    font-weight: 500 !important;
+    color: #495057 !important;
+  }
+}
+
+/* Gradient backgrounds */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%) !important;
+}
+
+/* Enhanced card styling */
+.shadow-lg {
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175) !important;
+}
+
+/* Table hover effects */
+.hover-row:hover {
+  background-color: #f8f9fa !important;
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+}
+
+/* Enhanced button styling */
+.btn-sm {
+  padding: 0.375rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  border-radius: 6px !important;
+}
+
+/* Section headers */
+.border-bottom {
+  border-bottom: 2px solid #e9ecef !important;
+}
+
+/* Icon styling */
+.text-primary {
+  color: #0d6efd !important;
+}
+
+/* Enhanced table styling */
+.table-dark th {
+  background-color: #212529 !important;
+  border-color: #495057 !important;
+}
+
+.table th {
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  font-size: 0.875rem !important;
+  letter-spacing: 0.5px !important;
+}
+
 
