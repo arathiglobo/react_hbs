@@ -40,13 +40,46 @@ const SpecialRates = () => {
     weekType: "all",
     bookByDate: "",
     bookByPriorDays: "",
-    minimumStay: 0,
+    minimumStay: "",
     validityList: [{ from: "", to: "" }],
     blackoutDates: [{ from: "", to: "" }],
     remarks: "",
     combinedStayPay: "",
     combinedDiscount: "",
   });
+
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // ✅ Validation function
+  const validateForm = () => {
+    const errors = {};
+
+    console.log("Validating form with data:", formData);
+
+    // Season validation
+    if (!formData.season || formData.season === "") {
+      errors.season = "Please select a season";
+    }
+
+    // Rate Code validation
+    if (!formData.rateCode || formData.rateCode.trim() === "") {
+      errors.rateCode = "Please enter a rate code";
+    }
+
+    // Market Type validation
+    if (!formData.marketType || formData.marketType.length === 0) {
+      errors.marketType = "Please select at least one market type";
+    }
+
+    // Minimum Stay validation
+    if (!formData.minimumStay || formData.minimumStay === "" || Number(formData.minimumStay) <= 0) {
+      errors.minimumStay = "Please enter a valid minimum stay (greater than 0)";
+    }
+
+    console.log("Validation errors:", errors);
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   // ✅ Load hotel room data dynamically
   const loadHotelRoomDatas = async () => {
@@ -157,7 +190,13 @@ const SpecialRates = () => {
   // ✅ Submit
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try {
+    
+  // Validate form before submission
+    if (!validateForm()) {
+      console.log("Validation failed, showing errors");
+     return;
+    }
+     try {
       const formatDate = (date) => {
         if (!date) return "";
         const d = new Date(date);
@@ -297,13 +336,18 @@ const SpecialRates = () => {
                         <Form.Label>Season *</Form.Label>
                         <Form.Select
                           value={formData.season}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               season: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user selects
+                            if (validationErrors.season) {
+                              setValidationErrors({...validationErrors, season: ""});
+                            }
+                          }}
                           className="rounded-pill"
+                          isInvalid={!!validationErrors.season}
                         >
                             <option value="">Select Season</option>
                             {seasonData?.map(
@@ -314,6 +358,11 @@ const SpecialRates = () => {
                                        )
                                      )}
                         </Form.Select>
+                        {validationErrors.season && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.season}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
 
@@ -323,14 +372,24 @@ const SpecialRates = () => {
                         <Form.Label>Rate Code *</Form.Label>
                         <Form.Control
                           value={formData.rateCode}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               rateCode: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user types
+                            if (validationErrors.rateCode) {
+                              setValidationErrors({...validationErrors, rateCode: ""});
+                            }
+                          }}
                           placeholder="Enter rate code"
+                          isInvalid={!!validationErrors.rateCode}
                         />
+                        {validationErrors.rateCode && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.rateCode}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
 
@@ -345,12 +404,29 @@ const SpecialRates = () => {
                             label: m.name,
                           }))}
                           value={formData.marketType}
-                          onChange={(selected) =>
-                            setFormData({ ...formData, marketType: selected })
-                          }
+                          onChange={(selected) => {
+                            setFormData({ ...formData, marketType: selected });
+                            // Clear validation error when user selects
+                            if (validationErrors.marketType) {
+                              setValidationErrors({...validationErrors, marketType: ""});
+                            }
+                          }}
                           classNamePrefix="react-select"
                           placeholder="Select Market Type"
+                          className={validationErrors.marketType ? 'is-invalid' : ''}
+                          styles={{
+                            control: (base, state) => ({
+                              ...base,
+                              borderColor: validationErrors.marketType ? '#dc3545' : base.borderColor,
+                              boxShadow: validationErrors.marketType ? '0 0 0 0.25rem rgba(220, 53, 69, 0.25)' : base.boxShadow,
+                            })
+                          }}
                         />
+                        {validationErrors.marketType && (
+                          <div className="invalid-feedback d-block">
+                            {validationErrors.marketType}
+                          </div>
+                        )}
                       </Form.Group>
                     </Col>
 
@@ -457,17 +533,28 @@ const SpecialRates = () => {
                     </Col>
                     <Col md={2}>
                       <Form.Group>
-                        <Form.Label>Min Stay</Form.Label>
+                        <Form.Label>Min Stay *</Form.Label>
                         <Form.Control
                           type="number"
                           value={formData.minimumStay}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               minimumStay: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user types
+                            if (validationErrors.minimumStay) {
+                              setValidationErrors({...validationErrors, minimumStay: ""});
+                            }
+                          }}
+                          isInvalid={!!validationErrors.minimumStay}
+                          min="1"
                         />
+                        {validationErrors.minimumStay && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.minimumStay}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
                   </Row>

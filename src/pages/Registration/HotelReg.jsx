@@ -51,6 +51,7 @@ const HotelReg = () => {
   const [activeTab, setActiveTab] = useState(tabOrder[0]);
   const [masterAmenityIds, setMasterAmenityIds] = useState([]);  
 
+
   // Per-step validation logic
   const validateStep = (step) => {
     const errors = {};
@@ -172,6 +173,7 @@ const HotelReg = () => {
   const [roomTypes, setRoomTypes] = useState([]);
   const [filteredRoomTypes, setFilteredRoomTypes] = useState({});
   const [masterAmenityData, setMasterAmenityData] = useState({});
+  const [isDataReady, setIsDataReady] = useState(false);
 
 
   // Form data state
@@ -226,7 +228,6 @@ const HotelReg = () => {
 
   // Debug: Monitor formData.weekDays changes
   useEffect(() => {
-    // console.log("formData.weekDays changed:", formData.weekDays);
   }, [formData.weekDays]);
 
   // Weekdays configuration
@@ -249,7 +250,6 @@ const loadHotelData = async () => {
 
     // Ensure amenities are loaded first
     if (amenities.length === 0) {
-      // console.log("Amenities not loaded yet, loading amenities first...");
       await loadAmenities();
     }
 
@@ -265,8 +265,6 @@ const loadHotelData = async () => {
           (rt) => rt.hotelRoomCategoryId === roomCategory.hotelRoomCategoryId
         ) || [];
       
-      // console.log("Room Category:", roomCategory);
-      // console.log("Associated Room Types:", associatedRoomTypes);
       
       return {
         roomCategoryId: roomCategory.roomCategoryId ?? "",
@@ -284,54 +282,31 @@ const loadHotelData = async () => {
     // Ensure amenityIds are numbers and properly mapped
     const amenityIds = hotelData.amenities?.map((amenity) => {
       // Convert to number to ensure proper comparison
-      // console.log("Processing hotel amenity:", amenity);
-      // console.log("amenity.amenityId:", amenity.amenityId);
-      // console.log("amenity.amenitiesId:", amenity.amenitiesId);
       const id = Number(amenity.amenityId || amenity.amenitiesId);
-      // console.log("Final processed ID:", id);
       return id;
     }) || [];
     
-    // console.log("Raw hotelData.amenities:", hotelData.amenities);
-    // console.log("Processed amenityIds:", amenityIds);
-
-    // console.log("=== AMENITIES DEBUG ===");
-    // console.log("Amenity IDs from API:", amenityIds);
-    // console.log("Amenities from API:", hotelData.amenities);
-    // console.log("Available amenities for comparison:", amenities);
-    // console.log("Form data amenityIds:", amenityIds);
-    // console.log("Amenities length:", amenities.length);
-    // console.log("Hotel data placeId:", hotelData.placeId);
-    // console.log("Hotel data stateId:", hotelData.stateId);
     
     // Additional debug: show first few amenities
     if (amenities.length > 0) {
-      // console.log("First 3 amenities:", amenities.slice(0, 3));
-      // console.log("All amenity IDs in loaded amenities:", amenities.map(a => a.amenitiesId || a.amenityId));
-      // console.log("Looking for amenity IDs:", amenityIds);
       
       // Check if the amenity IDs from hotel data exist in loaded amenities
       amenityIds.forEach(amenityId => {
         const found = amenities.find(a => (a.amenitiesId || a.amenityId) == amenityId);
-        // console.log(`Amenity ID ${amenityId}: ${found ? 'FOUND' : 'NOT FOUND'} in loaded amenities`);
         if (found) {
-          // console.log(`  Found amenity: ${found.amenityName} (ID: ${found.amenitiesId || found.amenityId})`);
         }
       });
     }
     
     // Check if amenities match
     if (hotelData.amenities.length > 0) {
-      // console.log("Checking amenity matches:");
       amenityIds.forEach(amenityId => {
         // Try both field names: amenitiesId and amenityId
         const foundAmenity = hotelData.amenities.find(a => 
           a.amenitiesId === amenityId || a.amenityId === amenityId
         );
-        // console.log(`Amenity ID ${amenityId}:`, foundAmenity ? 'FOUND' : 'NOT FOUND', foundAmenity);
       });
     }
-    // console.log("=== END AMENITIES DEBUG ===" ,amenityIds );
 
     const weekDays = {
       id: hotelData.weekDays?.id ?? "",
@@ -351,8 +326,6 @@ const loadHotelData = async () => {
       wedSaturday: hotelData.weekDays?.wedSaturday ?? false,
     };
 
-    // console.log("WeekDays from API:", hotelData.weekDays);
-    // console.log("Processed weekDays:", weekDays);
 
     // Set the main form data first
     const formDataToSet = {
@@ -385,10 +358,7 @@ const loadHotelData = async () => {
       amenityIds, // This should now contain [7, 8, 9] as numbers
     };
     
-    // console.log("=== SETTING FORM DATA ===");
-    // console.log("About to set formData with stateId:", formDataToSet.stateId, "placeId:", formDataToSet.placeId);
     setFormData(formDataToSet);
-    // console.log("Form data set successfully");
     
     // Fetch master amenity IDs after hotel data is loaded
     await fetchHotelMasterAmenityIds(hotelData);
@@ -396,38 +366,23 @@ const loadHotelData = async () => {
     // Step 2: Load dependent data after setting the form data
     // Load provinces first, then places
     if (hotelData.countryId) {
-      // console.log("=== LOADING DEPENDENT DATA ===");
-      // console.log("Loading provinces for country:", hotelData.countryId);
       try {
         const provincesResponse = await axiosInstance.get(
           `/api/province/getByCountryId/${hotelData.countryId}`
         );
-        // console.log("Provinces loaded:", provincesResponse.data);
-        // console.log("Setting provinces state...");
         setProvinces(provincesResponse.data || []);
         
         // After provinces are loaded, load places if stateId exists
         if (hotelData.stateId) {
-          // console.log("Loading places for state:", hotelData.stateId);
           const placesResponse = await axiosInstance.get(
             `/api/destination/getplaces/${hotelData.stateId}`
           );
-          // console.log("Places loaded:", placesResponse.data);
-          // console.log("Looking for placeId:", hotelData.placeId, "in places data");
           const loadedPlaces = placesResponse.data || [];
-          // console.log("Available place IDs:", loadedPlaces.map(p => p.id));
-          // console.log("Available place names:", loadedPlaces.map(p => p.name));
-          // console.log("Setting places state...");
           setPlaces(loadedPlaces);
-        } else {
-          // console.log("No stateId found, skipping places loading");
         }
       } catch (error) {
         console.error("Error loading dependent data:", error);
       }
-      // console.log("=== END LOADING DEPENDENT DATA ===");
-    } else {
-      // console.log("No countryId found, skipping dependent data loading");
     }
 
   } catch (error) {
@@ -485,19 +440,36 @@ const loadHotelData = async () => {
     // console.log("=== END COUNTRY USEEFFECT ===");
   }, [formData.countryId, isInitialLoad]);
 
-  useEffect(() => {
+  // useEffect(() => {
    
     
-    // Only run this effect if it's not the initial load
-    if (formData.stateId && !isInitialLoad) {
-      // console.log("Loading places for user change");
+  //   // Only run this effect if it's not the initial load
+  //   if (formData.stateId && !isInitialLoad) {
+  //     // console.log("Loading places for user change");
+  //     loadPlaces(formData.stateId);
+  //     setFormData((prev) => ({ ...prev, placeId: "" }));
+  //   } else if (isInitialLoad) {
+  //     // console.log("Skipping state useEffect during initial load");
+  //   }
+  //   // console.log("=== END STATE USEEFFECT ===");
+  // }, [formData.stateId, isInitialLoad]);
+
+  useEffect(() => {
+  console.log("=== StateId useEffect triggered ===", {
+    stateId: formData.stateId,
+    isInitialLoad,
+    isLoadingHotelData,
+    isDataReady
+  });
+  if (formData.stateId) {
+    // Always load places if data is ready (edit mode or user selected)
+    if (isDataReady || (!isInitialLoad && !isLoadingHotelData)) {
+      console.log("=== Calling loadPlaces ===", formData.stateId);
       loadPlaces(formData.stateId);
-      setFormData((prev) => ({ ...prev, placeId: "" }));
-    } else if (isInitialLoad) {
-      // console.log("Skipping state useEffect during initial load");
     }
-    // console.log("=== END STATE USEEFFECT ===");
-  }, [formData.stateId, isInitialLoad]);
+  }
+}, [formData.stateId, isInitialLoad, isLoadingHotelData, isDataReady]);
+
 
   // After hotel data is loaded for edit, set isInitialLoad to false
   useEffect(() => {

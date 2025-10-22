@@ -16,6 +16,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import Swal from "sweetalert2";
 
 const Promotion = () => {
   const { id } = useParams();
@@ -25,6 +26,7 @@ const Promotion = () => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showValidityModal, setShowValidityModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedPromo, setSelectedPromo] = useState(null);
   const [formData, setFormData] = useState({ type: "" });
 
@@ -51,35 +53,95 @@ const Promotion = () => {
   }, [id]);
 
   // ✅ Delete promotion
-  const handleDelete = async (promo) => {
-    if (!window.confirm("Are you sure you want to delete this promotion?"))
-      return;
+  const handleDelete = (promo) => {
+    Swal.fire({
+      title: `Are you sure? You want to delete ${promo.promotionType} for ${promo.promotionCode}?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
+      customClass: {
+        popup: "swal-small",
+        title: "swal-small-title",
+        htmlContainer: "swal-small-text",
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        let endpoint = "";
+        switch (promo.promotionType) {
+          case "Special Rates":
+            endpoint = `/api/hotelSpecialRate/${promo.id}`;
+            break;
+          case "Discount":
+          case "Discount Promotion":
+            endpoint = `/api/discount/${promo.id}`;
+            break;
+          case "StayPay":
+          case "Stay Pay Promotion":
+            endpoint = `/api/hotelStaypay/${promo.id}`;
+            break;
+          default:
+            toast.error("Unknown promotion type");
+            return;
+        }
 
-    let endpoint = "";
-    switch (promo.promotionType) {
-      case "Special Rates":
-        endpoint = `/api/hotelSpecialRate/${promo.id}`;
-        break;
-      case "Discount":
-      case "Discount Promotion":
-        endpoint = `/api/discount/${promo.id}`;
-        break;
-      case "StayPay":
-      case "Stay Pay Promotion":
-        endpoint = `/api/hotelStaypay/${promo.id}`;
-        break;
-      default:
-        toast.error("Unknown promotion type");
-        return;
-    }
+        axiosInstance
+          .delete(endpoint)
+          .then(() => {
+            toast.success(`${promo.promotionType} deleted successfully`);
+            fetchPromotions();
+          })
+          .catch((error) => {
+            console.error("❌ Delete Error:", error.response || error);
+            toast.error("Failed to delete promotion");
+          });
+      }
+    });
+  };
+
+  // ✅ Handle status toggle
+  const handleStatusToggle = (promo) => {
+    setSelectedPromo(promo);
+    setShowStatusModal(true);
+  };
+
+  // ✅ Update promotion status
+  const updatePromotionStatus = async () => {
+    if (!selectedPromo) return;
 
     try {
-      await axiosInstance.delete(endpoint);
-      toast.success(`${promo.promotionType} deleted successfully`);
+      let endpoint = "";
+      let payload = {
+        id: selectedPromo.id,
+        isLive: !selectedPromo.status,
+        type: selectedPromo.promotionType
+      };
+
+      switch (selectedPromo.promotionType) {
+        case "Special Rates":
+          endpoint = `/api/hotelSpecialRate/specialRateIsLiveUpdate/${selectedPromo.id}`;
+          break;
+        case "Discount":
+        case "Discount Promotion":
+          endpoint = `/api/discount/isLiveUpdate/${selectedPromo.id}`;
+          break;
+        case "StayPay":
+        case "Stay Pay Promotion":
+          endpoint = `/api/hotelStaypay/isLiveUpdate/${selectedPromo.id}`;
+          break;
+        default:
+          toast.error("Unknown promotion type");
+          return;
+      }
+
+      await axiosInstance.put(endpoint, payload);
+      toast.success(`Promotion ${payload.isLive ? 'activated' : 'deactivated'} successfully`);
       fetchPromotions();
+      setShowStatusModal(false);
     } catch (error) {
-      console.error("❌ Delete Error:", error.response || error);
-      toast.error("Failed to delete promotion");
+      console.error("❌ Status Update Error:", error.response || error);
+      toast.error("Failed to update promotion status");
     }
   };
 
@@ -194,7 +256,6 @@ const Promotion = () => {
                   <tr>
                     <th style={{ width: 70 }}>S/N</th>
                     <th>Type</th>
-                    <th>Name</th>
                     <th>Validity</th>
                     <th>Promotion Code</th>
                     <th>Day Type</th>
@@ -208,7 +269,6 @@ const Promotion = () => {
                       <tr key={promo.id}>
                         <td>{(currentPage - 1) * itemsPerPage + index + 1}</td>
                         <td>{promo.promotionType || "—"}</td>
-                        <td>{promo.promotionName || "—"}</td>
                         <td>
                           <Button
                             variant="link"
@@ -218,13 +278,18 @@ const Promotion = () => {
                               setShowValidityModal(true);
                             }}
                           >
-                            View
+                            view
                           </Button>
                         </td>
                         <td>{promo.promotionCode || "—"}</td>
                         <td>{promo.dayType || "—"}</td>
                         <td>
-                          <Badge bg={promo.status ? "success" : "secondary"}>
+                          <Badge 
+                            bg={promo.status ? "success" : "secondary"}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => handleStatusToggle(promo)}
+                            title={`Click to ${promo.status ? 'deactivate' : 'activate'} promotion`}
+                          >
                             {promo.status ? "Active" : "Inactive"}
                           </Badge>
                         </td>
@@ -491,6 +556,55 @@ const Promotion = () => {
                 onClick={() => setShowValidityModal(false)}
               >
                 ✖ Cancel
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* ✅ Status Toggle Modal */}
+          <Modal
+            show={showStatusModal}
+            onHide={() => setShowStatusModal(false)}
+            centered
+            size="sm"
+          >
+            <Modal.Header className="bg-warning text-dark">
+              <Modal.Title>Update Promotion Status</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {selectedPromo && (
+                <div className="text-center">
+                  <p className="mb-3">
+                    Are you sure you want to{" "}
+                    <strong className={selectedPromo.status ? "text-danger" : "text-success"}>
+                      {selectedPromo.status ? "deactivate" : "activate"}
+                    </strong>{" "}
+                    this promotion?
+                  </p>
+                  {/* <div className="bg-light p-3 rounded">
+                    <strong>Promotion:</strong> {selectedPromo.promotionType}
+                    <br />
+                    <strong>Code:</strong> {selectedPromo.promotionCode}
+                    <br />
+                    <strong>Current Status:</strong>{" "}
+                    <Badge bg={selectedPromo.status ? "success" : "secondary"}>
+                      {selectedPromo.status ? "Active" : "Inactive"}
+                    </Badge>
+                  </div> */}
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer className="justify-content-between">
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowStatusModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant={selectedPromo?.status ? "danger" : "success"}
+                onClick={updatePromotionStatus}
+              >
+                {selectedPromo?.status ? "Deactivate" : "Activate"}
               </Button>
             </Modal.Footer>
           </Modal>
