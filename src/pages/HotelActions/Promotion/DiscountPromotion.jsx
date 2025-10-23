@@ -54,6 +54,12 @@ export default function DiscountPromotion() {
     return Object.keys(errors).length === 0;
   };
 
+  // Helper function to get current date in YYYY-MM-DD format for date inputs
+  const getCurrentDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+
   const [formData, setFormData] = useState({
     season: "",
     rateCode: "",
@@ -195,7 +201,7 @@ const fetchRoomDetails = async () => {
   const handleAddDate = (field) => {
     setFormData({
       ...formData,
-      [field]: [...formData[field], { from: "", to: "" }],
+      [field]: [...formData[field], { from: getCurrentDate(), to: getCurrentDate() }],
     });
   };
 
@@ -238,6 +244,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
     try {
       const formatDate = (date) => {
         if (!date) return "";
+        // Convert YYYY-MM-DD to dd-mm-yyyy for API
         const d = new Date(date);
         return `${String(d.getDate()).padStart(2, "0")}-${String(
           d.getMonth() + 1
@@ -530,6 +537,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                         <Form.Control
                           type="date"
                           value={formData.bookByDate}
+                          min={getCurrentDate()}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
@@ -577,6 +585,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                               <Form.Control
                                 type="date"
                                 value={v.from}
+                                min={getCurrentDate()}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -591,6 +600,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                               <Form.Control
                                 type="date"
                                 value={v.to}
+                                min={v.from || getCurrentDate()}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -637,6 +647,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                               <Form.Control
                                 type="date"
                                 value={b.from}
+                                min={getCurrentDate()}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -651,6 +662,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                               <Form.Control
                                 type="date"
                                 value={b.to}
+                                min={b.from || getCurrentDate()}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -797,7 +809,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                       variant="success"
                       className="px-4 rounded-pill"
                     >
-                      <FaSave className="me-2" /> Save Promotion
+                      <FaSave className="me-2" /> Save
                     </Button>
                   </div>
                 </Form>

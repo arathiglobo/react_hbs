@@ -80,6 +80,8 @@ import DiscountPromotion from "./pages/HotelActions/Promotion/DiscountPromotion"
 import EditDiscountPromotion from "./pages/HotelActions/Promotion/EditDiscountPromotion";
 import StayPayPromotion from "./pages/HotelActions/Promotion/StayPayPromotion";
 import EditStayPayPromotion from "./pages/HotelActions/Promotion/EditStayPayPromotion";
+import PolicyUpdate from "./pages/HotelActions/Policy/PolicyUpdate";
+import PolicyCreate from "./pages/HotelActions/Policy/PolicyCreate";
 
 
 
@@ -238,6 +240,8 @@ export default function App() {
       <Route path="/hotel-actions/:id/promotion/discount/edit/:editId" element={<EditDiscountPromotion />} />
       {/* policy */}
       <Route path="/hotel-actions/:id/hotel-policy" element={<Policy />} />
+      <Route path="/hotel-actions/:id/hotel-policy/create" element={<PolicyCreate />} />
+      <Route path="/hotel-actions/:id/hotel-policy/:editId/edit" element={<PolicyUpdate />} />
       
       
       {/* inhouse accounts    */}

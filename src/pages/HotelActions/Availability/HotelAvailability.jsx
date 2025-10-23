@@ -90,6 +90,10 @@ const HotelAvailability = () => {
   const [pageBlock, setPageBlock] = useState(0);
   const [totalPagesBlock, setTotalPagesBlock] = useState(0);
   const [searchBlock, setSearchBlock] = useState("");
+  
+  // State for Block live status modal
+  const [showLiveStatusModalBlock, setShowLiveStatusModalBlock] = useState(false);
+  const [selectedItemBlock, setSelectedItemBlock] = useState(null);
 
   // State for Stop Sale
   const [stopSaleItems, setStopSaleItems] = useState([]);
@@ -107,6 +111,10 @@ const HotelAvailability = () => {
   const [pageStopSale, setPageStopSale] = useState(0);
   const [totalPagesStopSale, setTotalPagesStopSale] = useState(0);
   const [searchStopSale, setSearchStopSale] = useState("");
+  
+  // State for Stop Sale live status modal
+  const [showLiveStatusModalStopSale, setShowLiveStatusModalStopSale] = useState(false);
+  const [selectedItemStopSale, setSelectedItemStopSale] = useState(null);
 
   // Load market types and room categories
   useEffect(() => {
@@ -687,6 +695,147 @@ const HotelAvailability = () => {
   const closeLiveStatusModal = () => {
     setShowLiveStatusModal(false);
     setSelectedItem(null);
+  };
+
+  // Stop Sale Live Status Functions
+  const handleLiveStatusStopSale = async (item) => {
+    setSelectedItemStopSale(item);
+    setShowLiveStatusModalStopSale(true);
+  };
+
+  const confirmLiveStatusChangeStopSale = async () => {
+    console.log("=== CONFIRM LIVE STATUS CHANGE STOP SALE ===");
+    console.log("Toggling live status for:", selectedItemStopSale);
+    console.log("Current status:", selectedItemStopSale?.isLive);
+    console.log("Stop Sale ID:", selectedItemStopSale?.stopSaleId);
+
+    if (!selectedItemStopSale) {
+      console.error("No selected stop sale item found!");
+      return;
+    }
+
+    try {
+      setIsLoadingStopSale(true);
+
+      // Create payload with isLive parameter as RequestParam
+      const isLive = !selectedItemStopSale.isLive; // Toggle the current status
+
+      console.log("Sending isLive parameter:", isLive);
+      const res = await axiosInstance.put(
+        `/api/hotelStopSale/${selectedItemStopSale.stopSaleId}/live-status?isLive=${isLive}`
+      );
+
+      console.log("✅ API call successful!");
+      console.log("API response:", res.data);
+
+      // Show success message based on the new status
+      if (isLive) {
+        toast.success("Stop Sale activated successfully");
+      } else {
+        toast.success("Stop Sale deactivated successfully");
+      }
+
+      // Refresh the stop sale list to show updated data
+      await fetchStopSaleList(pageStopSale, searchStopSale);
+      setShowLiveStatusModalStopSale(false);
+      setSelectedItemStopSale(null);
+    } catch (error) {
+    
+
+      // Handle different types of errors
+      if (error.response?.status === 404) {
+        toast.error("API endpoint not found. Please check the backend routes.");
+      } else if (error.response?.status === 500) {
+        toast.error("Server error. Please check the backend logs.");
+      } else {
+        toast.error(
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
+    } finally {
+      setIsLoadingStopSale(false);
+    }
+  };
+
+  const closeLiveStatusModalStopSale = () => {
+    setShowLiveStatusModalStopSale(false);
+    setSelectedItemStopSale(null);
+  };
+
+  // Block Checkin Checkout Live Status Functions
+  const handleLiveStatusBlock = async (item) => {
+    setSelectedItemBlock(item);
+    setShowLiveStatusModalBlock(true);
+  };
+
+  const confirmLiveStatusChangeBlock = async () => {
+    console.log("=== CONFIRM LIVE STATUS CHANGE BLOCK ===");
+    console.log("Toggling live status for:", selectedItemBlock);
+    console.log("Current status:", selectedItemBlock?.isLive);
+    console.log("Hotel ID from params:", id);
+    console.log("Block ID:", selectedItemBlock?.id);
+
+    if (!selectedItemBlock) {
+      console.error("No selected block item found!");
+      return;
+    }
+
+    try {
+      setIsLoadingBlock(true);
+
+      // Create payload matching HotelAvailabilityPatchDTO structure
+      const payload = {
+        isLive: !selectedItemBlock.isLive, // Toggle the current status
+      };
+
+      console.log("Sending payload:", payload);
+      const res = await axiosInstance.patch(
+        `/api/hotels/${id}/blockCheckInCheckout/${selectedItemBlock.id}/status`,
+        payload
+      );
+
+      console.log("✅ API call successful!");
+      console.log("API response:", res.data);
+
+      // Show success message based on the API response status
+      if (res.data.isLive === true || res.data.isLive === "true") {
+        toast.success("Block Checkin Checkout activated successfully");
+      } else {
+        toast.success("Block Checkin Checkout deactivated successfully");
+      }
+
+      // Refresh the block list to show updated data
+      await fetchBlockList(pageBlock, searchBlock);
+      setShowLiveStatusModalBlock(false);
+      setSelectedItemBlock(null);
+    } catch (error) {
+      console.error("Error updating block live status:", error);
+      console.error("Error response:", error.response);
+      console.error("Error status:", error.response?.status);
+      console.error("Error data:", error.response?.data);
+
+      // Handle different types of errors
+      if (error.response?.status === 404) {
+        toast.error("API endpoint not found. Please check the backend routes.");
+      } else if (error.response?.status === 500) {
+        toast.error("Server error. Please check the backend logs.");
+      } else {
+        toast.error(
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
+    } finally {
+      setIsLoadingBlock(false);
+    }
+  };
+
+  const closeLiveStatusModalBlock = () => {
+    setShowLiveStatusModalBlock(false);
+    setSelectedItemBlock(null);
   };
 
   const handleTabSelect = (key) => {
@@ -1572,9 +1721,23 @@ const HotelAvailability = () => {
                           </td>
 
                           <td>
-                            <Badge bg={item.isActive ? "success" : "danger"}>
-                              {item.isActive ? "Active" : "Inactive"}
-                            </Badge>
+                            {item.isLive === true || item.isLive === "true" ? (
+                              <Badge
+                                bg="success"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleLiveStatusBlock(item)}
+                              >
+                                Active
+                              </Badge>
+                            ) : (
+                              <Badge
+                                bg="danger"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleLiveStatusBlock(item)}
+                              >
+                                Inactive
+                              </Badge>
+                            )}
                           </td>
                           <td>
                             <div className="d-flex gap-2">
@@ -1691,9 +1854,23 @@ const HotelAvailability = () => {
                           </td>
 
                           <td>
-                            <Badge bg={item.isLive ? "success" : "danger"}>
-                              {item.isLive ? "Active" : "Inactive"}
-                            </Badge>
+                            {item.isLive === true || item.isLive === "true" ? (
+                              <Badge
+                                bg="success"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleLiveStatusStopSale(item)}
+                              >
+                                Active
+                              </Badge>
+                            ) : (
+                              <Badge
+                                bg="danger"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleLiveStatusStopSale(item)}
+                              >
+                                Inactive
+                              </Badge>
+                            )}
                           </td>
                           <td>
                             <div className="d-flex gap-2">
@@ -2405,6 +2582,54 @@ const HotelAvailability = () => {
         </Modal.Footer>
       </Modal>
 
+      {/* Block Checkin Checkout Live Status Modal */}
+      <Modal
+        show={showLiveStatusModalBlock}
+        onHide={closeLiveStatusModalBlock}
+        centered
+        size="sm"
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!isLoadingBlock}>
+          <Modal.Title>Confirm Status Change</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            Are you sure you want to{" "}
+            {selectedItemBlock?.isLive === true || selectedItemBlock?.isLive === "true" ? "deactivate" : "activate"} this
+            block checkin checkout?
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={closeLiveStatusModalBlock}
+            disabled={isLoadingBlock}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={confirmLiveStatusChangeBlock}
+            disabled={isLoadingBlock}
+          >
+            {isLoadingBlock ? (
+              <>
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                  aria-hidden="true"
+                ></span>
+                Processing...
+              </>
+            ) : (
+              "Confirm"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
       {/* Stop Sale Modal */}
       <Modal
         show={showStopSaleModal}
@@ -2675,6 +2900,54 @@ const HotelAvailability = () => {
               Reset
             </Button>
           )}
+        </Modal.Footer>
+      </Modal>
+
+      {/* Stop Sale Live Status Modal */}
+      <Modal
+        show={showLiveStatusModalStopSale}
+        onHide={closeLiveStatusModalStopSale}
+        centered
+        size="sm"
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!isLoadingStopSale}>
+          <Modal.Title>Confirm Status Change</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            Are you sure you want to{" "}
+            {selectedItemStopSale?.isLive === true || selectedItemStopSale?.isLive === "true" ? "deactivate" : "activate"} this
+            stop sale?
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={closeLiveStatusModalStopSale}
+            disabled={isLoadingStopSale}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={confirmLiveStatusChangeStopSale}
+            disabled={isLoadingStopSale}
+          >
+            {isLoadingStopSale ? (
+              <>
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                  aria-hidden="true"
+                ></span>
+                Processing...
+              </>
+            ) : (
+              "Confirm"
+            )}
+          </Button>
         </Modal.Footer>
       </Modal>
     </div>

@@ -16,7 +16,8 @@ import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
 const PolicyUpdate = () => {
-  const { id, policyId } = useParams(); // hotelId, policyId
+  const { id, editId } = useParams(); // hotelId, policyId
+  const policyId = editId;
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);

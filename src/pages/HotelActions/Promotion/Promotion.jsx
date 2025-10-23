@@ -580,16 +580,7 @@ const Promotion = () => {
                     </strong>{" "}
                     this promotion?
                   </p>
-                  {/* <div className="bg-light p-3 rounded">
-                    <strong>Promotion:</strong> {selectedPromo.promotionType}
-                    <br />
-                    <strong>Code:</strong> {selectedPromo.promotionCode}
-                    <br />
-                    <strong>Current Status:</strong>{" "}
-                    <Badge bg={selectedPromo.status ? "success" : "secondary"}>
-                      {selectedPromo.status ? "Active" : "Inactive"}
-                    </Badge>
-                  </div> */}
+                 
                 </div>
               )}
             </Modal.Body>

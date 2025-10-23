@@ -9,7 +9,7 @@ import {
   Card,
   Spinner,
 } from "react-bootstrap";
-import { FaArrowLeft, FaPlus, FaTrash, FaSave } from "react-icons/fa";
+import { FaArrowLeft, FaPlus, FaTrash, FaSave, FaTimes } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
@@ -19,7 +19,8 @@ import Select from "react-select";
 
 export default function EditDiscountPromotion() {
   const navigate = useNavigate();
-  const { id, promoId } = useParams();
+  const { id, editId } = useParams(); // hotelId and promoId
+  const promoId = editId;
 
   const [loading, setLoading] = useState(false);
   const [rooms, setRooms] = useState([]);
@@ -27,6 +28,52 @@ export default function EditDiscountPromotion() {
   const [countries, setCountries] = useState([]);
   const [filteredCountries, setFilteredCountries] = useState([]);
   const [roomDetails, setRoomDetails] = useState([]);
+  const [hotelRoomsData, setHotelRoomsData] = useState([]);
+  const [discountRoomData, setDiscountRoomData] = useState([]);
+  const [seasonData, setSeasonData] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // ✅ Validation function
+  const validateForm = () => {
+    const errors = {};
+
+    // Season validation
+    if (!formData.season || formData.season === "") {
+      errors.season = "Please select a season";
+    }
+
+    // Rate Code validation
+    if (!formData.rateCode || formData.rateCode.trim() === "") {
+      errors.rateCode = "Please enter a rate code";
+    }
+
+    // Market Type validation
+    if (!formData.marketType || formData.marketType.length === 0) {
+      errors.marketType = "Please select at least one market type";
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Helper function to get current date in YYYY-MM-DD format for date inputs
+  const getCurrentDate = () => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  };
+
+  // Helper function to convert dd-mm-yyyy to YYYY-MM-DD
+  const convertToDateInput = (dateString) => {
+    if (!dateString) return "";
+    const parts = dateString.split("-");
+    if (parts.length === 3) {
+      const day = parts[0];
+      const month = parts[1];
+      const year = parts[2];
+      return `${year}-${month}-${day}`;
+    }
+    return dateString;
+  };
 
   const [formData, setFormData] = useState({
     season: "",
@@ -41,10 +88,103 @@ export default function EditDiscountPromotion() {
     bookByPriorDays: "",
     validityList: [{ from: "", to: "" }],
     blackoutDates: [{ from: "", to: "" }],
+    discounts: [],
     remarks: "",
   });
 
-  // ✅ Fetch dropdowns
+  // ✅ Load discount data
+  const loadDiscountData = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get(`/api/discount/${promoId}`);
+      const data = response.data;
+
+      console.log("Discount data loaded:", data);
+
+      // Convert API data to form format
+      const validityList = data.validityDTO
+        ?.filter((item) => item.isType === "V")
+        .map((item) => ({
+          from: convertToDateInput(item.validityFrom),
+          to: convertToDateInput(item.validityTo),
+        })) || [{ from: "", to: "" }];
+
+      const blackoutDates = data.validityDTO
+        ?.filter((item) => item.isType === "B")
+        .map((item) => ({
+          from: convertToDateInput(item.validityFrom),
+          to: convertToDateInput(item.validityTo),
+        })) || [{ from: "", to: "" }];
+
+        // Store roomDTO data for discount details
+        console.log('Setting discount room data:', data.roomDTO);
+        setDiscountRoomData(data.roomDTO || []);
+
+        setFormData({
+          season: data.seasonId?.toString() || "",
+          rateCode: data.rateCode || "",
+          marketType:
+            data.marketype?.map((id) => ({
+              value: id,
+              label:
+                markets.find((m) => m.marketTypeId === id)?.name ||
+                `Market ${id}`,
+            })) || [],
+          excludeNationality:
+            data.excludeCountry?.map((id) => ({
+              value: id,
+              label: countries.find((c) => c.id === id)?.name || `Country ${id}`,
+            })) || [],
+          isRefundable: data.refund || false,
+          weekType: data.allDays ? "all" : data.weekDay ? "weekdays" : "weekends",
+          discountForRooms: true,
+          discountForExtraBed: data.extraBed || false,
+          bookByDate: convertToDateInput(data.bookDate),
+          bookByPriorDays: data.bookDay?.toString() || "",
+          validityList: validityList,
+          blackoutDates: blackoutDates,
+          discounts: [],
+          remarks: data.remark || "",
+        });
+    } catch (error) {
+      console.error("Error loading discount data:", error);
+      toast.error("Failed to load discount data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Load hotel room data dynamically
+  const loadHotelRoomDatas = async () => {
+    try {
+      const response = await axiosInstance.get(
+        `/api/hotelRoomDetailsController/${id}`
+      );
+      console.log("Hotel Rooms Data:", response.data);
+      setHotelRoomsData(response.data || []);
+    } catch (error) {
+      console.error("Error loading hotel rooms data:", error);
+      toast.error("Failed to load Hotel Rooms Data");
+    }
+  };
+
+  // ✅ Fetch season data
+  const seasonList = async () => {
+    try {
+      setLoading(true);
+      const seasonRes = await axiosInstance.get(`api/seasonType`);
+      console.log("seasonRes::", seasonRes.data);
+      if (seasonRes.data) {
+        setSeasonData(seasonRes.data);
+      }
+    } catch {
+      toast.error("Failed to load seasons");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Fetch dropdown data (market + countries)
   const fetchDropdowns = async () => {
     try {
       const [marketRes, countryRes] = await Promise.all([
@@ -59,206 +199,155 @@ export default function EditDiscountPromotion() {
     }
   };
 
-  // ✅ Fetch Room & Meal Data
-  const fetchRooms = async () => {
-    try {
-      const res = await axiosInstance.get(`/api/hotel/${id}/room-meal-data`);
-      const roomData = res.data || [];
-
-      return roomData.map((room) => ({
-        roomId: room.roomId,
-        roomName: room.roomName,
-        mealPlans: room.mealPlans.map((meal) => ({
-          mealPlanId: meal.mealPlanId,
-          mealName: meal.mealName,
-          discountPercent: 0,
-          discountValue: 0,
-          minStay: 0,
-        })),
-      }));
-    } catch {
-      toast.error("Failed to load rooms");
-      return [];
-    }
-  };
-
-  // ✅ Fetch contract rate details
-  const fetchRoomDetails = async () => {
-    try {
-      const res = await axiosInstance.get(`/api/hotelRoomDetailsController/${id}`);
-      const data = res.data || [];
-      setRoomDetails(
-        data.map((room) => ({
-          id: room.id,
-          roomCategory: room.roomCategory,
-          occupancies: room.occupancyDetailsDTOs.map((occ) => ({
-            id: occ.id,
-            occupancyType: occ.occupanyType,
-            rateSingle: occ.rateSingle || 0,
-            rateDouble: occ.rateDouble || 0,
-            rateExtraAdult: occ.rateExtraAdult || 0,
-            rateExtraChild: occ.rateExtraChild || 0,
-          })),
-        }))
-      );
-    } catch {
-      toast.error("Failed to load contract rate details");
-    }
-  };
-
-  // ✅ Fetch existing promotion data
-  const fetchPromotion = async (roomData) => {
-    try {
-      setLoading(true);
-      const res = await axiosInstance.get(`/api/discount/${promoId}`);
-      const data = res.data;
-
-      // ✅ Map validity and blackout
-      const validityList =
-        data.validityList?.map((v) => ({
-          from: v.validityFrom || "",
-          to: v.validityTo || "",
-        })) || [{ from: "", to: "" }];
-
-      const blackoutDates =
-        data.blackoutDates?.map((b) => ({
-          from: b.validityFrom || "",
-          to: b.validityTo || "",
-        })) || [{ from: "", to: "" }];
-
-      // ✅ Map rooms & meals discount
-      const updatedRooms = roomData.map((room) => ({
-        ...room,
-        mealPlans: room.mealPlans.map((meal) => {
-          const existing = data.discountRoomDTO?.find(
-            (d) =>
-              d.hotelRoomId === room.roomId &&
-              d.mealPlanId === meal.mealPlanId
-          );
-          return {
-            ...meal,
-            discountPercent: existing?.discountPercent || 0,
-            discountValue: existing?.discountValue || 0,
-            minStay: existing?.minStay || 0,
-          };
-        }),
-      }));
-
-      setRooms(updatedRooms);
-
-      setFormData({
-        season: data.seasonId || "",
-        rateCode: data.rateCode || "",
-        marketType: (data.marketTypeDTOList || []).map((m) => ({
-          value: m.marketTypeId,
-          label: m.name,
-        })),
-        excludeNationality: (data.excludeNationalityDTOList || []).map((n) => ({
-          value: n.id,
-          label: `${n.name} (${n.marketType})`,
-        })),
-        isRefundable: data.isRefundable || false,
-        weekType:
-          data.allDays === 1
-            ? "all"
-            : data.weekDay === 1
-            ? "weekdays"
-            : "weekends",
-        discountForRooms: data.discountForRooms ?? true,
-        discountForExtraBed: data.discountForExtraBed ?? false,
-        bookByDate: data.bookByDate || "",
-        bookByPriorDays: data.bookByPriorDays || "",
-        validityList,
-        blackoutDates,
-        remarks: data.remarks || "",
-      });
-    } catch (error) {
-      toast.error("Failed to load promotion details");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    (async () => {
-      const [roomData] = await Promise.all([
-        fetchRooms(),
-        fetchDropdowns(),
-        fetchRoomDetails(),
-      ]);
-      await fetchPromotion(roomData);
-    })();
-  }, [id, promoId]);
+    fetchDropdowns();
+    loadHotelRoomDatas();
+    seasonList();
+  }, [id]);
 
-  // ✅ Filter countries by market
+  // Load discount data after dropdowns are loaded
+  useEffect(() => {
+    if (markets.length > 0 && countries.length > 0) {
+      loadDiscountData();
+    }
+  }, [markets, countries, promoId]);
+
+  // Debug effect to log discount room data changes
+  useEffect(() => {
+    console.log('Discount room data updated:', discountRoomData);
+  }, [discountRoomData]);
+
+  // ✅ Filter countries based on selected markets
   useEffect(() => {
     if (!formData.marketType?.length) {
       setFilteredCountries(countries);
     } else {
       const selectedIds = formData.marketType.map((m) => m.value);
-      setFilteredCountries(
-        countries.filter((c) => selectedIds.includes(c.marketTypeId))
+      const filtered = countries.filter((c) =>
+        selectedIds.includes(c.marketTypeId)
       );
+      setFilteredCountries(filtered);
     }
   }, [formData.marketType, countries]);
 
-  // ✅ Handle date lists
-  const handleAddDate = (field) =>
+  // ✅ Handle validity & blackout
+  const handleAddDate = (field) => {
     setFormData({
       ...formData,
       [field]: [...formData[field], { from: "", to: "" }],
     });
+  };
 
-  const handleRemoveDate = (field, i) => {
+  const handleRemoveDate = (field, index) => {
     const updated = [...formData[field]];
-    updated.splice(i, 1);
+    updated.splice(index, 1);
     setFormData({ ...formData, [field]: updated });
   };
 
-  const handleDateChange = (field, i, key, value) => {
+  const handleDateChange = (field, index, key, value) => {
     const updated = [...formData[field]];
-    updated[i][key] = value;
+    updated[index][key] = value;
     setFormData({ ...formData, [field]: updated });
+  };
+
+  // ✅ Handle discount changes
+  const handleDiscountChange = (index, field, value) => {
+    const updated = [...formData.discounts];
+    updated[index][field] = value;
+    setFormData({ ...formData, discounts: updated });
   };
 
   // ✅ Handle contract rate input change
-  const handleContractRateChange = (rIndex, oIndex, field, value) => {
+  const handleContractRateChange = (roomIndex, occIndex, field, value) => {
     const updated = [...roomDetails];
-    updated[rIndex].occupancies[oIndex][field] = value;
+    updated[roomIndex].occupancies[occIndex][field] = value;
     setRoomDetails(updated);
   };
 
-  // ✅ Submit update
-  const handleUpdate = async (e) => {
+  // ✅ Submit
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate form before submission
+    if (!validateForm()) {
+      return;
+    }
+
     try {
-      const payload = {
-        ...formData,
-        hotelId: parseInt(id),
-        marketType: formData.marketType.map((m) => m.value),
-        excludeNationality: formData.excludeNationality.map((n) => n.value),
-        discountRoomDTO: rooms.flatMap((room) =>
-          room.mealPlans.map((meal) => ({
-            hotelRoomId: room.roomId,
-            mealPlanId: meal.mealPlanId,
-            discountPercent: meal.discountPercent,
-            discountValue: meal.discountValue,
-            minStay: meal.minStay,
-          }))
-        ),
+      const formatDate = (date) => {
+        if (!date) return "";
+        // Convert YYYY-MM-DD to dd-mm-yyyy for API
+        const d = new Date(date);
+        return `${String(d.getDate()).padStart(2, "0")}-${String(
+          d.getMonth() + 1
+        ).padStart(2, "0")}-${d.getFullYear()}`;
       };
 
-      await axiosInstance.put(`/api/discount/update/${promoId}`, payload);
+      const weekDay = formData.weekType === "weekdays" ? true : false;
+      const weekEnd = formData.weekType === "weekends" ? true : false;
+      const allDays = formData.weekType === "all" ? true : false;
+
+      const validityList = formData.validityList.map((v) => ({
+        promo_validity_id: "",
+        validityFrom: formatDate(v.from),
+        validityTo: formatDate(v.to),
+        isType: "V",
+      }));
+
+      const blackoutDates = formData.blackoutDates.map((b) => ({
+        promo_validity_id: "",
+        validityFrom: formatDate(b.from),
+        validityTo: formatDate(b.to),
+        isType: "B",
+      }));
+
+      // Use the updated discount room data
+      const roomDTO = discountRoomData.map((room) => ({
+        promo_room_id: room.promo_room_id || "",
+        hotelRoomcategoryId: String(room.hotelRoomcategoryId),
+        hotelRoomtypeId: String(room.hotelRoomtypeId),
+        discountPercent: room.discountPercent || "0",
+        discountValue: room.discountValue || "0",
+        lengthRestriction: room.lengthRestriction || "0",
+        roomId: room.roomId,
+      }));
+
+      const payload = {
+        marketype: formData.marketType.map((m) => m.value),
+        hotelId: String(id),
+        seasonId: String(formData.season),
+        discountId: String(promoId),
+        rateCode: formData.rateCode,
+        excludeCountry: formData.excludeNationality.map((c) => c.value),
+        weekDay: weekDay,
+        weekEnd: weekEnd,
+        allDays: allDays,
+        refund: formData.isRefundable ? 1 : 0,
+        extraBed: formData.discountForExtraBed,
+        bookDate: formatDate(formData.bookByDate),
+        bookDay: String(formData.bookByPriorDays),
+        remark: formData.remarks || "",
+        validityDTO: [...validityList, ...blackoutDates],
+        roomDTO: roomDTO,
+      };
+
+      console.log("Update discount payload:", payload);
+
+      const response = await axiosInstance.put(
+        `/api/discount/${promoId}`,
+        payload
+      );
+
+      if (response.data) {
       toast.success("Discount Promotion Updated Successfully!");
-      navigate(`/registration/hotel/${id}/promotion`);
+        navigate(`/hotel-actions/${id}/promotions`);
+      }
     } catch (error) {
       console.error("Update error:", error);
       toast.error("Failed to update discount promotion");
     }
   };
 
-  // ✅ UI rendering
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
@@ -266,6 +355,7 @@ export default function EditDiscountPromotion() {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid>
+            {/* Header */}
             <div className="d-flex justify-content-between align-items-center mb-4">
               <Button
                 variant="outline-secondary"
@@ -285,49 +375,80 @@ export default function EditDiscountPromotion() {
                   <Spinner animation="border" variant="primary" />
                 </div>
               ) : (
-                <Form onSubmit={handleUpdate}>
+                <Form onSubmit={handleSubmit}>
                   {/* ================= BASIC INFO ================= */}
                   <Row className="mb-4 g-3">
+                    {/* Season */}
                     <Col md={3}>
                       <Form.Group>
                         <Form.Label>Season *</Form.Label>
                         <Form.Select
                           value={formData.season}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               season: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user selects
+                            if (validationErrors.season) {
+                              setValidationErrors({
+                                ...validationErrors,
+                                season: "",
+                              });
+                            }
+                          }}
+                          className="rounded-pill"
+                          isInvalid={!!validationErrors.season}
                         >
                           <option value="">Select Season</option>
-                          <option value="1">Peak</option>
-                          <option value="2">Mid</option>
-                          <option value="3">Low</option>
-                          <option value="4">High</option>
-                          <option value="5">Shoulder</option>
-                          <option value="6">High High</option>
-                          <option value="7">Festive</option>
+                          {seasonData?.map((season) => (
+                            <option
+                              key={season.seasonTypeId}
+                              value={season.seasonTypeId}
+                            >
+                              {season.season}
+                            </option>
+                          ))}
                         </Form.Select>
+                        {validationErrors.season && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.season}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
 
+                    {/* Rate Code */}
                     <Col md={3}>
                       <Form.Group>
                         <Form.Label>Rate Code *</Form.Label>
                         <Form.Control
                           value={formData.rateCode}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               rateCode: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user types
+                            if (validationErrors.rateCode) {
+                              setValidationErrors({
+                                ...validationErrors,
+                                rateCode: "",
+                              });
+                            }
+                          }}
                           placeholder="Enter rate code"
+                          isInvalid={!!validationErrors.rateCode}
                         />
+                        {validationErrors.rateCode && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.rateCode}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
 
+                    {/* Market Type */}
                     <Col md={3}>
                       <Form.Group>
                         <Form.Label>Market Type *</Form.Label>
@@ -338,13 +459,42 @@ export default function EditDiscountPromotion() {
                             label: m.name,
                           }))}
                           value={formData.marketType}
-                          onChange={(selected) =>
-                            setFormData({ ...formData, marketType: selected })
+                          onChange={(selected) => {
+                            setFormData({ ...formData, marketType: selected });
+                            // Clear validation error when user selects
+                            if (validationErrors.marketType) {
+                              setValidationErrors({
+                                ...validationErrors,
+                                marketType: "",
+                              });
+                            }
+                          }}
+                          classNamePrefix="react-select"
+                          placeholder="Select Market Type"
+                          className={
+                            validationErrors.marketType ? "is-invalid" : ""
                           }
+                          styles={{
+                            control: (base, state) => ({
+                              ...base,
+                              borderColor: validationErrors.marketType
+                                ? "#dc3545"
+                                : base.borderColor,
+                              boxShadow: validationErrors.marketType
+                                ? "0 0 0 0.25rem rgba(220, 53, 69, 0.25)"
+                                : base.boxShadow,
+                            }),
+                          }}
                         />
+                        {validationErrors.marketType && (
+                          <div className="invalid-feedback d-block">
+                            {validationErrors.marketType}
+                          </div>
+                        )}
                       </Form.Group>
                     </Col>
 
+                    {/* Exclude Nationality */}
                     <Col md={3}>
                       <Form.Group>
                         <Form.Label>Exclude Nationality</Form.Label>
@@ -361,12 +511,111 @@ export default function EditDiscountPromotion() {
                               excludeNationality: selected,
                             })
                           }
+                          classNamePrefix="react-select"
+                          placeholder="Select Countries"
                         />
                       </Form.Group>
                     </Col>
                   </Row>
 
-                  {/* ================= VALIDITY ================= */}
+                  {/* ================= DAY TYPE & REFUND ================= */}
+                  <Row className="align-items-center mb-4">
+                    <Col md={4}>
+                      <Form.Label>Day Type:</Form.Label>
+                      <div className="d-flex gap-3">
+                        <Form.Check
+                          type="radio"
+                          label="All Days"
+                          name="days"
+                          checked={formData.weekType === "all"}
+                          onChange={() =>
+                            setFormData({ ...formData, weekType: "all" })
+                          }
+                        />
+                        <Form.Check
+                          type="radio"
+                          label="Weekdays"
+                          name="days"
+                          checked={formData.weekType === "weekdays"}
+                          onChange={() =>
+                            setFormData({ ...formData, weekType: "weekdays" })
+                          }
+                        />
+                        <Form.Check
+                          type="radio"
+                          label="Weekends"
+                          name="days"
+                          checked={formData.weekType === "weekends"}
+                          onChange={() =>
+                            setFormData({ ...formData, weekType: "weekends" })
+                          }
+                        />
+                      </div>
+                    </Col>
+
+                    <Col md={4}>
+                      <Form.Label>Discount For *</Form.Label>
+                      <div className="d-flex gap-3">
+                        <Form.Check
+                          type="checkbox"
+                          label="Rooms"
+                          checked={formData.discountForRooms}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              discountForRooms: e.target.checked,
+                            })
+                          }
+                        />
+                        <Form.Check
+                          type="checkbox"
+                          label="Extra Bed"
+                          checked={formData.discountForExtraBed}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              discountForExtraBed: e.target.checked,
+                            })
+                          }
+                        />
+                      </div>
+                    </Col>
+
+                    <Col md={2}>
+                      <Form.Group>
+                        <Form.Label>Book By Date</Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={formData.bookByDate}
+                          min={getCurrentDate()}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              bookByDate: e.target.value,
+                            })
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col md={2}>
+                      <Form.Group>
+                        <Form.Label>Prior Days</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={formData.bookByPriorDays}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              bookByPriorDays: e.target.value,
+                            })
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+                  </Row>
+
+                  {/* ================= VALIDITY & BLACKOUT ================= */}
                   <Row className="mb-4">
                     <Col md={6}>
                       <Card className="p-3 border rounded-3">
@@ -386,8 +635,14 @@ export default function EditDiscountPromotion() {
                               <Form.Control
                                 type="date"
                                 value={v.from}
+                                min={getCurrentDate()}
                                 onChange={(e) =>
-                                  handleDateChange("validityList", i, "from", e.target.value)
+                                  handleDateChange(
+                                    "validityList",
+                                    i,
+                                    "from",
+                                    e.target.value
+                                  )
                                 }
                               />
                             </Col>
@@ -395,8 +650,14 @@ export default function EditDiscountPromotion() {
                               <Form.Control
                                 type="date"
                                 value={v.to}
+                                min={v.from || getCurrentDate()}
                                 onChange={(e) =>
-                                  handleDateChange("validityList", i, "to", e.target.value)
+                                  handleDateChange(
+                                    "validityList",
+                                    i,
+                                    "to",
+                                    e.target.value
+                                  )
                                 }
                               />
                             </Col>
@@ -405,7 +666,9 @@ export default function EditDiscountPromotion() {
                                 <Button
                                   size="sm"
                                   variant="outline-danger"
-                                  onClick={() => handleRemoveDate("validityList", i)}
+                                  onClick={() =>
+                                    handleRemoveDate("validityList", i)
+                                  }
                                 >
                                   <FaTrash />
                                 </Button>
@@ -434,8 +697,14 @@ export default function EditDiscountPromotion() {
                               <Form.Control
                                 type="date"
                                 value={b.from}
+                                min={getCurrentDate()}
                                 onChange={(e) =>
-                                  handleDateChange("blackoutDates", i, "from", e.target.value)
+                                  handleDateChange(
+                                    "blackoutDates",
+                                    i,
+                                    "from",
+                                    e.target.value
+                                  )
                                 }
                               />
                             </Col>
@@ -443,8 +712,14 @@ export default function EditDiscountPromotion() {
                               <Form.Control
                                 type="date"
                                 value={b.to}
+                                min={b.from || getCurrentDate()}
                                 onChange={(e) =>
-                                  handleDateChange("blackoutDates", i, "to", e.target.value)
+                                  handleDateChange(
+                                    "blackoutDates",
+                                    i,
+                                    "to",
+                                    e.target.value
+                                  )
                                 }
                               />
                             </Col>
@@ -453,7 +728,9 @@ export default function EditDiscountPromotion() {
                                 <Button
                                   size="sm"
                                   variant="outline-danger"
-                                  onClick={() => handleRemoveDate("blackoutDates", i)}
+                                  onClick={() =>
+                                    handleRemoveDate("blackoutDates", i)
+                                  }
                                 >
                                   <FaTrash />
                                 </Button>
@@ -465,158 +742,121 @@ export default function EditDiscountPromotion() {
                     </Col>
                   </Row>
 
-                  {/* ================= DISCOUNT TABLE ================= */}
+                  {/* ================= DISCOUNT DETAILS ================= */}
                   <Card className="p-3 border-0 mb-4">
-                    <h6 className="fw-bold mb-3 text-primary">DISCOUNT DETAILS</h6>
-                    <div className="table-responsive">
-                      <Table bordered hover size="sm">
-                        <thead className="table-light text-center align-middle">
-                          <tr>
-                            <th>Room Type</th>
-                            <th>Discount (%)</th>
-                            <th>Discount (Value)</th>
-                            <th>Min Stay</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rooms.map((room, roomIndex) => (
-                            <React.Fragment key={room.roomId}>
-                              <tr className="bg-light fw-bold text-primary">
-                                <td colSpan={4}>{room.roomName}</td>
-                              </tr>
-                              {room.mealPlans.map((meal, mealIndex) => (
-                                <tr key={meal.mealPlanId}>
-                                  <td className="ps-4">{meal.mealName}</td>
-                                  <td>
-                                    <Form.Control
-                                      type="number"
-                                      value={meal.discountPercent}
-                                      onChange={(e) => {
-                                        const updated = [...rooms];
-                                        updated[roomIndex].mealPlans[mealIndex].discountPercent =
-                                          e.target.value;
-                                        setRooms(updated);
-                                      }}
-                                    />
-                                  </td>
-                                  <td>
-                                    <Form.Control
-                                      type="number"
-                                      value={meal.discountValue}
-                                      onChange={(e) => {
-                                        const updated = [...rooms];
-                                        updated[roomIndex].mealPlans[mealIndex].discountValue =
-                                          e.target.value;
-                                        setRooms(updated);
-                                      }}
-                                    />
-                                  </td>
-                                  <td>
-                                    <Form.Control
-                                      type="number"
-                                      value={meal.minStay}
-                                      onChange={(e) => {
-                                        const updated = [...rooms];
-                                        updated[roomIndex].mealPlans[mealIndex].minStay =
-                                          e.target.value;
-                                        setRooms(updated);
-                                      }}
-                                    />
-                                  </td>
-                                </tr>
-                              ))}
-                            </React.Fragment>
-                          ))}
-                        </tbody>
-                      </Table>
-                    </div>
-                  </Card>
+                    <h6 className="fw-bold mb-3 text-primary">
+                      DISCOUNT DETAILS
+                    </h6>
 
-                  {/* ================= CONTRACT RATE BOX ================= */}
-                  <Card className="p-3 border-0 mb-4">
-                    <h6 className="fw-bold mb-3 text-primary">CONTRACT RATE DETAILS</h6>
                     <div className="table-responsive">
                       <Table bordered hover size="sm">
                         <thead className="table-light text-center align-middle">
                           <tr>
                             <th>Room Category</th>
-                            <th>Occupancy Type</th>
-                            <th>Rate (Single)</th>
-                            <th>Rate (Double)</th>
-                            <th>Extra Adult</th>
-                            <th>Extra Child</th>
+                            <th>Room Type</th>
+                            <th>Occupancy</th>
+                            <th>Discount (%)</th>
+                            <th>Discount (Value)</th>
+                            <th>Minlength & Stay Restriction</th>
+                            <th>Maxlength & Stay Restriction</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {roomDetails.map((room, rIndex) => (
-                            <React.Fragment key={room.id}>
-                              <tr className="bg-light fw-bold text-primary">
-                                <td colSpan={6}>{room.roomCategory}</td>
+                          {discountRoomData.map((room, index) => {
+                            // Find the actual names from hotelRoomsData
+                            const categoryName = hotelRoomsData.find(h => 
+                              h.rommCategoryId == room.hotelRoomcategoryId
+                            )?.roomCategory || `Category ${room.hotelRoomcategoryId}`;
+                            
+                            const typeName = hotelRoomsData.find(h => 
+                              h.rommCategoryId == room.hotelRoomcategoryId
+                            )?.roomTypeDetailsDTOs?.find(rt => 
+                              rt.roomTypeId == room.hotelRoomtypeId
+                            )?.roomTypeName || `Type ${room.hotelRoomtypeId}`;
+                            
+                            const occupancyName = hotelRoomsData.find(h => 
+                              h.rommCategoryId == room.hotelRoomcategoryId
+                            )?.occupancyDetailsDTOs?.find(occ => 
+                              occ.id == room.roomId
+                            )?.occupanyType || `Room ${room.roomId}`;
+                            
+                            console.log('Mapping names:', {
+                              room,
+                              categoryName,
+                              typeName,
+                              occupancyName,
+                              hotelRoomsData: hotelRoomsData.length
+                            });
+                            
+                            return (
+                              <tr key={`discount_${index}`}>
+                                <td>{categoryName}</td>
+                                <td>{typeName}</td>
+                                <td>{occupancyName}</td>
+                                <td>
+                                  <Form.Control
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    placeholder="0"
+                                    value={room.discountPercent || "0"}
+                                    size="sm"
+                                    onChange={(e) => {
+                                      const updated = [...discountRoomData];
+                                      updated[index].discountPercent = e.target.value;
+                                      setDiscountRoomData(updated);
+                                    }}
+                                  />
+                                </td>
+                                <td>
+                                  <Form.Control
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={room.discountValue || "0"}
+                                    size="sm"
+                                    onChange={(e) => {
+                                      const updated = [...discountRoomData];
+                                      updated[index].discountValue = e.target.value;
+                                      setDiscountRoomData(updated);
+                                    }}
+                                  />
+                                </td>
+                                <td>
+                                  <Form.Control
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={room.lengthRestriction === "null" ? "0" : room.lengthRestriction || "0"}
+                                    size="sm"
+                                    onChange={(e) => {
+                                      const updated = [...discountRoomData];
+                                      updated[index].lengthRestriction = e.target.value;
+                                      setDiscountRoomData(updated);
+                                    }}
+                                  />
+                                </td>
+                                <td>
+                                  <Form.Control
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    defaultValue="25"
+                                    size="sm"
+                                  />
+                                </td>
                               </tr>
-                              {room.occupancies.map((occ, oIndex) => (
-                                <tr key={occ.id}>
-                                  <td></td>
-                                  <td>{occ.occupancyType}</td>
-                                  <td>
-                                    <Form.Control
-                                      type="number"
-                                      value={occ.rateSingle}
-                                      onChange={(e) =>
-                                        handleContractRateChange(
-                                          rIndex,
-                                          oIndex,
-                                          "rateSingle",
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td>
-                                    <Form.Control
-                                      type="number"
-                                      value={occ.rateDouble}
-                                      onChange={(e) =>
-                                        handleContractRateChange(
-                                          rIndex,
-                                          oIndex,
-                                          "rateDouble",
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td>
-                                    <Form.Control
-                                      type="number"
-                                      value={occ.rateExtraAdult}
-                                      onChange={(e) =>
-                                        handleContractRateChange(
-                                          rIndex,
-                                          oIndex,
-                                          "rateExtraAdult",
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td>
-                                    <Form.Control
-                                      type="number"
-                                      value={occ.rateExtraChild}
-                                      onChange={(e) =>
-                                        handleContractRateChange(
-                                          rIndex,
-                                          oIndex,
-                                          "rateExtraChild",
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                </tr>
-                              ))}
-                            </React.Fragment>
-                          ))}
+                            );
+                          })}
+                          
+                          {/* Show message if no discount data */}
+                          {discountRoomData.length === 0 && (
+                            <tr>
+                              <td colSpan={7} className="text-center text-muted py-3">
+                                No discount data available
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </Table>
                     </div>
@@ -648,7 +888,7 @@ export default function EditDiscountPromotion() {
                       variant="success"
                       className="px-4 rounded-pill"
                     >
-                      <FaSave className="me-2" /> Update Promotion
+                      <FaSave className="me-2" /> Update
                     </Button>
                   </div>
                 </Form>
@@ -660,4 +900,3 @@ export default function EditDiscountPromotion() {
     </div>
   );
 }
-

@@ -26,7 +26,7 @@ const Policy = () => {
     try {
       setLoading(true);
       const res = await axiosInstance.get(
-        `http://localhost:8081/api/hotelPolicy?page=0&limit=20`
+        `/api/hotelPolicy?page=0&limit=20`
       );
 
       console.log("📦 API Response:", res.data);
@@ -71,9 +71,9 @@ const Policy = () => {
   };
 
   // ✅ Navigate to Create or Edit
-  const handleCreate = () => navigate(`/registration/hotel/${id}/policy/create`);
+  const handleCreate = () => navigate(`/hotel-actions/${id}/hotel-policy/create`); 
   const handleEdit = (policyId) =>
-    navigate(`/registration/hotel/${id}/policy/${policyId}/edit`);
+     navigate(`/hotel-actions/${id}/hotel-policy/${policyId}/edit`);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">

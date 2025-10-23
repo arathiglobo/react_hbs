@@ -363,25 +363,18 @@ const loadHotelData = async () => {
     // Fetch master amenity IDs after hotel data is loaded
     await fetchHotelMasterAmenityIds(hotelData);
 
-    // Step 2: Load dependent data after setting the form data
-    // Load provinces first, then places
+    // Now load dependent lists in correct order
     if (hotelData.countryId) {
-      try {
-        const provincesResponse = await axiosInstance.get(
-          `/api/province/getByCountryId/${hotelData.countryId}`
+      const provincesRes = await axiosInstance.get(
+        `/api/province/getByCountryId/${hotelData.countryId}`
+      );
+      setProvinces(provincesRes.data || []);
+
+      if (hotelData.stateId) {
+        const placesRes = await axiosInstance.get(
+          `/api/destination/getplaces/${hotelData.stateId}`
         );
-        setProvinces(provincesResponse.data || []);
-        
-        // After provinces are loaded, load places if stateId exists
-        if (hotelData.stateId) {
-          const placesResponse = await axiosInstance.get(
-            `/api/destination/getplaces/${hotelData.stateId}`
-          );
-          const loadedPlaces = placesResponse.data || [];
-          setPlaces(loadedPlaces);
-        }
-      } catch (error) {
-        console.error("Error loading dependent data:", error);
+        setPlaces(placesRes.data || []);
       }
     }
 
@@ -417,134 +410,23 @@ const loadHotelData = async () => {
   }, [isEditMode, id]);
 
   // Load dependent data when country/province changes
-
-  // Prevent resetting stateId/placeId on initial data load (edit mode)
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-
+  // 🏛️ Load provinces when country changes
   useEffect(() => {
-    // console.log("=== COUNTRY USEEFFECT TRIGGERED ===");
-    // console.log("formData.countryId:", formData.countryId);
-    // console.log("isInitialLoad:", isInitialLoad);
-    // console.log("Current formData.stateId:", formData.stateId);
-    // console.log("Current formData.placeId:", formData.placeId);
-    
-    // Only run this effect if it's not the initial load
-    if (formData.countryId && !isInitialLoad) {
-      // console.log("Loading provinces for user change");
+    // Skip clearing during initial load
+    if (!isLoadingHotelData && formData.countryId) {
       loadProvinces(formData.countryId);
-      setPlaces([]);
-      setFormData((prev) => ({ ...prev, stateId: "", placeId: "" }));
-    } else if (isInitialLoad) {
-      // console.log("Skipping country useEffect during initial load");
     }
-    // console.log("=== END COUNTRY USEEFFECT ===");
-  }, [formData.countryId, isInitialLoad]);
+  }, [formData.countryId, isLoadingHotelData]);
 
-  // useEffect(() => {
-   
-    
-  //   // Only run this effect if it's not the initial load
-  //   if (formData.stateId && !isInitialLoad) {
-  //     // console.log("Loading places for user change");
-  //     loadPlaces(formData.stateId);
-  //     setFormData((prev) => ({ ...prev, placeId: "" }));
-  //   } else if (isInitialLoad) {
-  //     // console.log("Skipping state useEffect during initial load");
-  //   }
-  //   // console.log("=== END STATE USEEFFECT ===");
-  // }, [formData.stateId, isInitialLoad]);
-
+  // 🏘️ Load places when state changes
   useEffect(() => {
-  console.log("=== StateId useEffect triggered ===", {
-    stateId: formData.stateId,
-    isInitialLoad,
-    isLoadingHotelData,
-    isDataReady
-  });
-  if (formData.stateId) {
-    // Always load places if data is ready (edit mode or user selected)
-    if (isDataReady || (!isInitialLoad && !isLoadingHotelData)) {
-      console.log("=== Calling loadPlaces ===", formData.stateId);
+    if (!isLoadingHotelData && formData.stateId) {
       loadPlaces(formData.stateId);
     }
-  }
-}, [formData.stateId, isInitialLoad, isLoadingHotelData, isDataReady]);
+  }, [formData.stateId, isLoadingHotelData]);
 
 
-  // After hotel data is loaded for edit, set isInitialLoad to false
-  useEffect(() => {
-    // console.log("=== INITIAL LOAD USEEFFECT ===");
-    // console.log("isLoadingHotelData:", isLoadingHotelData);
-    // console.log("isInitialLoad:", isInitialLoad);
-    if (!isLoadingHotelData && isInitialLoad) {
-      // console.log("Setting isInitialLoad to false - initial data loading complete");
-      setIsInitialLoad(false);
-    }
-    // console.log("=== END INITIAL LOAD USEEFFECT ===");
-  }, [isLoadingHotelData, isInitialLoad]);
 
-  // Force re-render when provinces or places are loaded
-  useEffect(() => {
-    // console.log("=== PROVINCES USEEFFECT ===");
-    // console.log("Provinces length:", provinces.length);
-    // console.log("FormData countryId:", formData.countryId);
-    // console.log("FormData stateId:", formData.stateId);
-    if (provinces.length > 0 && formData.countryId) {
-      // console.log("Provinces updated, current formData.stateId:", formData.stateId);
-      // console.log("Available provinces:", provinces.map(p => ({ id: p.id, name: p.stateName })));
-    }
-    // console.log("=== END PROVINCES USEEFFECT ===");
-  }, [provinces, formData.countryId, formData.stateId]);
-
-  useEffect(() => {
-    // console.log("=== PLACES USEEFFECT ===");
-    // console.log("Places length:", places.length);
-    // console.log("FormData stateId:", formData.stateId);
-    // console.log("FormData placeId:", formData.placeId);
-    if (places.length > 0 && formData.stateId) {
-      // console.log("Places updated, current formData.placeId:", formData.placeId);
-      // console.log("Available places:", places.map(p => ({ id: p.id, name: p.name })));
-      
-      // Check if the current placeId exists in the loaded places
-      const currentPlace = places.find(p => p.id == formData.placeId);
-      if (currentPlace) {
-        // console.log("Found matching place:", currentPlace);
-      } else {
-        // console.log("No matching place found for placeId:", formData.placeId);
-        // console.log("Available place IDs:", places.map(p => p.id));
-        
-        // Try to find by name if ID doesn't match
-        const placeByName = places.find(p => 
-          p.name.toLowerCase().includes('abu dhabi') || 
-          p.name.toLowerCase().includes('dubai') ||
-          p.name.toLowerCase().includes('sharjah') ||
-          p.name.toLowerCase().includes('ajman') ||
-          p.name.toLowerCase().includes('fujairah') ||
-          p.name.toLowerCase().includes('ras al khaimah') ||
-          p.name.toLowerCase().includes('umm al quwain')
-        );
-        if (placeByName) {
-          // console.log("Found place by name:", placeByName);
-          // Update the form data with the correct ID
-          setFormData(prev => ({
-            ...prev,
-            placeId: placeByName.id
-          }));
-        } else {
-          // console.log("No matching place found by name either");
-          // If still no match, try to find the first place as fallback
-          if (places.length > 0) {
-            // console.log("Using first available place as fallback:", places[0]);
-            setFormData(prev => ({
-              ...prev,
-              placeId: places[0].id
-            }));
-          }
-        }
-      }
-    }
-    // console.log("=== END PLACES USEEFFECT ===");
-  }, [places, formData.stateId, formData.placeId]);
 
   // Load currencies
   const loadCurrencies = async () => {
@@ -756,11 +638,34 @@ const loadHotelData = async () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked, files } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]:
-        type === "checkbox" ? checked : type === "file" ? files[0] : value,
-    }));
+
+    setFormData((prev) => {
+      let updated = { 
+        ...prev, 
+        [name]: type === "checkbox" ? checked : type === "file" ? files[0] : value 
+      };
+
+      // Reset dependent fields only on user input
+      if (name === "regionId") {
+        updated.countryId = "";
+        updated.stateId = "";
+        updated.placeId = "";
+        setCountries([]);
+        setProvinces([]);
+        setPlaces([]);
+      } else if (name === "countryId") {
+        updated.stateId = "";
+        updated.placeId = "";
+        setProvinces([]);
+        setPlaces([]);
+      } else if (name === "stateId") {
+        updated.placeId = "";
+        setPlaces([]);
+      }
+
+      return updated;
+    });
+
     // Remove validation error for this field if any
     setValidationErrors((prev) => {
       if (!prev[name]) return prev;
