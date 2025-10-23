@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams , useNavigate} from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Card,
   Button,
@@ -622,31 +622,63 @@ const HotelAvailability = () => {
   };
 
   const confirmLiveStatusChange = async () => {
-    if (!selectedItem) return;
+    console.log("=== CONFIRM LIVE STATUS CHANGE ===");
+    console.log("Toggling live status for:", selectedItem);
+    console.log("Current status:", selectedItem?.status);
+    console.log("Hotel ID from params:", id);
+    console.log("Availability ID:", selectedItem?.availabilityId);
+
+    if (!selectedItem) {
+      console.error("No selected item found!");
+      return;
+    }
+
     try {
       setIsLoading(true);
+
+      // Create payload matching the backend DTO structure
       const payload = {
-        isLive: !selectedItem.isLive,
+        isLive: !selectedItem.status, // Toggle the current status
       };
+
+      console.log("Sending payload:", payload);
       const res = await axiosInstance.patch(
-        `/api/hotels/${id}/availabilities/${selectedItem.id}/status`,
+        `/api/hotels/${id}/availabilities/${selectedItem.availabilityId}/status`,
         payload
       );
-      toast.success(
-        `Availability ${
-          selectedItem.isLive ? "deactivated" : "activated"
-        } successfully`
-      );
+
+      console.log("✅ API call successful!");
+      console.log("API response:", res.data);
+
+      // Show success message based on the API response status
+      if (res.data.isLive === true || res.data.isLive === "true") {
+        toast.success("Availability activated successfully");
+      } else {
+        toast.success("Availability deactivated successfully");
+      }
+
+      // Refresh the availability list to show updated data
       await fetchAvailabilityList(page, search);
       setShowLiveStatusModal(false);
       setSelectedItem(null);
     } catch (error) {
       console.error("Error updating live status:", error);
-      toast.error(
-        `Failed to update status: ${
-          error.response?.data?.message || error.message
-        }`
-      );
+      console.error("Error response:", error.response);
+      console.error("Error status:", error.response?.status);
+      console.error("Error data:", error.response?.data);
+
+      // Handle different types of errors
+      if (error.response?.status === 404) {
+        toast.error("API endpoint not found. Please check the backend routes.");
+      } else if (error.response?.status === 500) {
+        toast.error("Server error. Please check the backend logs.");
+      } else {
+        toast.error(
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -1374,21 +1406,21 @@ const HotelAvailability = () => {
                             </Badge>
                           </td>
                           <td>
-                            {item.isLive ? (
-                              <Badge
-                                bg="danger"
-                                style={{ cursor: "pointer" }}
-                                onClick={() => handleLiveStatus(item)}
-                              >
-                                Inactive
-                              </Badge>
-                            ) : (
+                            {item.status === true || item.status === "true" ? (
                               <Badge
                                 bg="success"
                                 style={{ cursor: "pointer" }}
                                 onClick={() => handleLiveStatus(item)}
                               >
                                 Active
+                              </Badge>
+                            ) : (
+                              <Badge
+                                bg="danger"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleLiveStatus(item)}
+                              >
+                                Inactive
                               </Badge>
                             )}
                           </td>
@@ -2118,7 +2150,7 @@ const HotelAvailability = () => {
         <Modal.Body>
           <p>
             Are you sure you want to{" "}
-            {selectedItem?.isLive ? "deactivate" : "activate"} this
+            {selectedItem?.status === true || selectedItem?.status === "true" ? "deactivate" : "activate"} this
             availability?
           </p>
         </Modal.Body>

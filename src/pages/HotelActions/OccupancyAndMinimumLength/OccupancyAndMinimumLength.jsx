@@ -750,46 +750,30 @@ const OccupancyAndMinimumLength = () => {
       };
 
       console.log("Sending payload:", payload);
-      console.log(
-        "Full API URL:",
-        `http://localhost:8081/api/hotels/${id}/occupancies/${selectedItemOcc.occupancyId}/status`
-      );
-
-      // Add CORS headers to the request
+          // Add CORS headers to the request
       const res = await axiosInstance.patch(
         `/api/hotels/${id}/occupancies/${selectedItemOcc.occupancyId}/status`,
-        payload,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods":
-              "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
-        }
+        payload
+      
       );
 
       console.log("✅ API call successful!");
       console.log("API response:", res.data);
 
-      toast.success(
-        `Occupancy ${
-          selectedItemOcc.isLive ? "deactivated" : "activated"
-        } successfully`
-      );
+       if (res.data.isLive === true || res.data.isLive === "true") {
+              toast.success("Occupancy activated successfully");
+            } else {
+              toast.success("Occupancy deactivated successfully");
+            }
+
+   
 
       // Refresh the occupancy list to show updated data
       await fetchOccupancyList(pageOcc, searchOcc);
       setShowLiveStatusModalOcc(false);
       setSelectedItemOcc(null);
     } catch (error) {
-      console.error("❌ Error in confirmLiveStatusChangeOcc:");
-      console.error("Error object:", error);
-      console.error("Error response:", error.response?.data);
-      console.error("Error status:", error.response?.status);
-      console.error("Error code:", error.code);
-      console.error("Error message:", error.message);
+     
 
       // Handle CORS error specifically
       if (error.code === "ERR_NETWORK" || error.message.includes("CORS")) {
@@ -1445,19 +1429,20 @@ const OccupancyAndMinimumLength = () => {
                           <td>
                             {item.isLive ? (
                               <Badge
-                                bg="danger"
-                                style={{ cursor: "pointer" }}
-                                onClick={() => handleLiveStatusOcc(item)}
-                              >
-                                Inactive
-                              </Badge>
-                            ) : (
-                              <Badge
                                 bg="success"
                                 style={{ cursor: "pointer" }}
                                 onClick={() => handleLiveStatusOcc(item)}
                               >
                                 Active
+                              </Badge>
+                            ) : (
+                              
+                                <Badge
+                                bg="danger"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleLiveStatusOcc(item)}
+                              >
+                                Inactive
                               </Badge>
                             )}
                           </td>
@@ -2095,20 +2080,20 @@ const OccupancyAndMinimumLength = () => {
 
                           <td>
                             {item.status ? (
+                               <Badge
+                                bg="success"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleLiveStatusMin(item)}
+                              >
+                                Active
+                              </Badge>
+                            ) : (
                               <Badge
                                 bg="danger"
                                 style={{ cursor: "pointer" }}
                                 onClick={() => handleLiveStatusMin(item)}
                               >
                                 Inactive
-                              </Badge>
-                            ) : (
-                              <Badge
-                                bg="success"
-                                style={{ cursor: "pointer" }}
-                                onClick={() => handleLiveStatusMin(item)}
-                              >
-                                Active
                               </Badge>
                             )}
                           </td>
