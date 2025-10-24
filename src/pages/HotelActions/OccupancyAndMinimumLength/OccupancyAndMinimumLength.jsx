@@ -216,6 +216,14 @@ const OccupancyAndMinimumLength = () => {
   const [searchTimeoutMin, setSearchTimeoutMin] = useState(null);
   const [showLiveStatusModalMin, setShowLiveStatusModalMin] = useState(false);
   const [selectedItemMin, setSelectedItemMin] = useState(null);
+
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
+  };
   const [activeTab, setActiveTab] = useState("occupancy");
   const [showAllOccModal, setShowAllOccModal] = useState(false);
   const [showAllMinModal, setShowAllMinModal] = useState(false);
@@ -244,7 +252,14 @@ const OccupancyAndMinimumLength = () => {
     try {
       const response = await axiosInstance.get("/api/marketType");
       console.log("Market Types Data:", response.data); // Debug log
-      setMarketTypes(response.data || []);
+      
+      // Add "All" option with value -1 at the beginning
+      const marketTypesWithAll = [
+        { marketTypeId: 100, name: "All", marketTypeName: "All" },
+        ...(response.data || [])
+      ];
+      
+      setMarketTypes(marketTypesWithAll);
     } catch (error) {
       console.error("Error loading market types:", error);
       toast.error("Failed to load market types");
@@ -342,7 +357,7 @@ const OccupancyAndMinimumLength = () => {
 
   const validateOccupancyForm = (data) => {
     const newErrors = {};
-    if (!data.marketTypeId) {
+    if (!data.marketTypeId || data.marketTypeId === "") {
       newErrors.marketTypeId = "Market type is required";
     }
     if (!data.validityPeriods || data.validityPeriods.length === 0) {
@@ -402,8 +417,8 @@ const OccupancyAndMinimumLength = () => {
         hotelId: id,
         marketTypeId: formDataOcc.marketTypeId || null,
         validityPeriods: formDataOcc.validityPeriods.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
+          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
         })),
         hotelRooms: formDataOcc.hotelRooms.map((room) => ({
           id: room.id, // Use the mapped rommCategoryId
@@ -457,8 +472,8 @@ const OccupancyAndMinimumLength = () => {
         hotelId: id,
         marketTypeId: formDataOcc.marketTypeId || null,
         validityPeriods: formDataOcc.validityPeriods.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
+          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
         })),
         hotelRooms: formDataOcc.hotelRooms.map((room) => ({
           id: room.id, // Use the mapped rommCategoryId
@@ -474,10 +489,7 @@ const OccupancyAndMinimumLength = () => {
       console.log("Edit Occupancy Payload:", payload);
       const response = await axiosInstance.put(
         `/api/hotels/${id}/occupancies/${occupancyId}`,
-        payload,
-        {
-          headers: { "Content-Type": "application/json" },
-        }
+        payload       
       );
       if (response.data) {
         toast.success("Occupancy updated successfully!");
@@ -597,10 +609,10 @@ const OccupancyAndMinimumLength = () => {
       });
       Object.values(roomMap).forEach((room) => hotelRooms.push(room));
 
-      // Transform validity list
+      // Transform validity list - convert from yyyy-MM-dd'T'HH:mm:ss to yyyy-MM-dd for UI
       const validityPeriods = (data.validityList || []).map((v) => ({
-        validityFrom: v.validityFrom,
-        validityTo: v.validityTo,
+        validityFrom: v.validityFrom ? v.validityFrom.split('T')[0] : v.validityFrom,
+        validityTo: v.validityTo ? v.validityTo.split('T')[0] : v.validityTo,
       }));
 
       // Map marketName to marketTypeId if needed
@@ -675,10 +687,10 @@ const OccupancyAndMinimumLength = () => {
       });
       Object.values(roomMap).forEach((room) => hotelRooms.push(room));
 
-      // Transform validity list
+      // Transform validity list - convert from yyyy-MM-dd'T'HH:mm:ss to yyyy-MM-dd for UI
       const validityPeriods = (data.validityList || []).map((v) => ({
-        validityFrom: v.validityFrom,
-        validityTo: v.validityTo,
+        validityFrom: v.validityFrom ? v.validityFrom.split('T')[0] : v.validityFrom,
+        validityTo: v.validityTo ? v.validityTo.split('T')[0] : v.validityTo,
       }));
 
       // Map marketName to marketTypeId
@@ -858,14 +870,14 @@ const OccupancyAndMinimumLength = () => {
       setEditingMin(data);
       setIsViewModeMin(false);
 
-      // Map validity periods correctly
+      // Map validity periods correctly - convert from yyyy-MM-dd'T'HH:mm:ss to yyyy-MM-dd for UI
       const mappedValidityPeriods = (data.validityPeriods || []).map(
         (period) => ({
           validityFrom: period.validityFrom
-            ? period.validityFrom.substring(0, 16)
-            : "", // Convert to datetime-local format
+            ? period.validityFrom.split('T')[0]
+            : "", // Convert to date format
           validityTo: period.validityTo
-            ? period.validityTo.substring(0, 16)
+            ? period.validityTo.split('T')[0]
             : "",
         })
       );
@@ -927,8 +939,8 @@ const OccupancyAndMinimumLength = () => {
         hotelId: id,
         marketTypeId: formDataMin.marketTypeId,
         validityPeriods: formDataMin.validityPeriods.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
+          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
         })),
         hotelRooms: hotelRoomsData.map((category) => {
           const roomData = formDataMin.hotelRooms.find(
@@ -1033,7 +1045,7 @@ const OccupancyAndMinimumLength = () => {
 
   const validateMinForm = (data) => {
     const newErrors = {};
-    if (!data.marketTypeId) newErrors.marketTypeId = "Market Type is required";
+    if (!data.marketTypeId || data.marketTypeId === "") newErrors.marketTypeId = "Market Type is required";
     if (!data.validityPeriods || data.validityPeriods.length === 0) {
       newErrors.validityPeriods = "At least one validity period is required";
     } else {
@@ -1077,8 +1089,8 @@ const OccupancyAndMinimumLength = () => {
         hotelId: id,
         marketTypeId: formDataMin.marketTypeId,
         validityPeriods: formDataMin.validityPeriods.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
+          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
         })),
         hotelRooms: hotelRoomsData.map((category) => {
           const roomData = formDataMin.hotelRooms.find(
@@ -1210,14 +1222,14 @@ const OccupancyAndMinimumLength = () => {
       setEditingMin(data);
       setIsViewModeMin(true);
 
-      // Map validity periods correctly (same as edit)
+      // Map validity periods correctly - convert from yyyy-MM-dd'T'HH:mm:ss to yyyy-MM-dd for UI
       const mappedValidityPeriods = (data.validityPeriods || []).map(
         (period) => ({
           validityFrom: period.validityFrom
-            ? period.validityFrom.substring(0, 16)
-            : "", // Convert to datetime-local format
+            ? period.validityFrom.split('T')[0]
+            : "", // Convert to date format
           validityTo: period.validityTo
-            ? period.validityTo.substring(0, 16)
+            ? period.validityTo.split('T')[0]
             : "",
         })
       );
@@ -1656,7 +1668,7 @@ const OccupancyAndMinimumLength = () => {
                                   <span className="text-danger">*</span>
                                 </Form.Label>
                                 <Form.Control
-                                  type="datetime-local"
+                                  type="date"
                                   value={period.validityFrom || ""}
                                   onChange={(e) => {
                                     const newPeriods = [
@@ -1664,6 +1676,13 @@ const OccupancyAndMinimumLength = () => {
                                     ];
                                     newPeriods[index].validityFrom =
                                       e.target.value;
+                                    
+                                    // Clear Validity To if it becomes invalid (before or equal to From date)
+                                    const currentToDate = formDataOcc.validityPeriods[index].validityTo;
+                                    if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                      newPeriods[index].validityTo = "";
+                                    }
+                                    
                                     setFormDataOcc({
                                       ...formDataOcc,
                                       validityPeriods: newPeriods,
@@ -1686,8 +1705,9 @@ const OccupancyAndMinimumLength = () => {
                                   <span className="text-danger">*</span>
                                 </Form.Label>
                                 <Form.Control
-                                  type="datetime-local"
+                                  type="date"
                                   value={period.validityTo || ""}
+                                  min={getMinValidityToDate(period.validityFrom)}
                                   onChange={(e) => {
                                     const newPeriods = [
                                       ...formDataOcc.validityPeriods,
@@ -2307,7 +2327,7 @@ const OccupancyAndMinimumLength = () => {
                                   <span className="text-danger">*</span>
                                 </Form.Label>
                                 <Form.Control
-                                  type="datetime-local"
+                                  type="date"
                                   value={period.validityFrom || ""}
                                   onChange={(e) => {
                                     const newValidityPeriods = [
@@ -2315,6 +2335,13 @@ const OccupancyAndMinimumLength = () => {
                                     ];
                                     newValidityPeriods[index].validityFrom =
                                       e.target.value;
+                                    
+                                    // Clear Validity To if it becomes invalid (before or equal to From date)
+                                    const currentToDate = formDataMin.validityPeriods[index].validityTo;
+                                    if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                      newValidityPeriods[index].validityTo = "";
+                                    }
+                                    
                                     setFormDataMin({
                                       ...formDataMin,
                                       validityPeriods: newValidityPeriods,
@@ -2337,8 +2364,9 @@ const OccupancyAndMinimumLength = () => {
                                   <span className="text-danger">*</span>
                                 </Form.Label>
                                 <Form.Control
-                                  type="datetime-local"
+                                  type="date"
                                   value={period.validityTo || ""}
+                                  min={getMinValidityToDate(period.validityFrom)}
                                   onChange={(e) => {
                                     const newValidityPeriods = [
                                       ...formDataMin.validityPeriods,

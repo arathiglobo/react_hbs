@@ -1750,7 +1750,7 @@ const HotelRegistrationActions = () => {
            
             {loginDetailsSaved && (
               <div className="alert alert-info mb-3" role="alert">
-                <small><strong>Existing User:</strong> Username is pre-filled. Leave password fields empty to keep current password, or enter new password to update.</small>
+                <small><strong>Existing User:</strong> </small>
               </div>
             )}
             {!loginDetailsSaved && (

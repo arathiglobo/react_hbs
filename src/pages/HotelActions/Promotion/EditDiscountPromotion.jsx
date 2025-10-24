@@ -118,6 +118,7 @@ export default function EditDiscountPromotion() {
 
         // Store roomDTO data for discount details
         console.log('Setting discount room data:', data.roomDTO);
+        console.log('Available hotel rooms data:', hotelRoomsData);
         setDiscountRoomData(data.roomDTO || []);
 
         setFormData({
@@ -191,7 +192,12 @@ export default function EditDiscountPromotion() {
         axiosInstance.get("/api/marketType"),
         axiosInstance.get("/api/country"),
       ]);
-      setMarkets(marketRes.data || []);
+        // Add "All" option with value -1 at the beginning
+        const marketsWithAll = [
+          { marketTypeId: 100, name: "All" },
+          ...(marketRes.data || [])
+        ];
+      setMarkets(marketsWithAll);
       setCountries(countryRes.data || []);
       setFilteredCountries(countryRes.data || []);
     } catch {
@@ -762,50 +768,103 @@ export default function EditDiscountPromotion() {
                           </tr>
                         </thead>
                         <tbody>
-                          {discountRoomData.map((room, index) => {
-                            // Find the actual names from hotelRoomsData
-                            const categoryName = hotelRoomsData.find(h => 
-                              h.rommCategoryId == room.hotelRoomcategoryId
-                            )?.roomCategory || `Category ${room.hotelRoomcategoryId}`;
-                            
-                            const typeName = hotelRoomsData.find(h => 
-                              h.rommCategoryId == room.hotelRoomcategoryId
-                            )?.roomTypeDetailsDTOs?.find(rt => 
-                              rt.roomTypeId == room.hotelRoomtypeId
-                            )?.roomTypeName || `Type ${room.hotelRoomtypeId}`;
-                            
-                            const occupancyName = hotelRoomsData.find(h => 
-                              h.rommCategoryId == room.hotelRoomcategoryId
-                            )?.occupancyDetailsDTOs?.find(occ => 
-                              occ.id == room.roomId
-                            )?.occupanyType || `Room ${room.roomId}`;
-                            
-                            console.log('Mapping names:', {
-                              room,
-                              categoryName,
-                              typeName,
-                              occupancyName,
-                              hotelRoomsData: hotelRoomsData.length
-                            });
+                          {hotelRoomsData.map((roomCategory, categoryIndex) => (
+                            <React.Fragment key={roomCategory.id}>
+                              {/* Room Category Header Row */}
+                              <tr className="bg-light fw-bold text-primary">
+                                <td colSpan={7}>{roomCategory.roomCategory}</td>
+                              </tr>
+                              
+                              {/* Room Types and Occupancies */}
+                              {roomCategory.roomTypeDetailsDTOs?.map((roomType, typeIndex) => (
+                                <React.Fragment key={roomType.roomTypeId}>
+                                  {/* Room Type Header Row */}
+                                  <tr className="bg-light">
+                                    <td></td>
+                                    <td className="fw-semibold">{roomType.roomTypeName}</td>
+                                    <td colSpan={5}></td>
+                                  </tr>
+                                  
+                                  {/* Occupancy Rows */}
+                                  {roomCategory.occupancyDetailsDTOs?.map((occupancy, occIndex) => {
+                                    // Find existing discount data for this combination
+                                    // First try exact match by hotelRoomcategoryId, hotelRoomtypeId, and roomId
+                                    let existingDiscount = discountRoomData.find(d => 
+                                      d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
+                                      d.hotelRoomtypeId == roomType.roomTypeId &&
+                                      d.roomId == occupancy.id
+                                    );
+                                    
+                                    // If no exact match, try to find by category and type only
+                                    // This handles cases where roomId doesn't match occupancy.id
+                                    if (!existingDiscount) {
+                                      existingDiscount = discountRoomData.find(d => 
+                                        d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
+                                        d.hotelRoomtypeId == roomType.roomTypeId
+                                      );
+                                    }
+                                    
+                                    console.log('Looking for discount data:', {
+                                      roomCategory: roomCategory.rommCategoryId,
+                                      roomType: roomType.roomTypeId,
+                                      occupancy: occupancy.id,
+                                      occupancyType: occupancy.occupanyType,
+                                      availableDiscounts: discountRoomData,
+                                      found: existingDiscount
+                                    });
+                                    
+                                    // Debug: Show all occupancy IDs for this room category
+                                    console.log('All occupancies for this category:', 
+                                      roomCategory.occupancyDetailsDTOs?.map(occ => ({
+                                        id: occ.id,
+                                        type: occ.occupanyType
+                                      }))
+                                    );
                             
                             return (
-                              <tr key={`discount_${index}`}>
-                                <td>{categoryName}</td>
-                                <td>{typeName}</td>
-                                <td>{occupancyName}</td>
+                                      <tr key={`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`}>
+                                        <td></td>
+                                        <td></td>
+                                        <td>{occupancy.occupanyType}</td>
                                 <td>
                                   <Form.Control
                                     type="number"
                                     min="0"
                                     max="100"
                                     placeholder="0"
-                                    value={room.discountPercent || "0"}
+                                            value={existingDiscount?.discountPercent || "0"}
                                     size="sm"
-                                    onChange={(e) => {
-                                      const updated = [...discountRoomData];
-                                      updated[index].discountPercent = e.target.value;
-                                      setDiscountRoomData(updated);
-                                    }}
+                                            onChange={(e) => {
+                                              const updated = [...discountRoomData];
+                                              // Try exact match first
+                                              let existingIndex = updated.findIndex(d => 
+                                                d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
+                                                d.hotelRoomtypeId == roomType.roomTypeId &&
+                                                d.roomId == occupancy.id
+                                              );
+                                              
+                                              // If no exact match, try category and type only
+                                              if (existingIndex === -1) {
+                                                existingIndex = updated.findIndex(d => 
+                                                  d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
+                                                  d.hotelRoomtypeId == roomType.roomTypeId
+                                                );
+                                              }
+                                              
+                                              if (existingIndex !== -1) {
+                                                updated[existingIndex].discountPercent = e.target.value;
+                                              } else {
+                                                updated.push({
+                                                  hotelRoomcategoryId: roomCategory.rommCategoryId,
+                                                  hotelRoomtypeId: roomType.roomTypeId,
+                                                  roomId: occupancy.id,
+                                                  discountPercent: e.target.value,
+                                                  discountValue: "0",
+                                                  lengthRestriction: "0"
+                                                });
+                                              }
+                                              setDiscountRoomData(updated);
+                                            }}
                                   />
                                 </td>
                                 <td>
@@ -813,13 +872,39 @@ export default function EditDiscountPromotion() {
                                     type="number"
                                     min="0"
                                     placeholder="0"
-                                    value={room.discountValue || "0"}
+                                            value={existingDiscount?.discountValue || "0"}
                                     size="sm"
-                                    onChange={(e) => {
-                                      const updated = [...discountRoomData];
-                                      updated[index].discountValue = e.target.value;
-                                      setDiscountRoomData(updated);
-                                    }}
+                                            onChange={(e) => {
+                                              const updated = [...discountRoomData];
+                                              // Try exact match first
+                                              let existingIndex = updated.findIndex(d => 
+                                                d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
+                                                d.hotelRoomtypeId == roomType.roomTypeId &&
+                                                d.roomId == occupancy.id
+                                              );
+                                              
+                                              // If no exact match, try category and type only
+                                              if (existingIndex === -1) {
+                                                existingIndex = updated.findIndex(d => 
+                                                  d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
+                                                  d.hotelRoomtypeId == roomType.roomTypeId
+                                                );
+                                              }
+                                              
+                                              if (existingIndex !== -1) {
+                                                updated[existingIndex].discountValue = e.target.value;
+                                              } else {
+                                                updated.push({
+                                                  hotelRoomcategoryId: roomCategory.rommCategoryId,
+                                                  hotelRoomtypeId: roomType.roomTypeId,
+                                                  roomId: occupancy.id,
+                                                  discountPercent: "0",
+                                                  discountValue: e.target.value,
+                                                  lengthRestriction: "0"
+                                                });
+                                              }
+                                              setDiscountRoomData(updated);
+                                            }}
                                   />
                                 </td>
                                 <td>
@@ -827,13 +912,39 @@ export default function EditDiscountPromotion() {
                                     type="number"
                                     min="0"
                                     placeholder="0"
-                                    value={room.lengthRestriction === "null" ? "0" : room.lengthRestriction || "0"}
+                                            value={existingDiscount?.lengthRestriction === "null" ? "0" : existingDiscount?.lengthRestriction || "0"}
                                     size="sm"
-                                    onChange={(e) => {
-                                      const updated = [...discountRoomData];
-                                      updated[index].lengthRestriction = e.target.value;
-                                      setDiscountRoomData(updated);
-                                    }}
+                                            onChange={(e) => {
+                                              const updated = [...discountRoomData];
+                                              // Try exact match first
+                                              let existingIndex = updated.findIndex(d => 
+                                                d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
+                                                d.hotelRoomtypeId == roomType.roomTypeId &&
+                                                d.roomId == occupancy.id
+                                              );
+                                              
+                                              // If no exact match, try category and type only
+                                              if (existingIndex === -1) {
+                                                existingIndex = updated.findIndex(d => 
+                                                  d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
+                                                  d.hotelRoomtypeId == roomType.roomTypeId
+                                                );
+                                              }
+                                              
+                                              if (existingIndex !== -1) {
+                                                updated[existingIndex].lengthRestriction = e.target.value;
+                                              } else {
+                                                updated.push({
+                                                  hotelRoomcategoryId: roomCategory.rommCategoryId,
+                                                  hotelRoomtypeId: roomType.roomTypeId,
+                                                  roomId: occupancy.id,
+                                                  discountPercent: "0",
+                                                  discountValue: "0",
+                                                  lengthRestriction: e.target.value
+                                                });
+                                              }
+                                              setDiscountRoomData(updated);
+                                            }}
                                   />
                                 </td>
                                 <td>
@@ -848,12 +959,16 @@ export default function EditDiscountPromotion() {
                               </tr>
                             );
                           })}
+                                </React.Fragment>
+                              ))}
+                            </React.Fragment>
+                          ))}
                           
-                          {/* Show message if no discount data */}
-                          {discountRoomData.length === 0 && (
+                          {/* Show message if no hotel rooms data */}
+                          {hotelRoomsData.length === 0 && (
                             <tr>
                               <td colSpan={7} className="text-center text-muted py-3">
-                                No discount data available
+                                No hotel rooms data available
                               </td>
                             </tr>
                           )}

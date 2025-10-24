@@ -23,10 +23,44 @@ export default function StayPayPromotion() {
   const { id } = useParams();
 
   const [loading, setLoading] = useState(false);
-  const [rooms, setRooms] = useState([]);
+  const [hotelRoomsData, setHotelRoomsData] = useState([]);
+  const [roomRates, setRoomRates] = useState({});
    const [markets, setMarkets] = useState([]);
     const [countries, setCountries] = useState([]);
     const [filteredCountries, setFilteredCountries] = useState([]);
+  const [seasonData, setSeasonData] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // ✅ Helper function to get minimum validity to date (next day from from date)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
+  };
+
+  // ✅ Validation function - Only basic required fields
+  const validateForm = () => {
+    const errors = {};
+
+    // Season validation
+    if (!formData.season || formData.season === "") {
+      errors.season = "Please select a season";
+    }
+
+    // Rate Code validation
+    if (!formData.rateCode || formData.rateCode.trim() === "") {
+      errors.rateCode = "Please enter a rate code";
+    }
+
+    // Market Type validation
+    if (!formData.marketType || formData.marketType.length === 0) {
+      errors.marketType = "Please select at least one market type";
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const [formData, setFormData] = useState({
     season: "",
@@ -44,45 +78,85 @@ export default function StayPayPromotion() {
     remarks: "",
   });
 
-  // ✅ Fetch rooms dynamically
- const fetchRooms = async () => {
+  // ✅ Load hotel room data dynamically (same as Special Rates)
+  const loadHotelRoomDatas = async () => {
   try {
     setLoading(true);
-    const res = await axiosInstance.get(`/api/hotel/${id}/room-meal-data`);
-    const roomList = res.data || [];
-
-    const formatted = roomList.map((room) => ({
-      roomId: room.roomId,
-      roomName: room.roomName,
-      mealPlans: room.mealPlans.map((meal) => ({
-        mealPlanId: meal.mealPlanId,
-        mealName: meal.mealName,
-        stay: 0,
-        pay: 0,
-        free: 0,
-      })),
-    }));
-
-    setRooms(formatted);
+    console.log("Loading room data for hotel ID:", id);
+      const response = await axiosInstance.get(
+        `/api/hotelRoomDetailsController/${id}`
+      );
+      console.log("Hotel Rooms Data:", response.data);
+      console.log("Room data length:", response.data?.length);
+      setHotelRoomsData(response.data || []);
+      console.log("Hotel rooms data set:", response.data || []);
   } catch (error) {
-    toast.error("Failed to load room list");
+      console.error("Room fetch error:", error);
+      console.error("Error details:", error.response?.data);
+      toast.error("Failed to load Hotel Rooms Data");
   } finally {
     setLoading(false);
   }
 };
+
+  // ✅ Handle Stay/Pay table changes with auto-calculation and validation
+  const handleStayPayChange = (roomCategory, roomType, field, value) => {
+    const baseKey = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}`;
+    
+    if (field === "stay") {
+      // When Stay changes, just update Stay (no auto-calculation of Free)
+      setRoomRates(prev => ({
+        ...prev,
+        [`${baseKey}_stay`]: value
+      }));
+    } else if (field === "pay") {
+      // When Pay changes, auto-calculate Free
+      const currentRates = roomRates;
+      const stayValue = currentRates[`${baseKey}_stay`] || 0;
+      let payValue = value;
+      
+      // Validation: Pay cannot exceed Stay - 1
+      if (stayValue > 0) {
+        payValue = Math.min(payValue, stayValue - 1);
+      }
+      
+      const freeValue = Math.max(0, stayValue - payValue);
+      
+      setRoomRates(prev => ({
+        ...prev,
+        [`${baseKey}_pay`]: payValue,
+        [`${baseKey}_free`]: freeValue,
+      }));
+    } else {
+      // For free field, just update normally
+      setRoomRates(prev => ({
+        ...prev,
+        [`${baseKey}_${field}`]: value
+      }));
+    }
+  };
 
 
 
 
   const fetchDropdowns = async () => {
   try {
-    const [marketRes, countryRes] = await Promise.all([
+    const [marketRes, countryRes, seasonRes] = await Promise.all([
       axiosInstance.get("/api/marketType"),
       axiosInstance.get("/api/country"),
+      axiosInstance.get("/api/seasonType"),
     ]);
-    setMarkets(marketRes.data || []);
+
+      // Add "All" option with value -1 at the beginning
+        const marketsWithAll = [
+          { marketTypeId: 100, name: "All" },
+          ...(marketRes.data || [])
+        ]; 
+        
+    setMarkets(marketsWithAll);
     setCountries(countryRes.data || []);
     setFilteredCountries(countryRes.data || []);
+    setSeasonData(seasonRes.data || []);
   } catch {
     toast.error("Failed to load dropdown data");
   }
@@ -102,7 +176,7 @@ useEffect(() => {
 
 
 useEffect(() => {
-  fetchRooms();
+  loadHotelRoomDatas();
   fetchDropdowns();
 }, [id]);
 
@@ -127,40 +201,121 @@ useEffect(() => {
     setFormData({ ...formData, [field]: updated });
   };
 
-  // ✅ Handle Stay/Pay table changes
- const handleStayPayChange = (roomIndex, mealIndex, field, value) => {
-  const updated = [...rooms];
-  updated[roomIndex].mealPlans[mealIndex][field] = value;
-  setRooms(updated);
-};
 
 
   // ✅ Submit handler
  const handleSubmit = async (e) => {
   e.preventDefault();
+  
+  // Validate form before submission
+  if (!validateForm()) {
+    return;
+  }
+  
   try {
+    const formatDate = (date) => {
+      if (!date) return "";
+      const d = new Date(date);
+      return `${String(d.getDate()).padStart(2, "0")}-${String(
+        d.getMonth() + 1
+      ).padStart(2, "0")}-${d.getFullYear()}`;
+    };
+
+    const weekDay = formData.weekType === "weekdays" ? 1 : 0;
+    const weekEnd = formData.weekType === "weekends" ? 1 : 0;
+    const allDays = formData.weekType === "all" ? 1 : 0;
+
+    const validityList = formData.validityList.map((v) => ({
+      promo_validity_id: "",
+      validityFrom: formatDate(v.from),
+      validityTo: formatDate(v.to),
+      deleted: 0,
+      isType: "V",
+    }));
+
+    const blackoutDates = formData.blackoutDates.map((b) => ({
+      promo_validity_id: "",
+      validityFrom: formatDate(b.from),
+      validityTo: formatDate(b.to),
+      deleted: 0,
+      isType: "B",
+    }));
+
     const payload = {
-      ...formData,
-      hotelId: parseInt(id),
-      marketType: formData.marketType.map((m) => m.value),
-      excludeNationality: formData.excludeNationality.map((n) => n.value),
-      stayPayDTO: rooms.flatMap((room) =>
-        room.mealPlans.map((meal) => ({
-          hotelRoomId: room.roomId,
-          mealPlanId: meal.mealPlanId,
-          stay: meal.stay,
-          pay: meal.pay,
-          free: meal.free,
-        }))
+      marketype: formData.marketType.map((m) => m.value),
+      combinedPromo: [],
+      promotypeArray: [],
+      hotelId: String(id),
+      seasonId: String(formData.season),
+      staypayId: "",
+      rateCode: formData.rateCode.trim(),
+      // ========================================
+      // EXCLUDE NATIONALITY - CURRENT FORMAT (STRING)
+      // ========================================
+      excludeCountry: formData.excludeNationality.length > 0 
+        ? formData.excludeNationality.map((n) => n.value).join(",") 
+        : "",
+      
+      // ========================================
+      // EXCLUDE NATIONALITY - FUTURE FORMAT (ARRAY) - COMMENTED OUT
+      // ========================================
+      // excludeCountrys: formData.excludeNationality.map((n) => n.value),
+      weekDay,
+      weekEnd,
+      allDays,
+      refund: formData.isRefundable ? 1 : 0,
+      bookDate: formatDate(formData.bookByDate),
+      bookDay: String(formData.bookByPriorDays),
+      promotionfor: formData.promotionFor === "rooms" ? "1" : "2",
+      remark: formData.remarks || "",
+      promotionValidityDTO: [...validityList, ...blackoutDates],
+      promotionRoomDTO: hotelRoomsData.flatMap((roomCategory) =>
+        roomCategory.roomTypeDetailsDTOs?.map((roomType) => ({
+          promo_room_id: "",
+          hotelRoomcategoryId: String(roomCategory.rommCategoryId),
+          hotelRoomtypeId: String(roomType.roomTypeId),
+          noOffree: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_free`] || 0),
+          noOfpay: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_pay`] || 0),
+          noOfstay: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_stay`] || 0),
+        })) || []
       ),
     };
 
-    await axiosInstance.post("/api/staypay/save", payload);
+    console.log("Stay Pay payload:", payload);
+    console.log("Hotel rooms data being sent:", hotelRoomsData);
+    console.log("Form data:", formData);
+    console.log("Exclude Nationality form data:", formData.excludeNationality);
+    console.log("Exclude Country in payload:", payload.excludeCountry);
+    console.log("Exclude Nationality length:", formData.excludeNationality.length);
+    console.log("Exclude Country type:", typeof payload.excludeCountry);
+    
+    // Try different endpoint patterns
+    let response;
+    try {
+      response = await axiosInstance.post("/api/hotelStaypay/save", payload);
+    } catch (firstError) {
+      if (firstError.response?.status === 404) {
+        // Try alternative endpoint
+        console.log("Trying alternative endpoint...");
+        response = await axiosInstance.post("/api/hotelStaypay", payload);
+      } else {
+        throw firstError;
+      }
+    }
+    
+    if (response.data) {
     toast.success("Stay & Pay Promotion Saved Successfully!");
-    navigate(`/registration/hotel/${id}/promotion`);
+      navigate(`/hotel-actions/${id}/promotions`);
+    }
   } catch (error) {
     console.error("Save error:", error);
+    if (error.response?.status === 403) {
+      toast.error("Access denied. Please check your permissions or contact administrator.");
+    } else if (error.response?.status === 400) {
+      toast.error("Invalid data. Please check all required fields.");
+    } else {
     toast.error("Failed to save Stay & Pay promotion");
+    }
   }
 };
 
@@ -200,23 +355,30 @@ useEffect(() => {
                         <Form.Label>Season *</Form.Label>
                         <Form.Select
                           value={formData.season}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               season: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user selects
+                            if (validationErrors.season) {
+                              setValidationErrors({...validationErrors, season: ""});
+                            }
+                          }}
+                          isInvalid={!!validationErrors.season}
                         >
                           <option value="">SELECT</option>
-                          <option value="1">Peak</option>
-                          <option value="2">Mid</option>
-                          <option value="3">Low</option>
-                          <option value="4">High</option>
-                          <option value="5">Shoulder</option>
-                          <option value="6">High High</option>
-                          <option value="7">Festive</option>
-
+                          {seasonData?.map((season) => (
+                            <option key={season.seasonTypeId} value={season.seasonTypeId}>
+                              {season.season}
+                            </option>
+                          ))}
                         </Form.Select>
+                        {validationErrors.season && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.season}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
                     <Col md={3}>
@@ -224,14 +386,24 @@ useEffect(() => {
                         <Form.Label>Rate Code *</Form.Label>
                         <Form.Control
                           value={formData.rateCode}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               rateCode: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user types
+                            if (validationErrors.rateCode) {
+                              setValidationErrors({...validationErrors, rateCode: ""});
+                            }
+                          }}
                           placeholder="Enter Rate Code"
+                          isInvalid={!!validationErrors.rateCode}
                         />
+                        {validationErrors.rateCode && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.rateCode}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
                     {/* Market Type */}
@@ -245,12 +417,29 @@ useEffect(() => {
         label: m.name,
       }))}
       value={formData.marketType}
-      onChange={(selected) =>
-        setFormData({ ...formData, marketType: selected })
-      }
+      onChange={(selected) => {
+        setFormData({ ...formData, marketType: selected });
+        // Clear validation error when user selects
+        if (validationErrors.marketType) {
+          setValidationErrors({...validationErrors, marketType: ""});
+        }
+      }}
       classNamePrefix="react-select"
       placeholder="Select Market Type"
+      className={validationErrors.marketType ? 'is-invalid' : ''}
+      styles={{
+        control: (base, state) => ({
+          ...base,
+          borderColor: validationErrors.marketType ? '#dc3545' : base.borderColor,
+          boxShadow: validationErrors.marketType ? '0 0 0 0.25rem rgba(220, 53, 69, 0.25)' : base.boxShadow,
+        })
+      }}
     />
+    {validationErrors.marketType && (
+      <div className="invalid-feedback d-block">
+        {validationErrors.marketType}
+      </div>
+    )}
   </Form.Group>
 </Col>
                     {/* Exclude Nationality */}
@@ -264,12 +453,13 @@ useEffect(() => {
         label: `${c.name} (${c.marketType})`,
       }))}
       value={formData.excludeNationality}
-      onChange={(selected) =>
+      onChange={(selected) => {
+        console.log("Exclude Nationality selected:", selected);
         setFormData({
           ...formData,
           excludeNationality: selected,
-        })
-      }
+        });
+      }}
       classNamePrefix="react-select"
       placeholder="Select Countries"
     />
@@ -406,20 +596,26 @@ useEffect(() => {
                               <Form.Control
                                 type="date"
                                 value={v.from}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "validityList",
-                                    i,
-                                    "from",
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(e) => {
+                                  const updated = [...formData.validityList];
+                                  updated[i].from = e.target.value;
+                                  // Clear Validity To if it becomes invalid (before or equal to From date)
+                                  const currentToDate = formData.validityList[i].to;
+                                  if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                    updated[i].to = "";
+                                  }
+                                  setFormData({
+                                    ...formData,
+                                    validityList: updated,
+                                  });
+                                }}
                               />
                             </Col>
                             <Col>
                               <Form.Control
                                 type="date"
                                 value={v.to}
+                                min={getMinValidityToDate(v.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -466,20 +662,26 @@ useEffect(() => {
                               <Form.Control
                                 type="date"
                                 value={b.from}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "blackoutDates",
-                                    i,
-                                    "from",
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(e) => {
+                                  const updated = [...formData.blackoutDates];
+                                  updated[i].from = e.target.value;
+                                  // Clear Blackout To if it becomes invalid (before or equal to From date)
+                                  const currentToDate = formData.blackoutDates[i].to;
+                                  if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                    updated[i].to = "";
+                                  }
+                                  setFormData({
+                                    ...formData,
+                                    blackoutDates: updated,
+                                  });
+                                }}
                               />
                             </Col>
                             <Col>
                               <Form.Control
                                 type="date"
                                 value={b.to}
+                                min={getMinValidityToDate(b.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -513,76 +715,106 @@ useEffect(() => {
                   {/* ==================== STAY & PAY TABLE ==================== */}
 <Card className="p-3 border-0 mb-4">
   <h6 className="fw-bold mb-3 text-primary">Stay and Pay Details</h6>
+  {validationErrors.roomData && (
+    <div className="text-danger small mb-3">
+      {validationErrors.roomData}
+    </div>
+  )}
 
   <div className="table-responsive">
     <Table bordered hover responsive size="sm">
       <thead className="table-light text-center align-middle">
         <tr>
           <th>Room Type</th>
-          <th>Stay (Nights)</th>
-          <th>Pay (Nights)</th>
-          <th>Free (Nights)</th>
+          <th>Stay</th>
+          <th>Pay </th>
+          <th>Free </th>
         </tr>
       </thead>
       <tbody>
-        {rooms.map((room, roomIndex) => (
-          <React.Fragment key={room.roomId}>
-            <tr className="bg-light fw-bold text-primary">
-              <td colSpan={4}>{room.roomName}</td>
+        {loading ? (
+          <tr>
+            <td colSpan={4} className="text-center py-4">
+              <div className="d-flex align-items-center justify-content-center">
+                <Spinner animation="border" size="sm" className="me-2" />
+                Loading rooms...
+              </div>
+            </td>
             </tr>
-
-            {room.mealPlans.map((meal, mealIndex) => (
-              <tr key={meal.mealPlanId}>
-                <td className="ps-4">{meal.mealName}</td>
+        ) : hotelRoomsData && hotelRoomsData.length > 0 ? (
+          hotelRoomsData.flatMap((roomCategory, categoryIndex) => {
+            return roomCategory.roomTypeDetailsDTOs?.map((roomType, roomTypeIndex) => (
+              <tr key={`${roomCategory.rommCategoryId}-${roomType.roomTypeId}`}>
+                <td className="fw-semibold">
+                  {roomCategory.roomCategory} - {roomType.roomTypeName}
+                </td>
+                <td>
+                    <Form.Control
+                      type="number"
+                      min="0"
+                      max="25"
+                      step="1"
+                      placeholder="0"
+                      value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_stay`] || 0}
+                      onChange={(e) => {
+                        const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
+                        handleStayPayChange(roomCategory, roomType, "stay", value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
+                    />
+                </td>
                 <td>
                   <Form.Control
                     type="number"
                     min="0"
-                    value={meal.stay}
-                    onChange={(e) =>
-                      handleStayPayChange(
-                        roomIndex,
-                        mealIndex,
-                        "stay",
-                        e.target.value
-                      )
-                    }
+                    max="25"
+                    step="1"
+                    placeholder="0"
+                    value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_pay`] || 0}
+                    onChange={(e) => {
+                      const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
+                      handleStayPayChange(roomCategory, roomType, "pay", value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
                   />
                 </td>
                 <td>
                   <Form.Control
                     type="number"
                     min="0"
-                    value={meal.pay}
-                    onChange={(e) =>
-                      handleStayPayChange(
-                        roomIndex,
-                        mealIndex,
-                        "pay",
-                        e.target.value
-                      )
-                    }
-                  />
-                </td>
-                <td>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    value={meal.free}
-                    onChange={(e) =>
-                      handleStayPayChange(
-                        roomIndex,
-                        mealIndex,
-                        "free",
-                        e.target.value
-                      )
-                    }
+                    max="25"
+                    step="1"
+                    placeholder="0"
+                    value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_free`] || 0}
+                    onChange={(e) => {
+                      const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
+                      handleStayPayChange(roomCategory, roomType, "free", value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
                   />
                 </td>
               </tr>
-            ))}
-          </React.Fragment>
-        ))}
+            ))
+          })
+        ) : (
+          <tr>
+            <td colSpan={4} className="text-center py-4 text-muted">
+              No rooms found for this hotel. Please check if the hotel has room configurations.
+            </td>
+          </tr>
+        )}
       </tbody>
     </Table>
   </div>

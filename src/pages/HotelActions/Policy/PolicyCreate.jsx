@@ -254,7 +254,9 @@ const PolicyCreate = () => {
                         })
                       }
                     >
-                      <option value="0">All Market</option>
+
+                      <option value="0">SELECT</option>
+                      <option value="100">All Market</option>
                       {marketTypes.map((m) => (
                         <option key={m.marketTypeId} value={m.marketTypeId}>
                           {m.name}

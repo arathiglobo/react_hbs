@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Card,
   Button,
@@ -8,6 +8,7 @@ import {
   Badge,
   Form,
   Pagination,
+  Modal,
 } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -27,6 +28,11 @@ export default function ContractRate() {
   const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
+
+  // Modal states for validity view
+  const [showValidityModal, setShowValidityModal] = useState(false);
+  const [selectedValidityData, setSelectedValidityData] = useState([]);
+  const [selectedRateCode, setSelectedRateCode] = useState("");
 
   // ✅ Fetch contract rates with pagination and search
   const fetchRates = async (pageNum = 0, searchTerm = search) => {
@@ -99,6 +105,12 @@ export default function ContractRate() {
 
   const handleCopy = (rateId) => {
     navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/copy`);
+  };
+
+  const handleViewValidity = (validityData, rateCode) => {
+    setSelectedValidityData(validityData || []);
+    setSelectedRateCode(rateCode);
+    setShowValidityModal(true);
   };
 
   const handleDelete = async (rateId, rateCode) => {
@@ -180,9 +192,6 @@ export default function ContractRate() {
                   <tr>
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Rate Code</th>
-                    <th>Market Type</th>
-                    <th>Exclude Country</th>
-                    <th>Season</th>
                     <th>Days</th>
                     <th>Validity Periods</th>
                     <th>Status</th>
@@ -201,33 +210,7 @@ export default function ContractRate() {
                       <tr key={rate.contractrateId}>
                         <td>{index + 1 + page * 10}</td>
                         <td>{rate.rateCode || "-"}</td>
-                        <td>
-                          {rate.markeType && rate.markeType.length > 0
-                            ? rate.markeType.map((type) => (
-                                <Badge key={type.id} bg="info" className="me-1">
-                                  {type.name}
-                                </Badge>
-                              ))
-                            : "N/A"}
-                        </td>
-                        <td>
-                          {rate.excludeCountry && rate.excludeCountry.length > 0
-                            ? rate.excludeCountry.map((country) => (
-                                <Badge
-                                  key={country.id}
-                                  bg="warning"
-                                  className="me-1"
-                                >
-                                  {country.name}
-                                </Badge>
-                              ))
-                            : "None"}
-                        </td>
-                        <td>
-                          {/* <Badge bg="success"> */}
-                          {rate.seasonName || rate.seasonId || "N/A"}
-                          {/* </Badge> */}
-                        </td>
+
                         <td>
                           {/* {rate.allDays ? (
                             <Badge bg="primary">All Days</Badge> 
@@ -253,15 +236,25 @@ export default function ContractRate() {
                         </td>
                         <td>
                           {rate.contractRateValidityDTO?.length ? (
-                            <ul className="list-unstyled mb-0">
-                              {rate.contractRateValidityDTO.map((v) => (
-                                <li key={v.contractValidityId}>
-                                  <small className="text-muted">
-                                    {v.validityFrom} → {v.validityTo}
-                                  </small>
-                                </li>
-                              ))}
-                            </ul>
+                            // <Button
+                            //   variant="outline-primary"
+                            //   size="sm"
+                            //   onClick={() => handleViewValidity(rate.contractRateValidityDTO, rate.rateCode)}
+                            //   className="d-flex align-items-center gap-1"
+                            // >
+                            //   View
+                            // </Button>
+                            <Link
+                              onClick={() =>
+                                handleViewValidity(
+                                  rate.contractRateValidityDTO,
+                                  rate.rateCode
+                                )
+                              }
+                              className="text-secondary fw-medium text-decoration-underline"
+                            >
+                              View
+                            </Link>
                           ) : (
                             <span className="text-muted">No Validity</span>
                           )}
@@ -296,14 +289,7 @@ export default function ContractRate() {
                     <tr>
                       <td colSpan={9} className="text-center text-muted py-4">
                         <div className="py-3">
-                          <FaPlus
-                            className="text-muted mb-2"
-                            style={{ fontSize: "2rem" }}
-                          />
                           <div>No contract rates found</div>
-                          <small>
-                            Create your first contract rate to get started
-                          </small>
                         </div>
                       </td>
                     </tr>
@@ -337,6 +323,80 @@ export default function ContractRate() {
               </Pagination>
             </div>
           )}
+
+          {/* Validity View Modal */}
+          <Modal
+            show={showValidityModal}
+            onHide={() => setShowValidityModal(false)}
+            centered
+          >
+            <Modal.Header closeButton>
+              <Modal.Title>Validity Periods - {selectedRateCode}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {selectedValidityData.length > 0 ? (
+                <div className="table-responsive">
+                  <Table striped bordered hover size="sm">
+                    <thead className="table-light">
+                      <tr>
+                        <th>#</th>
+                        <th>From Date</th>
+                        <th>To Date</th>
+                        <th>Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedValidityData.map((validity, index) => {
+                        const fromDate = new Date(validity.validityFrom);
+                        const toDate = new Date(validity.validityTo);
+                        const duration =
+                          Math.ceil(
+                            (toDate - fromDate) / (1000 * 60 * 60 * 24)
+                          ) + 1;
+
+                        return (
+                          <tr key={validity.contractValidityId || index}>
+                            <td>{index + 1}</td>
+                            <td>
+                              <span className="fw">
+                                {validity.validityFrom}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="fw">{validity.validityTo}</span>
+                            </td>
+                            <td>
+                              {/* <Badge bg="info"> */}
+                              {duration} day{duration !== 1 ? "s" : ""}
+                              {/* </Badge> */}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <div className="text-muted">
+                    <FaEye
+                      className="mb-2"
+                      style={{ fontSize: "2rem", opacity: 0.3 }}
+                    />
+                    <p className="mb-0">No validity periods found</p>
+                  </div>
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setShowValidityModal(false)}
+              >
+                Close
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>

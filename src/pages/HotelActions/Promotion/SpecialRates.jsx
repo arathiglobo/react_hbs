@@ -102,7 +102,14 @@ const SpecialRates = () => {
         axiosInstance.get("/api/marketType"),
         axiosInstance.get("/api/country"),
       ]);
-      setMarkets(marketRes.data || []);
+
+        // Add "All" option with value -1 at the beginning
+        const marketsWithAll = [
+          { marketTypeId: 100, name: "All" },
+          ...(marketRes.data || [])
+        ];
+
+      setMarkets(marketsWithAll);
       setCountries(countryRes.data || []);
       setFilteredCountries(countryRes.data || []);
     } catch {

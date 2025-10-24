@@ -116,6 +116,14 @@ const HotelAvailability = () => {
   const [showLiveStatusModalStopSale, setShowLiveStatusModalStopSale] = useState(false);
   const [selectedItemStopSale, setSelectedItemStopSale] = useState(null);
 
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
+  };
+
   // Load market types and room categories
   useEffect(() => {
     loadMarketTypes();
@@ -176,7 +184,15 @@ const HotelAvailability = () => {
   const loadMarketTypes = async () => {
     try {
       const response = await axiosInstance.get("/api/marketType");
-      setMarketTypes(response.data || []);
+
+      // Add "All" option with value -1 at the beginning
+      const marketTypesWithAll = [
+        { marketTypeId: 100, name: "All", marketTypeName: "All" },
+        ...(response.data || [])
+      ];
+      
+      setMarketTypes(marketTypesWithAll);
+     
     } catch (error) {
       console.error("Failed to load market types:", error);
       toast.error("Failed to load market types");
@@ -287,12 +303,10 @@ const HotelAvailability = () => {
         noOfRooms: data.noOfRooms || "",
         releaseDay: data.releaseDay || "",
         availabilityType: data.availabilityType || "FREE_SALE",
-        availabilityValidities: data.availabilityValidities || [
-          {
-            validityFrom: "",
-            validityTo: "",
-          },
-        ],
+        availabilityValidities: (data.availabilityValidities || []).map((period) => ({
+          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
+          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+        })),
         checkinAllowedDays: data.checkinAllowedDays || [
           "SUNDAY",
           "MONDAY",
@@ -329,12 +343,10 @@ const HotelAvailability = () => {
         noOfRooms: data.noOfRooms || "",
         releaseDay: data.releaseDay || "",
         availabilityType: data.availabilityType || "FREE_SALE",
-        availabilityValidities: data.availabilityValidities || [
-          {
-            validityFrom: "",
-            validityTo: "",
-          },
-        ],
+        availabilityValidities: (data.availabilityValidities || []).map((period) => ({
+          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
+          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+        })),
         checkinAllowedDays: data.checkinAllowedDays || [
           "SUNDAY",
           "MONDAY",
@@ -439,8 +451,8 @@ const HotelAvailability = () => {
         availabilityType: formData.availabilityType,
         availabilityValidities: formData.availabilityValidities.map(
           (period) => ({
-            validityFrom: period.validityFrom,
-            validityTo: period.validityTo,
+            validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+            validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
           })
         ),
         checkinAllowedDays: formData.checkinAllowedDays,
@@ -497,8 +509,8 @@ const HotelAvailability = () => {
         availabilityType: formData.availabilityType,
         availabilityValidities: formData.availabilityValidities.map(
           (period) => ({
-            validityFrom: period.validityFrom,
-            validityTo: period.validityTo,
+            validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+            validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
           })
         ),
         checkinAllowedDays: formData.checkinAllowedDays,
@@ -949,12 +961,10 @@ const HotelAvailability = () => {
       setFormDataBlock({
         marketTypeId: data.marketTypeId || "",
         type: data.isCheckin ? "CheckIn" : "CheckOut",
-        validityList: data.validityList || [
-          {
-            validityFrom: "",
-            validityTo: "",
-          },
-        ],
+        validityList: (data.validityList || []).map((period) => ({
+          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
+          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+        })),
       });
       setValidationErrorsBlock({});
       setShowBlockModal(true);
@@ -979,12 +989,10 @@ const HotelAvailability = () => {
       setFormDataBlock({
         marketTypeId: data.marketTypeId || "",
         type: data.isCheckin ? "CheckIn" : "CheckOut",
-        validityList: data.validityList || [
-          {
-            validityFrom: "",
-            validityTo: "",
-          },
-        ],
+        validityList: (data.validityList || []).map((period) => ({
+          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
+          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+        })),
       });
       setValidationErrorsBlock({});
       setShowBlockModal(true);
@@ -1050,8 +1058,8 @@ const HotelAvailability = () => {
         isCheckin: formDataBlock.type === "CheckIn",
         isCheckOut: formDataBlock.type === "CheckOut",
         validityList: formDataBlock.validityList.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
+          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
         })),
       };
 
@@ -1101,8 +1109,8 @@ const HotelAvailability = () => {
         isCheckin: formDataBlock.type === "CheckIn",
         isCheckOut: formDataBlock.type === "CheckOut",
         validityList: formDataBlock.validityList.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
+          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
         })),
       };
       console.log("editingBlock:", editingBlock);
@@ -1237,12 +1245,10 @@ const HotelAvailability = () => {
           : data.block
           ? "Block"
           : "Free-Sale",
-        validityList: data.stopSaleValidityDTO || [
-          {
-            validityFrom: "",
-            validityTo: "",
-          },
-        ],
+        validityList: (data.stopSaleValidityDTO || []).map((period) => ({
+          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
+          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+        })),
       });
       setValidationErrorsStopSale({});
       setShowStopSaleModal(true);
@@ -1272,12 +1278,10 @@ const HotelAvailability = () => {
           : data.block
           ? "Block"
           : "Free-Sale",
-        validityList: data.stopSaleValidityDTO || [
-          {
-            validityFrom: "",
-            validityTo: "",
-          },
-        ],
+        validityList: (data.stopSaleValidityDTO || []).map((period) => ({
+          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
+          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+        })),
       });
       setValidationErrorsStopSale({});
       setShowStopSaleModal(true);
@@ -1348,8 +1352,8 @@ const HotelAvailability = () => {
         block: formDataStopSale.type === "Block",
         freeSale: formDataStopSale.type === "Free-Sale",
         stopSaleValidityDTO: formDataStopSale.validityList.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
+          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
         })),
       };
 
@@ -1402,8 +1406,8 @@ const HotelAvailability = () => {
         block: formDataStopSale.type === "Block",
         freeSale: formDataStopSale.type === "Free-Sale",
         stopSaleValidityDTO: formDataStopSale.validityList.map((period) => ({
-          validityFrom: period.validityFrom,
-          validityTo: period.validityTo,
+          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
+          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
         })),
       };
 
@@ -2139,7 +2143,7 @@ const HotelAvailability = () => {
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="datetime-local"
+                          type="date"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
                             const newValidityList = [
@@ -2147,6 +2151,13 @@ const HotelAvailability = () => {
                             ];
                             newValidityList[index].validityFrom =
                               e.target.value;
+                            
+                            // Clear Validity To if it becomes invalid (before or equal to From date)
+                            const currentToDate = formData.availabilityValidities[index].validityTo;
+                            if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                              newValidityList[index].validityTo = "";
+                            }
+                            
                             setFormData({
                               ...formData,
                               availabilityValidities: newValidityList,
@@ -2170,8 +2181,9 @@ const HotelAvailability = () => {
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="datetime-local"
+                          type="date"
                           value={period.validityTo || ""}
+                          min={getMinValidityToDate(period.validityFrom)}
                           onChange={(e) => {
                             const newValidityList = [
                               ...formData.availabilityValidities,
@@ -2466,7 +2478,7 @@ const HotelAvailability = () => {
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="datetime-local"
+                          type="date"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
                             const newValidityList = [
@@ -2474,6 +2486,13 @@ const HotelAvailability = () => {
                             ];
                             newValidityList[index].validityFrom =
                               e.target.value;
+                            
+                            // Clear Validity To if it becomes invalid (before or equal to From date)
+                            const currentToDate = formDataBlock.validityList[index].validityTo;
+                            if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                              newValidityList[index].validityTo = "";
+                            }
+                            
                             setFormDataBlock({
                               ...formDataBlock,
                               validityList: newValidityList,
@@ -2489,8 +2508,9 @@ const HotelAvailability = () => {
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="datetime-local"
+                          type="date"
                           value={period.validityTo || ""}
+                          min={getMinValidityToDate(period.validityFrom)}
                           onChange={(e) => {
                             const newValidityList = [
                               ...formDataBlock.validityList,
@@ -2786,7 +2806,7 @@ const HotelAvailability = () => {
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="datetime-local"
+                          type="date"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
                             const newValidityList = [
@@ -2794,6 +2814,13 @@ const HotelAvailability = () => {
                             ];
                             newValidityList[index].validityFrom =
                               e.target.value;
+                            
+                            // Clear Validity To if it becomes invalid (before or equal to From date)
+                            const currentToDate = formDataStopSale.validityList[index].validityTo;
+                            if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                              newValidityList[index].validityTo = "";
+                            }
+                            
                             setFormDataStopSale({
                               ...formDataStopSale,
                               validityList: newValidityList,
@@ -2809,8 +2836,9 @@ const HotelAvailability = () => {
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="datetime-local"
+                          type="date"
                           value={period.validityTo || ""}
+                          min={getMinValidityToDate(period.validityFrom)}
                           onChange={(e) => {
                             const newValidityList = [
                               ...formDataStopSale.validityList,

@@ -40,6 +40,14 @@ export default function EditContractRate() {
   const [seasonTypes, setSeasonTypes] = useState([]);
   const [fetchingData, setFetchingData] = useState(true);
 
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
+  };
+
   // ✅ Fetch dropdowns
   useEffect(() => {
     const fetchDropdowns = async () => {
@@ -50,7 +58,14 @@ export default function EditContractRate() {
           axiosInstance.get("/api/country"),
           axiosInstance.get("/api/seasonType"),
         ]);
-        setMarkets(marketRes.data || []);
+
+          // Add "All" option with value -1 at the beginning
+        const marketsWithAll = [
+          { marketTypeId: 100, name: "All" },
+          ...(marketRes.data || [])
+        ]; 
+        
+        setMarkets(marketsWithAll);
         setCountries(countryRes.data || []);
         setFilteredCountries(countryRes.data || []);
         setSeasonTypes(seasonTypeRes.data || []);
@@ -76,8 +91,17 @@ export default function EditContractRate() {
         if (res.data) {
           const data = res.data;
           
-          // Map market types - ensure we match with available markets
+          // Map market types - handle both array of IDs and array of objects
           const selectedMarkets = data.markeType?.map(apiMarket => {
+            // If apiMarket is just an ID (number), find the market by ID
+            if (typeof apiMarket === 'number') {
+              const matchingMarket = markets.find(m => m.marketTypeId === apiMarket);
+              return {
+                value: apiMarket,
+                label: matchingMarket?.name || `Market ${apiMarket}`
+              };
+            }
+            // If apiMarket is an object, use existing logic
             const matchingMarket = markets.find(m => 
               m.marketTypeId === apiMarket.marketTypeId || m.marketTypeId === apiMarket.id
             );
@@ -150,6 +174,7 @@ export default function EditContractRate() {
             originalData: data,
             selectedMarkets,
             selectedCountries,
+            availableMarkets: markets,
             formData: {
               seasonId: String(data.seasonId || ""),
               rateCode: data.rateCode || "",
@@ -594,6 +619,13 @@ export default function EditContractRate() {
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityFrom = e.target.value;
+                              
+                              // Clear Validity To if it becomes invalid (before or equal to From date)
+                              const currentToDate = formData.validityList[index].validityTo;
+                              if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                updated[index].validityTo = "";
+                              }
+                              
                               setFormData({
                                 ...formData,
                                 validityList: updated,
@@ -605,6 +637,7 @@ export default function EditContractRate() {
                           <Form.Control
                             type="date"
                             value={v.validityTo}
+                            min={getMinValidityToDate(v.validityFrom)}
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityTo = e.target.value;

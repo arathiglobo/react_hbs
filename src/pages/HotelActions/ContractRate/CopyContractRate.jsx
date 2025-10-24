@@ -35,6 +35,14 @@ export default function CopyContractRate() {
   const [loading, setLoading] = useState(false);
   const [roomLoading, setRoomLoading] = useState(false);
 
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
+  };
+
   // ✅ Fetch Market & Country Data
   useEffect(() => {
     const fetchDropdowns = async () => {
@@ -43,7 +51,13 @@ export default function CopyContractRate() {
           axiosInstance.get("/api/marketType"),
           axiosInstance.get("/api/country"),
         ]);
-        setMarkets(marketRes.data || []);
+
+          // Add "All" option with value -1 at the beginning
+        const marketsWithAll = [
+          { marketTypeId: 100, name: "All" },
+          ...(marketRes.data || [])
+        ];
+        setMarkets(marketsWithAll);
         setCountries(countryRes.data || []);
       } catch {
         toast.error("Failed to load dropdown data");
@@ -291,6 +305,13 @@ export default function CopyContractRate() {
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityFrom = e.target.value;
+                              
+                              // Clear Validity To if it becomes invalid (before or equal to From date)
+                              const currentToDate = formData.validityList[index].validityTo;
+                              if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                updated[index].validityTo = "";
+                              }
+                              
                               setFormData({ ...formData, validityList: updated });
                             }}
                           />
@@ -299,6 +320,7 @@ export default function CopyContractRate() {
                           <Form.Control
                             type="date"
                             value={v.validityTo}
+                            min={getMinValidityToDate(v.validityFrom)}
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityTo = e.target.value;

@@ -172,7 +172,7 @@ const PolicyUpdate = () => {
                             ])
                           }
                         >
-                          <option value="0">All Market</option>
+                          <option value="100">All Market</option>
                           {marketTypes.map((m) => (
                             <option
                               key={m.marketTypeId}

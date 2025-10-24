@@ -36,7 +36,7 @@ const Promotion = () => {
   const [searchTimeout, setSearchTimeout] = useState(null);
 
   // ✅ Fetch Promotions with search and pagination
-  const fetchPromotions = async (pageNum = 0, searchTerm = searchTerm) => {
+  const fetchPromotions = async (pageNum = 0, searchQuery = searchTerm) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -45,8 +45,8 @@ const Promotion = () => {
         hotelId: id, // Add hotelId to filter on backend
       });
 
-      if (searchTerm && searchTerm.trim()) {
-        params.append("search", searchTerm.trim());
+      if (searchQuery && searchQuery.trim()) {
+        params.append("search", searchQuery.trim());
       }
 
       const res = await axiosInstance.get(

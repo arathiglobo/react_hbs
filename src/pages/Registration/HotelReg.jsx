@@ -394,7 +394,6 @@ const loadHotelData = async () => {
     loadHotelTypes();
     loadMarkupTypes();
     loadRegions();
-    loadCountries();
     loadContactTypes();
     loadBanks();
     loadAmenities();
@@ -409,8 +408,16 @@ const loadHotelData = async () => {
     }
   }, [isEditMode, id]);
 
-  // Load dependent data when country/province changes
-  // 🏛️ Load provinces when country changes
+
+  //  Load countries when region changes
+  useEffect(() => {
+    // Skip clearing during initial load
+    if (!isLoadingHotelData && formData.regionId) {
+      loadCountries(formData.regionId);
+    }
+  }, [formData.regionId, isLoadingHotelData]);
+
+  //  Load provinces when country changes
   useEffect(() => {
     // Skip clearing during initial load
     if (!isLoadingHotelData && formData.countryId) {
@@ -418,7 +425,7 @@ const loadHotelData = async () => {
     }
   }, [formData.countryId, isLoadingHotelData]);
 
-  // 🏘️ Load places when state changes
+  //  Load places when state changes
   useEffect(() => {
     if (!isLoadingHotelData && formData.stateId) {
       loadPlaces(formData.stateId);
@@ -489,9 +496,9 @@ const loadHotelData = async () => {
   };
 
   // Load countries
-  const loadCountries = async () => {
+  const loadCountries = async (regionId) => {
     try {
-      const response = await axiosInstance.get("/api/country");
+      const response = await axiosInstance.post(`/api/country/getListBasedOnRegions/${regionId}`);
       // console.log("Countries response:", response.data);
       setCountries(response.data || []);
     } catch (error) {

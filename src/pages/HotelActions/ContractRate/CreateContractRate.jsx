@@ -39,6 +39,14 @@ export default function CreateContractRate() {
   const [roomLoading, setRoomLoading] = useState(false);
   const [seasonTypes, setSeasonTypes] = useState([]);
 
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
+  };
+
   // ✅ Fetch dropdowns
   useEffect(() => {
     const fetchDropdowns = async () => {
@@ -49,7 +57,14 @@ export default function CreateContractRate() {
           axiosInstance.get("/api/country"),
           axiosInstance.get("/api/seasonType"),
         ]);
-        setMarkets(marketRes.data || []);
+
+          // Add "All" option with value -1 at the beginning
+        const marketsWithAll = [
+          { marketTypeId: 100, name: "All" },
+          ...(marketRes.data || [])
+        ]; 
+        
+        setMarkets(marketsWithAll);
         setCountries(countryRes.data || []);
         setFilteredCountries(countryRes.data || []);
         setSeasonTypes(seasonTypeRes.data || []);
@@ -101,16 +116,16 @@ export default function CreateContractRate() {
   }, [id]);
 
   // ✅ Filter countries based on market
-  useEffect(() => {
-    if (formData.marketType.length === 0) setFilteredCountries(countries);
-    else {
-      const selectedIds = formData.marketType.map((m) => m.value);
-      const filtered = countries.filter((c) =>
-        selectedIds.includes(c.marketTypeId)
-      );
-      setFilteredCountries(filtered);
-    }
-  }, [formData.marketType, countries]);
+  // useEffect(() => {
+  //   if (formData.marketType.length === 0) setFilteredCountries(countries);
+  //   else {
+  //     const selectedIds = formData.marketType.map((m) => m.value);
+  //     const filtered = countries.filter((c) =>
+  //       selectedIds.includes(c.marketTypeId)
+  //     );
+  //     setFilteredCountries(filtered);
+  //   }
+  // }, [formData.marketType, countries]);
 
   // ✅ Add/remove validity
   const addValidity = () =>
@@ -470,6 +485,13 @@ export default function CreateContractRate() {
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityFrom = e.target.value;
+                              
+                              // Clear Validity To if it becomes invalid (before or equal to From date)
+                              const currentToDate = formData.validityList[index].validityTo;
+                              if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                updated[index].validityTo = "";
+                              }
+                              
                               setFormData({
                                 ...formData,
                                 validityList: updated,
@@ -481,6 +503,7 @@ export default function CreateContractRate() {
                           <Form.Control
                             type="date"
                             value={v.validityTo}
+                            min={getMinValidityToDate(v.validityFrom)}
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityTo = e.target.value;
