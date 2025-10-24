@@ -132,8 +132,14 @@ export default function ValidityPage() {
                       </span>
                     </td>
                     <td className="py-3 px-3">
-                      <span className="text-success fw-medium">
-                        {item.status ? "Live" : "Inactive"}
+                      <span
+                        className={
+                          item.status
+                            ? "text-success fw-medium"
+                            : "text-danger fw-medium"
+                        }
+                      >
+                        {item.status ? "Live" : "Stop"}
                       </span>
                     </td>
                   </tr>
@@ -200,8 +206,7 @@ export default function ValidityPage() {
           {/* Header */}
           <div className="d-flex justify-content-between align-items-center mb-4">
             <div className="d-flex align-items-center gap-3">
-
-               <Button
+              <Button
                 variant="outline-primary"
                 onClick={() => navigate(`/hotel-details/${id}`)}
                 className="d-flex align-items-center btn-sm gap-2"
@@ -212,7 +217,6 @@ export default function ValidityPage() {
               <h4 className="mb-0 fw-bold text-dark">
                 Hotel Validity Period Details
               </h4>
-             
             </div>
             <small className="text-muted">Hotel ID: {id}</small>
           </div>

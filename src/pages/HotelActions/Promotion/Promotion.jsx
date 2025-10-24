@@ -31,18 +31,54 @@ const Promotion = () => {
   const [formData, setFormData] = useState({ type: "" });
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
-  // ✅ Fetch Promotions
-  const fetchPromotions = async () => {
+  // ✅ Fetch Promotions with search and pagination
+  const fetchPromotions = async (pageNum = 0, searchTerm = searchTerm) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await axiosInstance.get(`/api/hotelPromotions/${id}`);
-      setPromotions(res.data || []);
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: "10",
+        hotelId: id, // Add hotelId to filter on backend
+      });
+
+      if (searchTerm && searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+
+      const res = await axiosInstance.get(
+        `/api/hotelPromotions/${id}?${params.toString()}`
+      );
+
+      console.log("📦 API Response:", res.data);
+
+      // ✅ Handle array or paginated response
+      const allPromotions = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data.data)
+        ? res.data.data
+        : [];
+
+      console.log("🏨 Filtered Promotions for Hotel", id, allPromotions);
+      setPromotions(allPromotions);
+
+      // ✅ Calculate total pages based on data length
+      if (allPromotions.length < 10) {
+        setTotalPages(pageNum + 1);
+      } else {
+        setTotalPages(Math.max(totalPages, pageNum + 2));
+      }
+
+      setPage(pageNum);
     } catch (error) {
       console.error("Error fetching promotions:", error);
       toast.error("Failed to load promotions");
+      setPromotions([]);
+      setTotalPages(0);
+      setPage(0);
     } finally {
       setLoading(false);
     }
@@ -51,6 +87,32 @@ const Promotion = () => {
   useEffect(() => {
     if (id) fetchPromotions();
   }, [id]);
+
+  // ✅ Debounced search effect (similar to Bank.jsx)
+  useEffect(() => {
+    // Clear previous timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    // Set new timeout for search
+    if (searchTerm !== "") {
+      const timeout = setTimeout(() => {
+        fetchPromotions(0, searchTerm);
+      }, 500); // 500ms delay
+      setSearchTimeout(timeout);
+    } else if (searchTerm === "") {
+      // If search is cleared, fetch all data
+      fetchPromotions(0, "");
+    }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchTerm]);
 
   // ✅ Delete promotion
   const handleDelete = (promo) => {
@@ -164,21 +226,11 @@ const Promotion = () => {
     setShowModal(false);
   };
 
-  // ✅ Filter + Pagination
-  const filteredPromotions = promotions.filter(
-    (p) =>
-      p.promotionName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.promotionType?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredPromotions.length / itemsPerPage);
-  const currentData = filteredPromotions.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  // ✅ Handle page change
+  const handlePageChange = (pageNum) => {
+    if (pageNum >= 0 && pageNum < totalPages) {
+      fetchPromotions(pageNum, searchTerm);
+    }
   };
 
   return (
@@ -212,8 +264,9 @@ const Promotion = () => {
                       placeholder="Search promotion..."
                       value={searchTerm}
                       onChange={(e) => {
-                        setSearchTerm(e.target.value);
-                        setCurrentPage(1);
+                        const value = e.target.value;
+                        setSearchTerm(value);
+                        fetchPromotions(0, value); // pass value to API
                       }}
                     />
                     {searchTerm && (
@@ -229,7 +282,7 @@ const Promotion = () => {
                         }}
                         onClick={() => {
                           setSearchTerm("");
-                          setCurrentPage(1);
+                          fetchPromotions(0, ""); // fetch all data
                         }}
                         title="Clear search"
                       >
@@ -264,10 +317,10 @@ const Promotion = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentData.length > 0 ? (
-                    currentData.map((promo, index) => (
+                  {promotions.length > 0 ? (
+                    promotions.map((promo, index) => (
                       <tr key={promo.id}>
-                        <td>{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                        <td>{page * 10 + index + 1}</td>
                         <td>{promo.promotionType || "—"}</td>
                         <td>
                           <Button
@@ -353,40 +406,34 @@ const Promotion = () => {
               </Table>
 
               {/* Pagination */}
-              {filteredPromotions.length > itemsPerPage && (
+              {totalPages > 1 && (
                 <div className="d-flex justify-content-between align-items-center p-3 border-top bg-white">
                   <div>
                     <small className="text-muted">
-                      Showing{" "}
-                      <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> to{" "}
-                      <strong>
-                        {Math.min(
-                          currentPage * itemsPerPage,
-                          filteredPromotions.length
-                        )}
-                      </strong>{" "}
-                      of <strong>{filteredPromotions.length}</strong> promotions
+                      Showing {promotions.length} of {totalPages * 10} promotions
                     </small>
                   </div>
-                  <Pagination className="mb-0">
-                    <Pagination.Prev
-                      disabled={currentPage === 1}
-                      onClick={() => handlePageChange(currentPage - 1)}
-                    />
-                    {[...Array(totalPages)].map((_, i) => (
-                      <Pagination.Item
-                        key={i}
-                        active={currentPage === i + 1}
-                        onClick={() => handlePageChange(i + 1)}
-                      >
-                        {i + 1}
-                      </Pagination.Item>
-                    ))}
-                    <Pagination.Next
-                      disabled={currentPage === totalPages}
-                      onClick={() => handlePageChange(currentPage + 1)}
-                    />
-                  </Pagination>
+                  <div>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={page === 0}
+                        onClick={() => handlePageChange(page - 1)}
+                      />
+                      {[...Array(totalPages)].map((_, i) => (
+                        <Pagination.Item
+                          key={i}
+                          active={i === page}
+                          onClick={() => handlePageChange(i)}
+                        >
+                          {i + 1}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={page === totalPages - 1}
+                        onClick={() => handlePageChange(page + 1)}
+                      />
+                    </Pagination>
+                  </div>
                 </div>
               )}
             </Card.Body>

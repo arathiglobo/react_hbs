@@ -1275,8 +1275,16 @@ const OccupancyAndMinimumLength = () => {
   };
 
   const confirmLiveStatusChangeMin = async () => {
-    console.log("Toggling live status for minimum length:", selectedItemMin);
-    if (!selectedItemMin) return;
+    console.log("=== CONFIRM LIVE STATUS CHANGE MIN ===");
+    console.log("Toggling live status for:", selectedItemMin);
+    console.log("Hotel ID from params:", id);
+    console.log("Minimum Length ID:", selectedItemMin.minimumLengthId);
+
+    if (!selectedItemMin) {
+      console.error("No selected item found!");
+      return;
+    }
+
     try {
       setIsLoading(true);
 
@@ -1285,31 +1293,41 @@ const OccupancyAndMinimumLength = () => {
         isLive: !selectedItemMin.status, // Toggle the current status
       };
 
+      console.log("Sending payload:", payload);
+
       const res = await axiosInstance.patch(
         `/api/hotels/${id}/minimumlengths/${selectedItemMin.minimumLengthId}/status`,
         payload
       );
 
+      console.log("✅ API call successful!");
       console.log("API response:", res.data);
 
-      toast.success(
-        `Min Length ${
-          selectedItemMin.status ? "deactivated" : "activated"
-        } successfully`
-      );
+      if (res.data.isLive === true || res.data.isLive === "true") {
+        toast.success("Minimum Length activated successfully");
+      } else {
+        toast.success("Minimum Length deactivated successfully");
+      }
 
       // Refresh the minimum length list to show updated data
       await fetchMinLengthList(pageMin, searchMin);
       setShowLiveStatusModalMin(false);
       setSelectedItemMin(null);
     } catch (error) {
-      console.error("Error status:", error.response?.status);
-
-      toast.error(
-        `Failed to update status: ${
-          error.response?.data?.message || error.message
-        }`
-      );
+      console.error("❌ Error updating minimum length status:", error);
+      
+      // Handle different error types
+      if (error.response?.status === 404) {
+        toast.error("API endpoint not found. Please check the backend routes.");
+      } else if (error.response?.status === 500) {
+        toast.error("Server error. Please check the backend logs.");
+      } else {
+        toast.error(
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -2542,22 +2560,28 @@ const OccupancyAndMinimumLength = () => {
                   <Modal.Title>Confirm Status Change</Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
-                  <p>
-                    Are you sure you want to{" "}
-                    {selectedItemMin?.isLive ? "deactivate" : "activate"} this
-                    min length?
-                  </p>
+                  {selectedItemMin && (
+                    <div className="text-center">
+                      <p className="mb-3">
+                        Are you sure you want to{" "}
+                        <strong className={selectedItemMin.status ? "text-danger" : "text-success"}>
+                          {selectedItemMin.status ? "deactivate" : "activate"}
+                        </strong>{" "}
+                        this minimum length?
+                      </p>
+                    </div>
+                  )}
                 </Modal.Body>
-                <Modal.Footer>
-                  <Button
-                    variant="secondary"
+                <Modal.Footer className="justify-content-between">
+                  <Button 
+                    variant="secondary" 
                     onClick={closeLiveStatusModalMin}
                     disabled={isLoading}
                   >
                     Cancel
                   </Button>
-                  <Button
-                    variant="primary"
+                  <Button 
+                    variant={selectedItemMin?.status ? "danger" : "success"}
                     onClick={confirmLiveStatusChangeMin}
                     disabled={isLoading}
                   >
@@ -2571,7 +2595,7 @@ const OccupancyAndMinimumLength = () => {
                         Processing...
                       </>
                     ) : (
-                      "Confirm"
+                      selectedItemMin?.status ? "Deactivate" : "Activate"
                     )}
                   </Button>
                 </Modal.Footer>

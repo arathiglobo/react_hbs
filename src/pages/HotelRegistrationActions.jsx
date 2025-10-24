@@ -54,6 +54,28 @@ import Topbar from "../components/TopBar";
 import Select from "react-select";
 import "../styles/HotelRegistrationActions.css";
 
+// Add custom styles for mail type dropdown
+const mailTypeDropdownStyles = `
+  .mail-type-dropdown .react-select__menu {
+    z-index: 9999 !important;
+    position: fixed !important;
+  }
+  .mail-type-dropdown .react-select__menu-portal {
+    z-index: 9999 !important;
+  }
+  .mail-type-dropdown .react-select__menu-list {
+    z-index: 9999 !important;
+  }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement("style");
+  styleSheet.type = "text/css";
+  styleSheet.innerText = mailTypeDropdownStyles;
+  document.head.appendChild(styleSheet);
+}
+
 const HotelRegistrationActions = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -145,6 +167,14 @@ const HotelRegistrationActions = () => {
       icon: FaFileContract,
     },
   ];
+
+  // Debug: Log current status values
+  console.log("🔍 Current Status Values:", {
+    isMailCenterSaved,
+    loginDetailsSaved,
+    mailCenterStatus: isMailCenterSaved ? "success" : "pending",
+    loginDetailsStatus: isMailCenterSaved ? (loginDetailsSaved ? "success" : "pending") : "disabled"
+  });
 
   const actions = [
     { 
@@ -292,17 +322,31 @@ const HotelRegistrationActions = () => {
       try {
         // Check if mail center has been saved for this hotel
         const mailCenterResponse = await axiosInstance.get(`/api/hotels/getMailCentre/${id}`);
-        // console.log("Mail center check response:", mailCenterResponse.data);
-        if (mailCenterResponse.data && Array.isArray(mailCenterResponse.data) && mailCenterResponse.data.length > 0) {
+        console.log("Mail center check response:", mailCenterResponse.data);
+        
+        // Handle both single object and array responses
+        let hasData = false;
+        if (Array.isArray(mailCenterResponse.data) && mailCenterResponse.data.length > 0) {
+          hasData = true;
+        } else if (mailCenterResponse.data && typeof mailCenterResponse.data === 'object' && mailCenterResponse.data.id) {
+          hasData = true;
+        }
+        
+        if (hasData) {
+          console.log("✅ Mail center data found - enabling login details");
           setIsMailCenterSaved(true);
+        } else {
+          console.log("❌ No mail center data found - login details will be disabled");
+          setIsMailCenterSaved(false);
         }
       } catch (error) {
         // If no data found or error, that's fine - user hasn't saved yet
-        // console.log("No saved mail center data found for this hotel");
+        console.log("❌ No saved mail center data found for this hotel");
+        setIsMailCenterSaved(false);
       }
     };
 
-    // console.log("Checking mail center status for hotelId:", id);
+    console.log("Checking mail center status for hotelId:", id);
     if (id) {
       checkMailCenterStatus();
     }
@@ -610,9 +654,11 @@ const HotelRegistrationActions = () => {
     } else if (actionLabel === "Login Details") {
       // Check if mail center has been saved first
       if (!isMailCenterSaved) {
+        console.log("❌ Login Details clicked but mail center not saved");
         toast.error("Please add mail center first, then you can add login details");
         return;
       }
+      console.log("✅ Mail center saved - opening login details modal");
 
       // console.log("=== LOGIN MODAL OPENING ===");
       // console.log("Hotel ID:", id);
@@ -809,14 +855,23 @@ const HotelRegistrationActions = () => {
     setIsLoadingMailCenterData(true);
     try {
       const response = await axiosInstance.get(`/api/hotels/getMailCentre/${id}`);
-      // console.log("Mail center fetch response:", response.data);
+      console.log("📧 Mail center fetch response:", response.data);
       
-      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+      // Handle both single object and array responses
+      let dataArray = [];
+      if (Array.isArray(response.data)) {
+        dataArray = response.data;
+      } else if (response.data && typeof response.data === 'object') {
+        dataArray = [response.data]; // Convert single object to array
+      }
+      
+      console.log("📊 Processed data array:", dataArray);
+      
+      if (dataArray.length > 0) {
         // If we have existing mail center data, populate the form
-        // Note: API returns an array of objects
-        const existingData = response.data.map(item => {
-          // console.log("Processing item:", item);
-          // console.log("mailTyIds from API:", item.mailTyIds);
+        const existingData = dataArray.map(item => {
+          console.log("🔍 Processing mail center item:", item);
+          console.log("📋 mailTyIds from API:", item.mailTyIds);
           
           const mappedItem = {
             id: item.id,
@@ -824,14 +879,25 @@ const HotelRegistrationActions = () => {
             username: item.contactPerson || "",
             contactNumber: item.mobileNumber || item.teleNumber || "",
             mailId: item.personalEmail || "",
-            mailType: item.mailTyIds ? item.mailTyIds.map(id => id.toString()) : []
+            mailType: item.mailTyIds ? item.mailTyIds.map(id => {
+              console.log("🔄 Converting mailTyId:", id, "to string:", id.toString());
+              return id.toString();
+            }) : []
           };
           
-          // console.log("Mapped item:", mappedItem);
+          console.log("🔍 Final mapped item for dropdown:", {
+            id: mappedItem.id,
+            mailType: mappedItem.mailType,
+            mailTypeLength: mappedItem.mailType?.length,
+            mailTypeIsArray: Array.isArray(mappedItem.mailType)
+          });
+          
+          console.log("✅ Mapped mail center item:", mappedItem);
+          console.log("📧 Final mailType array:", mappedItem.mailType);
           return mappedItem;
         });
         
-        // console.log("Mapped existing data:", existingData);
+        console.log("📊 All mapped existing data:", existingData);
         setMailCenterData(existingData);
         setIsMailCenterSaved(true);
       } else {
@@ -963,11 +1029,12 @@ const HotelRegistrationActions = () => {
     // Convert selected options to array of values
     const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
     
-    setMailCenterData((prevData) =>
-      prevData.map((item) =>
+    setMailCenterData((prevData) => {
+      const updatedData = prevData.map((item) =>
         item.id === id ? { ...item, mailType: selectedValues } : item
-      )
-    );
+      );
+      return updatedData;
+    });
     
     // Clear validation error when user selects mail types
     if (selectedValues.length > 0) {
@@ -1013,6 +1080,7 @@ const HotelRegistrationActions = () => {
 
       if (response.data) {
         toast.success("Mail added successfully!");
+        console.log("✅ Mail center saved - enabling login details");
         setIsMailCenterSaved(true); // Mark mail center as saved
         setShowMailCenterModal(false);
       } else {
@@ -1444,6 +1512,9 @@ const HotelRegistrationActions = () => {
                               key={index}
                               className="action-item"
                               onClick={() => handleActionClick(action.label)}
+                              title={action.label === "Login Details" && action.status === "disabled" 
+                                ? "Please add mail center first to enable login details" 
+                                : action.label}
                               style={{
                                 cursor:
                                   action.label === "Mail center" ||
@@ -1452,7 +1523,9 @@ const HotelRegistrationActions = () => {
                                   action.label === "Hotel Edit"
                                     ? "pointer"
                                     : "default",
-                                opacity: action.status === "disabled" ? 0.5 : 1,
+                                opacity: action.status === "disabled" ? 0.4 : 1,
+                                backgroundColor: action.status === "disabled" ? "#f8f9fa" : "transparent",
+                                border: action.status === "disabled" ? "1px dashed #dee2e6" : "1px solid transparent",
                               }}
                             >
                               <div className="action-content">
@@ -1544,6 +1617,7 @@ const HotelRegistrationActions = () => {
                           readOnly
                           className="border-0 bg-transparent"
                         />
+                       
                       </td>
                       <td>
                         <Select
@@ -1552,45 +1626,62 @@ const HotelRegistrationActions = () => {
                             { value: "1", label: "Login Credentials" },
                             { value: "2", label: "Voucher" }
                           ]}
-                          value={(() => {
-                            // console.log("Dropdown value calculation for item:", item);
-                            // console.log("item.mailType:", item.mailType);
-                            
-                            if (item.mailType && item.mailType.length > 0) {
-                              const mappedValues = item.mailType.map(type => {
-                                // console.log("Mapping mail type:", type);
-                                return {
-                                  value: type,
-                                  label: type === "1" ? "Login Credentials" : "Voucher"
-                                };
-                              });
-                              // console.log("Final mapped values:", mappedValues);
-                              return mappedValues;
-                            }
-                            // console.log("No mailType, returning empty array");
-                            return [];
-                          })()}
-                          onChange={(selectedOptions) =>
-                            handleMailTypeChange(item.id, selectedOptions)
-                          }
+                          value={item.mailType ? item.mailType.map(type => ({
+                            value: String(type),
+                            label: type === "1" || type === 1 ? "Login Credentials" : 
+                                   type === "2" || type === 2 ? "Voucher" : 
+                                   `Unknown (${type})`
+                          })) : []}
+                          onChange={(selectedOptions) => {
+                            const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
+                            handleMailTypeChange(item.id, selectedOptions);
+                          }}
                           placeholder="Select mail types..."
                           isClearable
+                          isSearchable={false}
                           className="modern-select"
+                          menuPortalTarget={document.body}
                           styles={{
-                            control: (base) => ({
+                            control: (base, state) => ({
                               ...base,
-                              minHeight: "32px",
+                              minHeight: "38px",
                               fontSize: "14px",
-                              border: "1px solid #dee2e6",
-                              "&:hover": { borderColor: "#86b7fe" },
+                              border: state.isFocused ? "2px solid #007bff" : "1px solid #dee2e6",
+                              borderRadius: "6px",
+                              boxShadow: state.isFocused ? "0 0 0 0.2rem rgba(0, 123, 255, 0.25)" : "none",
+                              "&:hover": { 
+                                borderColor: state.isFocused ? "#007bff" : "#86b7fe" 
+                              },
+                              backgroundColor: "#fff",
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              zIndex: 9999,
+                            }),
+                            menuPortal: (base) => ({
+                              ...base,
+                              zIndex: 9999,
                             }),
                             multiValue: (base) => ({
                               ...base,
+                              backgroundColor: "#007bff",
+                              borderRadius: "4px",
                               fontSize: "12px",
+                              fontWeight: "500",
                             }),
                             multiValueLabel: (base) => ({
                               ...base,
+                              color: "#fff",
                               fontSize: "12px",
+                              fontWeight: "500",
+                            }),
+                            multiValueRemove: (base) => ({
+                              ...base,
+                              color: "#fff",
+                              "&:hover": {
+                                backgroundColor: "rgba(255, 255, 255, 0.2)",
+                                color: "#fff",
+                              },
                             }),
                           }}
                         />
@@ -1604,6 +1695,8 @@ const HotelRegistrationActions = () => {
                   <small className="fw-bold">{mailCenterValidationError}</small>
                 </div>
               )}
+              
+          
             </>
           )}
         </Modal.Body>

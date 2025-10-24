@@ -29,15 +29,26 @@ const Policy = () => {
   const [selectedPolicy, setSelectedPolicy] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
-  // ✅ Fetch hotel policies
-  const fetchPolicies = async () => {
+  // ✅ Fetch hotel policies with search and pagination
+  const fetchPolicies = async (pageNum = 0, searchQuery = searchTerm) => {
+    setLoading(true);
     try {
-      setLoading(true);
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: "10",
+        hotelId: id, // Add hotelId to filter on backend
+      });
+
+      if (searchQuery && searchQuery.trim()) {
+        params.append("search", searchQuery.trim());
+      }
+
       const res = await axiosInstance.get(
-        `/api/hotelPolicy?page=0&limit=20`
+        `/api/hotelPolicy?${params.toString()}`
       );
 
       console.log("📦 API Response:", res.data);
@@ -49,16 +60,28 @@ const Policy = () => {
         ? res.data.data
         : [];
 
-      // ✅ Filter by current hotelId
+      // ✅ Filter by current hotelId (additional client-side filter if needed)
       const filteredPolicies = allPolicies.filter(
         (p) => String(p.hotelId) === String(id)
       );
 
       console.log("🏨 Filtered Policies for Hotel", id, filteredPolicies);
       setPolicies(filteredPolicies);
+
+      // ✅ Calculate total pages based on data length
+      if (filteredPolicies.length < 10) {
+        setTotalPages(pageNum + 1);
+      } else {
+        setTotalPages(Math.max(totalPages, pageNum + 2));
+      }
+
+      setPage(pageNum);
     } catch (error) {
       console.error("Error fetching policies:", error);
       toast.error("Failed to load hotel policies");
+      setPolicies([]);
+      setTotalPages(0);
+      setPage(0);
     } finally {
       setLoading(false);
     }
@@ -67,6 +90,32 @@ const Policy = () => {
   useEffect(() => {
     fetchPolicies();
   }, [id]);
+
+  // ✅ Debounced search effect (similar to Bank.jsx)
+  useEffect(() => {
+    // Clear previous timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    // Set new timeout for search
+    if (searchTerm !== "") {
+      const timeout = setTimeout(() => {
+        fetchPolicies(0, searchTerm);
+      }, 500); // 500ms delay
+      setSearchTimeout(timeout);
+    } else if (searchTerm === "") {
+      // If search is cleared, fetch all data
+      fetchPolicies(0, "");
+    }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchTerm]);
 
   // ✅ Delete policy
   const handleDelete = (policy) => {
@@ -135,21 +184,11 @@ const Policy = () => {
     navigate(`/hotel-actions/${id}/hotel-policy/create`);
   };
 
-  // ✅ Filter + Pagination
-  const filteredPolicies = policies.filter(
-    (p) =>
-      p.policyCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.policyType?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredPolicies.length / itemsPerPage);
-  const currentData = filteredPolicies.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  // ✅ Handle page change
+  const handlePageChange = (pageNum) => {
+    if (pageNum >= 0 && pageNum < totalPages) {
+      fetchPolicies(pageNum, searchTerm);
+    }
   };
 
   // ✅ Navigate to Edit
@@ -187,10 +226,11 @@ const Policy = () => {
                       placeholder="Search policy..."
                       value={searchTerm}
                       onChange={(e) => {
-                        setSearchTerm(e.target.value);
-                        setCurrentPage(1);
+                        const value = e.target.value;
+                        setSearchTerm(value);
+                        fetchPolicies(0, value); // pass value to API
                       }}
-                      className="border-0 bg-light"
+                      className="border-1  bg-light"
                     />
                     {searchTerm && (
                       <button
@@ -205,7 +245,7 @@ const Policy = () => {
                         }}
                         onClick={() => {
                           setSearchTerm("");
-                          setCurrentPage(1);
+                          fetchPolicies(0, ""); // fetch all data
                         }}
                         title="Clear search"
                       >
@@ -239,10 +279,10 @@ const Policy = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentData.length > 0 ? (
-                    currentData.map((policy, index) => (
+                  {policies.length > 0 ? (
+                    policies.map((policy, index) => (
                       <tr key={policy.policyId}>
-                        <td>{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                        <td>{page * 10 + index + 1}</td>
                         <td>{policy.policyCode || "—"}</td>
                         <td>
                           {Array.isArray(policy.marketTypeId)
@@ -299,40 +339,34 @@ const Policy = () => {
               </Table>
 
               {/* Pagination */}
-              {filteredPolicies.length > itemsPerPage && (
+              {totalPages > 1 && (
                 <div className="d-flex justify-content-between align-items-center p-3 border-top bg-white">
                   <div>
                     <small className="text-muted">
-                      Showing{" "}
-                      <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> to{" "}
-                      <strong>
-                        {Math.min(
-                          currentPage * itemsPerPage,
-                          filteredPolicies.length
-                        )}
-                      </strong>{" "}
-                      of <strong>{filteredPolicies.length}</strong> policies
+                      Showing {policies.length} of {totalPages * 10} policies
                     </small>
                   </div>
-                  <Pagination className="mb-0">
-                    <Pagination.Prev
-                      disabled={currentPage === 1}
-                      onClick={() => handlePageChange(currentPage - 1)}
-                    />
-                    {[...Array(totalPages)].map((_, i) => (
-                      <Pagination.Item
-                        key={i}
-                        active={currentPage === i + 1}
-                        onClick={() => handlePageChange(i + 1)}
-                      >
-                        {i + 1}
-                      </Pagination.Item>
-                    ))}
-                    <Pagination.Next
-                      disabled={currentPage === totalPages}
-                      onClick={() => handlePageChange(currentPage + 1)}
-                    />
-                  </Pagination>
+                  <div>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={page === 0}
+                        onClick={() => handlePageChange(page - 1)}
+                      />
+                      {[...Array(totalPages)].map((_, i) => (
+                        <Pagination.Item
+                          key={i}
+                          active={i === page}
+                          onClick={() => handlePageChange(i)}
+                        >
+                          {i + 1}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={page === totalPages - 1}
+                        onClick={() => handlePageChange(page + 1)}
+                      />
+                    </Pagination>
+                  </div>
                 </div>
               )}
             </Card.Body>
