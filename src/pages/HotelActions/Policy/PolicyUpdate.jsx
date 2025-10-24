@@ -87,9 +87,13 @@ const PolicyUpdate = () => {
     e.preventDefault();
     try {
       setSaving(true);
-      await axiosInstance.put(`/api/hotelPolicy/${policyId}`, policy);
-      toast.success("Policy updated successfully!");
-      navigate(`/registration/hotel/${id}/policy`);
+      const policyUpdateRes = await axiosInstance.put(`/api/hotelPolicy/${policyId}`, policy);
+      
+      if(policyUpdateRes.data != null){
+         toast.success("Policy updated successfully!");
+          navigate(`/hotel-actions/${id}/hotel-policy`);
+      }
+    
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to update policy.");

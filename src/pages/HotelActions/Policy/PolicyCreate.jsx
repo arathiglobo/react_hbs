@@ -22,6 +22,7 @@ const PolicyCreate = () => {
 
   const [marketTypes, setMarketTypes] = useState([]);
   const [loadingMarkets, setLoadingMarkets] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
 
   const [formData, setFormData] = useState({
     policyCode: "",
@@ -64,11 +65,21 @@ const PolicyCreate = () => {
     fetchMarketTypes();
   }, []);
 
+
+
   // ✅ Update array fields
   const handleArrayChange = (section, index, field, value) => {
     const updated = [...formData[section]];
     updated[index][field] = value;
     setFormData({ ...formData, [section]: updated });
+  };
+
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
   };
 
   // ✅ Update additional policy fields
@@ -79,9 +90,63 @@ const PolicyCreate = () => {
     });
   };
 
+
   // ✅ Add & Remove Row
   const handleAddRow = (section, obj) => {
     setFormData({ ...formData, [section]: [...formData[section], obj] });
+  };
+
+  // ✅ Validation function
+  const validateForm = () => {
+    // Initialize validation errors
+    const newErrors = {};
+    let hasErrors = false;
+
+    // Validate Policy Code
+    if (!formData.policyCode || formData.policyCode.trim() === "") {
+      newErrors.policyCode = "Policy Code is required";
+      hasErrors = true;
+    } else if (formData.policyCode.trim().length < 3) {
+      newErrors.policyCode = "Policy Code must be at least 3 characters long";
+      hasErrors = true;
+    } else if (!/^[A-Za-z0-9_-]+$/.test(formData.policyCode.trim())) {
+      newErrors.policyCode = "Policy Code can only contain letters, numbers, hyphens, and underscores";
+      hasErrors = true;
+    }
+
+    // Validate Validity Dates - First period is required
+    const firstPeriod = formData.validityPeriods[0];
+    if (!firstPeriod.validityFrom || firstPeriod.validityFrom.trim() === "") {
+      newErrors.validityFrom_0 = "Validity From date is required";
+      hasErrors = true;
+    }
+    if (!firstPeriod.validityTo || firstPeriod.validityTo.trim() === "") {
+      newErrors.validityTo_0 = "Validity To date is required";
+      hasErrors = true;
+    }
+
+    // Additional validation for validity dates if they exist
+    if (firstPeriod.validityFrom && firstPeriod.validityTo) {
+      const fromDate = new Date(firstPeriod.validityFrom);
+      const toDate = new Date(firstPeriod.validityTo);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (fromDate < today) {
+        newErrors.validityFrom_0 = "Validity From date cannot be in the past";
+        hasErrors = true;
+      }
+      if (toDate < today) {
+        newErrors.validityTo_0 = "Validity To date cannot be in the past";
+        hasErrors = true;
+      }
+      if (toDate <= fromDate) {
+        newErrors.validityTo_0 = "Validity To date must be after Validity From date";
+        hasErrors = true;
+      }
+    }
+
+    return { newErrors, hasErrors };
   };
 
   const handleRemoveRow = (section, index) => {
@@ -92,10 +157,18 @@ const PolicyCreate = () => {
   // ✅ Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.policyCode.trim()) {
-      toast.error("Policy Code is required!");
+    
+    // Validate form using the separate validation function
+    const { newErrors, hasErrors } = validateForm();
+
+    // If there are validation errors, show them and return
+    if (hasErrors) {
+      setValidationErrors(newErrors);
       return;
     }
+
+    // Clear any existing errors
+    setValidationErrors({});
 
     const payload = {
       hotelId: parseInt(id),
@@ -105,7 +178,7 @@ const PolicyCreate = () => {
     try {
       await axiosInstance.post("/api/hotelPolicy/register", payload);
       toast.success("Policy created successfully!");
-      navigate(`/registration/hotel/${id}/policy`);
+      navigate(`/hotel-actions/${id}/hotel-policy`);
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to save policy.");
@@ -132,22 +205,37 @@ const PolicyCreate = () => {
             {/* Policy Info */}
             <Row className="mb-4">
               <Col md={4}>
-                <Form.Group>
+                      <Form.Group>
                   <Form.Label className="fw-semibold small text-secondary">Policy Code *</Form.Label>
-                  <Form.Control
-                    type="text"
+                        <Form.Control
+                          type="text"
                     className="rounded-3"
-                    value={formData.policyCode}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        policyCode: e.target.value,
-                      })
-                    }
-                    placeholder="Enter policy code"
-                  />
-                </Form.Group>
-              </Col>
+                          value={formData.policyCode}
+                          onChange={(e) => {
+                      const value = e.target.value;
+                            setFormData({
+                              ...formData,
+                        policyCode: value,
+                            });
+                      // Clear error when user starts typing
+                            if (validationErrors.policyCode) {
+                              setValidationErrors({
+                                ...validationErrors,
+                                policyCode: "",
+                              });
+                            }
+                          }}
+                    placeholder="Enter policy code (e.g., POL-001)"
+                          isInvalid={!!validationErrors.policyCode}
+                    maxLength={50}
+                        />
+                        {validationErrors.policyCode && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.policyCode}
+                          </Form.Control.Feedback>
+                        )}
+                      </Form.Group>
+                    </Col>
 
               <Col md={4}>
                 <Form.Group>
@@ -203,28 +291,71 @@ const PolicyCreate = () => {
                 <Row key={index} className="align-items-end mb-2 g-2">
                   <Col md={5}>
                     <Form.Group>
-                      <Form.Label className="small text-secondary">Validity From</Form.Label>
+                      <Form.Label className="small text-secondary">
+                        Validity From {index === 0 ? "*" : ""}
+                      </Form.Label>
                       <Form.Control
                         type="date"
                         className="rounded-3"
                         value={v.validityFrom}
-                        onChange={(e) =>
-                          handleArrayChange("validityPeriods", index, "validityFrom", e.target.value)
-                        }
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          handleArrayChange("validityPeriods", index, "validityFrom", value);
+                          
+                          // Clear Validity To if it becomes invalid (before or equal to From date)
+                          const currentToDate = formData.validityPeriods[index].validityTo;
+                          if (currentToDate && value && new Date(currentToDate) <= new Date(value)) {
+                            handleArrayChange("validityPeriods", index, "validityTo", "");
+                          }
+                          
+                          // Clear errors immediately when user selects a date
+                          setValidationErrors(prev => {
+                            const updated = { ...prev };
+                            if (value && value.trim() !== "") {
+                              delete updated[`validityFrom_${index}`];
+                            }
+                            return updated;
+                          });
+                        }}
+                        isInvalid={!!validationErrors[`validityFrom_${index}`]}
                       />
+                      {validationErrors[`validityFrom_${index}`] && (
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors[`validityFrom_${index}`]}
+                        </Form.Control.Feedback>
+                      )}
                     </Form.Group>
                   </Col>
                   <Col md={5}>
                     <Form.Group>
-                      <Form.Label className="small text-secondary">Validity To</Form.Label>
+                      <Form.Label className="small text-secondary">
+                        Validity To {index === 0 ? "*" : ""}
+                      </Form.Label>
                       <Form.Control
                         type="date"
                         className="rounded-3"
                         value={v.validityTo}
-                        onChange={(e) =>
-                          handleArrayChange("validityPeriods", index, "validityTo", e.target.value)
-                        }
+                        min={getMinValidityToDate(v.validityFrom)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          handleArrayChange("validityPeriods", index, "validityTo", value);
+                          
+                          // Clear errors immediately when user selects a date
+                          setValidationErrors(prev => {
+                            const updated = { ...prev };
+                            if (value && value.trim() !== "") {
+                              delete updated[`validityTo_${index}`];
+                            }
+                            return updated;
+                          });
+                        }}
+                        isInvalid={!!validationErrors[`validityTo_${index}`]}
                       />
+                      {validationErrors[`validityTo_${index}`] && (
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors[`validityTo_${index}`]}
+                        </Form.Control.Feedback>
+                      )}
                     </Form.Group>
                   </Col>
                   <Col md={2} className="text-end">
@@ -543,12 +674,12 @@ const PolicyCreate = () => {
               <Button
                 variant="outline-danger"
                 className="px-4 rounded-pill"
-                onClick={() => navigate(`/registration/hotel/${id}/policy`)}
+                onClick={() => navigate(`/hotel-actions/${id}/hotel-policy/create`)}
               >
-                ✖ Cancel
+                 Cancel
               </Button>
               <Button type="submit" variant="success" className="px-4 rounded-pill">
-                ✅ Create
+                Create
               </Button>
             </div>
           </Form>
