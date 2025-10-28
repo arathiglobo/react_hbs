@@ -1341,13 +1341,12 @@ export default function HotelSearch() {
                           const newCheckIn = e.target.value;
                           setCheckIn(newCheckIn);
                           if (newCheckIn) clearError("checkIn");
-                          if (
-                            !checkOut ||
-                            new Date(newCheckIn) >= new Date(checkOut)
-                          ) {
-                            setCheckOut(
-                              formatDate(getTomorrow(new Date(newCheckIn)))
-                            );
+                          
+                          // Always set checkout to next day when check-in changes
+                          if (newCheckIn) {
+                            const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
+                            setCheckOut(nextDay);
+                            clearError("checkOut");
                           }
                         }}
                       />
@@ -1924,7 +1923,7 @@ export default function HotelSearch() {
                                       jumeirah: 10,
                                       iwtx: 12,
                                       x3: 15,
-                                      inhouse: 0,
+                                      inhouse: 1,
                                       ratehawk: 14,
                                       darina: 16,
                                     };

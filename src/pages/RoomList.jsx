@@ -79,8 +79,7 @@ const RoomList = () => {
           }
         }
 
-        payload.apiId = 1;
-        payload.hotelCode = "IN7";
+      
         console.log("payload::", payload);
         if (!payload) {
           setError("Missing search context. Please go back and try again.");
@@ -140,81 +139,116 @@ const RoomList = () => {
   }, [location.state]);
 
   const handleBooking = async (rate) => {
-    setLoadingRate(true);
+    const { payload, hotels } = roomData;
+    const hotelsdetail = hotels[0];
+    
+    console.log("hotelsdetail::", hotelsdetail);
+    console.log("rate::", rate);
 
-    setTimeout(async () => {
-      try {
-        const { payload, hotels } = roomData;
-        const hotelsdetail = hotels[0];
-        console.log("hotelsdetail::", hotelsdetail);
-        console.log("rate::", rate);
+    // For API IDs 12 and 15, fetch accurate rates
+    if (payload.apiId === 12 || payload.apiId === 15) {
+      setLoadingRate(true);
 
-        // Build dynamic request body
-        let priceCheckReq = {
-          searchCriteria: {
-            roomConfiguration: {
-              room: {
-                adult: {
-                  age: payload.rooms[0].adultAges[0].toString(),
+      setTimeout(async () => {
+        try {
+          // Build dynamic request body
+          let priceCheckReq = {
+            searchCriteria: {
+              roomConfiguration: {
+                room: {
+                  adult: {
+                    age: payload.rooms[0].adultAges[0].toString(),
+                  },
+                  roomTypeCode: rate.roomTypeCode,
+                  mealPlanCode: rate.mealPlanCode,
+                  contractTokenId: rate.contractTokenId || "0",
+                  roomConfigurationId: payload.rooms.length,
                 },
-                roomTypeCode: rate.roomTypeCode,
-                mealPlanCode: rate.mealPlanCode,
-                contractTokenId: rate.contractTokenId || "0",
-                roomConfigurationId: payload.rooms.length,
               },
+              startDate: payload.checkInDate,
+              endDate: payload.checkOutDate,
+              hotelCode: payload.hotelCode,
+              nationality: payload.nationality,
+              includeRateDetails: "Y",
+              cancellationPolicy: "Y",
+              groupByRooms: "Y",
             },
-            startDate: payload.checkInDate,
-            endDate: payload.checkOutDate,
-            hotelCode: payload.hotelCode,
-            nationality: payload.nationality,
-            includeRateDetails: "Y",
-            cancellationPolicy: "Y",
-            groupByRooms: "Y",
+          };
+
+          console.log("priceCheckReq ::", priceCheckReq);
+
+          // Choose endpoint dynamically
+          let endpoint = "";
+          switch (payload.apiId) {
+            case 12:
+              endpoint = "/api/iwtx/hotel/availability";
+              break;
+            case 15:
+              endpoint = "/api/x3/hotel/availability";
+              break;
+          }
+
+          const response = await axiosInstance.post(endpoint, priceCheckReq);
+          const hotel = response.data.hotels.hotel[0];
+          const rooms = hotel.roomTypeDetails.rooms.room;
+          console.log("Accurate room details::", rooms);
+          
+          // Map all rooms to a structured object
+          const accurateRates = rooms
+            .filter((room) => room != null)
+            .map((room) => ({
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              roomCategory: room.roomType,
+              mealPlan: room.mealPlan,
+              contractLabel: room.contractLabel,
+              nonRefundable: room.nonRefundable,
+              rate: room.rateDetails.rate,
+              currency: room.currCode,
+            }));
+          
+          console.log("accurateRate:", accurateRates);
+          setSelectedRate(accurateRates[0]);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("Accurate rate fetch failed:", err);
+          setLoadingRate(false);
+          alert("Unable to fetch accurate rate. Please try again.");
+        }
+      }, 3000);
+    } else {
+      // For all other API IDs (including 1), redirect directly to booking page
+      try {
+        // Create booking data from the current rate
+        const bookingData = {
+          selectedRate: {
+            hotelId: hotelsdetail.hotelId,
+            hotelName: hotelsdetail.hotelName,
+            roomCategory: rate.roomCategory,
+            mealPlan: rate.mealPlan,
+            contractLabel: rate.contractLabel,
+            nonRefundable: rate.nonRefundable,
+            rate: rate.totalRate,
+            currency: "AED",
           },
+          hotelStaticData: roomData.meta,
+          payload: payload
         };
 
-        console.log("priceCheckReq ::", priceCheckReq);
-
-        // Choose endpoint dynamically
-        let endpoint = "";
-        switch (payload.apiId) {
-          case 12:
-            endpoint = "/api/iwtx/hotel/availability";
-            break;
-          case 15:
-            endpoint = "/api/x3/hotel/availability";
-            break;
-          default:
-            throw new Error(`Unsupported API type: ${payload.apiId}`);
-        }
-
-        const response = await axiosInstance.post(endpoint, priceCheckReq);
-        const hotel = response.data.hotels.hotel[0];
-        const rooms = hotel.roomTypeDetails.rooms.room;
-        console.log("Accurate room details::", rooms);
-        // Map all rooms to a structured object
-        const accurateRates = rooms
-          .filter((room) => room != null)
-          .map((room) => ({
-            hotelId: hotel.hotelId,
-            hotelName: hotel.hotelName,
-            roomCategory: room.roomType,
-            mealPlan: room.mealPlan,
-            contractLabel: room.contractLabel,
-            nonRefundable: room.nonRefundable,
-            rate: room.rateDetails.rate,
-            currency: room.currCode,
-          }));
-        console.log("accurateRate:", accurateRates);
-        setSelectedRate(accurateRates[0]);
-        setLoadingRate(false);
-        setShowBookingModal(true);
+        console.log("Booking data for direct redirect:", bookingData);
+        
+        // Store booking data in sessionStorage
+        sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
+        
+        // Redirect to booking page
+       
+        window.open("/hotel-booking-page", "_blank");
       } catch (err) {
-        console.error("Accurate rate fetch failed:", err);
-        setLoadingRate(false);
-        alert("Unable to fetch accurate rate. Please try again.");
+        console.error("Error preparing booking data:", err);
+        alert("Unable to proceed with booking. Please try again.");
       }
-    }, 3000);
+    }
   };
 
   const sampleGallery = [
@@ -835,6 +869,7 @@ const RoomList = () => {
           </Button>
         </Modal.Footer>
       </Modal>
+
     </div>
   );
 };
