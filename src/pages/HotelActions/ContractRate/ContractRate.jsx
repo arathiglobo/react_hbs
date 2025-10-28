@@ -34,6 +34,10 @@ export default function ContractRate() {
   const [selectedValidityData, setSelectedValidityData] = useState([]);
   const [selectedRateCode, setSelectedRateCode] = useState("");
 
+  // Modal states for status toggle
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedRate, setSelectedRate] = useState(null);
+
   // ✅ Fetch contract rates with pagination and search
   const fetchRates = async (pageNum = 0, searchTerm = search) => {
     try {
@@ -111,6 +115,66 @@ export default function ContractRate() {
     setSelectedValidityData(validityData || []);
     setSelectedRateCode(rateCode);
     setShowValidityModal(true);
+  };
+
+  // ✅ Handle status toggle
+  const handleStatusToggle = (rate) => {
+    setSelectedRate(rate);
+    setShowStatusModal(true);
+  };
+
+  // ✅ Update contract rate status (following OccupancyAndMinimumLength pattern)
+  const updateContractRateStatus = async () => {
+   
+    if (!selectedRate) {
+      console.error("No selected rate found!");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Create payload matching the backend DTO structure
+      // Based on the modal message logic:
+      // - If modal says "deactivate" (status is false/Active), send isLive: false
+      // - If modal says "activate" (status is true/Inactive), send isLive: true
+      const payload = {
+        isLive: !selectedRate.isLive, 
+      };
+
+      const res = await axiosInstance.patch(
+        `/api/hotelContractRate/${id}/status/${selectedRate.contractrateId}`,
+        payload
+      );
+
+      if (res.data.status === true || res.data.status === "true") {
+        toast.success("Contract rate activated successfully");
+      } else {
+        toast.success("Contract rate deactivated successfully");
+      }
+
+      // Refresh the contract rates list to show updated data
+      await fetchRates(page, search);
+      setShowStatusModal(false);
+      setSelectedRate(null);
+    } catch (error) {
+      console.error("❌ Error updating contract rate status:", error);
+      
+      // Handle different error types
+      if (error.response?.status === 404) {
+        toast.error("Contract rate not found");
+      } else if (error.response?.status === 500) {
+        toast.error("Server error occurred while updating status");
+      } else {
+        toast.error(
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async (rateId, rateCode) => {
@@ -260,8 +324,15 @@ export default function ContractRate() {
                           )}
                         </td>
                         <td>
-                          <Badge bg={rate.isLive ? "danger" : "success"}>
-                            {rate.isLive ? "Inactive" : "Active"}
+                          <Badge 
+                            bg={rate.isLive ? "success" : "danger"}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => handleStatusToggle(rate)}
+                            title={`Click to ${rate.isLive ? 'activate' : 'deactivate'} contract rate`}
+                          >
+
+                            {console.log("rate data on toggle click::" , rate.isLive)}
+                            {rate.isLive ? "Active" : "Inactive"}
                           </Badge>
                         </td>
 
@@ -394,6 +465,55 @@ export default function ContractRate() {
                 onClick={() => setShowValidityModal(false)}
               >
                 Close
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Status Toggle Modal */}
+          <Modal
+            show={showStatusModal}
+            onHide={() => setShowStatusModal(false)}
+            centered
+            size="sm"
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton={!loading}>
+              <Modal.Title>Confirm Status Change</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {console.log("selectedRateRate##:", selectedRate)}
+              <p>
+                Are you sure you want to{" "}
+                {selectedRate?.isLive ? "deactivate" : "activate"} this
+                contract rate?
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setShowStatusModal(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={updateContractRateStatus}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Processing...
+                  </>
+                ) : (
+                  "Confirm"
+                )}
               </Button>
             </Modal.Footer>
           </Modal>

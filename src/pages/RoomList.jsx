@@ -79,6 +79,9 @@ const RoomList = () => {
           }
         }
 
+        payload.apiId = 1;
+        payload.hotelCode = "IN7";
+        console.log("payload::", payload);
         if (!payload) {
           setError("Missing search context. Please go back and try again.");
           setLoading(false);
