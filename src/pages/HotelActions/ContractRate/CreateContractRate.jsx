@@ -147,7 +147,7 @@ export default function CreateContractRate() {
     setFormData((prev) => {
       const updatedRates = [...prev.roomRates];
       updatedRates.forEach((r) => {
-        if (r.hotelRoomcategoryId === String(roomId)) r.isRefundable = checked;
+        if (r.hotelRoomcategoryId === String(roomId)) r.refundable = checked;
       });
       return { ...prev, roomRates: updatedRates };
     });
@@ -216,7 +216,7 @@ export default function CreateContractRate() {
             field === "adultRate" || field === "childRate"
               ? Number(value) > 0
               : false,
-          isRefundable: false,
+          refundable: false,
         });
       }
 
@@ -265,7 +265,7 @@ export default function CreateContractRate() {
         contractRateRoomDTO: formData.roomRates.map((r) => ({
           hotelRoomcategoryId: String(r.hotelRoomcategoryId),
           hotelRoomtypeId: String(r.hotelRoomtypeId),
-          isRefundable: Boolean(r.isRefundable),
+          refundable: Boolean(r.refundable),
           ocuppancytypeId: Number(r.ocuppancytypeId),
           rate: String(r.rate || "0"),
           extraBed: Boolean(r.extraBed),
@@ -274,12 +274,6 @@ export default function CreateContractRate() {
           childRate: String(r.childRate || "0"),
         })),
       };
-
-      console.log("✅ Day Selection:", formData.daySelection);
-      console.log("✅ Day Values - allDays:", allDays, "weekDay:", weekDay, "weekEndDay:", weekEndDay);
-      console.log("✅ Final Payload:", JSON.stringify(payload, null, 2));
-      console.log("✅ Form Data:", formData);
-      console.log("✅ Room Rates:", formData.roomRates);
 
       const res = await axiosInstance.post(
         "/api/hotelContractRate/save",
@@ -292,7 +286,7 @@ export default function CreateContractRate() {
         navigate(`/hotel-actions/${id}/contract-rate`);
       }
     } catch (err) {
-      console.error("❌ Save Error:", err);
+     
       toast.error(
         `Failed to save contract rate: ${
           err.response?.data?.message || err.message

@@ -148,7 +148,7 @@ export default function EditContractRate() {
             childRate: room.childRate || 0,
             meal: Boolean(room.meal),
             extraBed: Boolean(room.extraBed),
-            isRefundable: Boolean(room.isRefundable),
+            refundable: Boolean(room.refundable),
           })) || [];
 
           setFormData({
@@ -264,7 +264,7 @@ export default function EditContractRate() {
     setFormData((prev) => {
       const updatedRates = [...prev.roomRates];
       updatedRates.forEach((r) => {
-        if (r.hotelRoomcategoryId === String(roomId)) r.isRefundable = checked;
+        if (r.hotelRoomcategoryId === String(roomId)) r.refundable = checked;
       });
       return { ...prev, roomRates: updatedRates };
     });
@@ -333,7 +333,7 @@ export default function EditContractRate() {
             field === "adultRate" || field === "childRate"
               ? Number(value) > 0
               : false,
-          isRefundable: false,
+          refundable: false,
         });
       }
 
@@ -382,7 +382,7 @@ export default function EditContractRate() {
         contractRateRoomDTO: formData.roomRates.map((r) => ({
           hotelRoomcategoryId: String(r.hotelRoomcategoryId),
           hotelRoomtypeId: String(r.hotelRoomtypeId),
-          isRefundable: Boolean(r.isRefundable),
+          refundable: Boolean(r.refundable),
           ocuppancytypeId: Number(r.ocuppancytypeId),
           rate: String(r.rate || "0"),
           extraBed: Boolean(r.extraBed),
@@ -685,7 +685,7 @@ export default function EditContractRate() {
                               checked={
                                 formData.roomRates.find(
                                   (r) => r.hotelRoomcategoryId === String(room.hotelRoomcategoryId)
-                                )?.isRefundable || false
+                                )?.refundable || false
                               }
                               onChange={(e) =>
                                 handleRefundableChange(
