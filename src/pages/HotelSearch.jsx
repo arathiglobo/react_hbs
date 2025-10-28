@@ -543,7 +543,7 @@ export default function HotelSearch() {
    const fetchHotels = async (page, searchId, agentId) => {
     try {
       const params = {
-        agentId: agentId,
+        agentId: agentId || agent || 1, // Use passed agentId, or state agent, or default to 1
         page,
         pageSize,
         sortBy:
@@ -846,7 +846,7 @@ export default function HotelSearch() {
         adultAges: room.adultAges?.length ? room.adultAges : [25],
       }));
 
-      const agentId = 1;
+      const agentId = agent || 1; // Use selected agent or default to 1
 
       const searchPayloadReq = {
         nationalityId,
@@ -869,7 +869,7 @@ export default function HotelSearch() {
       setSearchId(searchId);
 
       const params = {
-        agentId: 1,
+        agentId: agentId, // Use the dynamic agentId
         page: 0,
         pageSize,
         sortBy:
@@ -1519,7 +1519,7 @@ export default function HotelSearch() {
             </Card>
           )}
 
-          {hasSearched && allResults.length > 0 && (
+          {hasSearched && (
             <div ref={resultsRef}>
               {/* Progress bar for channels */}
               {/* {pollStatus === "IN_PROGRESS" && (
@@ -1778,28 +1778,37 @@ export default function HotelSearch() {
               </Card>
 
                   {/* New Pagination Section After Filters */}
-              {filteredResults.length > 0 && (
+              {hasSearched && (
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
                   <small className="text-muted fw-semibold">
-                    Showing{" "}
-                    {pageIndex * pageSize + 1}-
-                    {(hotelSearchTerm || hotelType.length > 0
-                      ? Math.min(
-                          pageIndex * pageSize + pageSize,
-                          filteredResults.length
-                        )
-                      : Math.min(
-                          pageIndex * pageSize + pageSize,
-                          totalElements
-                        ))}{" "}
-                    of{" "}
-                    {(hotelSearchTerm || hotelType.length > 0
-                      ? filteredResults.length
-                      : totalElements)}{" "}
-                    results{" "}
-                    {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
+                    {filteredResults.length > 0 ? (
+                      <>
+                        Showing{" "}
+                        {pageIndex * pageSize + 1}-
+                        {(hotelSearchTerm || hotelType.length > 0
+                          ? Math.min(
+                              pageIndex * pageSize + pageSize,
+                              filteredResults.length
+                            )
+                          : Math.min(
+                              pageIndex * pageSize + pageSize,
+                              totalElements
+                            ))}{" "}
+                        of{" "}
+                        {(hotelSearchTerm || hotelType.length > 0
+                          ? filteredResults.length
+                          : totalElements)}{" "}
+                        results{" "}
+                        {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
+                      </>
+                    ) : (
+                      <>
+                        No results found{" "}
+                        {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
+                      </>
+                    )}
                   </small>
-                  {!(hotelSearchTerm || hotelType.length > 0) && (
+                  {filteredResults.length > 0 && !(hotelSearchTerm || hotelType.length > 0) && (
                     <Pagination className="mb-0 pagination-modern">
                       <Pagination.Prev
                         disabled={pageIndex === 0}
@@ -1846,8 +1855,8 @@ export default function HotelSearch() {
               <div>
                 {view === "card" && (
                   <Row xs={1} md={2} xl={3} className="g-3">
-                    {pageItems.length > 0 ? (
-                      pageItems.map((hotel) => (
+                    {filteredResults.length > 0 ? (
+                      filteredResults.map((hotel) => (
                         <Col key={hotel.id}>
                           <Card className="shadow-sm rounded-xl h-100 hotel-card-modern animate-fadeIn">
                             <div className="hotel-image-container">
@@ -1900,7 +1909,7 @@ export default function HotelSearch() {
                                         ? selectedNationality.code
                                         : " ";
 
-                                    const agentIdToUse = 1; //agent;
+                                    const agentIdToUse = agent || 1; // Use selected agent or default to 1
                                     const roomsPayload = rooms.map((r) => ({
                                       adults: r.adults || 1,
                                       children: r.children || 0,
@@ -1984,10 +1993,11 @@ export default function HotelSearch() {
                             <FaSearch className="display-4 text-muted mb-3" />
                             <h5>No results found</h5>
                             <p>
-                              {hotelSearchTerm ||
-                              starRating.length > 0 ||
-                              hotelType.length > 0 ||
-                              channelType.length > 0
+                              {channelType.length > 0
+                                ? `No hotels found for the selected channel${channelType.length > 1 ? 's' : ''}: ${channelType.map(c => c.label).join(', ')}. Try selecting different channels or clearing the channel filter.`
+                                : hotelSearchTerm ||
+                                  starRating.length > 0 ||
+                                  hotelType.length > 0
                                 ? "No hotels match your current filters. Try adjusting your search criteria or clearing some filters."
                                 : "Try adjusting your filters or search criteria."}
                             </p>
@@ -2016,8 +2026,12 @@ export default function HotelSearch() {
                   </Row>
                 )}
 
-                {filteredResults.length > 0 &&
+                {hasSearched &&
                   (() => {
+                    if (filteredResults.length === 0) {
+                      return null; // Don't show pagination when no results
+                    }
+                    
                     const hasClientOnlyFilters =
                       Boolean(hotelSearchTerm) || hotelType.length > 0;
                     const showingStart = pageIndex * pageSize + 1;
