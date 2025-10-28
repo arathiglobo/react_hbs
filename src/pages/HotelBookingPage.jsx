@@ -227,85 +227,94 @@ const HotelBookingPage = () => {
             {/* Booking Summary */}
             <Row>
               <Col>
-                <Card className="shadow-lg rounded-xl mb-3 booking-summary-card border-0">
-                  <Card.Header className="bg-primary text-white py-3 rounded-top">
+                <Card className="shadow-lg rounded-xl mb-3 booking-summary-card border-0 overflow-hidden">
+                  <Card.Header className="bg-gradient-secondary text-primary py-2 rounded-top">
                     <h4 className="mb-0 d-flex align-items-center">
-                      <FaHotel className="me-2" /> Booking Summary
+                      <FaHotel className="me-3 fs-5" /> Booking Summary
                     </h4>
                   </Card.Header>
-                  <Card.Body className="p-4 bg-white">
+                  <Card.Body className="p-4 bg-light">
                     <Row className="gy-4">
                       <Col md={6} lg={4}>
-                        <h5 className="fw-bold">{hotelStaticData.hotelName}</h5>
-                        <p className="text-muted mb-1">
-                          {hotelStaticData.address}
-                        </p>
-                        <div className="d-flex align-items-center mb-1">
-                          <small className="text-muted me-2">
-                            ⭐ {hotelStaticData.starRating} Star
-                          </small>
-                          {selectedRate.nonRefundable !== undefined &&
-                            getRefundStatusBadge(
-                               selectedRate.nonRefundable === "Y"
-                                ? "NON REFUNDABLE"
-                                : "FLEXIBLE"
-                            )}
-                           
+                        <div className="hotel-info-card p-3 bg-white rounded shadow-sm h-100">
+                          <h5 className="fw-bold text-primary mb-3">{hotelStaticData.hotelName}</h5>
+                          <p className="text-muted mb-2 d-flex align-items-start">
+                            <i className="bi bi-geo-alt-fill me-2 mt-1 text-primary"></i>
+                            {hotelStaticData.address}
+                          </p>
+                          <div className="d-flex align-items-center mb-2">
+                            <span className="badge bg-warning text-dark me-2">
+                              ⭐ {hotelStaticData.starRating} Star
+                            </span>
+                            {selectedRate.nonRefundable !== undefined &&
+                              getRefundStatusBadge(
+                                 selectedRate.nonRefundable === "Y"
+                                  ? "NON REFUNDABLE"
+                                  : "FLEXIBLE"
+                              )}
+                          </div>
                         </div>
                       </Col>
                       <Col md={6} lg={2}>
-                        <FaCalendarAlt className="me-2 text-muted" />
-                        <strong>Check-in:</strong>
-                        <br />
-                        {payload.checkInDate}
+                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
+                          <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
+                          <h6 className="fw-bold text-primary mb-2">Check-in</h6>
+                          <p className="mb-0 fw-semibold text-dark">{payload.checkInDate}</p>
+                        </div>
                       </Col>
                       <Col md={6} lg={2}>
-                        <FaCalendarAlt className="me-2 text-muted" />
-                        <strong>Check-out:</strong>
-                        <br />
-                        {payload.checkOutDate}
+                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
+                          <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
+                          <h6 className="fw-bold text-primary mb-2">Check-out</h6>
+                          <p className="mb-0 fw-semibold text-dark">{payload.checkOutDate}</p>
+                        </div>
                       </Col>
                       <Col md={6} lg={2}>
-                        <FaUsers className="me-2 text-muted" />
-                        <strong>Guests</strong>
-                        <br />
-                        {payload.rooms.map((room, i) => (
-                          <div key={i}>
-                            Room {i + 1}: {room.adults} Adults
-                            {room.children ? `, ${room.children} Children` : ""}
+                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
+                          <FaUsers className="me-2 text-primary fs-5 mb-2" />
+                          <h6 className="fw-bold text-primary mb-2">Guests</h6>
+                          <div className="text-start">
+                            {payload.rooms.map((room, i) => (
+                              <div key={i} className="mb-1">
+                                <small className="fw-semibold text-dark">
+                                  Room {i + 1}: {room.adults} Adults
+                                  {room.children ? `, ${room.children} Children` : ""}
+                                </small>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        </div>
                       </Col>
                       <Col md={6} lg={2}>
-                        <FaUtensils className="me-2 text-muted" />
-                        <strong>Meal Plan:</strong>
-                        <br />
-                        {selectedRate.mealPlan}
+                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
+                          <FaUtensils className="me-2 text-primary fs-5 mb-2" />
+                          <h6 className="fw-bold text-primary mb-2">Meal Plan</h6>
+                          <p className="mb-0 fw-semibold text-dark">{selectedRate.mealPlan}</p>
+                        </div>
                       </Col>
                     </Row>
-                    <hr />
+                    <hr className="my-4" />
 
    {/* ✅ Show Selling Price only if ADMIN */}
  {activeUserRole === "ADMIN" && (
-                    <div className="d-flex justify-content-end align-items-center mt-3">
-                      <h4 className="mb-0">
-                        Selling Price :{" "}
-                        <span className="text-success fw-bold">
-                            {formatPrice(selectedRate.rate)}
-                          {/* {formatPrice(selectedRate.sellingPrice)} */}
-                        </span>
-                      </h4>
+                    <div className="pricing-section p-3 bg-white rounded shadow-sm mb-3">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <h5 className="mb-0 text-muted">Selling Price</h5>
+                        <h4 className="mb-0 text-success fw-bold">
+                          {formatPrice(selectedRate.rate)}
+                        </h4>
+                      </div>
                     </div>
                      )}
 
                     
-                    <div className="d-flex justify-content-end align-items-center mt-3">
-                      <h4 className="mb-0">
-                        Total Price :{" "}
-                        <span className="text-success fw-bold">
-                            {formatPrice(selectedRate.rate)}
-                        </span>
-                      </h4>
+                    <div className="pricing-section p-3 bg-gradient-success text-white rounded shadow-sm">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <h5 className="mb-0">Total Price</h5>
+                        <h4 className="mb-0 fw-bold">
+                          {formatPrice(selectedRate.rate)}
+                        </h4>
+                      </div>
                     </div>
                   
 
@@ -347,7 +356,9 @@ const HotelBookingPage = () => {
                               <Row className="align-items-center">
                                 <Col md={2}>
                                   <span className="fw-semibold text-muted">
-                                    Guest {guestIndex + 1} *
+                                    {guest.isChild 
+                                      ? `Child ${guestIndex - room.adults + 1} (Age: ${room.childAges[guestIndex - room.adults]})` 
+                                      : `Adult ${guestIndex + 1}`} *
                                   </span>
                                 </Col>
                                 <Col md={2}>

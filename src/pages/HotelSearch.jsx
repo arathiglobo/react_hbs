@@ -918,7 +918,7 @@ export default function HotelSearch() {
                   "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
                 rating: hotel.starRating || 0,
                 hotelType: "hotel",
-                channelType: hotel.apiType?.toLowerCase() || "inhouse",
+                channelType: hotel.apiType?.toLowerCase() ,
               }))
             : [];
 
@@ -1908,10 +1908,13 @@ export default function HotelSearch() {
                                         ? selectedNationality.code
                                         : " ";
 
-                                    const agentIdToUse = agent || 1; // Use selected agent or default to 1
+                                    const agentIdToUse = agent; // Use selected agent or default to 1
+
+                                    console.log("rooms before mapping::", rooms);
                                     const roomsPayload = rooms.map((r) => ({
                                       adults: r.adults || 1,
                                       children: r.children || 0,
+                                      childAges:r.childAges || [],
                                       adultAges: Array.from(
                                         { length: r.adults || 1 },
                                         () => 30
