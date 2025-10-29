@@ -310,7 +310,7 @@ export default function HotelSearch() {
         }));
         setDestinationOptions(options);
       } catch (error) {
-        console.log("axios call error for city list:", error);
+        // console.log("axios call error for city list:", error);
         setDestinationOptions([]);
       } finally {
         setIsDestinationLoading(false);
@@ -349,20 +349,20 @@ export default function HotelSearch() {
     
     // Debug: Log all hotel names
     if (results.length > 0) {
-      console.log('All hotel names:', results.map(hotel => hotel.name || hotel.hotelName || 'NO NAME'));
+      // console.log('All hotel names:', results.map(hotel => hotel.name || hotel.hotelName || 'NO NAME'));
     }
 
     // Filter by hotel name search
     if (hotelSearchTerm) {
-      console.log('Filtering by hotel search term:', hotelSearchTerm);
-      console.log('Available hotels before filtering:', results.length);
+      // console.log('Filtering by hotel search term:', hotelSearchTerm);
+      // console.log('Available hotels before filtering:', results.length);
       results = results.filter((hotel) => {
         const hotelName = hotel.name || hotel.hotelName || '';
         const matches = hotelName.toLowerCase().includes(hotelSearchTerm.toLowerCase());
-        console.log(`Hotel: ${hotelName}, Search: ${hotelSearchTerm}, Matches: ${matches}`);
+        // console.log(`Hotel: ${hotelName}, Search: ${hotelSearchTerm}, Matches: ${matches}`);
         return matches;
       });
-      console.log('Filtered results after hotel name search:', results.length);
+      // console.log('Filtered results after hotel name search:', results.length);
     }
 
     // Filter by star rating
@@ -395,7 +395,7 @@ export default function HotelSearch() {
   // }, [filteredResults, pageIndex]);
 
     const pageItems = useMemo(() => {
-    console.log("Page items:", filteredResults.length);
+    // console.log("Page items:", filteredResults.length);
     return filteredResults;
   }, [filteredResults]);
 
@@ -448,7 +448,7 @@ export default function HotelSearch() {
         : [];
       setNationalityList(options);
     } catch (error) {
-      console.log("error for country list:", error);
+      // console.log("error for country list:", error);
       setNationalityList([]);
     }
   };
@@ -471,7 +471,7 @@ export default function HotelSearch() {
       }));
       setDestinationOptions(options);
     } catch (error) {
-      console.log("Error loading popular destinations:", error);
+      // console.log("Error loading popular destinations:", error);
     } finally {
       setIsDestinationLoading(false);
     }
@@ -483,7 +483,7 @@ export default function HotelSearch() {
      
       setAgents(response.data);
     } catch (error) {
-      console.log("error for agent axios list:", error);
+      // console.log("error for agent axios list:", error);
       setAgents([]);
     }
   };
@@ -636,13 +636,6 @@ export default function HotelSearch() {
           localPollCount++;
           const res = await axiosInstance.get(url, { params });
 
-          console.log(
-            `Poll ${localPollCount} received ${
-              res.data.result?.length || 0
-            } hotels`
-          );
-          console.log("Full response:", res.data);
-
           if (onUpdate) {
             onUpdate(res.data, localPollCount);
           }
@@ -763,12 +756,12 @@ export default function HotelSearch() {
   //         localPollCount++;
   //         const res = await axiosInstance.get(url, { params });
 
-  //         console.log(
+  //         // console.log(
   //           `Poll ${localPollCount} received ${
   //             res.data.result?.length || 0
   //           } hotels`
   //         );
-  //         console.log("Full response:", res.data); // For debugging channel statuses
+  //         // console.log("Full response:", res.data); // For debugging channel statuses
 
   //         if (onUpdate) {
   //           onUpdate(res.data, localPollCount);
@@ -908,8 +901,7 @@ export default function HotelSearch() {
           return hasAnyCompleted || data.finalStatus === "COMPLETED";
         },
         (data, pollCount) => {
-          console.log(`Poll ${pollCount} data:`, data);
-
+         
           const mappedResults = Array.isArray(data.result)
             ? data.result.map((hotel, index) => ({
                 id: hotel.hotelCode
@@ -944,7 +936,7 @@ export default function HotelSearch() {
               !completedChannels.has(ch)
             ) {
               newCompleted.add(ch);
-              console.log(`Channel ${ch} completed at poll ${pollCount}`);
+              // console.log(`Channel ${ch} completed at poll ${pollCount}`);
             }
           });
           setCompletedChannels(newCompleted);
@@ -968,12 +960,6 @@ export default function HotelSearch() {
                 (Number(data.totalResults) || mappedResults.length) / pageSize
               )
             )
-          );
-
-          console.log(
-            `Completed channels: ${Array.from(newCompleted).join(", ")} (${
-              newCompleted.size
-            }/${expectedChannels.length})`
           );
         },
         4000,
@@ -1069,7 +1055,7 @@ export default function HotelSearch() {
   //       params,
   //       (data) => data.finalStatus === "COMPLETED", // Stop when all channels complete
   //       (data, pollCount) => {
-  //         console.log(`Poll ${pollCount} data:`, data);
+  //         // console.log(`Poll ${pollCount} data:`, data);
 
   //         // Map hotels and group by channel
   //         const mappedResults = Array.isArray(data.result)
@@ -1116,7 +1102,7 @@ export default function HotelSearch() {
   //             !completedChannels.has(ch)
   //           ) {
   //             newCompleted.add(ch);
-  //             console.log(`Channel ${ch} completed at poll ${pollCount}`);
+  //             // console.log(`Channel ${ch} completed at poll ${pollCount}`);
   //           }
   //         });
   //         setCompletedChannels(newCompleted);
@@ -1146,7 +1132,7 @@ export default function HotelSearch() {
   //         );
 
   //         // Log progress
-  //         console.log(
+  //         // console.log(
   //           `Completed channels: ${Array.from(newCompleted).join(", ")} (${
   //             newCompleted.size
   //           }/${expectedChannels.length})`
@@ -1441,7 +1427,7 @@ export default function HotelSearch() {
                         }}
                       >
                         <option value="">Select Agent</option>
-                        {console.log("agents:::" , agents)}
+                       
                          {agents.map((agent) => (
                               <option key={agent.id} value={agent.id}>
                                 {agent.companyName}
@@ -1865,13 +1851,12 @@ export default function HotelSearch() {
               <div>
                 {view === "card" && (
         <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
-          {console.log('Filtered results length:', filteredResults.length)}
-          {console.log('Filtered results:', filteredResults)}
+          
           
           {filteredResults.length > 0 ? (
             filteredResults.map((hotel, index) => {
-              console.log('Hotel data:', hotel);
-              console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
+              // console.log('Hotel data:', hotel);
+              // console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
               return (
                         <Col key={hotel.id}>
                           
@@ -1915,7 +1900,7 @@ export default function HotelSearch() {
                               backgroundColor: 'white'
                             }}>
                               <h6 style={{
-                                fontSize: '1rem',
+                                fontSize: '1.3rem',
                                 fontWeight: '600',
                                 marginBottom: '8px',
                                 color: '#333',
@@ -1943,7 +1928,7 @@ export default function HotelSearch() {
                                 display: 'inline-block',
                                 marginBottom: '12px'
                               }}>
-                                {hotel.badge || 'Rate Available'}
+                                {hotel.badge}
                               </div>
                               
                               <div style={{
@@ -1955,7 +1940,7 @@ export default function HotelSearch() {
                                 borderTop: '1px solid #eee'
                               }}>
                                 <div style={{
-                                  fontSize: '0.9rem',
+                                  fontSize: '1.5rem',
                                   fontWeight: '600',
                                   color: '#333'
                                 }}>
@@ -1983,7 +1968,7 @@ export default function HotelSearch() {
 
                                     const agentIdToUse = agent; // Use selected agent or default to 1
 
-                                    console.log("rooms before mapping::", rooms);
+                                    // console.log("rooms before mapping::", rooms);
                                     const roomsPayload = rooms.map((r) => ({
                                       adults: r.adults || 1,
                                       children: r.children || 0,
@@ -2006,11 +1991,6 @@ export default function HotelSearch() {
                                     
                                     const apiId = apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
 
-                                    console.log("apiId:::", apiId);
-                                    console.log(
-                                      "selectedNationality:::",
-                                      selectedNationality
-                                    );
 
                                     const payload = {
                                       checkInDate: checkIn,
@@ -2035,8 +2015,8 @@ export default function HotelSearch() {
                                       hotelImage: hotel.image,
                                     };
 
-                                    console.log("payload::", payload);
-                                    console.log("meta::", meta);
+                                    // console.log("payload::", payload);
+                                    // console.log("meta::", meta);
                                     try {
                                       sessionStorage.setItem(
                                         "roomListPayload",
@@ -2049,9 +2029,6 @@ export default function HotelSearch() {
                                       // navigate("/room-list", { state: { payload, meta } });
                                     } catch {}
 
-                                    console.log(
-                                      "page redirection faces an issue"
-                                    );
                                   }}
                                 >
                                   View Rooms
