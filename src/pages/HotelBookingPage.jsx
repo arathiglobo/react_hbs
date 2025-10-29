@@ -228,9 +228,9 @@ const HotelBookingPage = () => {
             <Row>
               <Col>
                 <Card className="shadow-lg rounded-xl mb-3 booking-summary-card border-0 overflow-hidden">
-                  <Card.Header className="bg-gradient-secondary text-primary py-2 rounded-top">
+                  <Card.Header className="bg-gradient-secondary text-black py-2 rounded-top">
                     <h4 className="mb-0 d-flex align-items-center">
-                      <FaHotel className="me-3 fs-5" /> Booking Summary
+                      <FaHotel className="me-1 fs-4" /> Booking Summary
                     </h4>
                   </Card.Header>
                   <Card.Body className="p-4 bg-light">
