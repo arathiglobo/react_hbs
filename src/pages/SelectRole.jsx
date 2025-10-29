@@ -8,6 +8,7 @@ const SelectRole = () => {
   const navigate = useNavigate();
 
   const roles = state?.roles || [];
+  console.log("roles inside select role::", roles);
 
   // Redirect to login if no state or roles
   if (!state || !state.roles || state.roles.length === 0) {

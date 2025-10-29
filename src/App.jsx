@@ -82,6 +82,7 @@ import StayPayPromotion from "./pages/HotelActions/Promotion/StayPayPromotion";
 import EditStayPayPromotion from "./pages/HotelActions/Promotion/EditStayPayPromotion";
 import PolicyUpdate from "./pages/HotelActions/Policy/PolicyUpdate";
 import PolicyCreate from "./pages/HotelActions/Policy/PolicyCreate";
+import CompanyProfile from "./pages/CompanyProfile";
 
 
 
@@ -92,29 +93,22 @@ export default function App() {
   return (
     <div>
       <Routes>
+        {/* Public Routes */}
         <Route path="/" element={<Login />} />
         <Route path="/select-userRole" element={<SelectRole />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/agentDashboard" element={<AgentDashboard />} />
-        {/* Protected Routes */}
-       <Route
-          path="/hotels"
-          element={
-            <PrivateRoute>
-              <>
-                <Hotels />
-              </>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/adminDashboard"
-          element={
-            <PrivateRoute>
-              <AdminDashboard />
-            </PrivateRoute>
-          }
-        />
+        
+       
+     {/* Protected Routes */}
+<Route
+  path="/adminDashboard"
+  element={
+    <PrivateRoute>
+      <AdminDashboard />
+    </PrivateRoute>
+  }
+/>
+
         <Route
           path="/agentDashboard"
           element={
@@ -165,94 +159,93 @@ export default function App() {
         />
 
         {/* Masters */}
-        <Route path="/masters/designations" element={<Designations />} />
-        <Route path="/masters/bank" element={<Bank />} />
-         <Route path="/masters/contact-type" element={<ContactType />} />
-         <Route path="/masters/markup-type" element={<MarkupType />} />
-         <Route path="/masters/currency" element={<Currency />} />
-        <Route path="/new-booking/hotel" element={<HotelSearch />} />
-        <Route path="/new-booking/make-your-own-package" element={<MakeUrOwnPackage />} />
-        <Route path="/room-list" element={<RoomList />} />
-        <Route path="/masters/market-type" element={<MarketType />} />
-        <Route path="/masters/region" element={<Region />} />
-        <Route path="/masters/countries" element={<Country />} />
-        <Route path="/masters/states" element={<Province />} />
-       <Route path="/masters/destination" element={<Destination />} />
-       <Route path="/masters/city-mapping" element={<CityMapping />} />
-       <Route path="/masters/hotel-category" element={<HotelCategory />} />
-       <Route path="/masters/hotel-type" element={<HotelType />} />
-       <Route path="/masters/occupancy-type" element={<OccupancyType />} />
-       <Route path="/masters/season-type" element={<SeasonType />} />
-       <Route path="/masters/room-category" element={<RoomCategory />} />
-       <Route path="/masters/room-types" element={<RoomType />} />
-       <Route path="/masters/hotel-amenity" element={<HotelAmenity />} />
-       <Route path="/masters/room-amenity" element={<RoomAmenity />} />
-       <Route path="/masters/meal-plans" element={<MealPlan />} />
-       <Route path="/masters/agent-category" element={<MasterAgentCategory />} />
-       <Route path="/masters/package-category" element={<PackageCategory />} />
-       <Route path="/masters/package-type" element={<PackageType />} />
-       <Route path="/masters/day-activity" element={<DayActivities />} />
-       <Route path="/masters/itinerary-details" element={<ItineraryDetails />} />
-       <Route path="/masters/visa-information" element={<VisaDetails />} />
-       <Route path="/masters/terms-and-conditions" element={<TermsAndConditions />} />
+        <Route path="/masters/designations" element={<PrivateRoute><Designations /></PrivateRoute>} />
+        <Route path="/masters/bank" element={<PrivateRoute><Bank /></PrivateRoute>} />
+        <Route path="/masters/contact-type" element={<PrivateRoute><ContactType /></PrivateRoute>} />
+        <Route path="/masters/markup-type" element={<PrivateRoute><MarkupType /></PrivateRoute>} />
+        <Route path="/masters/currency" element={<PrivateRoute><Currency /></PrivateRoute>} />
+        <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
+        <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
+        <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
+        <Route path="/masters/market-type" element={<PrivateRoute><MarketType /></PrivateRoute>} />
+        <Route path="/masters/region" element={<PrivateRoute><Region /></PrivateRoute>} />
+        <Route path="/masters/countries" element={<PrivateRoute><Country /></PrivateRoute>} />
+        <Route path="/masters/states" element={<PrivateRoute><Province /></PrivateRoute>} />
+        <Route path="/masters/destination" element={<PrivateRoute><Destination /></PrivateRoute>} />
+        <Route path="/masters/city-mapping" element={<PrivateRoute><CityMapping /></PrivateRoute>} />
+        <Route path="/masters/hotel-category" element={<PrivateRoute><HotelCategory /></PrivateRoute>} />
+        <Route path="/masters/hotel-type" element={<PrivateRoute><HotelType /></PrivateRoute>} />
+        <Route path="/masters/occupancy-type" element={<PrivateRoute><OccupancyType /></PrivateRoute>} />
+        <Route path="/masters/season-type" element={<PrivateRoute><SeasonType /></PrivateRoute>} />
+        <Route path="/masters/room-category" element={<PrivateRoute><RoomCategory /></PrivateRoute>} />
+        <Route path="/masters/room-types" element={<PrivateRoute><RoomType /></PrivateRoute>} />
+        <Route path="/masters/hotel-amenity" element={<PrivateRoute><HotelAmenity /></PrivateRoute>} />
+        <Route path="/masters/room-amenity" element={<PrivateRoute><RoomAmenity /></PrivateRoute>} />
+        <Route path="/masters/meal-plans" element={<PrivateRoute><MealPlan /></PrivateRoute>} />
+        <Route path="/masters/agent-category" element={<PrivateRoute><MasterAgentCategory /></PrivateRoute>} />
+        <Route path="/masters/package-category" element={<PrivateRoute><PackageCategory /></PrivateRoute>} />
+        <Route path="/masters/package-type" element={<PrivateRoute><PackageType /></PrivateRoute>} />
+        <Route path="/masters/day-activity" element={<PrivateRoute><DayActivities /></PrivateRoute>} />
+        <Route path="/masters/itinerary-details" element={<PrivateRoute><ItineraryDetails /></PrivateRoute>} />
+        <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
+        <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
      
-       
+        {/* Company Profile */}
+        <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
 
-       {/* Registration */}
-       <Route path="/hotel-booking-page" element={<HotelBookingPage/>} />
-       <Route path="/registration/agent" element={<AgentReg />} />
-       <Route path="/registration/employee" element={<EmployeeReg />} />
-       <Route path="/registration/cabProvider" element={<CabProviderReg />} />
-       <Route path="/cab-rates" element={<CabRates />} />
-       <Route path="/registration/activityProvider" element={<ActivityProviderReg />} />
-       <Route path="activity-rates" element={<ActivityRates />} />
-       <Route path="/registration/package" element={<PackageReg />} />
-       <Route path="/package-rates" element={<PackageRates />} />
-       <Route path="/registration/supplier" element={<SupplierReg />} />
-       <Route path="/registration/hotel" element={<HotelList />} />
-       <Route path="/registration/hotel/create" element={<HotelReg />} />
-       <Route path="/registration/hotel/create/:id" element={<HotelReg />} />
+        {/* Registration */}
+        <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
+        <Route path="/registration/agent" element={<PrivateRoute><AgentReg /></PrivateRoute>} />
+        <Route path="/registration/employee" element={<PrivateRoute><EmployeeReg /></PrivateRoute>} />
+        <Route path="/registration/cabProvider" element={<PrivateRoute><CabProviderReg /></PrivateRoute>} />
+        <Route path="/cab-rates" element={<PrivateRoute><CabRates /></PrivateRoute>} />
+        <Route path="/registration/activityProvider" element={<PrivateRoute><ActivityProviderReg /></PrivateRoute>} />
+        <Route path="/activity-rates" element={<PrivateRoute><ActivityRates /></PrivateRoute>} />
+        <Route path="/registration/package" element={<PrivateRoute><PackageReg /></PrivateRoute>} />
+        <Route path="/package-rates" element={<PrivateRoute><PackageRates /></PrivateRoute>} />
+        <Route path="/registration/supplier" element={<PrivateRoute><SupplierReg /></PrivateRoute>} />
+        <Route path="/registration/hotel" element={<PrivateRoute><HotelList /></PrivateRoute>} />
+        <Route path="/registration/hotel/create" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
+        <Route path="/registration/hotel/create/:id" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
 
 
-       {/* Hotel Actions */}
-
-       <Route path="/hotel-details/:id" element={<HotelRegistrationActions />} />
-       {/* compulsory events */}
-      <Route path="/registration/hotel/:id/compulsory-events" element={<CompulsoryEventsPage />} />
-      <Route path="/hotel-actions/:id/occupancy-and-minimumlength" element={<OccupancyAndMinimumLength />} />
-      {/* hotelavailability */}
-      <Route path="/hotel-actions/:id/hotel-availability" element={<HotelAvailability />} />
-      <Route path="/hotel-actions/:id/validity-period-details" element={<ValidityPage />} />
-      {/* selected hotelsearch from booking page */}
-      <Route path="/hotel-actions/:id/individual-hotel-search" element={<IndividualHotelSearch />} />
-      {/* contract rate */}
-      <Route path="/hotel-actions/:id/contract-rate" element={<ContractRate />} />
-      <Route path="/hotel-actions/hotel/:id/contract-rate/create" element={<CreateContractRate />} />
-      <Route path="/hotel-actions/hotel/:id/contract-rate/:contractRateId/edit" element={<EditContractRate />} />
-      <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/copy" element={<CopyContractRate />} />
-      {/* promotion */}
-      <Route path="/hotel-actions/:id/promotions" element={<Promotion />} />
-      <Route path="/hotel-actions/:id/promotion/special-rate/save" element={<SpecialRates />} />
-      <Route path="/hotel-actions/:id/promotion/special-rate/edit/:editId" element={<EditSpecialRates />} />
-      <Route path="/hotel-actions/:id/promotion/staypay/save" element={<StayPayPromotion />} />
-      <Route path="/hotel-actions/:id/promotion/staypay/edit/:editId" element={<EditStayPayPromotion />} />
-      <Route path="/hotel-actions/:id/promotion/discount/save" element={<DiscountPromotion />} />
-      <Route path="/hotel-actions/:id/promotion/discount/edit/:editId" element={<EditDiscountPromotion />} />
-      {/* policy */}
-      <Route path="/hotel-actions/:id/hotel-policy" element={<Policy />} />
-      <Route path="/hotel-actions/:id/hotel-policy/create" element={<PolicyCreate />} />
-      <Route path="/hotel-actions/:id/hotel-policy/:editId/edit" element={<PolicyUpdate />} />
+        {/* Hotel Actions */}
+        <Route path="/hotel-details/:id" element={<PrivateRoute><HotelRegistrationActions /></PrivateRoute>} />
+        {/* compulsory events */}
+        <Route path="/registration/hotel/:id/compulsory-events" element={<PrivateRoute><CompulsoryEventsPage /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/occupancy-and-minimumlength" element={<PrivateRoute><OccupancyAndMinimumLength /></PrivateRoute>} />
+        {/* hotelavailability */}
+        <Route path="/hotel-actions/:id/hotel-availability" element={<PrivateRoute><HotelAvailability /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/validity-period-details" element={<PrivateRoute><ValidityPage /></PrivateRoute>} />
+        {/* selected hotelsearch from booking page */}
+        <Route path="/hotel-actions/:id/individual-hotel-search" element={<PrivateRoute><IndividualHotelSearch /></PrivateRoute>} />
+        {/* contract rate */}
+        <Route path="/hotel-actions/:id/contract-rate" element={<PrivateRoute><ContractRate /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/contract-rate/create" element={<PrivateRoute><CreateContractRate /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/contract-rate/:contractRateId/edit" element={<PrivateRoute><EditContractRate /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/copy" element={<PrivateRoute><CopyContractRate /></PrivateRoute>} />
+        {/* promotion */}
+        <Route path="/hotel-actions/:id/promotions" element={<PrivateRoute><Promotion /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/promotion/special-rate/save" element={<PrivateRoute><SpecialRates /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/promotion/special-rate/edit/:editId" element={<PrivateRoute><EditSpecialRates /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/promotion/staypay/save" element={<PrivateRoute><StayPayPromotion /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/promotion/staypay/edit/:editId" element={<PrivateRoute><EditStayPayPromotion /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/promotion/discount/save" element={<PrivateRoute><DiscountPromotion /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/promotion/discount/edit/:editId" element={<PrivateRoute><EditDiscountPromotion /></PrivateRoute>} />
+        {/* policy */}
+        <Route path="/hotel-actions/:id/hotel-policy" element={<PrivateRoute><Policy /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/hotel-policy/create" element={<PrivateRoute><PolicyCreate /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/hotel-policy/:editId/edit" element={<PrivateRoute><PolicyUpdate /></PrivateRoute>} />
       
-      
-      {/* inhouse accounts    */}
-      <Route path="/inhouse-accounts/agent" element={<AgentAccounts />} />
-      <Route path="/inhouse-accounts/agent-payment-history/:id" element={<AgentsPaymentHistory />} />
-      <Route path="/inhouse-accounts/agent-auto-generated-invoice/:id" element={<AgentsAutoGeneratedInvoice />} />
+        {/* inhouse accounts */}
+        <Route path="/inhouse-accounts/agent" element={<PrivateRoute><AgentAccounts /></PrivateRoute>} />
+        <Route path="/inhouse-accounts/agent-payment-history/:id" element={<PrivateRoute><AgentsPaymentHistory /></PrivateRoute>} />
+        <Route path="/inhouse-accounts/agent-auto-generated-invoice/:id" element={<PrivateRoute><AgentsAutoGeneratedInvoice /></PrivateRoute>} />
 
-       {/* sidebarMenus    */}
-      <Route path="/calendar" element={<Calendar />} />
-      <Route path="/offer" element={<OfferZone />} />
-      <Route path="/upload-offer-image" element={<OfferImageUpload />} />
+        {/* sidebarMenus */}
+        <Route path="/calendar" element={<PrivateRoute><Calendar /></PrivateRoute>} />
+        <Route path="/offer" element={<PrivateRoute><OfferZone /></PrivateRoute>} />
+        <Route path="/upload-offer-image" element={<PrivateRoute><OfferImageUpload /></PrivateRoute>} />
 
       </Routes>
 

@@ -11,16 +11,6 @@ export default function Sidebar() {
   const [openGroups, setOpenGroups] = useState({});
 
 
-  const toggleGroup = (groupKey) => {
-    console.log('Toggling group:', groupKey); // Debug log
-    setOpenGroups((prev) => {
-      const newOpenGroups = { ...prev }; // Keep existing state
-      newOpenGroups[groupKey] = !prev[groupKey];
-      console.log('New open groups:', newOpenGroups); // Debug log
-      return newOpenGroups;
-    });
-  };
-
   // Get roles as an array
   const storedRoles = (localStorage.getItem("userRole") || "")
     .split(",")
@@ -288,6 +278,73 @@ export default function Sidebar() {
     return item.roles.includes(currentRole);
   });
 
+  const toggleGroup = (groupKey, isTopLevelItem = false) => {
+    console.log('Toggling group:', groupKey, 'isTopLevelItem:', isTopLevelItem); // Debug log
+    setOpenGroups((prev) => {
+      const newOpenGroups = {};
+      
+      // If it's a top-level menu item (like "Registration", "Manage Masters", etc.)
+      if (isTopLevelItem) {
+        // Get list of all top-level menu item labels that have children or groups
+        const topLevelItems = filteredItems
+          .filter(item => (Array.isArray(item.children) && item.children.length > 0) || (Array.isArray(item.groups) && item.groups.length > 0))
+          .map(item => item.label);
+        
+        // Close all other top-level items and their nested groups
+        Object.keys(prev).forEach((key) => {
+          // Skip the clicked item (we'll handle it separately)
+          if (key === groupKey) {
+            return;
+          }
+          
+          // If it's a top-level item, don't keep it (close it)
+          if (topLevelItems.includes(key)) {
+            return; // Close this top-level item
+          }
+          
+          // If it's a nested group, check if it belongs to a closed top-level item
+          // Nested groups have format: "ParentItem-GroupName"
+          if (key.includes('-')) {
+            const parentName = key.split('-')[0];
+            // Close nested groups that belong to other top-level items
+            if (topLevelItems.includes(parentName) && parentName !== groupKey) {
+              return; // Close nested groups of other top-level items
+            }
+            // Keep nested groups that don't belong to top-level items (edge case)
+            if (!topLevelItems.includes(parentName)) {
+              newOpenGroups[key] = prev[key];
+            }
+          } else {
+            // Keep other non-top-level groups (if any exist)
+            newOpenGroups[key] = prev[key];
+          }
+        });
+        
+        // Toggle the clicked top-level item
+        newOpenGroups[groupKey] = !prev[groupKey];
+        
+        // If we're closing the clicked item, also remove its nested groups
+        if (!newOpenGroups[groupKey]) {
+          Object.keys(newOpenGroups).forEach((key) => {
+            if (key.includes('-') && key.startsWith(groupKey + '-')) {
+              delete newOpenGroups[key];
+            }
+          });
+        }
+      } else {
+        // For nested groups (like "Manage Masters-Basic settings")
+        // Copy all existing state and toggle the clicked group
+        Object.keys(prev).forEach((key) => {
+          newOpenGroups[key] = prev[key];
+        });
+        newOpenGroups[groupKey] = !prev[groupKey];
+      }
+      
+      console.log('New open groups:', newOpenGroups); // Debug log
+      return newOpenGroups;
+    });
+  };
+
   return (
     <>
       {/* Hamburger for small screens */}
@@ -316,7 +373,7 @@ export default function Sidebar() {
                     e.stopPropagation();
                     console.log('Clicked on:', item.label); // Debug log
                     const groupKey = item.label;
-                    toggleGroup(groupKey);
+                    toggleGroup(groupKey, true); // Pass true to indicate it's a top-level item
                   } : undefined}
                   style={{ cursor: hasChildren || hasGroups ? "pointer" : "default" }}
                 >
@@ -420,7 +477,7 @@ export default function Sidebar() {
                     onClick={hasChildren || hasGroups ? (e) => {
                       e.preventDefault();
                       const groupKey = item.label;
-                      toggleGroup(groupKey);
+                      toggleGroup(groupKey, true); // Pass true to indicate it's a top-level item
                     } : handleClose}
                     style={{ cursor: hasChildren || hasGroups ? "pointer" : "default" }}
                   >

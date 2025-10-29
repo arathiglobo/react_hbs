@@ -1,5 +1,6 @@
 import React from 'react';
 import { Navbar, Container, Nav, Dropdown, Image } from 'react-bootstrap';
+import { FaKey, FaUser, FaSignOutAlt } from 'react-icons/fa';
 
 export default function TopBar(){
   return (
@@ -13,9 +14,20 @@ export default function TopBar(){
           <Dropdown align="end">
             <Dropdown.Toggle as={ProfileToggle} id="profile-dropdown" />
             <Dropdown.Menu className="shadow-sm">
-              <Dropdown.Item href="#/change-password">Change Password</Dropdown.Item>
+              <Dropdown.Item href="#/change-password">
+                <FaKey className="me-2" />
+                Change Password
+              </Dropdown.Item>
               <Dropdown.Divider />
-              <Dropdown.Item href="/">Logout</Dropdown.Item>
+              <Dropdown.Item href="#/change-password">
+                <FaUser className="me-2" />
+                View Profile
+              </Dropdown.Item>
+              <Dropdown.Divider />
+              <Dropdown.Item href="/">
+                <FaSignOutAlt className="me-2" />
+                Logout
+              </Dropdown.Item>
             </Dropdown.Menu>
           </Dropdown>
         </Nav>

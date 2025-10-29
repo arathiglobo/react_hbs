@@ -14,6 +14,7 @@ export default function Bank() {
   const [name, setName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [validationErrors, setValidationErrors] = useState({});
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
@@ -29,20 +30,40 @@ export default function Bank() {
     setEditing(null);
     setName("");
     setError("");
+    setValidationErrors({});
     setShowModal(true);
   };
 
   const openEdit = (item) => {
     setEditing(item);
     setName(item.name);
+    setValidationErrors({});
     setShowModal(true);
+  };
+
+  const validateForm = () => {
+    const errors = {};
+
+    if (!name.trim()) {
+      errors.name = "Bank name is required";
+    }
+
+    return errors;
   };
 
   const handleEdit = async () => {
     if (!editing) return;
 
+    // Validation
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
     try {
       setIsLoading(true);
+      setValidationErrors({});
       const editRes = await axiosInstance.put(
         `/api/bank/${editing.bankId}`,
         {
@@ -71,6 +92,7 @@ export default function Bank() {
     setEditing(null);
     setName("");
     setError("");
+    setValidationErrors({});
   };
 
   const fetchBankList = async (pageNum = 0, searchTerm = search) => {
@@ -119,8 +141,16 @@ export default function Bank() {
   };
 
   const saveBank = async () => {
+    // Validation
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
     try {
       setIsLoading(true);
+      setValidationErrors({});
       const bankpayload = { 
                                 name: `${name}` 
                           };
@@ -330,14 +360,23 @@ export default function Bank() {
                   <Form.Label>Bank Name</Form.Label>
                   <Form.Control
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      // Clear validation error when user starts typing
+                      if (validationErrors.name) {
+                        setValidationErrors(prev => ({
+                          ...prev,
+                          name: ""
+                        }));
+                      }
+                    }}
                     placeholder="Enter bank name"
                     autoFocus
-                    isInvalid={!!error}
+                    isInvalid={!!validationErrors.name}
                   />
-                  {error && (
+                  {validationErrors.name && (
                     <Form.Control.Feedback type="invalid">
-                      {error}
+                      {validationErrors.name}
                     </Form.Control.Feedback>
                   )}
                 </Form.Group>

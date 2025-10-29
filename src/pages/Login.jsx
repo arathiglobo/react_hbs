@@ -127,7 +127,7 @@ const Login = () => {
     <div className="login-container">
       {/* Header Section */}
       <div className="login-header">
-        <div className="header-content">
+        <div className="header-content" style={{ margin: "-13px auto" }}>
           <div className="company-info">
             <img
               src={`${process.env.PUBLIC_URL}/images/logo-1.jpg`}
@@ -418,7 +418,15 @@ const Login = () => {
         </div>
 
         {/* Login Form Section */}
-        <div className="login-form">
+        <div 
+          className="login-form"
+          style={{
+            position: 'sticky',
+            top: '100px',
+            alignSelf: 'flex-start',
+            zIndex: 100
+          }}
+        >
           <div className="form-header">
             <div className="log">
               <img
