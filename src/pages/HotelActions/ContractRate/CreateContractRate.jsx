@@ -39,6 +39,7 @@ export default function CreateContractRate() {
   const [loading, setLoading] = useState(false);
   const [roomLoading, setRoomLoading] = useState(false);
   const [seasonTypes, setSeasonTypes] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
 
   // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
   const getMinValidityToDate = (fromDate) => {
@@ -156,42 +157,47 @@ export default function CreateContractRate() {
 
   // ✅ Validation
   const validateForm = () => {
-    if (!formData.seasonId) return "Please select a season.";
-    if (!formData.rateCode.trim()) return "Please enter a rate code.";
-    if (!formData.marketType.length)
-      return "Please select at least one market type.";
-    if (!formData.validityList.length) return "Please add a validity period.";
-    for (const v of formData.validityList) {
-      if (!v.validityFrom || !v.validityTo)
-        return "Please fill both validity dates.";
-      if (new Date(v.validityFrom) >= new Date(v.validityTo))
-        return "Validity To must be after Validity From.";
+    const errors = {};
+
+    if (!formData.seasonId) {
+      errors.seasonId = "Please select a season.";
+    }
+
+    if (!formData.rateCode.trim()) {
+      errors.rateCode = "Please enter a rate code.";
+    }
+
+    if (!formData.marketType.length) {
+      errors.marketType = "Please select at least one market type.";
+    }
+
+    if (!formData.validityList.length) {
+      errors.validityList = "Please add a validity period.";
+    } else {
+      formData.validityList.forEach((v, index) => {
+        if (!v.validityFrom || !v.validityTo) {
+          errors[`validityFrom_${index}`] = "Please fill both validity dates.";
+        } else if (new Date(v.validityFrom) >= new Date(v.validityTo)) {
+          errors[`validityTo_${index}`] = "Validity To must be after Validity From.";
+        }
+      });
     }
 
     // Validate room rates
     if (formData.roomRates.length === 0) {
-      return "Please add at least one room rate.";
+      errors.roomRates = "Please add at least one room rate.";
+    } else {
+      // Check if any room rate has valid data
+      const hasValidRates = formData.roomRates.some(
+        (rate) => rate.rate > 0 || rate.adultRate > 0 || rate.childRate > 0
+      );
+
+      if (!hasValidRates) {
+        errors.roomRates = "Please enter at least one valid rate (rate, adult rate, or child rate).";
+      }
     }
 
-    // Check if any room rate has valid data
-    const hasValidRates = formData.roomRates.some(
-      (rate) => rate.rate > 0 || rate.adultRate > 0 || rate.childRate > 0
-    );
-
-    if (!hasValidRates) {
-      return "Please enter at least one valid rate (rate, adult rate, or child rate).";
-    }
-
-    // Validate base rates - at least one base rate should be provided
-    const hasValidBaseRates = formData.baseRates.some(
-      (rate) => rate.baseRate > 0
-    );
-
-    if (!hasValidBaseRates) {
-      return "Please enter at least one base rate for a room category.";
-    }
-
-    return null;
+    return errors;
   };
 
   // ✅ Handle base rate change
@@ -258,8 +264,13 @@ export default function CreateContractRate() {
   // ✅ Save Contract Rate
   const handleSave = async () => {
     try {
-      const errorMsg = validateForm();
-      if (errorMsg) return toast.error(errorMsg);
+      const errors = validateForm();
+      if (Object.keys(errors).length > 0) {
+        setValidationErrors(errors);
+        return;
+      }
+      
+      setValidationErrors({}); // Clear errors if validation passes
 
       // Set day values based on radio button selection
       let allDays = 0, weekDay = 0, weekEndDay = 0;
@@ -304,10 +315,10 @@ export default function CreateContractRate() {
           adultRate: String(r.adultRate || "0"),
           childRate: String(r.childRate || "0"),
         })),
-        contractRateBaseDTO: formData.baseRates.map((r) => ({
-          hotelRoomcategoryId: String(r.hotelRoomcategoryId),
-          baseRate: String(r.baseRate || "0"),
-        })),
+        // contractRateBaseDTO: formData.baseRates.map((r) => ({
+        //   hotelRoomcategoryId: String(r.hotelRoomcategoryId),
+        //   baseRate: String(r.baseRate || "0"),
+        // })),
       };
 
       const res = await axiosInstance.post(
@@ -344,9 +355,7 @@ export default function CreateContractRate() {
               <h4 className="fw-semibold text-dark mb-0">
                 Create Contract Rate
               </h4>
-              <Button variant="success" onClick={handleSave}>
-                <FaPlus className="me-1" /> Save
-              </Button>
+           
             </div>
 
             <Card className="shadow-sm border-0 rounded-4 p-4">
@@ -363,12 +372,20 @@ export default function CreateContractRate() {
                         <Form.Label>Season</Form.Label>
                         <Form.Select
                           value={formData.seasonId}
-                          onChange={(e) =>
+                          isInvalid={!!validationErrors.seasonId}
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               seasonId: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user makes selection
+                            if (validationErrors.seasonId) {
+                              setValidationErrors(prev => ({
+                                ...prev,
+                                seasonId: ""
+                              }));
+                            }
+                          }}
                         >
                           <option value="">Select Season Type</option>
                           {seasonTypes && seasonTypes.length > 0 && seasonTypes.map((season) => (
@@ -380,6 +397,11 @@ export default function CreateContractRate() {
                             </option>
                           ))}
                         </Form.Select>
+                        {validationErrors.seasonId && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.seasonId}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
 
@@ -388,13 +410,26 @@ export default function CreateContractRate() {
                         <Form.Label>Rate Code</Form.Label>
                         <Form.Control
                           value={formData.rateCode}
-                          onChange={(e) =>
+                          isInvalid={!!validationErrors.rateCode}
+                          onChange={(e) => {
                             setFormData({
                               ...formData,
                               rateCode: e.target.value,
-                            })
-                          }
+                            });
+                            // Clear validation error when user starts typing
+                            if (validationErrors.rateCode) {
+                              setValidationErrors(prev => ({
+                                ...prev,
+                                rateCode: ""
+                              }));
+                            }
+                          }}
                         />
+                        {validationErrors.rateCode && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.rateCode}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
 
@@ -408,10 +443,23 @@ export default function CreateContractRate() {
                             label: m.name,
                           }))}
                           value={formData.marketType}
-                          onChange={(selected) =>
-                            setFormData({ ...formData, marketType: selected })
-                          }
+                          onChange={(selected) => {
+                            setFormData({ ...formData, marketType: selected });
+                            // Clear validation error when user makes selection
+                            if (validationErrors.marketType) {
+                              setValidationErrors(prev => ({
+                                ...prev,
+                                marketType: ""
+                              }));
+                            }
+                          }}
+                          className={validationErrors.marketType ? "is-invalid" : ""}
                         />
+                        {validationErrors.marketType && (
+                          <div className="invalid-feedback d-block">
+                            {validationErrors.marketType}
+                          </div>
+                        )}
                       </Form.Group>
                     </Col>
 
@@ -511,6 +559,7 @@ export default function CreateContractRate() {
                           <Form.Control
                             type="date"
                             value={v.validityFrom}
+                            isInvalid={!!validationErrors[`validityFrom_${index}`]}
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityFrom = e.target.value;
@@ -525,14 +574,28 @@ export default function CreateContractRate() {
                                 ...formData,
                                 validityList: updated,
                               });
+                              
+                              // Clear validation error when user makes selection
+                              if (validationErrors[`validityFrom_${index}`]) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  [`validityFrom_${index}`]: ""
+                                }));
+                              }
                             }}
                           />
+                          {validationErrors[`validityFrom_${index}`] && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors[`validityFrom_${index}`]}
+                            </Form.Control.Feedback>
+                          )}
                         </Col>
                         <Col md={4}>
                           <Form.Control
                             type="date"
                             value={v.validityTo}
                             min={getMinValidityToDate(v.validityFrom)}
+                            isInvalid={!!validationErrors[`validityTo_${index}`]}
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityTo = e.target.value;
@@ -540,8 +603,21 @@ export default function CreateContractRate() {
                                 ...formData,
                                 validityList: updated,
                               });
+                              
+                              // Clear validation error when user makes selection
+                              if (validationErrors[`validityTo_${index}`]) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  [`validityTo_${index}`]: ""
+                                }));
+                              }
                             }}
                           />
+                          {validationErrors[`validityTo_${index}`] && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors[`validityTo_${index}`]}
+                            </Form.Control.Feedback>
+                          )}
                         </Col>
                         <Col md="auto">
                           <Button
@@ -561,6 +637,11 @@ export default function CreateContractRate() {
                     <h6 className="fw-bold mb-3 text-primary">
                       Contract Rate Details
                     </h6>
+                    {validationErrors.roomRates && (
+                      <div className="alert alert-danger mb-3">
+                        {validationErrors.roomRates}
+                      </div>
+                    )}
                     {roomLoading ? (
                       <div className="text-center py-5">
                         <Spinner animation="border" />
@@ -576,7 +657,7 @@ export default function CreateContractRate() {
                               {room.roomCategory}
                             </span>
                             <div className="d-flex align-items-center gap-3">
-                              <div className="d-flex align-items-center gap-2">
+                              {/* <div className="d-flex align-items-center gap-2">
                                 <Form.Label className="mb-0 fw-semibold text-primary">
                                   Base Rate:
                                 </Form.Label>
@@ -598,7 +679,7 @@ export default function CreateContractRate() {
                                     )
                                   }
                                 />
-                              </div>
+                              </div> */}
                               <Form.Check
                                 label="Is Refundable"
                                 onChange={(e) =>
