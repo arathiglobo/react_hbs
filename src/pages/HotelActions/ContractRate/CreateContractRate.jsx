@@ -29,6 +29,7 @@ export default function CreateContractRate() {
     daySelection: "allDays", // "allDays", "weekDays", "weekendDays"
     validityList: [{ validityFrom: "", validityTo: "" }],
     roomRates: [],
+    baseRates: [], // New field for base rates per room category
   });
 
   const [markets, setMarkets] = useState([]);
@@ -181,7 +182,37 @@ export default function CreateContractRate() {
       return "Please enter at least one valid rate (rate, adult rate, or child rate).";
     }
 
+    // Validate base rates - at least one base rate should be provided
+    const hasValidBaseRates = formData.baseRates.some(
+      (rate) => rate.baseRate > 0
+    );
+
+    if (!hasValidBaseRates) {
+      return "Please enter at least one base rate for a room category.";
+    }
+
     return null;
+  };
+
+  // ✅ Handle base rate change
+  const handleBaseRateChange = (roomId, value) => {
+    setFormData((prev) => {
+      const updated = [...prev.baseRates];
+      const idx = updated.findIndex(
+        (r) => r.hotelRoomcategoryId === String(roomId)
+      );
+
+      if (idx !== -1) {
+        updated[idx].baseRate = Number(value);
+      } else {
+        updated.push({
+          hotelRoomcategoryId: String(roomId),
+          baseRate: Number(value),
+        });
+      }
+
+      return { ...prev, baseRates: updated };
+    });
   };
 
   // ✅ Handle rate input change
@@ -272,6 +303,10 @@ export default function CreateContractRate() {
           meal: Boolean(r.meal),
           adultRate: String(r.adultRate || "0"),
           childRate: String(r.childRate || "0"),
+        })),
+        contractRateBaseDTO: formData.baseRates.map((r) => ({
+          hotelRoomcategoryId: String(r.hotelRoomcategoryId),
+          baseRate: String(r.baseRate || "0"),
         })),
       };
 
@@ -540,15 +575,40 @@ export default function CreateContractRate() {
                             <span className="fw-semibold text-uppercase">
                               {room.roomCategory}
                             </span>
-                            <Form.Check
-                              label="Is Refundable"
-                              onChange={(e) =>
-                                handleRefundableChange(
-                                  room.hotelRoomcategoryId,
-                                  e.target.checked
-                                )
-                              }
-                            />
+                            <div className="d-flex align-items-center gap-3">
+                              <div className="d-flex align-items-center gap-2">
+                                <Form.Label className="mb-0 fw-semibold text-primary">
+                                  Base Rate:
+                                </Form.Label>
+                                <Form.Control
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="0.00"
+                                  style={{ width: "120px" }}
+                                  value={
+                                    formData.baseRates.find(
+                                      (r) => r.hotelRoomcategoryId === String(room.hotelRoomcategoryId)
+                                    )?.baseRate || ""
+                                  }
+                                  onChange={(e) =>
+                                    handleBaseRateChange(
+                                      room.hotelRoomcategoryId,
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </div>
+                              <Form.Check
+                                label="Is Refundable"
+                                onChange={(e) =>
+                                  handleRefundableChange(
+                                    room.hotelRoomcategoryId,
+                                    e.target.checked
+                                  )
+                                }
+                              />
+                            </div>
                           </div>
 
                           <Table bordered hover responsive size="sm">
