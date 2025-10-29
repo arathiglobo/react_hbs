@@ -346,12 +346,23 @@ export default function HotelSearch() {
 
   const filteredResults = useMemo(() => {
     let results = allResults;
+    
+    // Debug: Log all hotel names
+    if (results.length > 0) {
+      console.log('All hotel names:', results.map(hotel => hotel.name || hotel.hotelName || 'NO NAME'));
+    }
 
     // Filter by hotel name search
     if (hotelSearchTerm) {
-      results = results.filter((hotel) =>
-        hotel.name.toLowerCase().includes(hotelSearchTerm.toLowerCase())
-      );
+      console.log('Filtering by hotel search term:', hotelSearchTerm);
+      console.log('Available hotels before filtering:', results.length);
+      results = results.filter((hotel) => {
+        const hotelName = hotel.name || hotel.hotelName || '';
+        const matches = hotelName.toLowerCase().includes(hotelSearchTerm.toLowerCase());
+        console.log(`Hotel: ${hotelName}, Search: ${hotelSearchTerm}, Matches: ${matches}`);
+        return matches;
+      });
+      console.log('Filtered results after hotel name search:', results.length);
     }
 
     // Filter by star rating
@@ -1853,43 +1864,105 @@ export default function HotelSearch() {
 
               <div>
                 {view === "card" && (
-                  <Row xs={1} md={2} xl={3} className="g-3">
-                    {filteredResults.length > 0 ? (
-                      filteredResults.map((hotel) => (
+        <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
+          {console.log('Filtered results length:', filteredResults.length)}
+          {console.log('Filtered results:', filteredResults)}
+          
+          {filteredResults.length > 0 ? (
+            filteredResults.map((hotel, index) => {
+              console.log('Hotel data:', hotel);
+              console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
+              return (
                         <Col key={hotel.id}>
-                          <Card className="shadow-sm rounded-xl h-100 hotel-card-modern animate-fadeIn">
-                            <div className="hotel-image-container">
+                          
+                          <div style={{
+                            backgroundColor: 'white',
+                            border: '1px solid #dee2e6',
+                            borderRadius: '12px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            marginBottom: '20px',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              position: 'relative',
+                              height: '200px',
+                              overflow: 'hidden'
+                            }}>
                               <LazyImage src={hotel.image} alt={hotel.name} />
-                              <div className="hotel-rating-badge">
+                              <div style={{
+                                position: 'absolute',
+                                top: '10px',
+                                right: '10px',
+                                backgroundColor: 'rgba(0,0,0,0.7)',
+                                color: 'white',
+                                padding: '5px 10px',
+                                borderRadius: '15px',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                              }}>
                                 <FaStar className="text-warning me-1" />
                                 {hotel.rating}
-                                <Badge bg="secondary" className="ms-1">
+                                <span style={{marginLeft: '5px', backgroundColor: '#6c757d', padding: '2px 6px', borderRadius: '10px'}}>
                                   {hotel.channelType.toUpperCase()}
-                                </Badge>
+                                </span>
                               </div>
                             </div>
-                            <Card.Body className="p-3">
-                              <h6
-                                className="hotel-name mb-2 fw-bold"
-                                aria-label="hotel-name"
-                              >
-                                {hotel.name ||
-                                  hotel.hotelName ||
-                                  "Unknown Hotel"}
+                            
+                            <div style={{
+                              padding: '16px',
+                              backgroundColor: 'white'
+                            }}>
+                              <h6 style={{
+                                fontSize: '1rem',
+                                fontWeight: '600',
+                                marginBottom: '8px',
+                                color: '#333',
+                                lineHeight: '1.3'
+                              }}>
+                                {hotel.name || 'Hotel Name Not Available'}
                               </h6>
-                              <p className="hotel-location mb-2 text-muted small">
-                                📍 {hotel.address || hotel.city}
+                              
+                              <p style={{
+                                fontSize: '0.875rem',
+                                color: '#666',
+                                marginBottom: '8px',
+                                lineHeight: '1.4'
+                              }}>
+                                📍 {hotel.address || 'Address Not Available'}
                               </p>
-                              <Badge bg="success" className="mb-3 hotel-badge">
-                                {hotel.badge}
-                              </Badge>
-                              <div className="hotel-price-section">
-                                <div className="hotel-price">
-                                  {hotel.price
-                                    ? `Starts from AED ${hotel.price.toLocaleString()}`
-                                    : "Price Unavailable"}
+                              
+                              <div style={{
+                                backgroundColor: '#28a745',
+                                color: 'white',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: '500',
+                                display: 'inline-block',
+                                marginBottom: '12px'
+                              }}>
+                                {hotel.badge || 'Rate Available'}
+                              </div>
+                              
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginTop: '12px',
+                                paddingTop: '12px',
+                                borderTop: '1px solid #eee'
+                              }}>
+                                <div style={{
+                                  fontSize: '0.9rem',
+                                  fontWeight: '600',
+                                  color: '#333'
+                                }}>
+                                  {hotel.price ? `AED ${hotel.price.toLocaleString()}` : 'Price on request'}
                                 </div>
-                                <Button
+
+                                 <Button
                                   className="btn-view-rooms"
                                   size="sm"
                                   //  disabled={clickedHotelIds.includes(hotel.id)}
@@ -1983,11 +2056,13 @@ export default function HotelSearch() {
                                 >
                                   View Rooms
                                 </Button>
+                             
                               </div>
-                            </Card.Body>
-                          </Card>
+                            </div>
+                          </div>
                         </Col>
-                      ))
+                        );
+                      })
                     ) : (
                       <Col xs={12}>
                         <Card className="shadow-sm rounded-xl">
