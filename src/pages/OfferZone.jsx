@@ -39,6 +39,7 @@ export default function OfferZone() {
   // Form fields
   const [title, setTitle] = useState("");
   const [bannerImage, setBannerImage] = useState(null);
+  const [existingImageUrl, setExistingImageUrl] = useState(null); // Track existing image URL for preview
   const [description, setDescription] = useState("");
   const [validityFrom, setValidityFrom] = useState("");
   const [validityTo, setValidityTo] = useState("");
@@ -52,6 +53,7 @@ export default function OfferZone() {
     setEditing(null);
     setTitle("");
     setBannerImage(null);
+    setExistingImageUrl(null);
     setDescription("");
     setValidityFrom("");
     setValidityTo("");
@@ -60,9 +62,11 @@ export default function OfferZone() {
   };
 
   const openEdit = (item) => {
+    console.log("open edit item::", item);
     setEditing(item);
     setTitle(item.title || "");
     setBannerImage(null); // Reset file input for edit
+    setExistingImageUrl(item.bannerImagePah || null); // Set existing image URL for preview
     setDescription(item.description || "");
     
     // Convert LocalDateTime to date string for date inputs
@@ -153,6 +157,7 @@ export default function OfferZone() {
     setEditing(null);
     setTitle("");
     setBannerImage(null);
+    setExistingImageUrl(null);
     setDescription("");
     setValidityFrom("");
     setValidityTo("");
@@ -258,6 +263,7 @@ export default function OfferZone() {
   const resetForm = () => {
     setTitle("");
     setBannerImage(null);
+    setExistingImageUrl(null);
     setDescription("");
     setValidityFrom("");
     setValidityTo("");
@@ -322,6 +328,7 @@ export default function OfferZone() {
     const file = e.target.files[0];
     if (file) {
       setBannerImage(file);
+      setExistingImageUrl(null); // Clear existing image URL when new file is selected
     }
   };
 
@@ -501,6 +508,29 @@ export default function OfferZone() {
                         <Form.Control.Feedback type="invalid">
                           {error}
                         </Form.Control.Feedback>
+                      )}
+                      
+                      {/* Image Preview */}
+                      {(bannerImage || existingImageUrl) && (
+                        <div className="mt-3">
+                          <div className="d-flex align-items-center mb-2">
+                            <FaImage className="me-2 text-primary" />
+                            <span className="fw-semibold">Image Preview:</span>
+                          </div>
+                          <div className="border rounded p-2" style={{ maxWidth: '300px' }}>
+                            <img
+                              src={bannerImage ? URL.createObjectURL(bannerImage) : existingImageUrl}
+                              alt="Banner preview"
+                              className="img-fluid rounded"
+                              style={{ maxHeight: '200px', width: '100%', objectFit: 'cover' }}
+                            />
+                          </div>
+                          {existingImageUrl && !bannerImage && (
+                            <small className="text-muted mt-1 d-block">
+                              Current image (select a new file to replace)
+                            </small>
+                          )}
+                        </div>
                       )}
                     </Form.Group>
                      </Col>

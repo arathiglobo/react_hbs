@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -16,6 +16,8 @@ const Login = () => {
   const [error, setError] = useState(null);
   const [forgetEmail, setForgetEmail] = useState("");
   const [forgetUsername, setForgetUsername] = useState("");
+  const [offers, setOffers] = useState([]);
+  const [offersLoading, setOffersLoading] = useState(true);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -39,12 +41,11 @@ const Login = () => {
       if (!token || !roles) {
         throw new Error("Invalid response from server: Missing token or roles");
       }
-     
+
       localStorage.setItem("authToken", token);
       localStorage.setItem("userRole", roles);
 
-      console.log("roles::" , roles)
-     
+      console.log("roles::", roles);
 
       if (roles.length > 1) {
         console.log("navigate to select roles");
@@ -52,7 +53,6 @@ const Login = () => {
       } else {
         DashboardRedirections(roles[0] || "User", navigate);
       }
-
     } catch (err) {
       setError("Invalid username or password");
     }
@@ -77,6 +77,35 @@ const Login = () => {
     // Redirect to insurance site - can be made dynamic later
     window.open("https://www.travelinsurance.com", "_blank");
   };
+
+  // Fetch offers data from API
+  const fetchOffers = async () => {
+    try {
+      setOffersLoading(true);
+      const response = await axios.get("/api/offerDetails");
+      console.log("Offers API response:", response.data);
+
+      if (response.data && Array.isArray(response.data)) {
+        // Filter offers that have valid bannerImagePah
+        const validOffers = response.data.filter(
+          (offer) => offer.bannerImagePah && offer.bannerImagePah.trim() !== ""
+        );
+        setOffers(validOffers);
+      } else {
+        setOffers([]);
+      }
+    } catch (error) {
+      console.error("Error fetching offers:", error);
+      setOffers([]);
+    } finally {
+      setOffersLoading(false);
+    }
+  };
+
+  // Load offers on component mount
+  useEffect(() => {
+    fetchOffers();
+  }, []);
 
   const sliderSettings = {
     slidesToShow: 5,
@@ -136,53 +165,169 @@ const Login = () => {
               id="offerSlider"
               className="carousel slide mb-4"
               data-bs-ride="carousel"
+              style={{ position: "relative" }}
             >
               <div className="carousel-inner">
-                <div className="carousel-item active">
-                  <img
-                    src={`${process.env.PUBLIC_URL}/images/01.png`}
-                    className="d-block w-100"
-                    alt="Special Offer 1"
-                  />
-                </div>
-                <div className="carousel-item">
-                  <img
-                    src={`${process.env.PUBLIC_URL}/images/04.png`}
-                    className="d-block w-100"
-                    alt="Special Offer 2"
-                  />
-                </div>
-                <div className="carousel-item">
-                  <img
-                    src={`${process.env.PUBLIC_URL}/images/06.png`}
-                    className="d-block w-100"
-                    alt="Special Offer 3"
-                  />
-                </div>
-                <div className="carousel-item">
-                  <img
-                    src={`${process.env.PUBLIC_URL}/images/07.png`}
-                    className="d-block w-100"
-                    alt="Special Offer 4"
-                  />
-                </div>
+                {offersLoading ? (
+                  <div className="carousel-item active">
+                    <div
+                      className="d-flex justify-content-center align-items-center"
+                      style={{ height: "400px" }}
+                    >
+                      <div className="text-center">
+                        <div
+                          className="spinner-border text-primary mb-3"
+                          role="status"
+                        >
+                          <span className="visually-hidden">Loading...</span>
+                        </div>
+                        <p className="text-muted">Loading offers...</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : offers.length > 0 ? (
+                  offers.map((offer, index) => (
+                    <div
+                      key={offer.offerId}
+                      className={`carousel-item ${index === 0 ? "active" : ""}`}
+                    >
+                      <img
+                        src={offer.bannerImagePah}
+                        className="d-block w-100"
+                        alt={offer.title || `Special Offer ${index + 1}`}
+                        style={{ height: "400px", objectFit: "cover" }}
+                        onError={(e) => {
+                          // Fallback to default image if API image fails to load
+                          e.target.src = `${process.env.PUBLIC_URL}/images/01.png`;
+                        }}
+                      />
+                      {/* Optional: Add overlay with offer title and description */}
+                      <div className="carousel-caption d-none d-md-block">
+                        <h5 className="text-white fw-bold">{offer.title}</h5>
+                        <p className="text-white">
+                          {offer.description}
+                          {(offer.validityFrom || offer.validityTo) && (
+                            <>
+                              {" "},{" "}
+                              <small className="text-white">
+                                {offer.validityFrom && offer.validityTo
+                                  ? `${offer.validityFrom.split("T")[0]} - ${
+                                      offer.validityTo.split("T")[0]
+                                    }`
+                                  : offer.validityFrom
+                                  ? offer.validityFrom.split("T")[0]
+                                  : offer.validityTo.split("T")[0]}
+                              </small>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  // Fallback to static images if no offers are available
+                  <>
+                    <div className="carousel-item active">
+                      <img
+                        src={`${process.env.PUBLIC_URL}/images/01.png`}
+                        className="d-block w-100"
+                        alt="Special Offer 1"
+                        style={{ height: "400px", objectFit: "cover" }}
+                      />
+                    </div>
+                    <div className="carousel-item">
+                      <img
+                        src={`${process.env.PUBLIC_URL}/images/04.png`}
+                        className="d-block w-100"
+                        alt="Special Offer 2"
+                        style={{ height: "400px", objectFit: "cover" }}
+                      />
+                    </div>
+                    <div className="carousel-item">
+                      <img
+                        src={`${process.env.PUBLIC_URL}/images/06.png`}
+                        className="d-block w-100"
+                        alt="Special Offer 3"
+                        style={{ height: "400px", objectFit: "cover" }}
+                      />
+                    </div>
+                    <div className="carousel-item">
+                      <img
+                        src={`${process.env.PUBLIC_URL}/images/07.png`}
+                        className="d-block w-100"
+                        alt="Special Offer 4"
+                        style={{ height: "400px", objectFit: "cover" }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
+              {/* Previous Button */}
               <button
                 className="carousel-control-prev"
                 type="button"
                 data-bs-target="#offerSlider"
                 data-bs-slide="prev"
+                style={{
+                  width: "auto",
+                  height: "auto",
+                  background: "none",
+                  border: "none",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  left: "15px",
+                  zIndex: 10,
+                  cursor: "pointer",
+                }}
               >
-                <i className="fa-solid fa-angle-left"></i>
+                <span
+                  className="carousel-control-prev-icon"
+                  aria-hidden="true"
+                  style={{
+                    fontSize: "32px",
+                    fontWeight: "bold",
+                    color: "white",
+                    display: "block",
+                    backgroundImage: "none",
+                    lineHeight: "1",
+                  }}
+                >
+                  &lt;
+                </span>
                 <span className="visually-hidden">Previous</span>
               </button>
+              {/* Next Button */}
               <button
                 className="carousel-control-next"
                 type="button"
                 data-bs-target="#offerSlider"
                 data-bs-slide="next"
+                style={{
+                  width: "auto",
+                  height: "auto",
+                  background: "none",
+                  border: "none",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  right: "15px",
+                  zIndex: 10,
+                  cursor: "pointer",
+                }}
               >
-                <i className="fa-solid fa-angle-right"></i>
+                <span
+                  className="carousel-control-next-icon"
+                  aria-hidden="true"
+                  style={{
+                    fontSize: "32px",
+                    fontWeight: "bold",
+                    color: "white",
+                    display: "block",
+                    backgroundImage: "none",
+                    lineHeight: "1",
+                  }}
+                >
+                  &gt;
+                </span>
                 <span className="visually-hidden">Next</span>
               </button>
             </div>
@@ -192,7 +337,11 @@ const Login = () => {
           <div className="value-proposition">
             <div className="value-content">
               <h2>Streamline Your Contracting Operations</h2>
-              <p>Access our comprehensive platform to manage hotel contracts, track performance, and optimize your business relationships with leading international hotel chains.</p>
+              <p>
+                Access our comprehensive platform to manage hotel contracts,
+                track performance, and optimize your business relationships with
+                leading international hotel chains.
+              </p>
               <div className="value-features">
                 <div className="value-feature">
                   <i className="fas fa-chart-line"></i>
@@ -241,7 +390,10 @@ const Login = () => {
                 </div>
               </div>
               <div className="col-md-6 visit">
-                <div className="position-relative places insurance-card" onClick={handleInsuranceClick}>
+                <div
+                  className="position-relative places insurance-card"
+                  onClick={handleInsuranceClick}
+                >
                   <img
                     src={`${process.env.PUBLIC_URL}/images/03.png`}
                     alt="Travel Insurance"
@@ -251,8 +403,8 @@ const Login = () => {
                     <h3>Travel Insurance &ndash; Travel Smart</h3>
                     <p>
                       Enhance your travel experience with peace of mind. Add
-                      insurance to your travel package and explore the world worry
-                      free.
+                      insurance to your travel package and explore the world
+                      worry free.
                     </p>
                     <div className="insurance-cta">
                       <i className="fas fa-external-link-alt"></i>
@@ -278,7 +430,7 @@ const Login = () => {
             <h3>Welcome Back</h3>
             <p className="form-subtitle">Access your contracting dashboard</p>
           </div>
-          
+
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label htmlFor="username">
@@ -329,7 +481,7 @@ const Login = () => {
               </button>
             </div>
           </form>
-          
+
           <div className="form-footer">
             <div className="security-notice">
               <i className="fas fa-shield-alt"></i>
@@ -364,7 +516,8 @@ const Login = () => {
             <div className="modal-body">
               <div className="inner">
                 <p className="modal-description">
-                  Enter your email and username to receive password reset instructions.
+                  Enter your email and username to receive password reset
+                  instructions.
                 </p>
                 <form
                   id="changePass"

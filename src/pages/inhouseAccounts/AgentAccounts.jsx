@@ -279,7 +279,7 @@ export default function AgentAccounts() {
 
   const handleCurrency = (item) => {
       const agentId = item.agentId;
-    navigate(`/inhouse-accounts/agent-auto-generated-invoice/${agentId}`);
+    navigate(`/inhouse-accounts/agent-payment-history/${agentId}`);
   };
 
   const calculateAvailable = (creditLimit, used) => {

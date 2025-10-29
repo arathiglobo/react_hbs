@@ -180,6 +180,7 @@ export default function AgentsPaymentHistory() {
             <p className="text-muted mb-1">
               Agent ID: <strong>{id || 'Not found'}</strong>
             </p>
+            {console.log("agentInfo:::" ,  agentInfo)}
             {agentInfo && (
               <p className="text-muted mb-0">
                 Agent: <strong>{agentInfo.agentName || agentInfo.name || 'Unknown Agent'}</strong>
