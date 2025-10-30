@@ -47,9 +47,10 @@ const RoomList = () => {
   const [searchPayload, setSearchPayload] = useState(null);
   const [loadingRate, setLoadingRate] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
+  const [policyList, setPolicyList] = useState(null);
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
-  console.log("currentActiveRole::", activeUserRole);
+  // console.log("currentActiveRole::", activeUserRole);
 
   // Trigger API call on page load with state passed from HotelSearch
   useEffect(() => {
@@ -71,15 +72,15 @@ const RoomList = () => {
               meta = parsed.meta;
               setHotelStaticData(meta);
               setSearchPayload(payload);
-              console.log("Retrieved payload from sessionStorage:", payload);
-              console.log("Retrieved meta from sessionStorage:", meta);
+              // console.log("Retrieved payload from sessionStorage:", payload);
+              // console.log("Retrieved meta from sessionStorage:", meta);
             }
           } catch (e) {
             console.error("Error parsing sessionStorage:", e);
           }
         }
 
-        console.log("payload::", payload);
+        // console.log("payload::", payload);
         if (!payload) {
           setError("Missing search context. Please go back and try again.");
           setLoading(false);
@@ -91,16 +92,16 @@ const RoomList = () => {
           payload
         );
 
-        console.log("room search res::", res);
+        // console.log("room search res::", res);
 
         // Check for no availability or failed search
         if (!res.data || res.data.success === false) {
           const message =
             res.data?.message || "Search failed. Please try again.";
-          console.log("API error message:", message);
+          // console.log("API error message:", message);
 
           if (message.toLowerCase().includes("no availability found")) {
-            console.log("Triggering no availability modal");
+            // console.log("Triggering no availability modal");
             setShowUnavailableModal(true);
           } else {
             setError(message);
@@ -141,8 +142,8 @@ const RoomList = () => {
     const { payload, hotels } = roomData;
     const hotelsdetail = hotels[0];
 
-    console.log("hotelsdetail::", hotelsdetail);
-    console.log("rate::", rate);
+     console.log("hotelsdetail::", hotelsdetail);
+    // console.log("rate::", rate);
 
     // For API IDs 12 and 15, fetch accurate rates
     if (payload.apiId === 12 || payload.apiId === 15) {
@@ -174,7 +175,7 @@ const RoomList = () => {
             },
           };
 
-          console.log("priceCheckReq ::", priceCheckReq);
+          // console.log("priceCheckReq ::", priceCheckReq);
 
           // Choose endpoint dynamically
           let endpoint = "";
@@ -190,7 +191,7 @@ const RoomList = () => {
           const response = await axiosInstance.post(endpoint, priceCheckReq);
           const hotel = response.data.hotels.hotel[0];
           const rooms = hotel.roomTypeDetails.rooms.room;
-          console.log("Accurate room details::", rooms);
+          // console.log("Accurate room details::", rooms);
 
           // Map all rooms to a structured object
           const accurateRates = rooms
@@ -206,7 +207,7 @@ const RoomList = () => {
               currency: room.currCode,
             }));
 
-          console.log("accurateRate:", accurateRates);
+          // console.log("accurateRate:", accurateRates);
           setSelectedRate(accurateRates[0]);
           setLoadingRate(false);
           setShowBookingModal(true);
@@ -235,7 +236,7 @@ const RoomList = () => {
           payload: payload,
         };
 
-        console.log("Booking data for direct redirect:", bookingData);
+        // console.log("Booking data for direct redirect:", bookingData);
 
         // Store booking data in sessionStorage
         sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
@@ -277,11 +278,6 @@ const RoomList = () => {
   };
 
   const getRefundStatusBadgeInRoomList = (nonRefundable) => {
-    console.log(
-      "SELECTED nonRefundable in getRefundStatusBadgeInRoomList:::",
-      nonRefundable
-    );
-
     const value = String(nonRefundable).toLowerCase();
     switch (value) {
       case "false":
@@ -321,7 +317,7 @@ const RoomList = () => {
   };
 
   const getRefundStatusBadge = (refundStatus) => {
-    console.log("SELECTED refundStatus:::", refundStatus);
+    // console.log("SELECTED refundStatus:::", refundStatus);
     switch (refundStatus) {
       case "FLEXIBLE":
         return <Badge bg="success">Flexible</Badge>;
@@ -344,6 +340,26 @@ const RoomList = () => {
       <FaStar key={i} className="text-warning" />
     ));
   };
+
+  // Second useEffect to fetch policy details when roomData is available
+  useEffect(() => {
+    const fetchInhousePolicyDetails = async () => {
+      if (!roomData || !roomData.hotels || roomData.hotels.length === 0) {
+        return;
+      }
+
+      try {
+        const hotelsdetail = roomData.hotels[0];
+        const response = await axiosInstance.get(`/api/hotels/${hotelsdetail.hotelId}/policies`);
+         console.log("response for policy list:", response.data);
+        setPolicyList(response.data);
+      } catch (error) {
+        // console.log("error for policy list :", error);
+      }
+    };
+
+    fetchInhousePolicyDetails();
+  }, [roomData]);
 
   if (loading) {
     return (
@@ -420,10 +436,10 @@ const RoomList = () => {
     );
   }
 
-  console.log("roomdata ::::::::::::::::::", roomData);
+  // console.log("roomdata ::::::::::::::::::", roomData);
   const hotel = roomData.hotels[0];
   const payload = roomData.payload || {};
-  console.log("selectedRate before bookingmodal:::", selectedRate);
+  // console.log("selectedRate before bookingmodal:::", selectedRate);
 
   return (
     <div className="room-list-container">
@@ -697,69 +713,183 @@ const RoomList = () => {
               </Accordion>
             </div>
 
-            {/* Static Sections for future dynamic data */}
+            {/* Additional Information Section */}
             <div className="mt-4">
               <Card className="mb-4">
                 <Card.Header as="h6">Additional Information</Card.Header>
                 <Card.Body>
-                  <ul className="mb-0 text-muted">
-                    <li>
-                      Mandatory gala dinner fees may apply on certain dates.
-                      Please contact the hotel directly for more information.
-                    </li>
-                    <li>
-                      Additional taxes or resort fees may be collected at the
-                      property during check-in.
-                    </li>
-                    <li>
-                      Special requests are subject to availability and may incur
-                      additional charges.
-                    </li>
-                    <li>
-                      Photo identification and a credit card or cash deposit may
-                      be required at check-in for incidental charges.
-                    </li>
-                  </ul>
+                  {payload.apiId === 1 && policyList && policyList.policies ? (
+                    <div className="policy-details">
+                      {/* Child Policy */}
+                      {policyList.policies?.childPolicy &&
+                        policyList.policies.childPolicy.length > 0 && (
+                          <div className="mb-3">
+                            <h6 className="text-primary mb-2">
+                              <FaUsers className="me-2" />
+                              Child Policy
+                            </h6>
+                            {policyList.policies.childPolicy.map(
+                              (policy, index) => (
+                                <p key={index} className="mb-2 text-muted">
+                                  {policy.policyText}
+                                </p>
+                              )
+                            )}
+                          </div>
+                        )}
+
+                    
+                    </div>
+                  ) : (
+                    <ul className="mb-0 text-muted">
+                      <li>
+                        Mandatory gala dinner fees may apply on certain dates.
+                        Please contact the hotel directly for more information.
+                      </li>
+                      <li>
+                        Additional taxes or resort fees may be collected at the
+                        property during check-in.
+                      </li>
+                      <li>
+                        Special requests are subject to availability and may incur
+                        additional charges.
+                      </li>
+                      <li>
+                        Photo identification and a credit card or cash deposit may
+                        be required at check-in for incidental charges.
+                      </li>
+                    </ul>
+                  )}
                 </Card.Body>
               </Card>
 
               <Card className="mb-4">
                 <Card.Header as="h6">Policies</Card.Header>
                 <Card.Body>
-                  <Row className="g-3">
-                    <Col md={6}>
-                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span className="text-muted">Check-in</span>
-                        <span className="fw-semibold">After 14:00</span>
-                      </div>
-                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span className="text-muted">Check-out</span>
-                        <span className="fw-semibold">Before 12:00</span>
-                      </div>
-                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span className="text-muted">Children</span>
-                        <span className="fw-semibold">
-                          Policies vary by room
-                        </span>
-                      </div>
-                    </Col>
-                    <Col md={6}>
-                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span className="text-muted">Deposit</span>
-                        <span className="fw-semibold">May be required</span>
-                      </div>
-                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span className="text-muted">Additional Bed</span>
-                        <span className="fw-semibold">
-                          Subject to availability
-                        </span>
-                      </div>
-                      <div className="d-flex justify-content-between">
-                        <span className="text-muted">Cancellation</span>
-                        <span className="fw-semibold">See rate conditions</span>
-                      </div>
-                    </Col>
-                  </Row>
+                  {payload.apiId === 1 && policyList && policyList.policies ? (
+                    <div className="policies-dynamic">
+                      {/* Cancellation Policy */}
+                      {policyList.policies?.cancellationPolicy &&
+                        policyList.policies.cancellationPolicy.length > 0 && (
+                          <div className="mb-3">
+                            <h6 className="text-danger mb-2">
+                              <FaTimesCircle className="me-2" />
+                              Cancellation Policy
+                            </h6>
+                            {policyList.policies.cancellationPolicy.map(
+                              (policy, index) => (
+                                <div key={index} className="policy-item mb-2">
+                                  <p className="text-muted mb-1">
+                                    {policy.policyText}
+                                  </p>
+                                  <small className="text-muted">
+                                    Valid:{" "}
+                                    {new Date(
+                                      policy.fromDate
+                                    ).toLocaleDateString()}{" "}
+                                    -{" "}
+                                    {new Date(
+                                      policy.toDate
+                                    ).toLocaleDateString()}
+                                  </small>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
+
+                      {/* Amendment Policy */}
+                      {policyList.policies?.amendmentPolicy &&
+                        policyList.policies.amendmentPolicy.length > 0 && (
+                          <div className="mb-3">
+                            <h6 className="text-warning mb-2">
+                              <FaInfoCircle className="me-2" />
+                              Amendment Policy
+                            </h6>
+                            {policyList.policies.amendmentPolicy.map(
+                              (policy, index) => (
+                                <div key={index} className="policy-item mb-2">
+                                  <p className="text-muted mb-1">
+                                    {policy.policyText}
+                                  </p>
+                                  <small className="text-muted">
+                                    Valid:{" "}
+                                    {new Date(
+                                      policy.fromDate
+                                    ).toLocaleDateString()}{" "}
+                                    -{" "}
+                                    {new Date(
+                                      policy.toDate
+                                    ).toLocaleDateString()}
+                                  </small>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
+
+                      {/* General Policies */}
+                      <Row className="g-3 mt-3">
+                        <Col md={6}>
+                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                            <span className="text-muted">Check-in</span>
+                            <span className="fw-semibold">After 14:00</span>
+                          </div>
+                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                            <span className="text-muted">Check-out</span>
+                            <span className="fw-semibold">Before 12:00</span>
+                          </div>
+                        </Col>
+                        <Col md={6}>
+                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                            <span className="text-muted">Deposit</span>
+                            <span className="fw-semibold">May be required</span>
+                          </div>
+                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                            <span className="text-muted">Additional Bed</span>
+                            <span className="fw-semibold">
+                              Subject to availability
+                            </span>
+                          </div>
+                        </Col>
+                      </Row>
+                    </div>
+                  ) : (
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                          <span className="text-muted">Check-in</span>
+                          <span className="fw-semibold">After 14:00</span>
+                        </div>
+                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                          <span className="text-muted">Check-out</span>
+                          <span className="fw-semibold">Before 12:00</span>
+                        </div>
+                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                          <span className="text-muted">Children</span>
+                          <span className="fw-semibold">
+                            Policies vary by room
+                          </span>
+                        </div>
+                      </Col>
+                      <Col md={6}>
+                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                          <span className="text-muted">Deposit</span>
+                          <span className="fw-semibold">May be required</span>
+                        </div>
+                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                          <span className="text-muted">Additional Bed</span>
+                          <span className="fw-semibold">
+                            Subject to availability
+                          </span>
+                        </div>
+                        <div className="d-flex justify-content-between">
+                          <span className="text-muted">Cancellation</span>
+                          <span className="fw-semibold">See rate conditions</span>
+                        </div>
+                      </Col>
+                    </Row>
+                  )}
                 </Card.Body>
               </Card>
             </div>
