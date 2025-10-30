@@ -24,7 +24,7 @@ const HotelBookingPage = () => {
 
   const [bookingData, setBookingData] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [primaryGuest, setPrimaryGuest] = useState({ 
+  const [primaryGuest, setPrimaryGuest] = useState({
     salutation: "",
     firstName: "",
     middleName: "",
@@ -65,7 +65,7 @@ const HotelBookingPage = () => {
       updatedRooms[roomIndex].guests[guestIndex][field] = value;
       return updatedRooms;
     });
-    
+
     // Clear validation error when user starts typing
     const guestKey = `room_${roomIndex}_guest_${guestIndex}_${field}`;
     if (validationErrors[guestKey]) {
@@ -79,29 +79,29 @@ const HotelBookingPage = () => {
 
   const handlePrimaryGuestChange = (field, value) => {
     setPrimaryGuest((prev) => ({ ...prev, [field]: value }));
-    
+
     // Real-time validation for email format
     if (field === "email" && value.trim() !== "") {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
         setValidationErrors((prev) => ({
           ...prev,
-          email: "Please enter a valid email address"
+          email: "Please enter a valid email address",
         }));
         return;
       }
     }
-    
+
     // Real-time validation for phone length
     if (field === "phone" && value.trim() !== "") {
       if (value.trim().length > 10) {
         setValidationErrors((prev) => ({
           ...prev,
-          phone: "Phone number cannot exceed 10 digits"
+          phone: "Phone number cannot exceed 10 digits",
         }));
         return;
       }
     }
-    
+
     // Clear validation error when user starts typing
     if (validationErrors[field]) {
       setValidationErrors((prev) => {
@@ -163,7 +163,7 @@ const HotelBookingPage = () => {
     rooms.forEach((room, roomIndex) => {
       room.guests.forEach((guest, guestIndex) => {
         const guestKey = `room_${roomIndex}_guest_${guestIndex}`;
-        
+
         if (!guest.salutation || guest.salutation.trim() === "") {
           errors[`${guestKey}_salutation`] = "Salutation is required";
           hasErrors = true;
@@ -188,9 +188,9 @@ const HotelBookingPage = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     const { errors, hasErrors } = validateForm();
-    
+
     if (hasErrors) {
       setValidationErrors(errors);
       return;
@@ -198,7 +198,7 @@ const HotelBookingPage = () => {
 
     // Clear any existing errors
     setValidationErrors({});
-    
+
     const bookingPayload = { primaryGuest, rooms };
     console.log("Booking Data:", bookingPayload);
     navigate("/booking-confirmation", {
@@ -237,7 +237,9 @@ const HotelBookingPage = () => {
                     <Row className="gy-4">
                       <Col md={6} lg={4}>
                         <div className="hotel-info-card p-3 bg-white rounded shadow-sm h-100">
-                          <h5 className="fw-bold text-primary mb-3">{hotelStaticData.hotelName}</h5>
+                          <h5 className="fw-bold text-primary mb-3">
+                            {hotelStaticData.hotelName}
+                          </h5>
                           <p className="text-muted mb-2 d-flex align-items-start">
                             <i className="bi bi-geo-alt-fill me-2 mt-1 text-primary"></i>
                             {hotelStaticData.address}
@@ -246,9 +248,10 @@ const HotelBookingPage = () => {
                             <span className="badge bg-warning text-dark me-2">
                               ⭐ {hotelStaticData.starRating} Star
                             </span>
-                            {selectedRate.nonRefundable !== undefined &&
+                            {selectedRate?.nonRefundable !== undefined &&
                               getRefundStatusBadge(
-                                 selectedRate.nonRefundable === "Y"
+                                selectedRate.nonRefundable === true ||
+                                  selectedRate.nonRefundable === "true"
                                   ? "NON REFUNDABLE"
                                   : "FLEXIBLE"
                               )}
@@ -258,15 +261,23 @@ const HotelBookingPage = () => {
                       <Col md={6} lg={2}>
                         <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
                           <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Check-in</h6>
-                          <p className="mb-0 fw-semibold text-dark">{payload.checkInDate}</p>
+                          <h6 className="fw-bold text-primary mb-2">
+                            Check-in
+                          </h6>
+                          <p className="mb-0 fw-semibold text-dark">
+                            {payload.checkInDate}
+                          </p>
                         </div>
                       </Col>
                       <Col md={6} lg={2}>
                         <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
                           <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Check-out</h6>
-                          <p className="mb-0 fw-semibold text-dark">{payload.checkOutDate}</p>
+                          <h6 className="fw-bold text-primary mb-2">
+                            Check-out
+                          </h6>
+                          <p className="mb-0 fw-semibold text-dark">
+                            {payload.checkOutDate}
+                          </p>
                         </div>
                       </Col>
                       <Col md={6} lg={2}>
@@ -278,7 +289,9 @@ const HotelBookingPage = () => {
                               <div key={i} className="mb-1">
                                 <small className="fw-semibold text-dark">
                                   Room {i + 1}: {room.adults} Adults
-                                  {room.children ? `, ${room.children} Children` : ""}
+                                  {room.children
+                                    ? `, ${room.children} Children`
+                                    : ""}
                                 </small>
                               </div>
                             ))}
@@ -288,26 +301,29 @@ const HotelBookingPage = () => {
                       <Col md={6} lg={2}>
                         <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
                           <FaUtensils className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Meal Plan</h6>
-                          <p className="mb-0 fw-semibold text-dark">{selectedRate.mealPlan}</p>
+                          <h6 className="fw-bold text-primary mb-2">
+                            Meal Plan
+                          </h6>
+                          <p className="mb-0 fw-semibold text-dark">
+                            {selectedRate.mealPlan}
+                          </p>
                         </div>
                       </Col>
                     </Row>
                     <hr className="my-4" />
 
-   {/* ✅ Show Selling Price only if ADMIN */}
- {activeUserRole === "ADMIN" && (
-                    <div className="pricing-section p-3 bg-white rounded shadow-sm mb-3">
-                      <div className="d-flex justify-content-between align-items-center">
-                        <h5 className="mb-0 text-muted">Selling Price</h5>
-                        <h4 className="mb-0 text-success fw-bold">
-                          {formatPrice(selectedRate.rate)}
-                        </h4>
+                    {/* ✅ Show Selling Price only if ADMIN */}
+                    {activeUserRole === "ADMIN" && (
+                      <div className="pricing-section p-3 bg-white rounded shadow-sm mb-3">
+                        <div className="d-flex justify-content-between align-items-center">
+                          <h5 className="mb-0 text-muted">Selling Price</h5>
+                          <h4 className="mb-0 text-success fw-bold">
+                            {formatPrice(selectedRate.rate)}
+                          </h4>
+                        </div>
                       </div>
-                    </div>
-                     )}
+                    )}
 
-                    
                     <div className="pricing-section p-3 bg-gradient-success text-white rounded shadow-sm">
                       <div className="d-flex justify-content-between align-items-center">
                         <h5 className="mb-0">Total Price</h5>
@@ -316,9 +332,6 @@ const HotelBookingPage = () => {
                         </h4>
                       </div>
                     </div>
-                  
-
-
                   </Card.Body>
                 </Card>
               </Col>
@@ -339,12 +352,15 @@ const HotelBookingPage = () => {
               <Card className="mb-2 shadow-sm border-0">
                 <Card.Header className="bg-light text-center py-3">
                   <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
-                    
                 </Card.Header>
                 <Card.Body className="p-0">
                   <Accordion defaultActiveKey="0">
                     {rooms.map((room, roomIndex) => (
-                      <Accordion.Item key={roomIndex} eventKey={roomIndex.toString()} className="mb-3">
+                      <Accordion.Item
+                        key={roomIndex}
+                        eventKey={roomIndex.toString()}
+                        className="mb-3"
+                      >
                         <Accordion.Header className="bg-primary text-white">
                           <h6 className="mb-0 fw-bold">
                             Room {roomIndex + 1} - {selectedRate.roomCategory}
@@ -356,9 +372,16 @@ const HotelBookingPage = () => {
                               <Row className="align-items-center">
                                 <Col md={2}>
                                   <span className="fw-semibold text-muted">
-                                    {guest.isChild 
-                                      ? `Child ${guestIndex - room.adults + 1} (Age: ${room.childAges[guestIndex - room.adults]})` 
-                                      : `Adult ${guestIndex + 1}`} *
+                                    {guest.isChild
+                                      ? `Child ${
+                                          guestIndex - room.adults + 1
+                                        } (Age: ${
+                                          room.childAges[
+                                            guestIndex - room.adults
+                                          ]
+                                        })`
+                                      : `Adult ${guestIndex + 1}`}{" "}
+                                    *
                                   </span>
                                 </Col>
                                 <Col md={2}>
@@ -373,7 +396,11 @@ const HotelBookingPage = () => {
                                       )
                                     }
                                     className="form-control-sm"
-                                    isInvalid={!!validationErrors[`room_${roomIndex}_guest_${guestIndex}_salutation`]}
+                                    isInvalid={
+                                      !!validationErrors[
+                                        `room_${roomIndex}_guest_${guestIndex}_salutation`
+                                      ]
+                                    }
                                   >
                                     <option value="">SELECT</option>
                                     <option value="Mr">Mr</option>
@@ -381,9 +408,15 @@ const HotelBookingPage = () => {
                                     <option value="Ms">Ms</option>
                                     <option value="Dr">Dr</option>
                                   </Form.Select>
-                                  {validationErrors[`room_${roomIndex}_guest_${guestIndex}_salutation`] && (
+                                  {validationErrors[
+                                    `room_${roomIndex}_guest_${guestIndex}_salutation`
+                                  ] && (
                                     <Form.Control.Feedback type="invalid">
-                                      {validationErrors[`room_${roomIndex}_guest_${guestIndex}_salutation`]}
+                                      {
+                                        validationErrors[
+                                          `room_${roomIndex}_guest_${guestIndex}_salutation`
+                                        ]
+                                      }
                                     </Form.Control.Feedback>
                                   )}
                                 </Col>
@@ -401,11 +434,21 @@ const HotelBookingPage = () => {
                                       )
                                     }
                                     className="form-control-sm"
-                                    isInvalid={!!validationErrors[`room_${roomIndex}_guest_${guestIndex}_firstName`]}
+                                    isInvalid={
+                                      !!validationErrors[
+                                        `room_${roomIndex}_guest_${guestIndex}_firstName`
+                                      ]
+                                    }
                                   />
-                                  {validationErrors[`room_${roomIndex}_guest_${guestIndex}_firstName`] && (
+                                  {validationErrors[
+                                    `room_${roomIndex}_guest_${guestIndex}_firstName`
+                                  ] && (
                                     <Form.Control.Feedback type="invalid">
-                                      {validationErrors[`room_${roomIndex}_guest_${guestIndex}_firstName`]}
+                                      {
+                                        validationErrors[
+                                          `room_${roomIndex}_guest_${guestIndex}_firstName`
+                                        ]
+                                      }
                                     </Form.Control.Feedback>
                                   )}
                                 </Col>
@@ -423,11 +466,21 @@ const HotelBookingPage = () => {
                                       )
                                     }
                                     className="form-control-sm"
-                                    isInvalid={!!validationErrors[`room_${roomIndex}_guest_${guestIndex}_lastName`]}
+                                    isInvalid={
+                                      !!validationErrors[
+                                        `room_${roomIndex}_guest_${guestIndex}_lastName`
+                                      ]
+                                    }
                                   />
-                                  {validationErrors[`room_${roomIndex}_guest_${guestIndex}_lastName`] && (
+                                  {validationErrors[
+                                    `room_${roomIndex}_guest_${guestIndex}_lastName`
+                                  ] && (
                                     <Form.Control.Feedback type="invalid">
-                                      {validationErrors[`room_${roomIndex}_guest_${guestIndex}_lastName`]}
+                                      {
+                                        validationErrors[
+                                          `room_${roomIndex}_guest_${guestIndex}_lastName`
+                                        ]
+                                      }
                                     </Form.Control.Feedback>
                                   )}
                                 </Col>
@@ -443,16 +496,26 @@ const HotelBookingPage = () => {
                                       )
                                     }
                                     className="form-control-sm"
-                                    isInvalid={!!validationErrors[`room_${roomIndex}_guest_${guestIndex}_gender`]}
+                                    isInvalid={
+                                      !!validationErrors[
+                                        `room_${roomIndex}_guest_${guestIndex}_gender`
+                                      ]
+                                    }
                                   >
                                     <option value="">Gender</option>
                                     <option value="Male">Male</option>
                                     <option value="Female">Female</option>
                                     <option value="Other">Other</option>
                                   </Form.Select>
-                                  {validationErrors[`room_${roomIndex}_guest_${guestIndex}_gender`] && (
+                                  {validationErrors[
+                                    `room_${roomIndex}_guest_${guestIndex}_gender`
+                                  ] && (
                                     <Form.Control.Feedback type="invalid">
-                                      {validationErrors[`room_${roomIndex}_guest_${guestIndex}_gender`]}
+                                      {
+                                        validationErrors[
+                                          `room_${roomIndex}_guest_${guestIndex}_gender`
+                                        ]
+                                      }
                                     </Form.Control.Feedback>
                                   )}
                                 </Col>
@@ -636,23 +699,25 @@ const HotelBookingPage = () => {
                 <h5 className="mb-3 fw-bold">Remarks & Special Requests</h5>
                 <Row>
                   <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Remarks</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={3}
-                    placeholder="Any remarks..."
-                  />
-                </Form.Group></Col>
-                <Col>
-                <Form.Group>
-                  <Form.Label>Special Requests</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={3}
-                    placeholder="Any special requests..."
-                  />
-                </Form.Group></Col>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Remarks</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        placeholder="Any remarks..."
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col>
+                    <Form.Group>
+                      <Form.Label>Special Requests</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        placeholder="Any special requests..."
+                      />
+                    </Form.Group>
+                  </Col>
                 </Row>
               </Card>
 

@@ -79,7 +79,6 @@ const RoomList = () => {
           }
         }
 
-      
         console.log("payload::", payload);
         if (!payload) {
           setError("Missing search context. Please go back and try again.");
@@ -141,7 +140,7 @@ const RoomList = () => {
   const handleBooking = async (rate) => {
     const { payload, hotels } = roomData;
     const hotelsdetail = hotels[0];
-    
+
     console.log("hotelsdetail::", hotelsdetail);
     console.log("rate::", rate);
 
@@ -192,7 +191,7 @@ const RoomList = () => {
           const hotel = response.data.hotels.hotel[0];
           const rooms = hotel.roomTypeDetails.rooms.room;
           console.log("Accurate room details::", rooms);
-          
+
           // Map all rooms to a structured object
           const accurateRates = rooms
             .filter((room) => room != null)
@@ -206,7 +205,7 @@ const RoomList = () => {
               rate: room.rateDetails.rate,
               currency: room.currCode,
             }));
-          
+
           console.log("accurateRate:", accurateRates);
           setSelectedRate(accurateRates[0]);
           setLoadingRate(false);
@@ -233,16 +232,16 @@ const RoomList = () => {
             currency: "AED",
           },
           hotelStaticData: roomData.meta,
-          payload: payload
+          payload: payload,
         };
 
         console.log("Booking data for direct redirect:", bookingData);
-        
+
         // Store booking data in sessionStorage
         sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
-        
+
         // Redirect to booking page
-       
+
         window.open("/hotel-booking-page", "_blank");
       } catch (err) {
         console.error("Error preparing booking data:", err);
@@ -291,6 +290,33 @@ const RoomList = () => {
         return <Badge bg="danger">Non-Refundable</Badge>;
       default:
         return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
+    }
+  };
+
+  const getRoomStatusBadge = (roomStatus) => {
+    switch (roomStatus) {
+      case "On Request":
+        return (
+          <small>
+            {" "}
+            This room can be booked{" "}
+            <span className="bg-warning text-dark px-2 py-0 rounded">
+              On Request{" "}
+            </span>
+          </small>
+        );
+      case "Available":
+        return (
+          <small>
+            {" "}
+            This room is{" "}
+            <span className="bg-success text-white px-3 py-0 rounded">
+              Available{" "}
+            </span>
+          </small>
+        );
+      default:
+        return <Badge bg="secondary">{roomStatus}</Badge>;
     }
   };
 
@@ -605,6 +631,12 @@ const RoomList = () => {
                                       {rate.mealPlan}
                                     </span>
                                   </div>
+                                  <div>
+                                    <span>
+                                      {" "}
+                                      {getRoomStatusBadge(rate.roomStatus)}{" "}
+                                    </span>
+                                  </div>
                                   {getRefundStatusBadgeInRoomList(
                                     rate.nonRefundable
                                   )}
@@ -869,7 +901,6 @@ const RoomList = () => {
           </Button>
         </Modal.Footer>
       </Modal>
-
     </div>
   );
 };
