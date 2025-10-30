@@ -9,6 +9,7 @@ import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import DashboardRedirections from "../components/DashboardRedirections";
+import axiosInstance from "../components/AxiosInstance";
 
 const Login = () => {
   const [username, setUsername] = useState("");
@@ -37,19 +38,34 @@ const Login = () => {
 
       const token = response.data.token;
       const roles = response.data.roles;
+      const loginedUserName = response.data.username;
 
-      if (!token || !roles) {
-        throw new Error("Invalid response from server: Missing token or roles");
+      if (!token || !roles || !loginedUserName) {
+        throw new Error(
+          "Invalid response from server: Missing token or roles or username"
+        );
       }
 
       localStorage.setItem("authToken", token);
       localStorage.setItem("userRole", roles);
+      localStorage.setItem("UserName", loginedUserName);
 
+      // ✅ Fetch additional user details using username
+      const userDetailsResponse = await axiosInstance.get(
+        `/auth/loginedUserData/${loginedUserName}`
+      );
+
+      const { userId, userTypeId } = userDetailsResponse.data;
+      console.log("Fetched user details:", userId, userTypeId);
       console.log("roles::", roles);
 
       if (roles.length > 1) {
         console.log("navigate to select roles");
         navigate("/select-userRole", { state: { roles } });
+
+        //   navigate("/select-userRole", {
+        //   state: { roles, userId, userTypeId },
+        // });
       } else {
         DashboardRedirections(roles[0] || "User", navigate);
       }
@@ -208,7 +224,8 @@ const Login = () => {
                           {offer.description}
                           {(offer.validityFrom || offer.validityTo) && (
                             <>
-                              {" "},{" "}
+                              {" "}
+                              ,{" "}
                               <small className="text-white">
                                 {offer.validityFrom && offer.validityTo
                                   ? `${offer.validityFrom.split("T")[0]} - ${
@@ -418,13 +435,13 @@ const Login = () => {
         </div>
 
         {/* Login Form Section */}
-        <div 
+        <div
           className="login-form"
           style={{
-            position: 'sticky',
-            top: '100px',
-            alignSelf: 'flex-start',
-            zIndex: 100
+            position: "sticky",
+            top: "100px",
+            alignSelf: "flex-start",
+            zIndex: 100,
           }}
         >
           <div className="form-header">

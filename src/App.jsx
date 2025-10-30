@@ -83,6 +83,9 @@ import EditStayPayPromotion from "./pages/HotelActions/Promotion/EditStayPayProm
 import PolicyUpdate from "./pages/HotelActions/Policy/PolicyUpdate";
 import PolicyCreate from "./pages/HotelActions/Policy/PolicyCreate";
 import CompanyProfile from "./pages/CompanyProfile";
+import Profile from "./pages/Profile/Profile";
+import ChangePassword from "./pages/Profile/ChangePassword";
+import Logout from "./pages/Profile/Logout";
 
 
 
@@ -149,14 +152,11 @@ export default function App() {
             </PrivateRoute>
           }
         />
-        <Route
-          path="/test"
-          element={
-            <PrivateRoute>
-              <Test />
-            </PrivateRoute>
-          }
-        />
+
+        {/* Topbar profile  */}
+        <Route path="/view-profile" element={<PrivateRoute><Profile /> </PrivateRoute> }/>
+        <Route path="/change-password" element={<PrivateRoute><ChangePassword /> </PrivateRoute> }/>
+        <Route path="/log-out" element={<PrivateRoute><Logout /> </PrivateRoute> }/>
 
         {/* Masters */}
         <Route path="/masters/designations" element={<PrivateRoute><Designations /></PrivateRoute>} />

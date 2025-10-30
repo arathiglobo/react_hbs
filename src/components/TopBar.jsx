@@ -1,8 +1,9 @@
-import React from 'react';
-import { Navbar, Container, Nav, Dropdown, Image } from 'react-bootstrap';
-import { FaKey, FaUser, FaSignOutAlt } from 'react-icons/fa';
+import React from "react";
+import { Navbar, Container, Nav, Dropdown, Image } from "react-bootstrap";
+import { FaKey, FaUser, FaSignOutAlt } from "react-icons/fa";
 
-export default function TopBar(){
+export default function TopBar() {
+ 
   return (
     <Navbar bg="white" className="topbar shadow-sm" expand="lg" sticky="top">
       <Container fluid className="px-3">
@@ -14,12 +15,12 @@ export default function TopBar(){
           <Dropdown align="end">
             <Dropdown.Toggle as={ProfileToggle} id="profile-dropdown" />
             <Dropdown.Menu className="shadow-sm">
-              <Dropdown.Item href="#/change-password">
+              <Dropdown.Item href="change-password">
                 <FaKey className="me-2" />
                 Change Password
               </Dropdown.Item>
               <Dropdown.Divider />
-              <Dropdown.Item href="#/change-password">
+              <Dropdown.Item   href="view-profile">
                 <FaUser className="me-2" />
                 View Profile
               </Dropdown.Item>
@@ -40,7 +41,10 @@ const ProfileToggle = React.forwardRef(({ onClick }, ref) => (
   <a
     href="#profile"
     ref={ref}
-    onClick={(e) => { e.preventDefault(); onClick(e); }}
+    onClick={(e) => {
+      e.preventDefault();
+      onClick(e);
+    }}
     className="d-flex align-items-center gap-2 text-decoration-none profile-toggle"
   >
     <Image roundedCircle width={34} height={34} src={avatarUrl} alt="profile" />
@@ -49,6 +53,4 @@ const ProfileToggle = React.forwardRef(({ onClick }, ref) => (
 ));
 
 // Placeholder avatar for the logged-in agent
-const avatarUrl = 'https://i.pravatar.cc/100?img=12';
-
-
+const avatarUrl = "https://i.pravatar.cc/100?img=12";
