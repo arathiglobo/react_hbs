@@ -301,7 +301,7 @@ const HotelAvailability = () => {
         marketTypeId: data.marketTypeId || "",
         hotelRoomId: data.hotelRoomId || "",
         noOfRooms: data.noOfRooms || "",
-        releaseDay: data.releaseDay || "",
+        releaseDay: data.releaseDay || "0",
         availabilityType: data.availabilityType || "FREE_SALE",
         availabilityValidities: (data.availabilityValidities || []).map((period) => ({
           validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",

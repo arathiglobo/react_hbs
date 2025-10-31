@@ -50,7 +50,7 @@ export default function ContractRate() {
         params.append("search", searchTerm.trim());
       }
 
-      const res = await axiosInstance.get(`/api/hotelContractRate?${params}`);
+      const res = await axiosInstance.get(`/api/hotelContractRate/${id}?${params}`);
       if (res.data && Array.isArray(res.data)) {
         setRates(res.data);
         if (res.data.length < 10) {

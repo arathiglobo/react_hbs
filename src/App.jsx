@@ -85,13 +85,8 @@ import PolicyCreate from "./pages/HotelActions/Policy/PolicyCreate";
 import CompanyProfile from "./pages/CompanyProfile";
 import Profile from "./pages/Profile/Profile";
 import ChangePassword from "./pages/Profile/ChangePassword";
-
-
 import Logout from "./pages/Profile/Logout";
-
-
-
-
+import MakePkgCombineSearch from "./pages/search/MakePkgCombineSearch";
 
 
 export default function App() {
@@ -166,9 +161,6 @@ export default function App() {
         <Route path="/masters/contact-type" element={<PrivateRoute><ContactType /></PrivateRoute>} />
         <Route path="/masters/markup-type" element={<PrivateRoute><MarkupType /></PrivateRoute>} />
         <Route path="/masters/currency" element={<PrivateRoute><Currency /></PrivateRoute>} />
-        <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
-        <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
-        <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
         <Route path="/masters/market-type" element={<PrivateRoute><MarketType /></PrivateRoute>} />
         <Route path="/masters/region" element={<PrivateRoute><Region /></PrivateRoute>} />
         <Route path="/masters/countries" element={<PrivateRoute><Country /></PrivateRoute>} />
@@ -192,6 +184,13 @@ export default function App() {
         <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
      
+       {/* New Booking */}
+        <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
+        <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
+        <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
+        <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
+       
+       
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
 
