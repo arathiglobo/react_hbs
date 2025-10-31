@@ -193,7 +193,18 @@ export default function MakeUrOwnPackage() {
   }
 
   // Navigate to new Package Generation page
-  navigate("/new-booking/make-your-own-package/search");
+ navigate("/new-booking/make-your-own-package/search", {
+  state: {
+    travelDate,
+    agent,
+    nationality: selectedNationality,
+    destination: selectedDestination,
+    adults,
+    children,
+    nights,
+  },
+});
+
 };
 
 
