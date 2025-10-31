@@ -50,14 +50,14 @@ const Login = () => {
       localStorage.setItem("userRole", roles);
       localStorage.setItem("UserName", loginedUserName);
 
-      // ✅ Fetch additional user details using username
-      const userDetailsResponse = await axiosInstance.get(
-        `/auth/loginedUserData/${loginedUserName}`
-      );
+      // // ✅ Fetch additional user details using username
+      // const userDetailsResponse = await axiosInstance.get(
+      //   `/auth/loginedUserData/${loginedUserName}`
+      // );
 
-      const { userId, userTypeId } = userDetailsResponse.data;
-      console.log("Fetched user details:", userId, userTypeId);
-      console.log("roles::", roles);
+      // const { userId, userTypeId } = userDetailsResponse.data;
+      // console.log("Fetched user details:", userId, userTypeId);
+      // console.log("roles::", roles);
 
       if (roles.length > 1) {
         console.log("navigate to select roles");
