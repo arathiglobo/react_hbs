@@ -350,7 +350,7 @@ export default function MakeUrOwnPackage() {
 
   const filteredResults = useMemo(() => {
     let results = allResults;
-    
+
     // Debug: Log all hotel names
     if (results.length > 0) {
       // console.log('All hotel names:', results.map(hotel => hotel.name || hotel.hotelName || 'NO NAME'));
@@ -361,8 +361,10 @@ export default function MakeUrOwnPackage() {
       // console.log('Filtering by hotel search term:', hotelSearchTerm);
       // console.log('Available hotels before filtering:', results.length);
       results = results.filter((hotel) => {
-        const hotelName = hotel.name || hotel.hotelName || '';
-        const matches = hotelName.toLowerCase().includes(hotelSearchTerm.toLowerCase());
+        const hotelName = hotel.name || hotel.hotelName || "";
+        const matches = hotelName
+          .toLowerCase()
+          .includes(hotelSearchTerm.toLowerCase());
         // console.log(`Hotel: ${hotelName}, Search: ${hotelSearchTerm}, Matches: ${matches}`);
         return matches;
       });
@@ -398,7 +400,7 @@ export default function MakeUrOwnPackage() {
   //   return filteredResults;
   // }, [filteredResults, pageIndex]);
 
-    const pageItems = useMemo(() => {
+  const pageItems = useMemo(() => {
     // console.log("Page items:", filteredResults.length);
     return filteredResults;
   }, [filteredResults]);
@@ -481,10 +483,10 @@ export default function MakeUrOwnPackage() {
     }
   };
 
-   const agentList = async () => {
+  const agentList = async () => {
     try {
       const response = await axiosInstance.get("/api/agent");
-     
+
       setAgents(response.data);
     } catch (error) {
       // console.log("error for agent axios list:", error);
@@ -533,11 +535,7 @@ export default function MakeUrOwnPackage() {
     }
 
     if (!checkIn) {
-      newErrors.checkIn = "Check-in date is required";
-    }
-
-    if (!checkOut) {
-      newErrors.checkOut = "Check-out date is required";
+      newErrors.checkIn = "Travel date is required";
     }
 
     if (!agent) {
@@ -555,7 +553,7 @@ export default function MakeUrOwnPackage() {
     });
   };
 
-   const fetchHotels = async (page, searchId, agentId) => {
+  const fetchHotels = async (page, searchId, agentId) => {
     try {
       const params = {
         agentId: agentId || agent || 1, // Use passed agentId, or state agent, or default to 1
@@ -820,7 +818,7 @@ export default function MakeUrOwnPackage() {
     setCompletedChannels(new Set());
   };
 
-   const handleSearchSubmit = async (e) => {
+  const handleSearchSubmit = async (e) => {
     e.preventDefault();
     const formErrors = validateForm();
     if (Object.keys(formErrors).length > 0) {
@@ -901,11 +899,12 @@ export default function MakeUrOwnPackage() {
         (data) => {
           // Check if any individual API is completed OR if finalStatus is completed
           const currentStatuses = data.status || {};
-          const hasAnyCompleted = expectedChannels.some(ch => currentStatuses[ch] === "COMPLETED");
+          const hasAnyCompleted = expectedChannels.some(
+            (ch) => currentStatuses[ch] === "COMPLETED"
+          );
           return hasAnyCompleted || data.finalStatus === "COMPLETED";
         },
         (data, pollCount) => {
-         
           const mappedResults = Array.isArray(data.result)
             ? data.result.map((hotel, index) => ({
                 id: hotel.hotelCode
@@ -925,7 +924,7 @@ export default function MakeUrOwnPackage() {
                   "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
                 rating: hotel.starRating || 0,
                 hotelType: "hotel",
-                channelType: hotel.apiType?.toLowerCase() ,
+                channelType: hotel.apiType?.toLowerCase(),
               }))
             : [];
 
@@ -954,9 +953,7 @@ export default function MakeUrOwnPackage() {
             }
           }
 
-          setTotalElements(
-            Number(data.totalResults) || mappedResults.length
-          );
+          setTotalElements(Number(data.totalResults) || mappedResults.length);
           setTotalPages(
             Math.max(
               1,
@@ -1198,26 +1195,23 @@ export default function MakeUrOwnPackage() {
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
-      
-     
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl mb-4 search-card-modern"  style={{ backgroundColor: '#ffffff' }}>
-               <Card.Body className="p-4">
+          <Card
+            className="shadow-sm rounded-xl mb-4 search-card-modern"
+            style={{ backgroundColor: "#ffffff" }}
+          >
+            <Card.Body className="p-4">
               <div className="text-left mb-4">
-                <h2 className="fw-bold text-black mb-2">
-                  Create My Trip
-                </h2>
-                <p className="text-muted">
-                  Plan your perfect vacation package
-                </p>
+                <h2 className="fw-bold text-black mb-2">Create My Trip</h2>
+                <p className="text-muted">Plan your perfect vacation package</p>
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
                 <Row className="g-4">
-                     <Col lg={3} md={6}>
+                  <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         📅 TRAVEL DATE
@@ -1231,10 +1225,12 @@ export default function MakeUrOwnPackage() {
                           const newCheckIn = e.target.value;
                           setCheckIn(newCheckIn);
                           if (newCheckIn) clearError("checkIn");
-                          
+
                           // Always set checkout to next day when check-in changes
                           if (newCheckIn) {
-                            const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
+                            const nextDay = formatDate(
+                              getTomorrow(new Date(newCheckIn))
+                            );
                             setCheckOut(nextDay);
                             clearError("checkOut");
                           }
@@ -1247,7 +1243,7 @@ export default function MakeUrOwnPackage() {
                       )}
                     </Form.Group>
                   </Col>
-                     <Col lg={3} md={6}>
+                  <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         👤 Agent
@@ -1261,12 +1257,12 @@ export default function MakeUrOwnPackage() {
                         }}
                       >
                         <option value="">Select Agent</option>
-                       
-                         {agents.map((agent) => (
-                              <option key={agent.id} value={agent.id}>
-                                {agent.companyName}
-                              </option>
-                            ))}
+
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.companyName}
+                          </option>
+                        ))}
                       </Form.Select>
                       {errors.agent && (
                         <div className="text-danger small mt-1">
@@ -1292,17 +1288,16 @@ export default function MakeUrOwnPackage() {
                         isSearchable
                         isClearable
                         className="modern-select"
-                        menuPortalTarget={document.body}   // 👈 force portal
-  styles={{
-    menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-    control: (base) => ({
-      ...base,
-      minHeight: "42px",
-      border: "1px solid #dee2e6",
-      "&:hover": { borderColor: "#86b7fe" },
-    }),
-  }}
-               
+                        menuPortalTarget={document.body} // 👈 force portal
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "42px",
+                            border: "1px solid #dee2e6",
+                            "&:hover": { borderColor: "#86b7fe" },
+                          }),
+                        }}
                       />
                       {errors.nationality && (
                         <div className="text-danger small mt-1">
@@ -1311,7 +1306,7 @@ export default function MakeUrOwnPackage() {
                       )}
                     </Form.Group>
                   </Col>
-                   <Col lg={3} md={6}>
+                  <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         <FaUser className="me-2" />
@@ -1396,10 +1391,10 @@ export default function MakeUrOwnPackage() {
                             cityList(inputValue);
                           }
                         }}
-                         menuPortalTarget={document.body}   // 👈 force portal
-                       styles={{
-                           menuPortal: base => ({ ...base, zIndex: 9999 }), 
-                          control: (base ) => ({
+                        menuPortalTarget={document.body} // 👈 force portal
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
                             ...base,
                             minHeight: "42px",
                             border: "1px solid #dee2e6",
@@ -1439,10 +1434,6 @@ export default function MakeUrOwnPackage() {
                     </Form.Group>
                   </Col>
 
-               
-
-                
-
                   <Col lg={2} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
@@ -1458,12 +1449,14 @@ export default function MakeUrOwnPackage() {
                       />
                     </Form.Group>
                   </Col>
-                   </Row>
+                </Row>
                 <Row className="mt-4">
                   <Col className="d-flex justify-content-center gap-3 ">
                     <Button
                       type="submit"
-                      className="btn-warning btn-lg px-5 py-3 rounded-pill btn-search-modern"disabled={isLoading}
+                      className="px-5 py-3 rounded-pill btn-search-modern text-white border-0"
+                      style={{ backgroundColor: "#ff7f00" }} // bright orange
+                      disabled={isLoading}
                       size="lg"
                     >
                       {isLoading ? (
@@ -1614,9 +1607,9 @@ export default function MakeUrOwnPackage() {
                           className="modern-select-sm"
                           menuPosition="absolute"
                           menuPlacement="auto"
-                           menuPortalTarget={document.body}   // 👈 force portal
-                           styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                          menuPortalTarget={document.body} // 👈 force portal
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
                             control: (base) => ({
                               ...base,
                               minHeight: "36px",
@@ -1656,9 +1649,9 @@ export default function MakeUrOwnPackage() {
                           className="modern-select-sm"
                           menuPosition="absolute"
                           menuPlacement="auto"
-                           menuPortalTarget={document.body}  
+                          menuPortalTarget={document.body}
                           styles={{
-                             menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
                             control: (base) => ({
                               ...base,
                               minHeight: "36px",
@@ -1698,9 +1691,9 @@ export default function MakeUrOwnPackage() {
                           className="modern-select-sm"
                           menuPosition="absolute"
                           menuPlacement="auto"
-                           menuPortalTarget={document.body}  
+                          menuPortalTarget={document.body}
                           styles={{
-                             menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
                             control: (base) => ({
                               ...base,
                               minHeight: "36px",
@@ -1780,15 +1773,14 @@ export default function MakeUrOwnPackage() {
                 </Card.Body>
               </Card>
 
-                  {/* New Pagination Section After Filters */}
+              {/* New Pagination Section After Filters */}
               {hasSearched && (
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
                   <small className="text-muted fw-semibold">
                     {filteredResults.length > 0 ? (
                       <>
-                        Showing{" "}
-                        {pageIndex * pageSize + 1}-
-                        {(hotelSearchTerm || hotelType.length > 0
+                        Showing {pageIndex * pageSize + 1}-
+                        {hotelSearchTerm || hotelType.length > 0
                           ? Math.min(
                               pageIndex * pageSize + pageSize,
                               filteredResults.length
@@ -1796,11 +1788,11 @@ export default function MakeUrOwnPackage() {
                           : Math.min(
                               pageIndex * pageSize + pageSize,
                               totalElements
-                            ))}{" "}
+                            )}{" "}
                         of{" "}
-                        {(hotelSearchTerm || hotelType.length > 0
+                        {hotelSearchTerm || hotelType.length > 0
                           ? filteredResults.length
-                          : totalElements)}{" "}
+                          : totalElements}{" "}
                         results{" "}
                         {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
                       </>
@@ -1811,31 +1803,32 @@ export default function MakeUrOwnPackage() {
                       </>
                     )}
                   </small>
-                  {filteredResults.length > 0 && !(hotelSearchTerm || hotelType.length > 0) && (
-                    <Pagination className="mb-0 pagination-modern">
-                      <Pagination.Prev
-                        disabled={pageIndex === 0}
-                        onClick={() => goToPage(pageIndex - 1)}
-                      />
-                      {pageNumbers.map((n) =>
-                        typeof n === "number" ? (
-                          <Pagination.Item
-                            key={n}
-                            active={n === pageIndex + 1}
-                            onClick={() => goToPage(n - 1)}
-                          >
-                            {n}
-                          </Pagination.Item>
-                        ) : (
-                          <Pagination.Ellipsis key={n} disabled />
-                        )
-                      )}
-                      <Pagination.Next
-                        disabled={pageIndex >= effectiveTotalPages - 1}
-                        onClick={() => goToPage(pageIndex + 1)}
-                      />
-                    </Pagination>
-                  )}
+                  {filteredResults.length > 0 &&
+                    !(hotelSearchTerm || hotelType.length > 0) && (
+                      <Pagination className="mb-0 pagination-modern">
+                        <Pagination.Prev
+                          disabled={pageIndex === 0}
+                          onClick={() => goToPage(pageIndex - 1)}
+                        />
+                        {pageNumbers.map((n) =>
+                          typeof n === "number" ? (
+                            <Pagination.Item
+                              key={n}
+                              active={n === pageIndex + 1}
+                              onClick={() => goToPage(n - 1)}
+                            >
+                              {n}
+                            </Pagination.Item>
+                          ) : (
+                            <Pagination.Ellipsis key={n} disabled />
+                          )
+                        )}
+                        <Pagination.Next
+                          disabled={pageIndex >= effectiveTotalPages - 1}
+                          onClick={() => goToPage(pageIndex + 1)}
+                        />
+                      </Pagination>
+                    )}
                 </div>
               )}
 
@@ -1857,194 +1850,224 @@ export default function MakeUrOwnPackage() {
 
               <div>
                 {view === "card" && (
-        <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
-          
-          
-          {filteredResults.length > 0 ? (
-            filteredResults.map((hotel, index) => {
-              // console.log('Hotel data:', hotel);
-              // console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
-              return (
-                        <Col key={hotel.id}>
-                          
-                          <div style={{
-                            backgroundColor: 'white',
-                            border: '1px solid #dee2e6',
-                            borderRadius: '12px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                            marginBottom: '20px',
-                            overflow: 'hidden'
-                          }}>
-                            <div style={{
-                              position: 'relative',
-                              height: '200px',
-                              overflow: 'hidden'
-                            }}>
-                              <LazyImage src={hotel.image} alt={hotel.name} />
-                              <div style={{
-                                position: 'absolute',
-                                top: '10px',
-                                right: '10px',
-                                backgroundColor: 'rgba(0,0,0,0.7)',
-                                color: 'white',
-                                padding: '5px 10px',
-                                borderRadius: '15px',
-                                fontSize: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}>
-                                <FaStar className="text-warning me-1" />
-                                {hotel.rating}
-                                <span style={{marginLeft: '5px', backgroundColor: '#6c757d', padding: '2px 6px', borderRadius: '10px'}}>
-                                  {hotel.channelType.toUpperCase()}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div style={{
-                              padding: '16px',
-                              backgroundColor: 'white'
-                            }}>
-                              <h6 style={{
-                                fontSize: '1.3rem',
-                                fontWeight: '600',
-                                marginBottom: '8px',
-                                color: '#333',
-                                lineHeight: '1.3'
-                              }}>
-                                {hotel.name || 'Hotel Name Not Available'}
-                              </h6>
-                              
-                              <p style={{
-                                fontSize: '0.875rem',
-                                color: '#666',
-                                marginBottom: '8px',
-                                lineHeight: '1.4'
-                              }}>
-                                📍 {hotel.address || 'Address Not Available'}
-                              </p>
-                              
-                              <div style={{
-                                backgroundColor: '#28a745',
-                                color: 'white',
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                display: 'inline-block',
-                                marginBottom: '12px'
-                              }}>
-                                {hotel.badge}
-                              </div>
-                              
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginTop: '12px',
-                                paddingTop: '12px',
-                                borderTop: '1px solid #eee'
-                              }}>
-                                <div style={{
-                                  fontSize: '1.5rem',
-                                  fontWeight: '600',
-                                  color: '#333'
-                                }}>
-                                  {hotel.price ? `AED ${hotel.price.toLocaleString()}` : 'Price on request'}
-                                </div>
-
-                                 <Button
-                                  className="btn-view-rooms"
-                                  size="sm"
-                                  //  disabled={clickedHotelIds.includes(hotel.id)}
-                                  variant={clickedHotelIds.includes(hotel.id) ? "secondary" : "primary"}
-                                  onClick={() => {
-
-                                     // Add hotel ID to clickedHotelIds
-                                    setClickedHotelIds((prev) => [...prev, hotel.id]);
-                                    
-                                    const nationalityValue =
-                                      selectedNationality?.value;
-
-                                   const nationalityCode =
-                                      (selectedNationality?.code || "")
-                                        .length === 2
-                                        ? selectedNationality.code
-                                        : " ";
-
-                                    const agentIdToUse = agent; // Use selected agent or default to 1
-
-                                    // console.log("rooms before mapping::", rooms);
-                                    const roomsPayload = rooms.map((r) => ({
-                                      adults: r.adults || 1,
-                                      children: r.children || 0,
-                                      childAges:r.childAges || [],
-                                      adultAges: Array.from(
-                                        { length: r.adults || 1 },
-                                        () => 30
-                                      ),
-                                    }));
-
-                                    // Dynamic apiId based on channelType
-                                    const apiIdMapping = {
-                                      jumeirah: 10,
-                                      iwtx: 12,
-                                      x3: 15,
-                                      inhouse: 1,
-                                      ratehawk: 14,
-                                      darina: 16,
-                                    };
-                                    
-                                    const apiId = apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
-
-
-                                    const payload = {
-                                      checkInDate: checkIn,
-                                      checkOutDate: checkOut,
-                                      hotelCode:
-                                        hotel.hotelCode ||
-                                        hotel.id
-                                          ?.split("-")
-                                          .slice(1)
-                                          .join("-") ||
-                                        "",
-                                      nationality: nationalityCode,
-                                      agentId: String(agentIdToUse),
-                                      apiId: apiId,
-                                      rooms: roomsPayload,
-                                    };
-                                    const meta = {
-                                      hotelName: hotel.name,
-                                      address: hotel.address || hotel.city,
-                                      starRating: hotel.rating || 0,
-                                      phone: "",
-                                      hotelImage: hotel.image,
-                                    };
-
-                                    // console.log("payload::", payload);
-                                    // console.log("meta::", meta);
-                                    try {
-                                      sessionStorage.setItem(
-                                        "roomListPayload",
-                                        JSON.stringify({ payload, meta })
-                                      );
-                                      setTimeout(() => {
-                                        window.open("/room-list", "_blank");
-                                      }, 50);
-
-                                      // navigate("/room-list", { state: { payload, meta } });
-                                    } catch {}
-
+                  <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
+                    {filteredResults.length > 0 ? (
+                      filteredResults.map((hotel, index) => {
+                        // console.log('Hotel data:', hotel);
+                        // console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
+                        return (
+                          <Col key={hotel.id}>
+                            <div
+                              style={{
+                                backgroundColor: "white",
+                                border: "1px solid #dee2e6",
+                                borderRadius: "12px",
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                                marginBottom: "20px",
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  position: "relative",
+                                  height: "200px",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <LazyImage src={hotel.image} alt={hotel.name} />
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    top: "10px",
+                                    right: "10px",
+                                    backgroundColor: "rgba(0,0,0,0.7)",
+                                    color: "white",
+                                    padding: "5px 10px",
+                                    borderRadius: "15px",
+                                    fontSize: "12px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "5px",
                                   }}
                                 >
-                                  View Rooms
-                                </Button>
-                             
+                                  <FaStar className="text-warning me-1" />
+                                  {hotel.rating}
+                                  <span
+                                    style={{
+                                      marginLeft: "5px",
+                                      backgroundColor: "#6c757d",
+                                      padding: "2px 6px",
+                                      borderRadius: "10px",
+                                    }}
+                                  >
+                                    {hotel.channelType.toUpperCase()}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  padding: "16px",
+                                  backgroundColor: "white",
+                                }}
+                              >
+                                <h6
+                                  style={{
+                                    fontSize: "1.3rem",
+                                    fontWeight: "600",
+                                    marginBottom: "8px",
+                                    color: "#333",
+                                    lineHeight: "1.3",
+                                  }}
+                                >
+                                  {hotel.name || "Hotel Name Not Available"}
+                                </h6>
+
+                                <p
+                                  style={{
+                                    fontSize: "0.875rem",
+                                    color: "#666",
+                                    marginBottom: "8px",
+                                    lineHeight: "1.4",
+                                  }}
+                                >
+                                  📍 {hotel.address || "Address Not Available"}
+                                </p>
+
+                                <div
+                                  style={{
+                                    backgroundColor: "#28a745",
+                                    color: "white",
+                                    padding: "4px 8px",
+                                    borderRadius: "4px",
+                                    fontSize: "0.75rem",
+                                    fontWeight: "500",
+                                    display: "inline-block",
+                                    marginBottom: "12px",
+                                  }}
+                                >
+                                  {hotel.badge}
+                                </div>
+
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    marginTop: "12px",
+                                    paddingTop: "12px",
+                                    borderTop: "1px solid #eee",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "1.5rem",
+                                      fontWeight: "600",
+                                      color: "#333",
+                                    }}
+                                  >
+                                    {hotel.price
+                                      ? `AED ${hotel.price.toLocaleString()}`
+                                      : "Price on request"}
+                                  </div>
+
+                                  <Button
+                                    className="btn-view-rooms"
+                                    size="sm"
+                                    //  disabled={clickedHotelIds.includes(hotel.id)}
+                                    variant={
+                                      clickedHotelIds.includes(hotel.id)
+                                        ? "secondary"
+                                        : "primary"
+                                    }
+                                    onClick={() => {
+                                      // Add hotel ID to clickedHotelIds
+                                      setClickedHotelIds((prev) => [
+                                        ...prev,
+                                        hotel.id,
+                                      ]);
+
+                                      const nationalityValue =
+                                        selectedNationality?.value;
+
+                                      const nationalityCode =
+                                        (selectedNationality?.code || "")
+                                          .length === 2
+                                          ? selectedNationality.code
+                                          : " ";
+
+                                      const agentIdToUse = agent; // Use selected agent or default to 1
+
+                                      // console.log("rooms before mapping::", rooms);
+                                      const roomsPayload = rooms.map((r) => ({
+                                        adults: r.adults || 1,
+                                        children: r.children || 0,
+                                        childAges: r.childAges || [],
+                                        adultAges: Array.from(
+                                          { length: r.adults || 1 },
+                                          () => 30
+                                        ),
+                                      }));
+
+                                      // Dynamic apiId based on channelType
+                                      const apiIdMapping = {
+                                        jumeirah: 10,
+                                        iwtx: 12,
+                                        x3: 15,
+                                        inhouse: 1,
+                                        ratehawk: 14,
+                                        darina: 16,
+                                      };
+
+                                      const apiId =
+                                        apiIdMapping[
+                                          hotel.channelType?.toLowerCase()
+                                        ] || 0;
+
+                                      const payload = {
+                                        checkInDate: checkIn,
+                                        checkOutDate: checkOut,
+                                        hotelCode:
+                                          hotel.hotelCode ||
+                                          hotel.id
+                                            ?.split("-")
+                                            .slice(1)
+                                            .join("-") ||
+                                          "",
+                                        nationality: nationalityCode,
+                                        agentId: String(agentIdToUse),
+                                        apiId: apiId,
+                                        rooms: roomsPayload,
+                                      };
+                                      const meta = {
+                                        hotelName: hotel.name,
+                                        address: hotel.address || hotel.city,
+                                        starRating: hotel.rating || 0,
+                                        phone: "",
+                                        hotelImage: hotel.image,
+                                      };
+
+                                      // console.log("payload::", payload);
+                                      // console.log("meta::", meta);
+                                      try {
+                                        sessionStorage.setItem(
+                                          "roomListPayload",
+                                          JSON.stringify({ payload, meta })
+                                        );
+                                        setTimeout(() => {
+                                          window.open("/room-list", "_blank");
+                                        }, 50);
+
+                                        // navigate("/room-list", { state: { payload, meta } });
+                                      } catch {}
+                                    }}
+                                  >
+                                    View Rooms
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </Col>
+                          </Col>
                         );
                       })
                     ) : (
@@ -2055,7 +2078,13 @@ export default function MakeUrOwnPackage() {
                             <h5>No results found</h5>
                             <p>
                               {channelType.length > 0
-                                ? `No hotels found for the selected channel${channelType.length > 1 ? 's' : ''}: ${channelType.map(c => c.label).join(', ')}. Try selecting different channels or clearing the channel filter.`
+                                ? `No hotels found for the selected channel${
+                                    channelType.length > 1 ? "s" : ""
+                                  }: ${channelType
+                                    .map((c) => c.label)
+                                    .join(
+                                      ", "
+                                    )}. Try selecting different channels or clearing the channel filter.`
                                 : hotelSearchTerm ||
                                   starRating.length > 0 ||
                                   hotelType.length > 0
@@ -2092,7 +2121,7 @@ export default function MakeUrOwnPackage() {
                     if (filteredResults.length === 0) {
                       return null; // Don't show pagination when no results
                     }
-                    
+
                     const hasClientOnlyFilters =
                       Boolean(hotelSearchTerm) || hotelType.length > 0;
                     const showingStart = pageIndex * pageSize + 1;

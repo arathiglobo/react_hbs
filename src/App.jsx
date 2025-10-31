@@ -85,6 +85,8 @@ import PolicyCreate from "./pages/HotelActions/Policy/PolicyCreate";
 import CompanyProfile from "./pages/CompanyProfile";
 import Profile from "./pages/Profile/Profile";
 import ChangePassword from "./pages/Profile/ChangePassword";
+
+
 import Logout from "./pages/Profile/Logout";
 
 
