@@ -4,6 +4,7 @@ import { FaSearch, FaHotel, FaCar, FaTicketAlt } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { useLocation } from "react-router-dom";
+import axiosInstance from "../../components/AxiosInstance";
 
 export default function MakePkgCombineSearch() {
   const location = useLocation();
@@ -316,42 +317,39 @@ export default function MakePkgCombineSearch() {
     setCompletedChannels(new Set());
   };
 
-  const hanldeHotelSearchSubmit = async (e) => {
+  const handleHotelSearchSubmit = async (e) => {
     e.preventDefault();
-    const formErrors = validateForm();
-    if (Object.keys(formErrors).length > 0) {
-      setErrors(formErrors);
-      setHasSearched(false);
-      return;
-    }
-    setErrors({});
+
+    // Reset state before starting
     setIsLoading(true);
     setHasSearched(true);
     setHasSearchResult(false);
     setAllResults([]);
     setPollStatus("IDLE");
+    setCompletedChannels(new Set());
     setPageIndex(0);
     setTotalElements(0);
     setTotalPages(1);
-    setCompletedChannels(new Set());
 
     try {
-      const nationalityId = selectedNationality.value;
-      const nationalityCode = selectedNationality.code;
-      const destinationCityId = selectedDestination.value;
-      const destinationCountryId = selectedDestination.countryId;
-      const noOfRooms = String(rooms.length);
+      // ---- ✅ Extract values safely ----
+      const nationalityId = nationality?.value || "";
+      const nationalityCode = nationality?.code || "";
+      const destinationCityId = destination?.value || "";
+      const destinationCountryId = destination?.countryId || "";
+      const agentIdFinal = agentId || agent || 1;
+      const noOfRooms = rooms.length.toString();
 
+      // ---- ✅ Build room configurations dynamically ----
       const roomConfigurations = rooms.map((room, index) => ({
-        roomNo: index + 1,
-        adultCount: String(room.adults || 1),
-        childCount: String(room.children || 0),
-        childAges: room.childAges?.length ? room.childAges : [0],
-        adultAges: room.adultAges?.length ? room.adultAges : [25],
+        roomNo: (index + 1).toString(),
+        adultCount: (room.adults || 1).toString(),
+        childCount: (room.children || 0).toString(),
+        childAges: room.childAges?.length ? room.childAges : [],
+        adultAges: Array.from({ length: room.adults || 1 }, () => 25),
       }));
 
-      const agentId = agent || 1; // Use selected agent or default to 1
-
+      // ---- ✅ Final payload structure ----
       const searchPayloadReq = {
         nationalityId,
         nationalityCode,
@@ -361,105 +359,59 @@ export default function MakePkgCombineSearch() {
         checkOut,
         noOfRooms,
         roomConfigurations,
-        agentId,
+        agentId: agentIdFinal,
       };
 
+      console.log("🔹 Sending payload:", searchPayloadReq);
+
+      // ---- ✅ API Call ----
       const searchKeyRes = await axiosInstance.post(
         "/hotel-search/search",
         searchPayloadReq
       );
+
       const searchId = searchKeyRes.data.searchId;
-      if (!searchId) throw new Error("No searchId returned");
+      if (!searchId) throw new Error("No searchId returned from response");
+
       setSearchId(searchId);
 
+      // ---- ✅ Prepare params for polling ----
       const params = {
-        agentId: agentId, // Use the dynamic agentId
+        agentId: agentIdFinal,
         page: 0,
         pageSize,
-        sortBy:
-          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
-        sortOrder:
-          sortBy === "priceAsc" ||
-          sortBy === "ratingAsc" ||
-          sortBy === "nameAsc"
-            ? "asc"
-            : "desc",
-        starRating: starRating.map((s) => s.value).join(",") || undefined,
-        apiType:
-          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
 
-      const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
-
+      // ---- ✅ Polling logic ----
       await pollUntilComplete(
         `/hotel-search/results/${searchId}`,
         params,
+        (data) => data.finalStatus === "COMPLETED",
         (data) => {
-          // Check if any individual API is completed OR if finalStatus is completed
-          const currentStatuses = data.status || {};
-          const hasAnyCompleted = expectedChannels.some(
-            (ch) => currentStatuses[ch] === "COMPLETED"
-          );
-          return hasAnyCompleted || data.finalStatus === "COMPLETED";
-        },
-        (data, pollCount) => {
-          const mappedResults = Array.isArray(data.result)
-            ? data.result.map((hotel, index) => ({
-                id: hotel.hotelCode
-                  ? `${searchId}-${hotel.hotelCode}`
-                  : `${searchId}-h${index + 1}`,
-                searchId,
-                hotelCode: hotel.hotelCode || null,
-                name: hotel.hotelName || "Unknown Hotel",
-                address: hotel.hotelAddress || "",
-                city: hotel.hotelAddress
-                  ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-                  : "Unknown City",
-                price: hotel.baseRate || null,
-                badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-                image:
-                  hotel.hotelImage ||
-                  "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-                rating: hotel.starRating || 0,
-                hotelType: "hotel",
-                channelType: hotel.apiType?.toLowerCase(),
-              }))
-            : [];
-
-          // Update results for the current page
-          setAllResults(mappedResults);
-
-          const currentStatuses = data.status || {};
-          const newCompleted = new Set(completedChannels);
-          expectedChannels.forEach((ch) => {
-            if (
-              currentStatuses[ch] === "COMPLETED" &&
-              !completedChannels.has(ch)
-            ) {
-              newCompleted.add(ch);
-              // console.log(`Channel ${ch} completed at poll ${pollCount}`);
-            }
-          });
-          setCompletedChannels(newCompleted);
-
-          // Show results immediately if any channel is completed or we have results
-          if (pollCount === 1 || mappedResults.length > 0) {
+          if (Array.isArray(data.result)) {
+            const mappedResults = data.result.map((hotel, index) => ({
+              id: hotel.hotelCode
+                ? `${searchId}-${hotel.hotelCode}`
+                : `${searchId}-h${index + 1}`,
+              searchId,
+              hotelCode: hotel.hotelCode || null,
+              name: hotel.hotelName || "Unknown Hotel",
+              address: hotel.hotelAddress || "",
+              city: hotel.hotelAddress
+                ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+                : "Unknown City",
+              price: hotel.baseRate || null,
+              badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+              image:
+                hotel.hotelImage ||
+                "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+              rating: hotel.starRating || 0,
+              hotelType: "hotel",
+              channelType: hotel.apiType?.toLowerCase(),
+            }));
+            setAllResults(mappedResults);
             setHasSearchResult(true);
-            // Show results as soon as any channel completes or we have data
-            if (newCompleted.size >= 1 || mappedResults.length > 0) {
-              setIsInitialResultsLoaded(true);
-            }
           }
-
-          setTotalElements(Number(data.totalResults) || mappedResults.length);
-          setTotalPages(
-            Math.max(
-              1,
-              Math.ceil(
-                (Number(data.totalResults) || mappedResults.length) / pageSize
-              )
-            )
-          );
         },
         4000,
         20000,
@@ -473,6 +425,21 @@ export default function MakePkgCombineSearch() {
       setIsLoading(false);
     }
   };
+
+  // ✅ Handle page change
+const handlePageChange = async (newPage) => {
+  if (newPage < 0 || newPage >= totalPages) return;
+  setPageIndex(newPage);
+  setIsLoading(true);
+  try {
+    await fetchHotels(newPage, searchId, agentId);
+  } catch (err) {
+    console.error("Pagination fetch failed:", err);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -560,28 +527,120 @@ export default function MakePkgCombineSearch() {
                             </Button>
                           </Col>
                         </Row>
-                        {roomsOpen && (
-                          <Row className="g-3 mt-3">
-                            <Col md={12}>
-                              <RoomGuestSelector
-                                value={rooms}
-                                onChange={setRooms}
-                              />
-                            </Col>
-                          </Row>
-                        )}
+                      {roomsOpen && (
+  <>
+    <Row className="g-3 mt-3">
+      <Col md={12}>
+        <RoomGuestSelector value={rooms} onChange={setRooms} />
+      </Col>
+    </Row>
+
+    {/* ✅ Pagination Controls */}
+    {totalPages > 1 && (
+      <div className="d-flex justify-content-center align-items-center mt-4 gap-2">
+        <Button
+          variant="outline-secondary"
+          size="sm"
+          disabled={pageIndex === 0 || isLoading}
+          onClick={() => handlePageChange(pageIndex - 1)}
+        >
+          Previous
+        </Button>
+
+        <span className="fw-semibold">
+          Page {pageIndex + 1} of {totalPages}
+        </span>
+
+        <Button
+          variant="outline-secondary"
+          size="sm"
+          disabled={pageIndex + 1 >= totalPages || isLoading}
+          onClick={() => handlePageChange(pageIndex + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    )}
+  </>
+)}
+
+
 
                         <div className="text-center mt-4">
                           <Button
                             variant="warning"
                             className="px-4 py-2 hotel-search"
-                            onClick={hanldeHotelSearchSubmit}
+                            onClick={handleHotelSearchSubmit}
                           >
                             <FaSearch className="me-2" />
                             Search
                           </Button>
                         </div>
                       </Form>
+
+                      {hasSearchResult && allResults.length > 0 && (
+                        <div className="mt-4">
+                          <h5 className="fw-bold mb-3 text-primary">
+                            Search Results
+                          </h5>
+                          <Row className="g-3">
+                            {allResults.map((hotel) => (
+                              <Col md={4} key={hotel.id}>
+                                <Card className="shadow-sm h-100">
+                                  <Card.Img
+                                    variant="top"
+                                    src={hotel.image}
+                                    alt={hotel.name}
+                                    style={{
+                                      height: "180px",
+                                      objectFit: "cover",
+                                    }}
+                                  />
+                                  <Card.Body>
+                                    <Card.Title className="fw-semibold text-dark">
+                                      {hotel.name}
+                                    </Card.Title>
+                                    <Card.Text className="text-muted mb-2">
+                                      <small>{hotel.city}</small>
+                                    </Card.Text>
+                                    <div className="d-flex justify-content-between align-items-center">
+                                      <span className="fw-bold text-success">
+                                        {hotel.price
+                                          ? `AED ${hotel.price}`
+                                          : "Rate not available"}
+                                      </span>
+                                      <Button
+                                        variant="outline-warning"
+                                        size="sm"
+                                      >
+                                        View Details
+                                      </Button>
+                                    </div>
+                                  </Card.Body>
+                                </Card>
+                              </Col>
+                            ))}
+                          </Row>
+                        </div>
+                      )}
+
+                      {hasSearchResult && allResults.length === 0 && (
+                        <div className="text-center text-muted mt-4">
+                          <p>No hotels found for the selected criteria.</p>
+                        </div>
+                      )}
+
+                      {isLoading && (
+                        <div className="text-center mt-4">
+                          <div
+                            className="spinner-border text-warning"
+                            role="status"
+                          >
+                            <span className="visually-hidden">Loading...</span>
+                          </div>
+                          <p className="mt-2 text-muted">Searching hotels...</p>
+                        </div>
+                      )}
                     </Card.Body>
                   </Card>
                 </Tab>
