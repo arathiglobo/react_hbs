@@ -41,7 +41,7 @@ const Profile = () => {
         <TopBar />
 
         <div className="container-fluid mt-4">
-          <h3 className="mb-4 fw-bold">Company Profile</h3>
+          <h3 className="mb-4 fw-bold">Profile</h3>
 
           <div className="card p-4 shadow rounded-3">
             <div className="row mb-3">
