@@ -50,7 +50,9 @@ export default function ContractRate() {
         params.append("search", searchTerm.trim());
       }
 
-      const res = await axiosInstance.get(`/api/hotelContractRate/${id}?${params}`);
+      const res = await axiosInstance.get(
+        `/api/hotelContractRate?${params}&hotelId=${id}`
+      );
       if (res.data && Array.isArray(res.data)) {
         setRates(res.data);
         if (res.data.length < 10) {
@@ -125,7 +127,6 @@ export default function ContractRate() {
 
   // ✅ Update contract rate status (following OccupancyAndMinimumLength pattern)
   const updateContractRateStatus = async () => {
-   
     if (!selectedRate) {
       console.error("No selected rate found!");
       return;
@@ -139,7 +140,7 @@ export default function ContractRate() {
       // - If modal says "deactivate" (status is false/Active), send isLive: false
       // - If modal says "activate" (status is true/Inactive), send isLive: true
       const payload = {
-        isLive: !selectedRate.isLive, 
+        isLive: !selectedRate.isLive,
       };
 
       const res = await axiosInstance.patch(
@@ -159,7 +160,7 @@ export default function ContractRate() {
       setSelectedRate(null);
     } catch (error) {
       console.error("❌ Error updating contract rate status:", error);
-      
+
       // Handle different error types
       if (error.response?.status === 404) {
         toast.error("Contract rate not found");
@@ -324,14 +325,18 @@ export default function ContractRate() {
                           )}
                         </td>
                         <td>
-                          <Badge 
+                          <Badge
                             bg={rate.isLive ? "success" : "danger"}
                             style={{ cursor: "pointer" }}
                             onClick={() => handleStatusToggle(rate)}
-                            title={`Click to ${rate.isLive ? 'activate' : 'deactivate'} contract rate`}
+                            title={`Click to ${
+                              rate.isLive ? "activate" : "deactivate"
+                            } contract rate`}
                           >
-
-                            {console.log("rate data on toggle click::" , rate.isLive)}
+                            {console.log(
+                              "rate data on toggle click::",
+                              rate.isLive
+                            )}
                             {rate.isLive ? "Active" : "Inactive"}
                           </Badge>
                         </td>
@@ -485,8 +490,8 @@ export default function ContractRate() {
               {console.log("selectedRateRate##:", selectedRate)}
               <p>
                 Are you sure you want to{" "}
-                {selectedRate?.isLive ? "deactivate" : "activate"} this
-                contract rate?
+                {selectedRate?.isLive ? "deactivate" : "activate"} this contract
+                rate?
               </p>
             </Modal.Body>
             <Modal.Footer>
