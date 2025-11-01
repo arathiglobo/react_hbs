@@ -192,14 +192,14 @@ const HotelBookingPage = () => {
     return { errors, hasErrors };
   };
 
-  const checkIn = new Date(bookingData.payload.checkInDate);
-  const checkOut = new Date(bookingData.payload.checkOutDate);
-
-  // Calculate difference in milliseconds → convert to days
-  const nights = Math.max(
-    1,
-    Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24))
-  );
+  // const checkIn = new Date(bookingData.payload.checkInDate);
+  // const checkOut = new Date(bookingData.payload.checkOutDate);
+  
+  // // // Calculate difference in milliseconds → convert to days
+  // const nights = Math.max(
+  //   1,
+  //   Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24))
+  // );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -221,16 +221,18 @@ const HotelBookingPage = () => {
       // ✅ Construct booking payload
       // ---------------------------
 
+
+
       const payload = {
         agentId: bookingData.payload.agentId || null,
-        apiId: bookingData.payload.apiId || null,
+        apiId: "INHOUSE",//bookingData.payload.apiId || null,
         hotelId: selectedRate.hotelId,
         hotelName: bookingData.hotelStaticData.hotelName,
         address: bookingData.hotelStaticData.address,
         starRating: bookingData.hotelStaticData.starRating,
         checkInDate: bookingData.payload.checkInDate,
         checkOutDate: bookingData.payload.checkOutDate,
-        nights: nights,
+         nights: 1, //nights,
 
         // ✅ Primary guest details
         primaryGuest: {
@@ -256,7 +258,7 @@ const HotelBookingPage = () => {
               : false,
           currency: bookingData.selectedRate.currency || "AED",
           rate: bookingData.selectedRate.rate,
-          rateWithoutMarkup: "", //bookingData.selectedRate.rateWithoutMarkup,
+          rateWithoutMarkup: bookingData.selectedRate.rate,
           adults: room.adults,
           children: room.children,
           childAges: room.childAges || [],
@@ -294,33 +296,69 @@ const HotelBookingPage = () => {
   };
 
   // ✅ Confirm and post API only on OK
-  const confirmBooking = async () => {
-    if (!pendingPayload) return;
-    setShowConfirmModal(false);
-    setIsSubmitting(true);
-    try {
-   
-      const response = await axiosInstance.post(
-        "/hotel-booking/confirm",
-        pendingPayload
-      );
-      if (response.status === 200 || response.status === 201) {
+const confirmBooking = async () => {
+  if (!pendingPayload) return;
+  setShowConfirmModal(false);
+  setIsSubmitting(true);
 
-        toast.success("Booking submitted successfully.");
-        navigate("/booking-confirmation", {
-          state: { bookingData: response.data },
-        });
-      } else {
-         toast.error("Booking submission failed. Please try again.");
-      }
-    } catch (err) {
+  try {
+    // ✅ Step 1: Check agent credit status
+    const agentId = pendingPayload.agentId;
+    const requiredAmount = pendingPayload.rooms.reduce(
+      (sum, r) => sum + (r.rate || 0),
+      0
+    );
+
+    console.log("🔍 Checking credit for Agent:", agentId, "Amount:", requiredAmount);
+
+    const creditResponse = await axiosInstance.get(
+      `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`
+    );
+
+    if (creditResponse.data === false) {
+      // ❌ Not enough credit — show Bootbox alert
+
+      toast.error("Insufficient credit. Please proceed with online payment.");
      
-      toast.error("Booking submission failed. Please try again.");
-      
-    } finally {
-      setIsSubmitting(false);
+      // bootbox.alert({
+      //   title: "Insufficient Credit",
+      //   message:
+      //     "Your available credit is insufficient for this booking.<br/>Please proceed with <strong>online payment</strong>.",
+      //   centerVertical: true,
+      //   closeButton: false,
+      //   buttons: {
+      //     ok: {
+      //       label: "OK",
+      //       className: "btn-primary",
+      //     },
+      //   },
+      // });
+      return; // stop here
     }
-  };
+
+    // ✅ Step 2: Proceed to confirm booking
+    console.log("✅ Credit check passed. Proceeding with booking...");
+
+    const response = await axiosInstance.post(
+      "/hotel-booking/create",
+      pendingPayload
+    );
+
+    bookingResponse = response.data;
+    if (bookingResponse && bookingResponse.status === "CONFIRMED" &&  bookingResponse.bookingId != 0) {
+      toast.success(bookingResponse.message);
+      navigate("/booking-confirmation");
+    } else {
+      toast.error("Booking submission failed. Please try again.");
+    }
+  } catch (err) {
+    console.error("❌ Error in booking confirmation:", err);
+    toast.error("Booking submission failed. Please try again.");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
 
   const formatPrice = (price) =>
     new Intl.NumberFormat("en-AE", {
