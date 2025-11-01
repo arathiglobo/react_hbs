@@ -38,7 +38,7 @@ const HotelBookingList = () => {
   const [toDate, setToDate] = useState("");
 
   // Fetch data from API
-  const fetchBookings = async () => {
+  const fetchBookings = async () => { 
     try {
       setLoading(true);
       const response = await axiosInstance.get("/api/bookings");
