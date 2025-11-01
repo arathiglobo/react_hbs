@@ -35,6 +35,7 @@ const HotelBookingPage = () => {
     agentLpo: "",
   });
   const [validationErrors, setValidationErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load bookingData once
   useEffect(() => {
@@ -186,25 +187,114 @@ const HotelBookingPage = () => {
     return { errors, hasErrors };
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    const { errors, hasErrors } = validateForm();
+  const { errors, hasErrors } = validateForm();
 
-    if (hasErrors) {
-      setValidationErrors(errors);
-      return;
+  if (hasErrors) {
+    setValidationErrors(errors);
+    return;
+  }
+
+  // ✅ Clear validation errors before submission
+  setValidationErrors({});
+
+  try {
+    setIsSubmitting(true);
+
+    // ---------------------------
+    // ✅ Construct booking payload
+    // ---------------------------
+
+    const payload = {
+    
+      agentId: bookingData.payload.agentId || null,
+      hotelId: selectedRate.hotelId,
+      hotelName: bookingData.hotelStaticData.hotelName,
+      address: bookingData.hotelStaticData.address,
+      starRating: bookingData.hotelStaticData.starRating,
+      checkInDate: bookingData.payload.checkInDate,
+      checkOutDate: bookingData.payload.checkOutDate,
+      nights: bookingData.payload.nights,
+
+      // ✅ Primary guest details
+      primaryGuest: {
+        salutation: primaryGuest.salutation,
+        firstName: primaryGuest.firstName,
+        middleName: primaryGuest.middleName,
+        lastName: primaryGuest.lastName,
+        email: primaryGuest.email,
+        phone: primaryGuest.phone,
+        passportNo: primaryGuest.passportNo,
+        agentLpo: primaryGuest.agentLpo,
+      },
+
+      // ✅ Room & guest breakdown
+      rooms: rooms.map((room, roomIndex) => ({
+        roomNo: roomIndex + 1,
+        roomCategory: bookingData.selectedRate.roomCategory, // per room
+        mealPlan: bookingData.selectedRate.mealPlan,
+        nonRefundable:
+          bookingData.selectedRate.nonRefundable === true ||
+          bookingData.selectedRate.nonRefundable === "true"
+            ? true
+            : false,
+        currency: bookingData.selectedRate.currency || "AED",
+        rate: bookingData.selectedRate.rate,
+        rateWithoutMarkup:  "",//bookingData.selectedRate.rateWithoutMarkup,
+        adults: room.adults,
+        children: room.children,
+        childAges: room.childAges || [],
+        guests: room.guests.map((guest) => ({
+          salutation: guest.salutation,
+          firstName: guest.firstName,
+          middleName: guest.middleName || "",
+          lastName: guest.lastName,
+          gender: guest.gender,
+          isChild: guest.isChild,
+        })),
+      })),
+
+      // ✅ Additional remarks
+      remarks:
+        document.querySelector("textarea[placeholder='Any remarks...']")?.value ||
+        "",
+      specialRequests:
+        document.querySelector("textarea[placeholder='Any special requests...']")
+          ?.value || "",
+
+      // ✅ Metadata
+     
+    };
+
+    console.log("📦 Final booking payload:", payload);
+
+    // ---------------------------
+    // ✅ Submit booking to backend
+    // ---------------------------
+
+    const response = await axiosInstance.post(
+      "/hotel-booking/confirm",
+      payload
+    );
+
+    if (response.status === 200 || response.status === 201) {
+      console.log("✅ Booking success:", response.data);
+      navigate("/booking-confirmation", {
+        state: { bookingData: response.data },
+      });
+    } else {
+      console.error("⚠️ Booking failed:", response);
+      alert("Booking submission failed. Please try again.");
     }
-
-    // Clear any existing errors
-    setValidationErrors({});
-
-    const bookingPayload = { primaryGuest, rooms };
-    console.log("Booking Data:", bookingPayload);
-    navigate("/booking-confirmation", {
-      state: { bookingData: bookingPayload },
-    });
-  };
+  } catch (err) {
+    console.error("❌ Booking error:", err);
+    alert("Error while processing booking. Please check console for details.");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const formatPrice = (price) =>
     new Intl.NumberFormat("en-AE", {
