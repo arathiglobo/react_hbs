@@ -17,6 +17,7 @@ import {
   Modal,
 } from "react-bootstrap";
 import axiosInstance from "../components/AxiosInstance";
+import toast from "react-hot-toast";
 
 const HotelBookingPage = () => {
   const navigate = useNavigate();
@@ -285,8 +286,8 @@ const HotelBookingPage = () => {
       setPendingPayload(payload);
       setShowConfirmModal(true);
     } catch (err) {
-      console.error("❌ Booking error:", err);
-      alert("Error while processing booking.");
+      console.error("booking payload error", err);
+      
     } finally {
       setIsSubmitting(false);
     }
@@ -304,15 +305,18 @@ const HotelBookingPage = () => {
         pendingPayload
       );
       if (response.status === 200 || response.status === 201) {
+
+        toast.success("Booking submitted successfully.");
         navigate("/booking-confirmation", {
           state: { bookingData: response.data },
         });
       } else {
-        alert("Booking submission failed. Please try again.");
+         toast.error("Booking submission failed. Please try again.");
       }
     } catch (err) {
-      console.error("❌ Booking error:", err);
-      alert("Error while processing booking.");
+     
+      toast.error("Booking submission failed. Please try again.");
+      
     } finally {
       setIsSubmitting(false);
     }
