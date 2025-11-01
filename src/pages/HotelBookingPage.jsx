@@ -14,7 +14,9 @@ import {
   Accordion,
   Badge,
   Alert,
+  Modal,
 } from "react-bootstrap";
+import axiosInstance from "../components/AxiosInstance";
 
 const HotelBookingPage = () => {
   const navigate = useNavigate();
@@ -36,6 +38,8 @@ const HotelBookingPage = () => {
   });
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState(null);
 
   // Load bookingData once
   useEffect(() => {
@@ -187,115 +191,132 @@ const HotelBookingPage = () => {
     return { errors, hasErrors };
   };
 
+  const checkIn = new Date(bookingData.payload.checkInDate);
+  const checkOut = new Date(bookingData.payload.checkOutDate);
+
+  // Calculate difference in milliseconds → convert to days
+  const nights = Math.max(
+    1,
+    Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24))
+  );
+
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  const { errors, hasErrors } = validateForm();
+    const { errors, hasErrors } = validateForm();
 
-  if (hasErrors) {
-    setValidationErrors(errors);
-    return;
-  }
-
-  // ✅ Clear validation errors before submission
-  setValidationErrors({});
-
-  try {
-    setIsSubmitting(true);
-
-    // ---------------------------
-    // ✅ Construct booking payload
-    // ---------------------------
-
-    const payload = {
-    
-      agentId: bookingData.payload.agentId || null,
-      apiId:payload.apiId,
-      hotelId: selectedRate.hotelId,
-      hotelName: bookingData.hotelStaticData.hotelName,
-      address: bookingData.hotelStaticData.address,
-      starRating: bookingData.hotelStaticData.starRating,
-      checkInDate: bookingData.payload.checkInDate,
-      checkOutDate: bookingData.payload.checkOutDate,
-      nights: bookingData.payload.nights,
-
-      // ✅ Primary guest details
-      primaryGuest: {
-        salutation: primaryGuest.salutation,
-        firstName: primaryGuest.firstName,
-        middleName: primaryGuest.middleName,
-        lastName: primaryGuest.lastName,
-        email: primaryGuest.email,
-        phone: primaryGuest.phone,
-        passportNo: primaryGuest.passportNo,
-        agentLpo: primaryGuest.agentLpo,
-      },
-
-      // ✅ Room & guest breakdown
-      rooms: rooms.map((room, roomIndex) => ({
-        roomNo: roomIndex + 1,
-        roomCategory: bookingData.selectedRate.roomCategory, // per room
-        mealPlan: bookingData.selectedRate.mealPlan,
-        nonRefundable:
-          bookingData.selectedRate.nonRefundable === true ||
-          bookingData.selectedRate.nonRefundable === "true"
-            ? true
-            : false,
-        currency: bookingData.selectedRate.currency || "AED",
-        rate: bookingData.selectedRate.rate,
-        rateWithoutMarkup:  "",//bookingData.selectedRate.rateWithoutMarkup,
-        adults: room.adults,
-        children: room.children,
-        childAges: room.childAges || [],
-        guests: room.guests.map((guest) => ({
-          salutation: guest.salutation,
-          firstName: guest.firstName,
-          middleName: guest.middleName || "",
-          lastName: guest.lastName,
-          gender: guest.gender,
-          isChild: guest.isChild,
-        })),
-      })),
-
-      // ✅ Additional remarks
-      remarks:
-        document.querySelector("textarea[placeholder='Any remarks...']")?.value ||
-        "",
-      specialRequests:
-        document.querySelector("textarea[placeholder='Any special requests...']")
-          ?.value || "",
-
-      // ✅ Metadata
-     
-    };
-
-    console.log("📦 Final booking payload:", payload);
-
-    // ---------------------------
-    // ✅ Submit booking to backend
-    // ---------------------------
-
-    const response = await axiosInstance.post(
-      "/hotel-booking/confirm",
-      payload
-    );
-
-    if (response.status === 200 || response.status === 201) {
-      console.log("✅ Booking success:", response.data);
-      navigate("/booking-confirmation", {
-        state: { bookingData: response.data },
-      });
-    } else {
-      console.error("⚠️ Booking failed:", response);
-      alert("Booking submission failed. Please try again.");
+    if (hasErrors) {
+      setValidationErrors(errors);
+      return;
     }
-  } catch (err) {
-    console.error("❌ Booking error:", err);
-    alert("Error while processing booking. Please check console for details.");
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+
+    // ✅ Clear validation errors before submission
+    setValidationErrors({});
+
+    try {
+      setIsSubmitting(true);
+
+      // ---------------------------
+      // ✅ Construct booking payload
+      // ---------------------------
+
+      const payload = {
+        agentId: bookingData.payload.agentId || null,
+        apiId: bookingData.payload.apiId || null,
+        hotelId: selectedRate.hotelId,
+        hotelName: bookingData.hotelStaticData.hotelName,
+        address: bookingData.hotelStaticData.address,
+        starRating: bookingData.hotelStaticData.starRating,
+        checkInDate: bookingData.payload.checkInDate,
+        checkOutDate: bookingData.payload.checkOutDate,
+        nights: nights,
+
+        // ✅ Primary guest details
+        primaryGuest: {
+          salutation: primaryGuest.salutation,
+          firstName: primaryGuest.firstName,
+          middleName: primaryGuest.middleName,
+          lastName: primaryGuest.lastName,
+          email: primaryGuest.email,
+          phone: primaryGuest.phone,
+          passportNo: primaryGuest.passportNo,
+          agentLpo: primaryGuest.agentLpo,
+        },
+
+        // ✅ Room & guest breakdown
+        rooms: rooms.map((room, roomIndex) => ({
+          roomNo: roomIndex + 1,
+          roomCategory: bookingData.selectedRate.roomCategory, // per room
+          mealPlan: bookingData.selectedRate.mealPlan,
+          nonRefundable:
+            bookingData.selectedRate.nonRefundable === true ||
+            bookingData.selectedRate.nonRefundable === "true"
+              ? true
+              : false,
+          currency: bookingData.selectedRate.currency || "AED",
+          rate: bookingData.selectedRate.rate,
+          rateWithoutMarkup: "", //bookingData.selectedRate.rateWithoutMarkup,
+          adults: room.adults,
+          children: room.children,
+          childAges: room.childAges || [],
+          guests: room.guests.map((guest) => ({
+            salutation: guest.salutation,
+            firstName: guest.firstName,
+            middleName: guest.middleName || "",
+            lastName: guest.lastName,
+            gender: guest.gender,
+            isChild: guest.isChild,
+          })),
+        })),
+
+        // ✅ Additional remarks
+        remarks:
+          document.querySelector("textarea[placeholder='Any remarks...']")
+            ?.value || "",
+        specialRequests:
+          document.querySelector(
+            "textarea[placeholder='Any special requests...']"
+          )?.value || "",
+
+        // ✅ Metadata
+      };
+
+      console.log("📦 Final booking payload:", payload);
+      setPendingPayload(payload);
+      setShowConfirmModal(true);
+    } catch (err) {
+      console.error("❌ Booking error:", err);
+      alert("Error while processing booking.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ✅ Confirm and post API only on OK
+  const confirmBooking = async () => {
+    if (!pendingPayload) return;
+    setShowConfirmModal(false);
+    setIsSubmitting(true);
+    try {
+   
+      const response = await axiosInstance.post(
+        "/hotel-booking/confirm",
+        pendingPayload
+      );
+      if (response.status === 200 || response.status === 201) {
+        navigate("/booking-confirmation", {
+          state: { bookingData: response.data },
+        });
+      } else {
+        alert("Booking submission failed. Please try again.");
+      }
+    } catch (err) {
+      console.error("❌ Booking error:", err);
+      alert("Error while processing booking.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const formatPrice = (price) =>
     new Intl.NumberFormat("en-AE", {
@@ -820,6 +841,117 @@ const HotelBookingPage = () => {
                   Confirm Booking
                 </Button>
               </div>
+
+              {/* ✅ Confirmation Modal */}
+             <Modal
+  show={showConfirmModal}
+  onHide={() => setShowConfirmModal(false)}
+  centered
+  backdrop="static"
+  size="md"
+>
+  <Modal.Header
+    closeButton
+    className="bg-primary text-white py-2"
+    style={{ borderBottom: "none" }}
+  >
+    <Modal.Title className="fw-semibold d-flex align-items-center">
+      <FaHotel className="me-2" /> Confirm Your Booking
+    </Modal.Title>
+  </Modal.Header>
+
+  <Modal.Body className="px-4 py-3 bg-light">
+    {pendingPayload && (
+      <div className="border rounded-3 bg-white shadow-sm p-3">
+        <div className="mb-3">
+          <h5 className="fw-bold text-primary mb-2">
+            {pendingPayload.hotelName}
+          </h5>
+          <p className="text-muted mb-0">{pendingPayload.address}</p>
+        </div>
+
+        <hr />
+
+        <Row className="gy-2">
+          <Col xs={6}>
+            <p className="mb-1">
+              <strong>Check-In:</strong>
+              <br />
+              <span className="text-dark">{pendingPayload.checkInDate}</span>
+            </p>
+          </Col>
+          <Col xs={6}>
+            <p className="mb-1">
+              <strong>Check-Out:</strong>
+              <br />
+              <span className="text-dark">{pendingPayload.checkOutDate}</span>
+            </p>
+          </Col>
+          <Col xs={6}>
+            <p className="mb-1">
+              <strong>Rooms:</strong> {pendingPayload.rooms.length}
+            </p>
+          </Col>
+          <Col xs={6}>
+            <p className="mb-1">
+              <strong>Nights:</strong> {pendingPayload.nights}
+            </p>
+          </Col>
+          <Col xs={12}>
+            <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
+              <h6 className="mb-0 fw-bold">Total Price</h6>
+              <h4 className="mb-0">
+                {formatPrice(
+                  pendingPayload.rooms.reduce(
+                    (sum, r) => sum + (r.rate || 0),
+                    0
+                  )
+                )}
+              </h4>
+            </div>
+          </Col>
+        </Row>
+
+        <div className="mt-4 text-center">
+          <p className="text-muted small mb-0">
+            Please review the booking details carefully before confirming.
+          </p>
+        </div>
+      </div>
+    )}
+  </Modal.Body>
+
+  <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
+    <Button
+      variant="outline-secondary"
+      onClick={() => setShowConfirmModal(false)}
+      disabled={isSubmitting}
+    >
+      <i className="bi bi-x-circle me-1"></i> Cancel
+    </Button>
+    <Button
+      variant="primary"
+      onClick={confirmBooking}
+      disabled={isSubmitting}
+      className="px-4 fw-semibold"
+    >
+      {isSubmitting ? (
+        <>
+          <span
+            className="spinner-border spinner-border-sm me-2"
+            role="status"
+          ></span>
+          Processing...
+        </>
+      ) : (
+        <>
+          <i className="bi bi-check-circle me-1"></i> Confirm
+        </>
+      )}
+    </Button>
+  </Modal.Footer>
+</Modal>
+
             </Form>
           </Container>
         </main>
