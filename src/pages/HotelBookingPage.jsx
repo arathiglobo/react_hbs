@@ -344,10 +344,13 @@ const confirmBooking = async () => {
       pendingPayload
     );
 
-    bookingResponse = response.data;
+   const bookingResponse = response.data;
+   console.log("response:::", response);
+   console.log("bookingResponse:::", bookingResponse);
+
     if (bookingResponse && bookingResponse.status === "CONFIRMED" &&  bookingResponse.bookingId != 0) {
       toast.success(bookingResponse.message);
-      navigate("/booking-confirmation");
+      navigate("/booking-details/hotel-booking-list");
     } else {
       toast.error("Booking submission failed. Please try again.");
     }
@@ -560,7 +563,7 @@ const confirmBooking = async () => {
                                     <option value="Mr">Mr</option>
                                     <option value="Mrs">Mrs</option>
                                     <option value="Ms">Ms</option>
-                                    <option value="Dr">Dr</option>
+                                    <option value="Dr">Master</option>
                                   </Form.Select>
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_salutation`

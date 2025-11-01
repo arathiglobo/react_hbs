@@ -117,14 +117,7 @@ export default function App() {
             </PrivateRoute>
           }
         />
-        <Route
-          path="/booking-details/hotel-booking-list"
-          element={
-            <PrivateRoute>
-              <HotelBookingList />
-            </PrivateRoute>
-          }
-        />
+       
         <Route
           path="/staffDashboard"
           element={
@@ -189,7 +182,7 @@ export default function App() {
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
-       
+        <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
        
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
