@@ -49,6 +49,13 @@ export default function MakePkgCombineSearch() {
   const resultsRef = useRef(null);
    const [hasSearched, setHasSearched] = useState(false);
    const [sortBy, setSortBy] = useState("priceAsc");
+    const [starRating, setStarRating] = useState([]);
+    const [hotelType, setHotelType] = useState([]);
+      const [channelType, setChannelType] = useState([]);
+      const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
+      const [hotelSearchTerm, setHotelSearchTerm] = useState("");
+      const [errors, setErrors] = useState({});
+      const [clickedHotelIds, setClickedHotelIds] = useState([]);
 
   useEffect(() => {
     if (checkIn && nightsCount) {
