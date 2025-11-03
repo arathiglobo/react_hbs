@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaHotel, FaCalendarAlt, FaUsers, FaUtensils } from "react-icons/fa";
+import { FaHotel, FaCalendarAlt, FaUsers, FaUtensils, FaUserTie } from "react-icons/fa";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import "../styles/HotelBookingPage.css";
@@ -36,11 +36,28 @@ const HotelBookingPage = () => {
     phone: "",
     passportNo: "",
     agentLpo: "",
+    employeeId: "",
   });
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+  const [employees, setEmployees] = useState([]);
+
+  // Fetch employees list
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
+        if (res.data && Array.isArray(res.data)) {
+          setEmployees(res.data);
+        }
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, []);
 
   // Load bookingData once
   useEffect(() => {
@@ -231,6 +248,7 @@ const HotelBookingPage = () => {
         checkInDate: bookingData.payload.checkInDate,
         checkOutDate: bookingData.payload.checkOutDate,
         nights: 1, //nights,
+        employeeId: primaryGuest.employeeId || null,
         cancellationPolicy:
           bookingData.selectedRate.cancellationPolicy?.map(
             (p) => p.policyText
@@ -246,8 +264,7 @@ const HotelBookingPage = () => {
           phone: primaryGuest.phone,
           passportNo: primaryGuest.passportNo,
           agentLpo: primaryGuest.agentLpo,
-          employeeId : null,
-          nativeCountry :bookingData.payload.nationality
+          nativeCountry: bookingData.payload.nationality,
         },
 
         // ✅ Room & guest breakdown
@@ -859,11 +876,11 @@ const HotelBookingPage = () => {
                       )}
                     </Form.Group>
                   </Col>
-                </Row>
+                </Row>              
               </Card>
 
               {/* Remarks & Requests */}
-              <Card className="p-4 mb-4 shadow-sm border-0">
+              <Card className="p-4 mb-2 shadow-sm border-0">
                 <h5 className="mb-3 fw-bold">Remarks & Special Requests</h5>
                 <Row>
                   <Col md={6}>
@@ -884,6 +901,34 @@ const HotelBookingPage = () => {
                         rows={3}
                         placeholder="Any special requests..."
                       />
+                    </Form.Group>
+                  </Col>
+                </Row>
+              </Card>
+
+              {/* Booking Done By Section */}
+              <Card className="p-4 mb-4 shadow-sm border-0 bg-light">
+                <h6 className="mb-3 fw-bold text-primary d-flex align-items-center">
+                  <FaUserTie className="me-2" /> Booking Done By
+                </h6>
+                <Row>
+                  <Col md={4}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold">Employee</Form.Label>
+                      <Form.Select
+                        value={primaryGuest.employeeId}
+                        onChange={(e) =>
+                          handlePrimaryGuestChange("employeeId", e.target.value)
+                        }
+                        className="form-control"
+                      >
+                        <option value="">Select Employee</option>
+                        {employees.map((employee) => (
+                          <option key={employee.employeeId} value={employee.employeeId}>
+                            {employee.firstName} {employee.lastName}
+                          </option>
+                        ))}
+                      </Form.Select>
                     </Form.Group>
                   </Col>
                 </Row>
