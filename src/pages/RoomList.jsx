@@ -28,6 +28,7 @@ import {
   FaHotel,
   FaMoneyBillWave,
   FaShieldAlt,
+  FaGlobe,
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
@@ -204,10 +205,11 @@ const RoomList = () => {
               contractLabel: room.contractLabel,
               nonRefundable: room.nonRefundable,
               rate: room.rateDetails.rate,
-              currency: room.currCode,
+              currency: room.currCode
+              
             }));
 
-          // console.log("accurateRate:", accurateRates);
+           console.log("accurateRate:", accurateRates);
           setSelectedRate(accurateRates[0]);
           setLoadingRate(false);
           setShowBookingModal(true);
@@ -231,6 +233,7 @@ const RoomList = () => {
             nonRefundable: rate.nonRefundable,
             rate: rate.totalRate,
             currency: "AED",
+            cancellationPolicy: hotelsdetail.cancellationPolicies,
           },
           hotelStaticData: roomData.meta,
           payload: payload,
@@ -543,6 +546,7 @@ const RoomList = () => {
                       </div>
                     </div>
                   </Col>
+                  {console.log("hotel::", hotel)}
                   <Col md={4}>
                     <Card className="booking-summary">
                       <Card.Body className="p-3">
@@ -582,6 +586,15 @@ const RoomList = () => {
                             </span>
                             <span className="fw-semibold">
                               {hotel.numberOfRooms}
+                            </span>
+                          </div>
+                          <div className="d-flex justify-content-between">
+                            <span>
+                              <FaGlobe className="text-muted me-2" />
+                              Nationality:
+                            </span>
+                            <span className="fw-semibold">
+                              {hotel.nationality}
                             </span>
                           </div>
                         </div>

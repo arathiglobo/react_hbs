@@ -38,11 +38,30 @@ const HotelBookingList = () => {
   const [toDate, setToDate] = useState("");
 
   // Fetch data from API
-  const fetchBookings = async () => { 
+  const fetchBookings = async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get("/api/bookings");
-      setBookings(response.data || []);
+      const staticBookings = [
+        {
+          bookingId: 101,
+          hotelName: "The Palm Resort",
+          guestName: "Arjun Kumar",
+          checkInDate: "2025-12-12",
+          checkOutDate: "2025-12-13",
+          nights: 1,
+          totalAmount: 500,
+          currency: "AED",
+          status: "CONFIRMED",
+          agentName : "John Doe",
+          customerName: "Test",
+          bookingCode:"CNF123",
+          referenceCode:"REF1234",
+        },
+      ];
+      // const response = await axiosInstance.get("/api/bookings");
+      // const finalData = response.data?.length ? response.data : staticBookings;
+      // setBookings(finalData || []);
+      setBookings(staticBookings || []);
     } catch (error) {
       console.error("Error fetching bookings:", error);
     } finally {
@@ -55,12 +74,18 @@ const HotelBookingList = () => {
   }, []);
 
   // Filter by status, search, and time period
+  console.log("Bookings:", bookings);
   const filteredBookings = useMemo(() => {
     const query = search.toLowerCase().trim();
 
     return bookings.filter((b) => {
       const matchStatus = b.status === status;
-      const matchSearch = [b.agentName, b.customerName, b.bookingCode, b.referenceCode]
+      const matchSearch = [
+        b.agentName,
+        b.customerName,
+        b.bookingCode,
+        b.referenceCode,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(query);
@@ -80,7 +105,9 @@ const HotelBookingList = () => {
         matchRange = bookingDate >= from && bookingDate <= to;
       }
 
-      return matchStatus && matchSearch && matchYear && matchMonth && matchRange;
+      return (
+        matchStatus && matchSearch && matchYear && matchMonth && matchRange
+      );
     });
   }, [bookings, search, status, selectedYear, selectedMonth, fromDate, toDate]);
 
@@ -178,7 +205,9 @@ const HotelBookingList = () => {
 
                   <Col md={6} className="d-flex justify-content-end">
                     <div>
-                      <Form.Label className="fw-semibold">Time Period</Form.Label>
+                      <Form.Label className="fw-semibold">
+                        Time Period
+                      </Form.Label>
                       <InputGroup>
                         <Form.Select
                           value={selectedMonth || new Date().getMonth() + 1}
@@ -186,9 +215,12 @@ const HotelBookingList = () => {
                         >
                           {Array.from({ length: 12 }, (_, i) => {
                             const monthValue = i + 1;
-                            const monthName = new Date(0, i).toLocaleString("default", {
-                              month: "long",
-                            });
+                            const monthName = new Date(0, i).toLocaleString(
+                              "default",
+                              {
+                                month: "long",
+                              }
+                            );
                             return (
                               <option key={monthValue} value={monthValue}>
                                 {monthName}
@@ -268,7 +300,9 @@ const HotelBookingList = () => {
                                 selectedRows.size === pagedBookings.length &&
                                 pagedBookings.length > 0
                               }
-                              onChange={(e) => toggleSelectAll(e.target.checked)}
+                              onChange={(e) =>
+                                toggleSelectAll(e.target.checked)
+                              }
                             />
                           </th>
                           <th>#</th>
@@ -312,7 +346,10 @@ const HotelBookingList = () => {
                               </td>
                               <td>
                                 <Dropdown>
-                                  <Dropdown.Toggle size="sm" variant="outline-secondary">
+                                  <Dropdown.Toggle
+                                    size="sm"
+                                    variant="outline-secondary"
+                                  >
                                     Actions
                                   </Dropdown.Toggle>
                                   <Dropdown.Menu>

@@ -194,7 +194,7 @@ const HotelBookingPage = () => {
 
   // const checkIn = new Date(bookingData.payload.checkInDate);
   // const checkOut = new Date(bookingData.payload.checkOutDate);
-  
+
   // // // Calculate difference in milliseconds → convert to days
   // const nights = Math.max(
   //   1,
@@ -221,18 +221,20 @@ const HotelBookingPage = () => {
       // ✅ Construct booking payload
       // ---------------------------
 
-
-
       const payload = {
         agentId: bookingData.payload.agentId || null,
-        apiId: "INHOUSE",//bookingData.payload.apiId || null,
+        apiId: "INHOUSE", //bookingData.payload.apiId || null,
         hotelId: selectedRate.hotelId,
         hotelName: bookingData.hotelStaticData.hotelName,
         address: bookingData.hotelStaticData.address,
         starRating: bookingData.hotelStaticData.starRating,
         checkInDate: bookingData.payload.checkInDate,
         checkOutDate: bookingData.payload.checkOutDate,
-         nights: 1, //nights,
+        nights: 1, //nights,
+        cancellationPolicy:
+          bookingData.selectedRate.cancellationPolicy?.map(
+            (p) => p.policyText
+          ) || [],
 
         // ✅ Primary guest details
         primaryGuest: {
@@ -244,6 +246,8 @@ const HotelBookingPage = () => {
           phone: primaryGuest.phone,
           passportNo: primaryGuest.passportNo,
           agentLpo: primaryGuest.agentLpo,
+          employeeId : null,
+          nativeCountry :bookingData.payload.nationality
         },
 
         // ✅ Room & guest breakdown
@@ -289,79 +293,86 @@ const HotelBookingPage = () => {
       setShowConfirmModal(true);
     } catch (err) {
       console.error("booking payload error", err);
-      
     } finally {
       setIsSubmitting(false);
     }
   };
 
   // ✅ Confirm and post API only on OK
-const confirmBooking = async () => {
-  if (!pendingPayload) return;
-  setShowConfirmModal(false);
-  setIsSubmitting(true);
+  const confirmBooking = async () => {
+    if (!pendingPayload) return;
+    setShowConfirmModal(false);
+    setIsSubmitting(true);
 
-  try {
-    // ✅ Step 1: Check agent credit status
-    const agentId = pendingPayload.agentId;
-    const requiredAmount = pendingPayload.rooms.reduce(
-      (sum, r) => sum + (r.rate || 0),
-      0
-    );
+    try {
+      // ✅ Step 1: Check agent credit status
+      const agentId = pendingPayload.agentId;
+      const requiredAmount = pendingPayload.rooms.reduce(
+        (sum, r) => sum + (r.rate || 0),
+        0
+      );
 
-    console.log("🔍 Checking credit for Agent:", agentId, "Amount:", requiredAmount);
+      console.log(
+        "🔍 Checking credit for Agent:",
+        agentId,
+        "Amount:",
+        requiredAmount
+      );
 
-    const creditResponse = await axiosInstance.get(
-      `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`
-    );
+      const creditResponse = await axiosInstance.get(
+        `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`
+      );
 
-    if (creditResponse.data === false) {
-      // ❌ Not enough credit — show Bootbox alert
+      if (creditResponse.data === false) {
+        // ❌ Not enough credit — show Bootbox alert
 
-      toast.error("Insufficient credit. Please proceed with online payment.");
-     
-      // bootbox.alert({
-      //   title: "Insufficient Credit",
-      //   message:
-      //     "Your available credit is insufficient for this booking.<br/>Please proceed with <strong>online payment</strong>.",
-      //   centerVertical: true,
-      //   closeButton: false,
-      //   buttons: {
-      //     ok: {
-      //       label: "OK",
-      //       className: "btn-primary",
-      //     },
-      //   },
-      // });
-      return; // stop here
-    }
+        toast.error("Insufficient credit. Please proceed with online payment.");
 
-    // ✅ Step 2: Proceed to confirm booking
-    console.log("✅ Credit check passed. Proceeding with booking...");
+        // bootbox.alert({
+        //   title: "Insufficient Credit",
+        //   message:
+        //     "Your available credit is insufficient for this booking.<br/>Please proceed with <strong>online payment</strong>.",
+        //   centerVertical: true,
+        //   closeButton: false,
+        //   buttons: {
+        //     ok: {
+        //       label: "OK",
+        //       className: "btn-primary",
+        //     },
+        //   },
+        // });
+        return; // stop here
+      }
 
-    const response = await axiosInstance.post(
-      "/hotel-booking/create",
-      pendingPayload
-    );
+      // ✅ Step 2: Proceed to confirm booking
+      console.log("✅ Credit check passed. Proceeding with booking...");
 
-   const bookingResponse = response.data;
-   console.log("response:::", response);
-   console.log("bookingResponse:::", bookingResponse);
+      const response = await axiosInstance.post(
+        "/hotel-booking/create",
+        pendingPayload
+      );
 
-    if (bookingResponse && bookingResponse.status === "CONFIRMED" &&  bookingResponse.bookingId != 0) {
-      toast.success(bookingResponse.message);
-      navigate("/booking-details/hotel-booking-list");
-    } else {
+      const bookingResponse = response.data;
+      console.log("response:::", response);
+      console.log("bookingResponse:::", bookingResponse);
+
+      if (
+        bookingResponse &&
+        bookingResponse.status === "CONFIRMED" &&
+        bookingResponse.bookingId != 0
+      ) {
+        toast.success(bookingResponse.message);
+        navigate("/booking-details/hotel-booking-list");
+      } else {
+        toast.error("Booking submission failed. Please try again.");
+      }
+    } catch (err) {
+      console.error("❌ Error in booking confirmation:", err);
       toast.error("Booking submission failed. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
-  } catch (err) {
-    console.error("❌ Error in booking confirmation:", err);
-    toast.error("Booking submission failed. Please try again.");
-  } finally {
-    setIsSubmitting(false);
-  }
-};
-
+  };
 
   const formatPrice = (price) =>
     new Intl.NumberFormat("en-AE", {
@@ -888,115 +899,148 @@ const confirmBooking = async () => {
               </div>
 
               {/* ✅ Confirmation Modal */}
-             <Modal
-  show={showConfirmModal}
-  onHide={() => setShowConfirmModal(false)}
-  centered
-  backdrop="static"
-  size="md"
->
-  <Modal.Header
-    closeButton
-    className="bg-primary text-white py-2"
-    style={{ borderBottom: "none" }}
-  >
-    <Modal.Title className="fw-semibold d-flex align-items-center">
-      <FaHotel className="me-2" /> Confirm Your Booking
-    </Modal.Title>
-  </Modal.Header>
+              <Modal
+                show={showConfirmModal}
+                onHide={() => setShowConfirmModal(false)}
+                centered
+                backdrop="static"
+                size="md"
+              >
+                <Modal.Header
+                  closeButton
+                  className="bg-primary text-white py-2"
+                  style={{ borderBottom: "none" }}
+                >
+                  <Modal.Title className="fw-semibold d-flex align-items-center">
+                    <FaHotel className="me-2" /> Confirm Your Booking
+                  </Modal.Title>
+                </Modal.Header>
 
-  <Modal.Body className="px-4 py-3 bg-light">
-    {pendingPayload && (
-      <div className="border rounded-3 bg-white shadow-sm p-3">
-        <div className="mb-3">
-          <h5 className="fw-bold text-primary mb-2">
-            {pendingPayload.hotelName}
-          </h5>
-          <p className="text-muted mb-0">{pendingPayload.address}</p>
-        </div>
-
-        <hr />
-
-        <Row className="gy-2">
-          <Col xs={6}>
-            <p className="mb-1">
-              <strong>Check-In:</strong>
-              <br />
-              <span className="text-dark">{pendingPayload.checkInDate}</span>
-            </p>
-          </Col>
-          <Col xs={6}>
-            <p className="mb-1">
-              <strong>Check-Out:</strong>
-              <br />
-              <span className="text-dark">{pendingPayload.checkOutDate}</span>
-            </p>
-          </Col>
-          <Col xs={6}>
-            <p className="mb-1">
-              <strong>Rooms:</strong> {pendingPayload.rooms.length}
-            </p>
-          </Col>
-          <Col xs={6}>
-            <p className="mb-1">
-              <strong>Nights:</strong> {pendingPayload.nights}
-            </p>
-          </Col>
-          <Col xs={12}>
-            <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
-              <h6 className="mb-0 fw-bold">Total Price</h6>
-              <h4 className="mb-0">
-                {formatPrice(
-                  pendingPayload.rooms.reduce(
-                    (sum, r) => sum + (r.rate || 0),
-                    0
-                  )
+                {console.log(
+                  "pendingPayload::inside :order modal:::",
+                  pendingPayload
                 )}
-              </h4>
-            </div>
-          </Col>
-        </Row>
+                <Modal.Body className="px-4 py-3 bg-light">
+                  {pendingPayload && (
+                    <div className="border rounded-3 bg-white shadow-sm p-3">
+                      <div className="mb-3">
+                        <h5 className="fw-bold text-primary mb-2">
+                          {pendingPayload.hotelName}
+                        </h5>
+                        <p className="text-muted mb-0">
+                          {pendingPayload.address}
+                        </p>
+                      </div>
 
-        <div className="mt-4 text-center">
-          <p className="text-muted small mb-0">
-            Please review the booking details carefully before confirming.
-          </p>
-        </div>
-      </div>
-    )}
-  </Modal.Body>
+                      <hr />
 
-  <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
-    <Button
-      variant="outline-secondary"
-      onClick={() => setShowConfirmModal(false)}
-      disabled={isSubmitting}
-    >
-      <i className="bi bi-x-circle me-1"></i> Cancel
-    </Button>
-    <Button
-      variant="primary"
-      onClick={confirmBooking}
-      disabled={isSubmitting}
-      className="px-4 fw-semibold"
-    >
-      {isSubmitting ? (
-        <>
-          <span
-            className="spinner-border spinner-border-sm me-2"
-            role="status"
-          ></span>
-          Processing...
-        </>
-      ) : (
-        <>
-          <i className="bi bi-check-circle me-1"></i> Confirm
-        </>
-      )}
-    </Button>
-  </Modal.Footer>
-</Modal>
+                      <Row className="gy-2">
+                        <Col xs={6}>
+                          <p className="mb-1">
+                            <strong>Check-In:</strong>
+                            <br />
+                            <span className="text-dark">
+                              {pendingPayload.checkInDate}
+                            </span>
+                          </p>
+                        </Col>
+                        <Col xs={6}>
+                          <p className="mb-1">
+                            <strong>Check-Out:</strong>
+                            <br />
+                            <span className="text-dark">
+                              {pendingPayload.checkOutDate}
+                            </span>
+                          </p>
+                        </Col>
+                        <Col xs={6}>
+                          <p className="mb-1">
+                            <strong>Rooms:</strong>{" "}
+                            {pendingPayload.rooms.length}
+                          </p>
+                        </Col>
+                        <Col xs={6}>
+                          <p className="mb-1">
+                            <strong>Nights:</strong> {pendingPayload.nights}
+                          </p>
+                        </Col>
+                        <Col xs={12}>
+                          <p className="mb-1">
+                            <strong>Cancellation Policy:</strong>
+                          </p>
+                          <ul className="mb-0 ps-3">
+                            {pendingPayload.cancellationPolicy &&
+                            pendingPayload.cancellationPolicy.length > 0 ? (
+                              pendingPayload.cancellationPolicy.map(
+                                (policy, index) => (
+                                  <li key={index} className="text-dark">
+                                    {policy}
+                                  </li>
+                                )
+                              )
+                            ) : (
+                              <li className="text-muted">
+                                No cancellation policy available.
+                              </li>
+                            )}
+                          </ul>
+                        </Col>
 
+                        <Col xs={12}>
+                          <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
+                            <h6 className="mb-0 fw-bold">Total Price</h6>
+                            <h4 className="mb-0">
+                              {formatPrice(
+                                pendingPayload.rooms.reduce(
+                                  (sum, r) => sum + (r.rate || 0),
+                                  0
+                                )
+                              )}
+                            </h4>
+                          </div>
+                        </Col>
+                      </Row>
+
+                      <div className="mt-4 text-center">
+                        <p className="text-muted small mb-0">
+                          Please review the booking details carefully before
+                          confirming.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </Modal.Body>
+
+                <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowConfirmModal(false)}
+                    disabled={isSubmitting}
+                  >
+                    <i className="bi bi-x-circle me-1"></i> Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={confirmBooking}
+                    disabled={isSubmitting}
+                    className="px-4 fw-semibold"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                        ></span>
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-check-circle me-1"></i> Confirm
+                      </>
+                    )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
             </Form>
           </Container>
         </main>

@@ -3,7 +3,16 @@ import { Navbar, Container, Nav, Dropdown, Image } from "react-bootstrap";
 import { FaKey, FaUser, FaSignOutAlt } from "react-icons/fa";
 
 export default function TopBar() {
- 
+  const handleLogout = () => {
+    // Remove specific items
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("UserName");
+
+    // Optionally redirect to login page
+    window.location.href = "/";
+  };
+
   return (
     <Navbar bg="white" className="topbar shadow-sm" expand="lg" sticky="top">
       <Container fluid className="px-3">
@@ -20,12 +29,12 @@ export default function TopBar() {
                 Change Password
               </Dropdown.Item>
               <Dropdown.Divider />
-              <Dropdown.Item   href="view-profile">
+              <Dropdown.Item href="view-profile">
                 <FaUser className="me-2" />
                 View Profile
               </Dropdown.Item>
               <Dropdown.Divider />
-              <Dropdown.Item href="/">
+              <Dropdown.Item onClick={handleLogout}>
                 <FaSignOutAlt className="me-2" />
                 Logout
               </Dropdown.Item>
