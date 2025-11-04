@@ -24,6 +24,10 @@ import {
   FaUndo,
   FaPrint,
   FaFileExcel,
+  FaFileInvoiceDollar,
+  FaFileInvoice,
+  FaPlus,
+  FaHotel,
 } from "react-icons/fa";
 
 // Dummy invoice data for testing
@@ -35,6 +39,8 @@ const dummyInvoiceData = [
     bookingCode: "BK001234",
     bookingDate: "2024-01-15",
     rate: 1250.00,
+    hotelName: "Grand Plaza Hotel",
+    confirmationCode: "CONF123456",
   },
   {
     id: 2,
@@ -43,71 +49,10 @@ const dummyInvoiceData = [
     bookingCode: "BK001235",
     bookingDate: "2024-01-16",
     rate: 890.50,
+    hotelName: "Oceanview Resort",
+    confirmationCode: "CONF123457",
   },
-  {
-    id: 3,
-    customerName: "Michael Brown",
-    agent: "ABC Travel Agency",
-    bookingCode: "BK001236",
-    bookingDate: "2024-01-17",
-    rate: 2100.75,
-  },
-  {
-    id: 4,
-    customerName: "Emily Davis",
-    agent: "Global Travel Solutions",
-    bookingCode: "BK001237",
-    bookingDate: "2024-01-18",
-    rate: 1750.00,
-  },
-  {
-    id: 5,
-    customerName: "David Wilson",
-    agent: "XYZ Tours",
-    bookingCode: "BK001238",
-    bookingDate: "2024-01-19",
-    rate: 950.25,
-  },
-  {
-    id: 6,
-    customerName: "Lisa Anderson",
-    agent: "Premium Travel Co",
-    bookingCode: "BK001239",
-    bookingDate: "2024-01-20",
-    rate: 3200.00,
-  },
-  {
-    id: 7,
-    customerName: "Robert Taylor",
-    agent: "ABC Travel Agency",
-    bookingCode: "BK001240",
-    bookingDate: "2024-01-21",
-    rate: 1480.50,
-  },
-  {
-    id: 8,
-    customerName: "Jessica Martinez",
-    agent: "Global Travel Solutions",
-    bookingCode: "BK001241",
-    bookingDate: "2024-01-22",
-    rate: 1120.75,
-  },
-  {
-    id: 9,
-    customerName: "William Garcia",
-    agent: "XYZ Tours",
-    bookingCode: "BK001242",
-    bookingDate: "2024-01-23",
-    rate: 2350.00,
-  },
-  {
-    id: 10,
-    customerName: "Amanda Rodriguez",
-    agent: "Premium Travel Co",
-    bookingCode: "BK001243",
-    bookingDate: "2024-01-24",
-    rate: 1680.25,
-  },
+ 
 ];
 
 export default function Invoice() {
@@ -115,6 +60,8 @@ export default function Invoice() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
   const [error, setError] = useState("");
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -450,6 +397,30 @@ export default function Invoice() {
     });
   };
 
+  const handleTaxClick = (item) => {
+    // TODO: Implement tax functionality
+    toast(`Tax action for ${item.customerName}`, {
+      icon: "ℹ️",
+    });
+  };
+
+  const handleInvoiceClick = (item) => {
+    // TODO: Implement invoice functionality
+    toast(`Invoice action for ${item.customerName}`, {
+      icon: "ℹ️",
+    });
+  };
+
+  const handlePlusClick = (item) => {
+    setSelectedItem(item);
+    setShowDetailsModal(true);
+  };
+
+  const closeDetailsModal = () => {
+    setShowDetailsModal(false);
+    setSelectedItem(null);
+  };
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
@@ -628,20 +599,26 @@ export default function Invoice() {
                               : "-"}
                           </td>
                           <td>
-                            <div className="d-flex gap-2">
-                              <FaEdit
-                                className="text-primary"
+                            <div className="d-flex gap-2 align-items-center">
+                              <FaFileInvoiceDollar
+                                className="text-warning"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
-                                onClick={() => openEdit(item)}
-                                title="Edit"
+                                onClick={() => handleTaxClick(item)}
+                                title="Tax"
                               />
-                              <FaTrash
-                                className="text-danger"
+                              <FaFileInvoice
+                                className="text-info"
                                 style={{ cursor: "pointer", fontSize: "18px" }}
-                                onClick={() => handleDelete(item)}
-                                title="Delete"
+                                onClick={() => handleInvoiceClick(item)}
+                                title="Invoice"
                               />
-                     </div>
+                              <FaPlus
+                                className="text-success"
+                                style={{ cursor: "pointer", fontSize: "18px" }}
+                                onClick={() => handlePlusClick(item)}
+                                title="View Details"
+                              />
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -855,7 +832,55 @@ export default function Invoice() {
                 Reset
                </Button>
              </Modal.Footer>
-           </Modal>
+                       </Modal>
+
+          {/* Details Modal */}
+          <Modal show={showDetailsModal} onHide={closeDetailsModal} centered>
+            <Modal.Header
+              closeButton
+              className="bg-primary text-white"
+            >
+              <Modal.Title>Booking Details</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {selectedItem && (
+                <div>
+                  <div className="mb-3">
+                    <div className="d-flex align-items-center mb-2">
+                      <FaHotel className="text-primary me-2" />
+                      <strong>Hotel Name:</strong>
+                    </div>
+                    <p className="ms-4 mb-0">{selectedItem.hotelName || "-"}</p>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <div className="d-flex align-items-center mb-2">
+                      <FaCalendarAlt className="text-primary me-2" />
+                      <strong>Booking Date:</strong>
+                    </div>
+                    <p className="ms-4 mb-0">{selectedItem.bookingDate || "-"}</p>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <div className="d-flex align-items-center mb-2">
+                      <FaFileInvoice className="text-primary me-2" />
+                      <strong>Confirmation Code:</strong>
+                    </div>
+                    <p className="ms-4 mb-0">
+                      <code className="bg-light p-2 rounded">
+                        {selectedItem.confirmationCode || "-"}
+                      </code>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={closeDetailsModal}>
+                Close
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>
