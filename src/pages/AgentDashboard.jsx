@@ -1,11 +1,12 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
-import { Container, Row, Col, Button, Card, ProgressBar } from 'react-bootstrap';
+import { Container, Row, Col, Button, Card, ProgressBar, Spinner } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
+import axiosInstance from '../components/AxiosInstance';
 
 const kpiData = {
   totalBookings: 1245,
@@ -20,22 +21,47 @@ const bookingsLabels = ['Aug 1','Aug 2','Aug 3','Aug 4','Aug 5'];
 const bookingsData = [20,35,50,40,65];
 const revenueData = [3000,4800,5500,4000,6800];
 
-// Credit summary shown on the left card (values can be wired to API later)
-const creditSummaryBase = {
-  creditLimit: 4889,
-  used: 4275.4
-};
-const creditSummary = {
-  ...creditSummaryBase,
-  available: Number((creditSummaryBase.creditLimit - creditSummaryBase.used).toFixed(1)),
-  usedPercent: Math.min(
-    100,
-    Math.round((creditSummaryBase.used / (creditSummaryBase.creditLimit || 1)) * 100)
-  )
-};
 
 export default function AgentDashboard(){
   const navigate = useNavigate();
+  const [creditSummary, setCreditSummary] = useState(null);
+  const [loadingCredit, setLoadingCredit] = useState(true);
+
+  useEffect(() => {
+    const fetchCreditLimit = async () => {
+      try {
+        setLoadingCredit(true);
+        const response = await axiosInstance.get('/api/agent-credit-limit/agent/6');
+        const data = response.data;
+        
+        const creditData = {
+          creditLimit: data.totalCreditLimit || 0,
+          used: data.usedCreditLimit || 0,
+          available: data.availableCreditLimit || 0,
+          usedPercent: Math.min(
+            100,
+            Math.round((data.usedCreditLimit / (data.totalCreditLimit || 1)) * 100)
+          )
+        };
+        
+        setCreditSummary(creditData);
+      } catch (error) {
+        console.error('Error fetching credit limit:', error);
+        // Set default values on error
+        setCreditSummary({
+          creditLimit: 0,
+          used: 0,
+          available: 0,
+          usedPercent: 0
+        });
+      } finally {
+        setLoadingCredit(false);
+      }
+    };
+
+    fetchCreditLimit();
+  }, []);
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar/>
@@ -53,28 +79,41 @@ export default function AgentDashboard(){
             <Col lg={7}>
               <Card className="h-100 shadow-sm">
                 <Card.Body>
-                  <div className="d-flex justify-content-between align-items-center mb-2">
-                    <div className="h6 mb-0">Credit Limit Used : {creditSummary.usedPercent}%</div>
-                  </div>
-                  <ProgressBar
-                    now={creditSummary.usedPercent}
-                    variant={creditSummary.usedPercent > 80 ? 'danger' : 'success'}
-                    className="mb-3"
-                  />
-                  <div className="d-flex flex-wrap gap-4">
-                    <div>
-                      <span className="text-muted">Credit :</span>{' '}
-                      <span className="fw-semibold">{creditSummary.creditLimit}</span>
+                  {loadingCredit ? (
+                    <div className="text-center py-4">
+                      <Spinner animation="border" variant="primary" />
+                      <p className="mt-2 text-muted">Loading credit information...</p>
                     </div>
-                    <div>
-                      <span className="text-muted">Used :</span>{' '}
-                      <span className="fw-semibold">{creditSummary.used}</span>
+                  ) : creditSummary ? (
+                    <>
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <div className="h6 mb-0">Credit Limit Used : {creditSummary.usedPercent}%</div>
+                      </div>
+                      <ProgressBar
+                        now={creditSummary.usedPercent}
+                        variant={creditSummary.usedPercent > 80 ? 'danger' : 'success'}
+                        className="mb-3"
+                      />
+                      <div className="d-flex flex-wrap gap-4">
+                        <div>
+                          <span className="text-muted">Credit :</span>{' '}
+                          <span className="fw-semibold">{creditSummary.creditLimit.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted">Used :</span>{' '}
+                          <span className="fw-semibold">{creditSummary.used.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted">Available Limit :</span>{' '}
+                          <span className="fw-semibold text-danger">{creditSummary.available.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-muted">No credit information available</p>
                     </div>
-                    <div>
-                      <span className="text-muted">Available Limit :</span>{' '}
-                      <span className="fw-semibold text-danger">{creditSummary.available}</span>
-                    </div>
-                  </div>
+                  )}
                 </Card.Body>
               </Card>
             </Col>
@@ -85,7 +124,7 @@ export default function AgentDashboard(){
                   <div className="d-flex flex-wrap gap-2">
                     <Button className="btn-indigo" onClick={()=>navigate('/new-booking/hotel')}>New Booking</Button>
                     <Button className="btn-green" onClick={()=>navigate('/inhouse-accounts/agent')}>Accounts</Button>
-                    <Button className="btn-yellow" onClick={()=>navigate('/calender')}>Calendar</Button>
+                    <Button className="btn-yellow" onClick={()=>navigate('/calendar')}>Calendar</Button>
                  </div>
                 </Card.Body>
               </Card>
