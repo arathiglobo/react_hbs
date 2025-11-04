@@ -151,6 +151,9 @@ export default function MakePkgCombineSearch() {
       const [transferDropoffDate, setTransferDropoffDate] = useState("");
 
       // Tours and Activities search state
+      const [tourResults, setTourResults] = useState([]);
+      const [tourLoading, setTourLoading] = useState(false);
+      const [hasTourSearched, setHasTourSearched] = useState(false);
       const [tourAdults, setTourAdults] = useState(1);
       const [tourChildren, setTourChildren] = useState(0);
       const [tourChildAges, setTourChildAges] = useState([]);
@@ -617,6 +620,72 @@ export default function MakePkgCombineSearch() {
     const updatedAges = [...tourChildAges];
     updatedAges[index] = parseInt(value) || 5;
     setTourChildAges(updatedAges);
+  };
+
+  const handleTourSearchSubmit = async (e) => {
+    e.preventDefault();
+    setTourLoading(true);
+    setHasTourSearched(true);
+    setTourResults([]);
+
+    try {
+      // Prepare payload for tour/activity search matching backend DTO
+      const tourPayload = {
+        tourDate: tourDate || travelDate || checkIn,
+        nativeCountryId: nationality?.value ? Number(nationality.value) : null,
+        searchCityorCountryId: destination?.value || "",
+        searchCorCtype: "city", // Assuming city search - adjust if needed
+        agentid: String(agentId || agent || 1),
+        childAge: tourChildAges.length > 0 ? tourChildAges : [],
+        adult: tourAdults || 1,
+        child: tourChildren || 0,
+      };
+
+      const response = await axiosInstance.post(
+        "/api/makeYourOwnPackage/getTourInhouse",
+        tourPayload
+      );
+
+      // Map API response to tour results format
+      const mappedResults = Array.isArray(response.data)
+        ? response.data.map((tour, index) => ({
+            id: tour.id || `tour-${index}`,
+            tourName: tour.tourName || tour.activityName || "Tour Activity",
+            description: tour.description || "",
+            duration: tour.duration || tour.tourDuration || "",
+            price: tour.price || tour.totalPrice || tour.rate || 0,
+            currency: tour.currency || "AED",
+            image: tour.image || tour.tourImage || tour.activityImage || "https://via.placeholder.com/400x225?text=Tour",
+            location: tour.location || tour.address || "",
+            category: tour.category || tour.tourType || "Tour",
+            rating: tour.rating || 0,
+            inclusions: tour.inclusions || [],
+            exclusions: tour.exclusions || [],
+          }))
+        : response.data?.data && Array.isArray(response.data.data)
+        ? response.data.data.map((tour, index) => ({
+            id: tour.id || `tour-${index}`,
+            tourName: tour.tourName || tour.activityName || "Tour Activity",
+            description: tour.description || "",
+            duration: tour.duration || tour.tourDuration || "",
+            price: tour.price || tour.totalPrice || tour.rate || 0,
+            currency: tour.currency || "AED",
+            image: tour.image || tour.tourImage || tour.activityImage || "https://via.placeholder.com/400x225?text=Tour",
+            location: tour.location || tour.address || "",
+            category: tour.category || tour.tourType || "Tour",
+            rating: tour.rating || 0,
+            inclusions: tour.inclusions || [],
+            exclusions: tour.exclusions || [],
+          }))
+        : [];
+
+      setTourResults(mappedResults);
+    } catch (err) {
+      console.error("Tour search failed:", err);
+      setTourResults([]);
+    } finally {
+      setTourLoading(false);
+    }
   };
 
   const handleTransferSearchSubmit = async (e) => {
@@ -1636,83 +1705,227 @@ export default function MakePkgCombineSearch() {
                   </Card>
                 </Tab>
 
-                                 {/* --------------- Tours Tab ---------------- */}
-                 <Tab eventKey="tours" title={<><FaTicketAlt className="me-2" /> Tours & Activities</>}>
-                   <Card className="border-0 shadow-sm rounded-4">
-                     <Card.Body>
-                       <h5 className="fw-bold text-primary mb-3">Tours & Activities Search</h5>
-                       <Form>
-                         <Row className="g-3">
-                           <Col md={2}>
-                             <Form.Label>Tour Date</Form.Label>
-                             <Form.Control 
-                               type="date" 
-                               value={tourDate} 
-                               onChange={(e) => setTourDate(e.target.value)}
-                               min={new Date().toISOString().split("T")[0]}
-                             />
-                           </Col>
-                           <Col md={2}>
-                             <Form.Label>Adults</Form.Label>
-                             <Form.Select 
-                               value={tourAdults} 
-                               onChange={(e) => setTourAdults(parseInt(e.target.value) || 1)}
-                             >
-                               {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
-                                 <option key={num} value={num}>
-                                   {num} 
-                                 </option>
-                               ))}
-                             </Form.Select>
-                           </Col>
-                           <Col md={2}>
-                             <Form.Label>Children</Form.Label>
-                             <Form.Select 
-                               value={tourChildren} 
-                               onChange={(e) => setTourChildren(parseInt(e.target.value) || 0)}
-                             >
-                               {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                                 <option key={num} value={num}>
-                                   {num} 
-                                 </option>
-                               ))}
-                             </Form.Select>
-                           </Col>
-                           {tourChildren > 0 && (
-                             <Col md={4}>
-                               <Form.Label className="mb-2">Child Ages</Form.Label>
-                               <Row className="g-2">
-                                 {tourChildAges.map((age, index) => (
-                                   <Col key={index} md={3} sm={4} xs={6}>
-                                     <Form.Control
-                                       type="number"
-                                       min="0"
-                                       max="17"
-                                       placeholder={`Child ${index + 1} age`}
-                                       value={age}
-                                       onChange={(e) => handleTourChildAgeChange(index, e.target.value)}
-                                     />
-                                   </Col>
-                                 ))}
-                               </Row>
-                             </Col>
-                           )}
-                           {/* <Col md={tourChildren > 0 ? 2 : 6} className="d-flex align-items-end activity-search"> */}
+                                                   {/* --------------- Tours Tab ---------------- */}
+                  <Tab eventKey="tours" title={<><FaTicketAlt className="me-2" /> Tours & Activities</>}>
+                    <Card className="border-0 shadow-sm rounded-4">
+                      <Card.Body>
+                        <h5 className="fw-bold text-primary mb-3">Tours & Activities Search</h5>
+                        <Form onSubmit={handleTourSearchSubmit}>
+                          <Row className="g-3">
+                            <Col md={2}>
+                              <Form.Label>Tour Date</Form.Label>
+                              <Form.Control 
+                                type="date" 
+                                value={tourDate} 
+                                onChange={(e) => setTourDate(e.target.value)}
+                                min={new Date().toISOString().split("T")[0]}
+                              />
+                            </Col>
+                            <Col md={2}>
+                              <Form.Label>Adults</Form.Label>
+                              <Form.Select 
+                                value={tourAdults} 
+                                onChange={(e) => setTourAdults(parseInt(e.target.value) || 1)}
+                              >
+                                {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                                  <option key={num} value={num}>
+                                    {num} 
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Col>
+                            <Col md={2}>
+                              <Form.Label>Children</Form.Label>
+                              <Form.Select 
+                                value={tourChildren} 
+                                onChange={(e) => setTourChildren(parseInt(e.target.value) || 0)}
+                              >
+                                {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                                  <option key={num} value={num}>
+                                    {num} 
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Col>
+                            {tourChildren > 0 && (
+                              <Col md={4}>
+                                <Form.Label className="mb-2">Child Ages</Form.Label>
+                                <Row className="g-2">
+                                  {tourChildAges.map((age, index) => (
+                                    <Col key={index} md={3} sm={4} xs={6}>
+                                      <Form.Control
+                                        type="number"
+                                        min="0"
+                                        max="17"
+                                        placeholder={`Child ${index + 1} age`}
+                                        value={age}
+                                        onChange={(e) => handleTourChildAgeChange(index, e.target.value)}
+                                      />
+                                    </Col>
+                                  ))}
+                                </Row>
+                              </Col>
+                            )}
                             <Col md={3} className="d-flex align-items-end activity-search">
-                             <Button variant="warning" className="w-100 py-2">
-                               <FaSearch className="me-2" /> Search
-                             </Button>
-                           </Col>
-                         </Row>
-                       </Form>
+                              <Button 
+                                variant="warning" 
+                                className="w-100 py-2" 
+                                type="submit"
+                                disabled={tourLoading}
+                              >
+                                {tourLoading ? (
+                                  <>
+                                    <Spinner animation="border" size="sm" className="me-2" />
+                                    Searching...
+                                  </>
+                                ) : (
+                                  <>
+                                    <FaSearch className="me-2" /> Search
+                                  </>
+                                )}
+                              </Button>
+                            </Col>
+                          </Row>
+                        </Form>
 
-                       <div className="text-center text-muted mt-5">
-                         <FaTicketAlt className="fs-1 mb-3 text-secondary" />
-                         <h6>No tour activities yet. Search to view available tours.</h6>
-                       </div>
-                     </Card.Body>
-                   </Card>
-                 </Tab>
+                        {/* Loading State */}
+                        {tourLoading && (
+                          <Card className="shadow-sm rounded-xl mb-4 mt-4">
+                            <Card.Body className="text-center py-5">
+                              <div className="results-loader">
+                                <div className="loader-ring">
+                                  <span></span>
+                                  <span></span>
+                                  <span></span>
+                                  <span></span>
+                                </div>
+                                <h4 className="text-primary fw-bold mt-3 mb-1">
+                                  Searching Tours & Activities...
+                                </h4>
+                                <p className="text-muted small mb-0">
+                                  Finding available tour options
+                                </p>
+                              </div>
+                            </Card.Body>
+                          </Card>
+                        )}
+
+                        {/* Empty State */}
+                        {!hasTourSearched && !tourLoading && (
+                          <div className="text-center text-muted mt-5">
+                            <FaTicketAlt className="fs-1 mb-3 text-secondary" />
+                            <h6>No tour activities yet. Run a search to view available tours.</h6>
+                          </div>
+                        )}
+
+                        {/* Results Display */}
+                        {hasTourSearched && !tourLoading && tourResults.length > 0 && (
+                          <div className="mt-4">
+                            <h6 className="fw-bold mb-3">
+                              Tour & Activity Results ({tourResults.length})
+                            </h6>
+                            <Row className="g-4">
+                              {tourResults.map((tour) => (
+                                <Col key={tour.id} md={6} lg={4}>
+                                  <Card className="h-100 shadow-sm rounded-3 overflow-hidden">
+                                    <LazyImage 
+                                      src={tour.image} 
+                                      alt={tour.tourName}
+                                      className="card-img-top"
+                                    />
+                                    <Card.Body className="p-3">
+                                      <div className="d-flex justify-content-between align-items-start mb-2">
+                                        <h6 className="fw-bold mb-1">{tour.tourName}</h6>
+                                        <Badge bg="primary">{tour.category}</Badge>
+                                      </div>
+                                      
+                                      {tour.description && (
+                                        <p className="text-muted small mb-2">{tour.description}</p>
+                                      )}
+
+                                      <div className="mb-2">
+                                        {tour.location && (
+                                          <div className="d-flex align-items-center mb-1">
+                                            <FaMapMarkerAlt className="text-primary me-2" size={12} />
+                                            <small className="text-muted">
+                                              <strong>Location:</strong> {tour.location}
+                                            </small>
+                                          </div>
+                                        )}
+                                        {tour.duration && (
+                                          <div className="d-flex align-items-center mb-1">
+                                            <FaTicketAlt className="text-info me-2" size={12} />
+                                            <small className="text-muted">
+                                              <strong>Duration:</strong> {tour.duration}
+                                            </small>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {tour.rating > 0 && (
+                                        <div className="mb-2">
+                                          <small className="text-muted">
+                                            <FaStar className="text-warning me-1" />
+                                            {tour.rating} Rating
+                                          </small>
+                                        </div>
+                                      )}
+
+                                      {tour.inclusions && tour.inclusions.length > 0 && (
+                                        <div className="mb-2">
+                                          <small className="text-muted d-block mb-1">Inclusions:</small>
+                                          <div className="d-flex flex-wrap gap-1">
+                                            {tour.inclusions.slice(0, 3).map((inclusion, idx) => (
+                                              <Badge key={idx} bg="success" className="small">
+                                                {inclusion}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      <div 
+                                        className="mt-3 pt-3"
+                                        style={{
+                                          borderTop: '1px solid #eee',
+                                          display: 'flex',
+                                          justifyContent: 'space-between',
+                                          alignItems: 'center'
+                                        }}
+                                      >
+                                        <div style={{
+                                          fontSize: '1.5rem',
+                                          fontWeight: '600',
+                                          color: '#333'
+                                        }}>
+                                          {tour.price ? `${tour.currency} ${tour.price.toLocaleString()}` : 'Price on request'}
+                                        </div>
+                                        <Button
+                                          variant="primary"
+                                          size="sm"
+                                        >
+                                          Select Tour
+                                        </Button>
+                                      </div>
+                                    </Card.Body>
+                                  </Card>
+                                </Col>
+                              ))}
+                            </Row>
+                          </div>
+                        )}
+
+                        {/* No Results State */}
+                        {hasTourSearched && !tourLoading && tourResults.length === 0 && (
+                          <div className="text-center text-muted mt-5">
+                            <FaTicketAlt className="fs-1 mb-3 text-secondary" />
+                            <h6>No tours found for the selected date.</h6>
+                            <p className="small">Please try different dates or contact support.</p>
+                          </div>
+                        )}
+                      </Card.Body>
+                    </Card>
+                  </Tab>
               </Tabs>
             </Card.Body>
           </Card>

@@ -88,6 +88,7 @@ import ChangePassword from "./pages/Profile/ChangePassword";
 import Logout from "./pages/Profile/Logout";
 import MakePkgCombineSearch from "./pages/search/MakePkgCombineSearch";
 import AccomodationRoomList from "./pages/roomlist/makeyourownpkg/AccomodationRoomList";
+import Invoice from "./pages/Invoice";
 
 
 export default function App() {
@@ -240,6 +241,7 @@ export default function App() {
 
         {/* sidebarMenus */}
         <Route path="/calendar" element={<PrivateRoute><Calendar /></PrivateRoute>} />
+        <Route path="/invoice" element={<PrivateRoute><Invoice /></PrivateRoute>} />
         <Route path="/offer" element={<PrivateRoute><OfferZone /></PrivateRoute>} />
         <Route path="/upload-offer-image" element={<PrivateRoute><OfferImageUpload /></PrivateRoute>} />
 
