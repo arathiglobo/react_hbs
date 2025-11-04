@@ -147,6 +147,14 @@ export default function MakePkgCombineSearch() {
       const [transferAdults, setTransferAdults] = useState(1);
       const [transferChildren, setTransferChildren] = useState(0);
       const [transferChildAges, setTransferChildAges] = useState([]);
+      const [transferPickupDate, setTransferPickupDate] = useState(travelDate || "");
+      const [transferDropoffDate, setTransferDropoffDate] = useState("");
+
+      // Tours and Activities search state
+      const [tourAdults, setTourAdults] = useState(1);
+      const [tourChildren, setTourChildren] = useState(0);
+      const [tourChildAges, setTourChildAges] = useState([]);
+      const [tourDate, setTourDate] = useState(travelDate || "");
 
   // Filter options
   const starOptions = [
@@ -200,6 +208,26 @@ export default function MakePkgCombineSearch() {
       setTransferChildAges([]);
     }
   }, [transferChildren]);
+
+  // Update tour child ages when number of children changes
+  useEffect(() => {
+    if (tourChildren > 0) {
+      setTourChildAges((prevAges) => {
+        const currentAges = [...prevAges];
+        // Ensure we have the right number of age inputs
+        while (currentAges.length < tourChildren) {
+          currentAges.push(5); // Default age
+        }
+        // Remove extra ages if children count decreased
+        if (currentAges.length > tourChildren) {
+          currentAges.splice(tourChildren);
+        }
+        return currentAges;
+      });
+    } else {
+      setTourChildAges([]);
+    }
+  }, [tourChildren]);
 
   const handleChildAgeChange = (index, value) => {
     const updatedAges = [...childAges];
@@ -585,6 +613,12 @@ export default function MakePkgCombineSearch() {
     setTransferChildAges(updatedAges);
   };
 
+  const handleTourChildAgeChange = (index, value) => {
+    const updatedAges = [...tourChildAges];
+    updatedAges[index] = parseInt(value) || 5;
+    setTourChildAges(updatedAges);
+  };
+
   const handleTransferSearchSubmit = async (e) => {
     e.preventDefault();
     setTransferLoading(true);
@@ -594,8 +628,8 @@ export default function MakePkgCombineSearch() {
     try {
       // Prepare payload for transfer search matching backend DTO
       const transferPayload = {
-        checkIn: travelDate || checkIn,
-        checkOut: checkOut,
+        checkIn: transferPickupDate || travelDate || checkIn,
+        checkOut: transferDropoffDate || checkOut,
         nativeCountryId: nationality?.value ? Number(nationality.value) : null,
         searchCityorCountryId: destination?.value || "",
         searchCorCtype: "city", // Assuming city search - adjust if needed (could be "city" or "country")
@@ -682,7 +716,12 @@ export default function MakePkgCombineSearch() {
                           <Col md={3}>
                             <Form.Group>
                               <Form.Label>Check Out</Form.Label>
-                              <Form.Control type="date" value={checkOut} readOnly />
+                              <Form.Control 
+                                type="date" 
+                                value={checkOut} 
+                                onChange={(e) => setCheckOut(e.target.value)}
+                                min={checkIn || undefined}
+                              />
                             </Form.Group>
                           </Col>
                           <Col md={2}>
@@ -1369,11 +1408,21 @@ export default function MakePkgCombineSearch() {
                          <Row className="g-3">
                            <Col md={2}>
                              <Form.Label>Pickup Date</Form.Label>
-                             <Form.Control type="date" value={travelDate || checkIn} readOnly />
+                             <Form.Control 
+                               type="date" 
+                               value={transferPickupDate} 
+                               onChange={(e) => setTransferPickupDate(e.target.value)}
+                               min={new Date().toISOString().split("T")[0]}
+                             />
                            </Col>
                            <Col md={2}>
                              <Form.Label>Dropoff Date</Form.Label>
-                             <Form.Control type="date" value={checkOut} readOnly />
+                             <Form.Control 
+                               type="date" 
+                               value={transferDropoffDate} 
+                               onChange={(e) => setTransferDropoffDate(e.target.value)}
+                               min={transferPickupDate || undefined}
+                             />
                            </Col>
                            <Col md={2}>
                               <Form.Label>Adults</Form.Label>
@@ -1587,32 +1636,83 @@ export default function MakePkgCombineSearch() {
                   </Card>
                 </Tab>
 
-                {/* --------------- Tours Tab ---------------- */}
-                <Tab eventKey="tours" title={<><FaTicketAlt className="me-2" /> Tours & Activities</>}>
-                  <Card className="border-0 shadow-sm rounded-4">
-                    <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Tours & Activities Search</h5>
-                      <Form>
-                        <Row className="g-3">
-                          <Col md={4}>
-                            <Form.Label>Tour Date</Form.Label>
-                            <Form.Control type="date" value={travelDate} readOnly />
-                          </Col>
-                          <Col md={4} className="d-flex align-items-end activity-search">
-                            <Button variant="warning" className="w-100 py-2">
-                              <FaSearch className="me-2" /> Search
-                            </Button>
-                          </Col>
-                        </Row>
-                      </Form>
+                                 {/* --------------- Tours Tab ---------------- */}
+                 <Tab eventKey="tours" title={<><FaTicketAlt className="me-2" /> Tours & Activities</>}>
+                   <Card className="border-0 shadow-sm rounded-4">
+                     <Card.Body>
+                       <h5 className="fw-bold text-primary mb-3">Tours & Activities Search</h5>
+                       <Form>
+                         <Row className="g-3">
+                           <Col md={2}>
+                             <Form.Label>Tour Date</Form.Label>
+                             <Form.Control 
+                               type="date" 
+                               value={tourDate} 
+                               onChange={(e) => setTourDate(e.target.value)}
+                               min={new Date().toISOString().split("T")[0]}
+                             />
+                           </Col>
+                           <Col md={2}>
+                             <Form.Label>Adults</Form.Label>
+                             <Form.Select 
+                               value={tourAdults} 
+                               onChange={(e) => setTourAdults(parseInt(e.target.value) || 1)}
+                             >
+                               {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                                 <option key={num} value={num}>
+                                   {num} 
+                                 </option>
+                               ))}
+                             </Form.Select>
+                           </Col>
+                           <Col md={2}>
+                             <Form.Label>Children</Form.Label>
+                             <Form.Select 
+                               value={tourChildren} 
+                               onChange={(e) => setTourChildren(parseInt(e.target.value) || 0)}
+                             >
+                               {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                                 <option key={num} value={num}>
+                                   {num} 
+                                 </option>
+                               ))}
+                             </Form.Select>
+                           </Col>
+                           {tourChildren > 0 && (
+                             <Col md={4}>
+                               <Form.Label className="mb-2">Child Ages</Form.Label>
+                               <Row className="g-2">
+                                 {tourChildAges.map((age, index) => (
+                                   <Col key={index} md={3} sm={4} xs={6}>
+                                     <Form.Control
+                                       type="number"
+                                       min="0"
+                                       max="17"
+                                       placeholder={`Child ${index + 1} age`}
+                                       value={age}
+                                       onChange={(e) => handleTourChildAgeChange(index, e.target.value)}
+                                     />
+                                   </Col>
+                                 ))}
+                               </Row>
+                             </Col>
+                           )}
+                           {/* <Col md={tourChildren > 0 ? 2 : 6} className="d-flex align-items-end activity-search"> */}
+                            <Col md={3} className="d-flex align-items-end activity-search">
+                             <Button variant="warning" className="w-100 py-2">
+                               <FaSearch className="me-2" /> Search
+                             </Button>
+                           </Col>
+                         </Row>
+                       </Form>
 
-                      <div className="text-center text-muted mt-5">
-                        <FaTicketAlt className="fs-1 mb-3 text-secondary" />
-                        <h6>No tour activities yet. Search to view available tours.</h6>
-                      </div>
-                    </Card.Body>
-                  </Card>
-                </Tab>
+                       <div className="text-center text-muted mt-5">
+                         <FaTicketAlt className="fs-1 mb-3 text-secondary" />
+                         <h6>No tour activities yet. Search to view available tours.</h6>
+                       </div>
+                     </Card.Body>
+                   </Card>
+                 </Tab>
               </Tabs>
             </Card.Body>
           </Card>
