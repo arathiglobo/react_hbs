@@ -616,7 +616,7 @@ const EmployeeReg = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/employee/${item.id}`)
+          .delete(`/api/employee/${item.employeeId}`)
           .then(() => {
             toast.success("Employee deleted successfully");
             fetchEmployeeList(page, search);
@@ -769,6 +769,7 @@ const EmployeeReg = () => {
     }
 
     setLoginErrors(errors);
+    console.log("isValid" , isValid)
 
     if (isValid) {
       try {
@@ -830,7 +831,7 @@ const EmployeeReg = () => {
         setIsLoading(false);
       }
     } else {
-      toast.error("Please fix the errors in the form");
+      toast.error(errors.username || errors.password || errors.repassword);
     }
   };
 

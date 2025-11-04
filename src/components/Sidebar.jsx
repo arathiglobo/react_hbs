@@ -18,6 +18,7 @@ export default function Sidebar() {
 
   // Get current active role (this could also come from localStorage as "currentActiveRole")
   const currentRole = localStorage.getItem("currentActiveRole")?.toLowerCase() || storedRoles[0] || "";
+  console.log("currentRole in sidebar::", currentRole);
    
 
   // Set dashboard path based on current active role
@@ -32,13 +33,13 @@ export default function Sidebar() {
   } else if (currentRole === "staff") {
     dashboardPath = "/staffDashboard";
     labelForDashboard = "Staff Dashboard"
-  } else if (currentRole === "hotel") {
+  } else if (currentRole === "extranet") {
     dashboardPath = "/hotelDashboard";
     labelForDashboard = "Hotel Dashboard"
   }
 
   const items = [
-    { label: labelForDashboard, to: dashboardPath , roles: ["admin", "agent", "staff", "hotel"]},
+    { label: labelForDashboard, to: dashboardPath , roles: ["admin", "agent", "staff", "extranet"]},
     {
       label: "Manage Masters",
       // to: "/manage-masters",
@@ -223,7 +224,7 @@ export default function Sidebar() {
       to: "/assigned-agents",
       roles: ["admin"],
     },
-    { label: "Calendar", to: "/calendar", roles: ["admin", "agent", "staff", "hotel"] },
+    { label: "Calendar", to: "/calendar", roles: ["admin", "agent", "staff", "extranet"] },
     {
       label: "Extranet Contract",
       to: "/extranet-contract",

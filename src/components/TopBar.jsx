@@ -14,6 +14,7 @@ export default function TopBar() {
     localStorage.removeItem("authToken");
     localStorage.removeItem("userRole");
     localStorage.removeItem("UserName");
+    localStorage.removeItem("currentActiveRole");
 
     // Optionally redirect to login page
     window.location.href = "/";
