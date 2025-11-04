@@ -87,6 +87,7 @@ import Profile from "./pages/Profile/Profile";
 import ChangePassword from "./pages/Profile/ChangePassword";
 import Logout from "./pages/Profile/Logout";
 import MakePkgCombineSearch from "./pages/search/MakePkgCombineSearch";
+import AccomodationRoomList from "./pages/roomlist/makeyourownpkg/AccomodationRoomList";
 
 
 export default function App() {
@@ -183,6 +184,7 @@ export default function App() {
         <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
+        <Route path="/make-your-pkg-room-list" element={<PrivateRoute><AccomodationRoomList /> </PrivateRoute>}/>
        
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />

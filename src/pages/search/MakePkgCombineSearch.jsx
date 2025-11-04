@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Card, Row, Col, Form, Button, Tabs, Tab } from "react-bootstrap";
+import React, { useEffect, useRef, useState, useMemo } from "react";
+import { Card, Row, Col, Form, Button, Tabs, Tab, Spinner, ButtonGroup, ToggleButton, Pagination, Badge } from "react-bootstrap";
+import Select from "react-select";
 import {
   FaSearch,
   FaHotel,
@@ -7,11 +8,91 @@ import {
   FaTicketAlt,
   FaMapMarkerAlt,
   FaStar,
+  FaBuilding,
+  FaGlobe,
+  FaSort,
+  FaUsers,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { useLocation } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
+
+function LazyImage({ src, alt, className }) {
+  const containerRef = useRef(null);
+  const [inView, setInView] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if ("IntersectionObserver" in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setInView(true);
+            observer.disconnect();
+          }
+        });
+      });
+      observer.observe(el);
+      return () => observer.disconnect();
+    } else {
+      setInView(true);
+    }
+  }, []);
+
+  const buildSrcSet = (url) => {
+    try {
+      const safeUrl = url || "https://via.placeholder.com/480x270";
+      const pattern = /\/(\d+)\/(\d+)$/;
+      const small = pattern.test(safeUrl)
+        ? safeUrl.replace(pattern, "/320/180")
+        : `${safeUrl}?w=320&h=180`;
+      const medium = pattern.test(safeUrl)
+        ? safeUrl.replace(pattern, "/480/270")
+        : `${safeUrl}?w=480&h=270`;
+      const large = pattern.test(safeUrl)
+        ? safeUrl.replace(pattern, "/640/360")
+        : `${safeUrl}?w=640&h=360`;
+      return `${small} 320w, ${medium} 480w, ${large} 640w`;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const imageSrc = src || "https://via.placeholder.com/480x270";
+
+  return (
+    <div
+      ref={containerRef}
+      className={`ratio ratio-16x9 rounded-top overflow-hidden ${
+        className || ""
+      }`}
+      style={{ height: "100%" }}
+    >
+      {!loaded && <div className="skeleton w-100 h-100" />}
+      {inView && (
+        <img
+          src={imageSrc}
+          srcSet={buildSrcSet(imageSrc)}
+          sizes="(min-width:1200px) 33vw, (min-width:768px) 50vw, 100vw"
+          loading="lazy"
+          decoding="async"
+          fetchpriority="low"
+          alt={alt}
+          onLoad={() => setLoaded(true)}
+          className={`img-cover ${loaded ? "img-loaded" : "img-loading"}`}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 export default function MakePkgCombineSearch() {
   const location = useLocation();
@@ -45,6 +126,7 @@ export default function MakePkgCombineSearch() {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [pollStatus, setPollStatus] = useState("IDLE");
+  const [completedChannels, setCompletedChannels] = useState(new Set()); // Track completed channels
   const [searchId, setSearchId] = useState(null);
   const resultsRef = useRef(null);
    const [hasSearched, setHasSearched] = useState(false);
@@ -56,6 +138,39 @@ export default function MakePkgCombineSearch() {
       const [hotelSearchTerm, setHotelSearchTerm] = useState("");
       const [errors, setErrors] = useState({});
       const [clickedHotelIds, setClickedHotelIds] = useState([]);
+      const [view, setView] = useState("card");
+
+      // Transfer search state
+      const [transferResults, setTransferResults] = useState([]);
+      const [transferLoading, setTransferLoading] = useState(false);
+      const [hasTransferSearched, setHasTransferSearched] = useState(false);
+      const [transferAdults, setTransferAdults] = useState(1);
+      const [transferChildren, setTransferChildren] = useState(0);
+      const [transferChildAges, setTransferChildAges] = useState([]);
+
+  // Filter options
+  const starOptions = [
+    { value: 5, label: "5 Stars" },
+    { value: 4, label: "4 Stars" },
+    { value: 3, label: "3 Stars" },
+    { value: 2, label: "2 Stars" },
+    { value: 1, label: "1 Star" },
+  ];
+
+  const hotelTypeOptions = [
+    { value: "hotel", label: "Hotel" },
+    { value: "villa", label: "Villa" },
+    { value: "resort", label: "Resort" },
+    { value: "apartment", label: "Apartment" },
+  ];
+
+  const channelTypeOptions = [
+    { value: "inhouse", label: "Inhouse" },
+    { value: "iwtx", label: "Iwtx" },
+    { value: "x3", label: "x3" },
+    { value: "ratehawk", label: "Ratehawk" },
+    { value: "darina", label: "Darina" },
+  ];
 
   useEffect(() => {
     if (checkIn && nightsCount) {
@@ -66,6 +181,26 @@ export default function MakePkgCombineSearch() {
     }
   }, [checkIn, nightsCount]);
 
+  // Update transfer child ages when number of children changes
+  useEffect(() => {
+    if (transferChildren > 0) {
+      setTransferChildAges((prevAges) => {
+        const currentAges = [...prevAges];
+        // Ensure we have the right number of age inputs
+        while (currentAges.length < transferChildren) {
+          currentAges.push(5); // Default age
+        }
+        // Remove extra ages if children count decreased
+        if (currentAges.length > transferChildren) {
+          currentAges.splice(transferChildren);
+        }
+        return currentAges;
+      });
+    } else {
+      setTransferChildAges([]);
+    }
+  }, [transferChildren]);
+
   const handleChildAgeChange = (index, value) => {
     const updatedAges = [...childAges];
     updatedAges[index] = value;
@@ -74,8 +209,26 @@ export default function MakePkgCombineSearch() {
 
   const fetchHotels = async (page, searchId, agentId) => {
     try {
-      const params = { agentId: agentId || agent || 1, page, pageSize };
-      const res = await axiosInstance.get(`/hotel-search/results/${searchId}`, { params });
+      const params = {
+        agentId: agentId || agent || 1, // Use passed agentId, or state agent, or default to 1
+        page,
+        pageSize,
+        sortBy:
+          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
+        sortOrder:
+          sortBy === "priceAsc" ||
+          sortBy === "ratingAsc" ||
+          sortBy === "nameAsc"
+            ? "asc"
+            : "desc",
+        starRating: starRating.map((s) => s.value).join(",") || undefined,
+        apiType:
+          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+      };
+
+      const res = await axiosInstance.get(`/hotel-search/results/${searchId}`, {
+        params,
+      });
 
       const mappedResults = Array.isArray(res.data.result)
         ? res.data.result.map((hotel, index) => ({
@@ -83,6 +236,7 @@ export default function MakePkgCombineSearch() {
               ? `${searchId}-${hotel.hotelCode}`
               : `${searchId}-h${index + 1}`,
             searchId,
+            hotelCode: hotel.hotelCode || null,
             name: hotel.hotelName || "Unknown Hotel",
             address: hotel.hotelAddress || "",
             city: hotel.hotelAddress
@@ -94,11 +248,14 @@ export default function MakePkgCombineSearch() {
               hotel.hotelImage ||
               "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
             rating: hotel.starRating || 0,
-            channelType: hotel.apiType?.toUpperCase() || "IWTX",
+            hotelType: "hotel",
+            channelType: hotel.apiType?.toLowerCase() || "inhouse",
           }))
         : [];
 
+      // Clear previous results and set new results for the current page
       setAllResults(mappedResults);
+
       setTotalElements(Number(res.data.totalResults) || mappedResults.length);
       setTotalPages(
         Math.max(
@@ -113,29 +270,52 @@ export default function MakePkgCombineSearch() {
     } catch (err) {
       console.error("Fetch hotels failed:", err);
       setPollStatus("ERROR");
+      throw err;
     }
   };
 
-  const pollUntilComplete = async (url, params, checkComplete, onUpdate) => {
+  const pollUntilComplete = async (
+    url,
+    params,
+    checkComplete,
+    onUpdate,
+    intervalMs = 4000,
+    timeoutMs = 20000,
+    initialDelay = 2000
+  ) => {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
-      const interval = setInterval(async () => {
+      let localPollCount = 0;
+
+      const poll = async () => {
         try {
+          localPollCount++;
           const res = await axiosInstance.get(url, { params });
-          if (onUpdate) onUpdate(res.data);
+
+          if (onUpdate) {
+            onUpdate(res.data, localPollCount);
+          }
+
           if (checkComplete(res.data)) {
-            clearInterval(interval);
-            resolve(res.data);
+            setPollStatus("COMPLETED");
+            return resolve(res.data);
           }
-          if (Date.now() - startTime > 25000) {
-            clearInterval(interval);
-            reject("Timeout");
+
+          if (Date.now() - startTime >= timeoutMs) {
+            setPollStatus("TIMEOUT");
+            return reject(new Error("Polling timed out"));
           }
+
+          setTimeout(poll, intervalMs);
         } catch (err) {
-          clearInterval(interval);
+          console.error("Poll failed:", err);
+          setPollStatus("ERROR");
           reject(err);
         }
-      }, 4000);
+      };
+
+      setPollStatus("IN_PROGRESS");
+      setTimeout(poll, initialDelay);
     });
   };
 
@@ -144,6 +324,64 @@ export default function MakePkgCombineSearch() {
     hasSearchResult &&
     isInitialResultsLoaded &&
     (pollStatus === "IN_PROGRESS" || pollStatus === "COMPLETED");
+
+  // Filtered results based on search term and filters
+  const filteredResults = useMemo(() => {
+    let results = allResults;
+
+    // Filter by hotel name search
+    if (hotelSearchTerm && hotelSearchTerm.trim()) {
+      const searchTerm = hotelSearchTerm.trim().toLowerCase();
+      results = results.filter((hotel) => {
+        const hotelName = (hotel.name || hotel.hotelName || '').trim().toLowerCase();
+        return hotelName.includes(searchTerm);
+      });
+    }
+
+    // Filter by star rating
+    if (starRating.length > 0) {
+      const selectedStars = starRating.map((s) => s.value);
+      results = results.filter((hotel) => selectedStars.includes(hotel.rating));
+    }
+
+    // Filter by hotel type
+    if (hotelType.length > 0) {
+      const selectedTypes = hotelType.map((t) => t.value);
+      results = results.filter((hotel) =>
+        selectedTypes.includes(hotel.hotelType)
+      );
+    }
+
+    // Filter by channel type
+    if (channelType.length > 0) {
+      const selectedChannels = channelType.map((c) => c.value);
+      results = results.filter((hotel) =>
+        selectedChannels.includes(hotel.channelType)
+      );
+    }
+
+    return results;
+  }, [allResults, hotelSearchTerm, starRating, hotelType, channelType]);
+
+  const effectiveTotalPages = useMemo(
+    () => Math.max(1, totalPages),
+    [totalPages]
+  );
+
+  const pageNumbers = useMemo(() => {
+    const maxPagesToShow = 5;
+    // Convert to 1-based for display
+    const currentPage = pageIndex + 1;
+    const start = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    const end = Math.min(totalPages, start + maxPagesToShow - 1);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [pageIndex, totalPages]);
+
+  const goToPage = (page) => {
+    if (page >= 0 && page < totalPages) {
+      setPageIndex(page);
+    }
+  };
 
    useEffect(() => {
       if (!searchId || !hasSearched) return;
@@ -179,74 +417,152 @@ export default function MakePkgCombineSearch() {
 
   const handleHotelSearchSubmit = async (e) => {
     e.preventDefault();
+    setErrors({});
     setIsLoading(true);
+    setHasSearched(true);
     setHasSearchResult(false);
     setAllResults([]);
+    setPollStatus("IDLE");
     setPageIndex(0);
     setTotalElements(0);
     setTotalPages(1);
+    setCompletedChannels(new Set());
 
     try {
-      const agentIdFinal = agentId || agent || 1;
+      const nationalityId = nationality?.value || "";
+      const nationalityCode = nationality?.code || "";
+      const destinationCityId = destination?.value || "";
+      const destinationCountryId = destination?.countryId || "";
+      const noOfRooms = String(rooms.length);
+
       const roomConfigurations = rooms.map((room, index) => ({
-        roomNo: (index + 1).toString(),
-        adultCount: (room.adults || 1).toString(),
-        childCount: (room.children || 0).toString(),
-        childAges: room.childAges?.length ? room.childAges : [],
+        roomNo: index + 1,
+        adultCount: String(room.adults || 1),
+        childCount: String(room.children || 0),
+        childAges: room.childAges?.length ? room.childAges : [0],
+        adultAges: room.adultAges?.length ? room.adultAges : [25],
       }));
 
-      const payload = {
-        nationalityId: nationality?.value || "",
-        nationalityCode: nationality?.code || "",
-        destinationCityId: destination?.value || "",
-        destinationCountryId: destination?.countryId || "",
+      const agentIdFinal = agentId || agent || 1; // Use selected agent or default to 1
+
+      const searchPayloadReq = {
+        nationalityId,
+        nationalityCode,
+        destinationCityId,
+        destinationCountryId,
         checkIn,
         checkOut,
-        noOfRooms: rooms.length.toString(),
+        noOfRooms,
         roomConfigurations,
         agentId: agentIdFinal,
       };
 
-      const res = await axiosInstance.post("/hotel-search/search", payload);
-      const searchIdRes = res.data.searchId;
+      const searchKeyRes = await axiosInstance.post(
+        "/hotel-search/search",
+        searchPayloadReq
+      );
+      const searchIdRes = searchKeyRes.data.searchId;
       if (!searchIdRes) throw new Error("No searchId returned");
-
       setSearchId(searchIdRes);
 
-      const params = { agentId: agentIdFinal, page: 0, pageSize };
+      const params = {
+        agentId: agentIdFinal, // Use the dynamic agentId
+        page: 0,
+        pageSize,
+        sortBy:
+          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
+        sortOrder:
+          sortBy === "priceAsc" ||
+          sortBy === "ratingAsc" ||
+          sortBy === "nameAsc"
+            ? "asc"
+            : "desc",
+        starRating: starRating.map((s) => s.value).join(",") || undefined,
+        apiType:
+          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+      };
+
+      const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
+
       await pollUntilComplete(
         `/hotel-search/results/${searchIdRes}`,
         params,
-        (data) => data.finalStatus === "COMPLETED",
         (data) => {
-          if (Array.isArray(data.result)) {
-            const mappedResults = data.result.map((hotel, index) => ({
-              id: hotel.hotelCode
-                ? `${searchIdRes}-${hotel.hotelCode}`
-                : `${searchIdRes}-h${index + 1}`,
-              searchId: searchIdRes,
-              name: hotel.hotelName || "Unknown Hotel",
-              address: hotel.hotelAddress || "",
-              city: hotel.hotelAddress
-                ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-                : "Unknown City",
-              price: hotel.baseRate || null,
-              badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-              image:
-                hotel.hotelImage ||
-                "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-              rating: hotel.starRating || 0,
-              channelType: hotel.apiType?.toUpperCase() || "IWTX",
-            }));
-            setAllResults(mappedResults);
-            setTotalElements(data.totalResults || mappedResults.length);
-            setTotalPages(Math.ceil((data.totalResults || 1) / pageSize));
+          // Check if any individual API is completed OR if finalStatus is completed
+          const currentStatuses = data.status || {};
+          const hasAnyCompleted = expectedChannels.some(ch => currentStatuses[ch] === "COMPLETED");
+          return hasAnyCompleted || data.finalStatus === "COMPLETED";
+        },
+        (data, pollCount) => {
+         
+          const mappedResults = Array.isArray(data.result)
+            ? data.result.map((hotel, index) => ({
+                id: hotel.hotelCode
+                  ? `${searchIdRes}-${hotel.hotelCode}`
+                  : `${searchIdRes}-h${index + 1}`,
+                searchId: searchIdRes,
+                hotelCode: hotel.hotelCode || null,
+                name: hotel.hotelName || "Unknown Hotel",
+                address: hotel.hotelAddress || "",
+                city: hotel.hotelAddress
+                  ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+                  : "Unknown City",
+                price: hotel.baseRate || null,
+                badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+                image:
+                  hotel.hotelImage ||
+                  "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+                rating: hotel.starRating || 0,
+                hotelType: "hotel",
+                channelType: hotel.apiType?.toLowerCase() ,
+              }))
+            : [];
+
+          // Update results for the current page
+          setAllResults(mappedResults);
+
+          const currentStatuses = data.status || {};
+          const newCompleted = new Set(completedChannels);
+          expectedChannels.forEach((ch) => {
+            if (
+              currentStatuses[ch] === "COMPLETED" &&
+              !completedChannels.has(ch)
+            ) {
+              newCompleted.add(ch);
+              // console.log(`Channel ${ch} completed at poll ${pollCount}`);
+            }
+          });
+          setCompletedChannels(newCompleted);
+
+          // Show results immediately if any channel is completed or we have results
+          if (pollCount === 1 || mappedResults.length > 0) {
             setHasSearchResult(true);
+            // Show results as soon as any channel completes or we have data
+            if (newCompleted.size >= 1 || mappedResults.length > 0) {
+              setIsInitialResultsLoaded(true);
+            }
           }
-        }
+
+          setTotalElements(
+            Number(data.totalResults) || mappedResults.length
+          );
+          setTotalPages(
+            Math.max(
+              1,
+              Math.ceil(
+                (Number(data.totalResults) || mappedResults.length) / pageSize
+              )
+            )
+          );
+        },
+        4000,
+        20000,
+        2000
       );
     } catch (err) {
       console.error("Search failed:", err);
+      setHasSearched(false);
+      setPollStatus("ERROR");
     } finally {
       setIsLoading(false);
     }
@@ -263,11 +579,77 @@ export default function MakePkgCombineSearch() {
     }
   };
 
-  const getPageNumbers = () => {
-    const maxPagesToShow = 5;
-    const start = Math.max(0, pageIndex - Math.floor(maxPagesToShow / 2));
-    const end = Math.min(totalPages, start + maxPagesToShow);
-    return Array.from({ length: end - start }, (_, i) => start + i);
+  const handleTransferChildAgeChange = (index, value) => {
+    const updatedAges = [...transferChildAges];
+    updatedAges[index] = parseInt(value) || 5;
+    setTransferChildAges(updatedAges);
+  };
+
+  const handleTransferSearchSubmit = async (e) => {
+    e.preventDefault();
+    setTransferLoading(true);
+    setHasTransferSearched(true);
+    setTransferResults([]);
+
+    try {
+      // Prepare payload for transfer search matching backend DTO
+      const transferPayload = {
+        checkIn: travelDate || checkIn,
+        checkOut: checkOut,
+        nativeCountryId: nationality?.value ? Number(nationality.value) : null,
+        searchCityorCountryId: destination?.value || "",
+        searchCorCtype: "city", // Assuming city search - adjust if needed (could be "city" or "country")
+        agentid: String(agentId || agent || 1),
+        childAge: transferChildAges.length > 0 ? transferChildAges : [],
+        adult: transferAdults || 1,
+        child: transferChildren || 0,
+      };
+
+      const response = await axiosInstance.post(
+        "/api/makeYourOwnPackage/getTransferInhouse",
+        transferPayload
+      );
+
+      // Map API response to transfer results format
+      const mappedResults = Array.isArray(response.data)
+        ? response.data.map((transfer, index) => ({
+            id: transfer.id || `transfer-${index}`,
+            vehicleType: transfer.vehicleType || transfer.vehicleName || "Standard Vehicle",
+            vehicleName: transfer.vehicleName || transfer.vehicleType || "Transfer Vehicle",
+            capacity: transfer.capacity || transfer.passengerCount || 0,
+            price: transfer.price || transfer.totalPrice || transfer.rate || 0,
+            currency: transfer.currency || "AED",
+            image: transfer.image || transfer.vehicleImage || "https://via.placeholder.com/400x225?text=Transfer",
+            pickupLocation: transfer.pickupLocation || transfer.fromLocation || "",
+            dropoffLocation: transfer.dropoffLocation || transfer.toLocation || "",
+            description: transfer.description || "",
+            amenities: transfer.amenities || [],
+            duration: transfer.duration || transfer.estimatedTime || "",
+          }))
+        : response.data?.data && Array.isArray(response.data.data)
+        ? response.data.data.map((transfer, index) => ({
+            id: transfer.id || `transfer-${index}`,
+            vehicleType: transfer.vehicleType || transfer.vehicleName || "Standard Vehicle",
+            vehicleName: transfer.vehicleName || transfer.vehicleType || "Transfer Vehicle",
+            capacity: transfer.capacity || transfer.passengerCount || 0,
+            price: transfer.price || transfer.totalPrice || transfer.rate || 0,
+            currency: transfer.currency || "AED",
+            image: transfer.image || transfer.vehicleImage || "https://via.placeholder.com/400x225?text=Transfer",
+            pickupLocation: transfer.pickupLocation || transfer.fromLocation || "",
+            dropoffLocation: transfer.dropoffLocation || transfer.toLocation || "",
+            description: transfer.description || "",
+            amenities: transfer.amenities || [],
+            duration: transfer.duration || transfer.estimatedTime || "",
+          }))
+        : [];
+
+      setTransferResults(mappedResults);
+    } catch (err) {
+      console.error("Transfer search failed:", err);
+      setTransferResults([]);
+    } finally {
+      setTransferLoading(false);
+    }
   };
 
   return (
@@ -618,27 +1000,22 @@ export default function MakePkgCombineSearch() {
                 </Card.Body>
               </Card>
 
-                  {/* New Pagination Section After Filters */}
+                                                                           {/* New Pagination Section After Filters */}
               {hasSearched && (
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
                   <small className="text-muted fw-semibold">
                     {filteredResults.length > 0 ? (
                       <>
                         Showing{" "}
-                        {pageIndex * pageSize + 1}-
-                        {(hotelSearchTerm || hotelType.length > 0
-                          ? Math.min(
-                              pageIndex * pageSize + pageSize,
-                              filteredResults.length
-                            )
-                          : Math.min(
-                              pageIndex * pageSize + pageSize,
-                              totalElements
-                            ))}{" "}
+                        {(hotelSearchTerm?.trim() || hotelType.length > 0 || channelType.length > 0 || starRating.length > 0
+                          ? `1-${filteredResults.length}`
+                          : `${pageIndex * pageSize + 1}-${Math.min(pageIndex * pageSize + pageSize, totalElements)}`
+                        )}{" "}
                         of{" "}
-                        {(hotelSearchTerm || hotelType.length > 0
+                        {(hotelSearchTerm?.trim() || hotelType.length > 0 || channelType.length > 0 || starRating.length > 0
                           ? filteredResults.length
-                          : totalElements)}{" "}
+                          : totalElements
+                        )}{" "}
                         results{" "}
                         {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
                       </>
@@ -649,25 +1026,21 @@ export default function MakePkgCombineSearch() {
                       </>
                     )}
                   </small>
-                  {filteredResults.length > 0 && !(hotelSearchTerm || hotelType.length > 0) && (
+                  {filteredResults.length > 0 && !(hotelSearchTerm?.trim() || hotelType.length > 0 || channelType.length > 0 || starRating.length > 0) && (
                     <Pagination className="mb-0 pagination-modern">
                       <Pagination.Prev
                         disabled={pageIndex === 0}
                         onClick={() => goToPage(pageIndex - 1)}
                       />
-                      {pageNumbers.map((n) =>
-                        typeof n === "number" ? (
-                          <Pagination.Item
-                            key={n}
-                            active={n === pageIndex + 1}
-                            onClick={() => goToPage(n - 1)}
-                          >
-                            {n}
-                          </Pagination.Item>
-                        ) : (
-                          <Pagination.Ellipsis key={n} disabled />
-                        )
-                      )}
+                      {pageNumbers.map((n) => (
+                        <Pagination.Item
+                          key={n}
+                          active={n === pageIndex + 1}
+                          onClick={() => goToPage(n - 1)}
+                        >
+                          {n}
+                        </Pagination.Item>
+                      ))}
                       <Pagination.Next
                         disabled={pageIndex >= effectiveTotalPages - 1}
                         onClick={() => goToPage(pageIndex + 1)}
@@ -803,12 +1176,12 @@ export default function MakePkgCombineSearch() {
                                     setClickedHotelIds((prev) => [...prev, hotel.id]);
                                     
                                     const nationalityValue =
-                                      selectedNationality?.value;
+                                      nationality?.value;
 
                                    const nationalityCode =
-                                      (selectedNationality?.code || "")
+                                      (nationality?.code || "")
                                         .length === 2
-                                        ? selectedNationality.code
+                                        ? nationality.code
                                         : " ";
 
                                     const agentIdToUse = agent; // Use selected agent or default to 1
@@ -864,11 +1237,11 @@ export default function MakePkgCombineSearch() {
                                     // console.log("meta::", meta);
                                     try {
                                       sessionStorage.setItem(
-                                        "roomListPayload",
+                                        "makeYourPkgRoomListPayload",
                                         JSON.stringify({ payload, meta })
                                       );
                                       setTimeout(() => {
-                                        window.open("/room-list", "_blank");
+                                        window.open("/make-your-pkg-room-list", "_blank");
                                       }, 50);
 
                                       // navigate("/room-list", { state: { payload, meta } });
@@ -878,6 +1251,8 @@ export default function MakePkgCombineSearch() {
                                 >
                                   View Rooms
                                 </Button>
+
+                               
                              
                               </div>
                             </div>
@@ -932,13 +1307,10 @@ export default function MakePkgCombineSearch() {
                     }
                     
                     const hasClientOnlyFilters =
-                      Boolean(hotelSearchTerm) || hotelType.length > 0;
-                    const showingStart = pageIndex * pageSize + 1;
+                      Boolean(hotelSearchTerm?.trim()) || hotelType.length > 0 || channelType.length > 0 || starRating.length > 0;
+                    const showingStart = hasClientOnlyFilters ? 1 : pageIndex * pageSize + 1;
                     const showingEnd = hasClientOnlyFilters
-                      ? Math.min(
-                          pageIndex * pageSize + pageSize,
-                          filteredResults.length
-                        )
+                      ? filteredResults.length
                       : Math.min(
                           pageIndex * pageSize + pageSize,
                           totalElements
@@ -959,19 +1331,15 @@ export default function MakePkgCombineSearch() {
                               disabled={pageIndex === 0}
                               onClick={() => goToPage(pageIndex - 1)}
                             />
-                            {pageNumbers.map((n) =>
-                              typeof n === "number" ? (
-                                <Pagination.Item
-                                  key={n}
-                                  active={n === pageIndex + 1}
-                                  onClick={() => goToPage(n - 1)}
-                                >
-                                  {n}
-                                </Pagination.Item>
-                              ) : (
-                                <Pagination.Ellipsis key={n} disabled />
-                              )
-                            )}
+                                                         {pageNumbers.map((n) => (
+                               <Pagination.Item
+                                 key={n}
+                                 active={n === pageIndex + 1}
+                                 onClick={() => goToPage(n - 1)}
+                               >
+                                 {n}
+                               </Pagination.Item>
+                             ))}
                             <Pagination.Next
                               disabled={pageIndex >= effectiveTotalPages - 1}
                               onClick={() => goToPage(pageIndex + 1)}
@@ -992,33 +1360,229 @@ export default function MakePkgCombineSearch() {
                   </Card>
                 </Tab>
 
-                {/* --------------- Transfer Tab ---------------- */}
-                <Tab eventKey="transfer" title={<><FaCar className="me-2" /> Transfer</>}>
-                  <Card className="border-0 shadow-sm rounded-4">
-                    <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Transfer Search</h5>
-                      <Form>
-                        <Row className="g-3">
-                          <Col md={4}>
-                            <Form.Label>Pickup Date</Form.Label>
-                            <Form.Control type="date" value={travelDate} readOnly />
-                          </Col>
-                          <Col md={4}>
-                            <Form.Label>Dropoff Date</Form.Label>
-                            <Form.Control type="date" value={checkOut} readOnly />
-                          </Col>
-                          <Col md={4} className="d-flex align-items-end">
-                            <Button variant="warning" className="w-100 py-2">
-                              <FaSearch className="me-2" /> Search
-                            </Button>
-                          </Col>
-                        </Row>
-                      </Form>
+                                 {/* --------------- Transfer Tab ---------------- */}
+                 <Tab eventKey="transfer" title={<><FaCar className="me-2" /> Transfer</>}>
+                   <Card className="border-0 shadow-sm rounded-4">
+                     <Card.Body>
+                       <h5 className="fw-bold text-primary mb-3">Transfer Search</h5>
+                       <Form onSubmit={handleTransferSearchSubmit}>
+                         <Row className="g-3">
+                           <Col md={2}>
+                             <Form.Label>Pickup Date</Form.Label>
+                             <Form.Control type="date" value={travelDate || checkIn} readOnly />
+                           </Col>
+                           <Col md={2}>
+                             <Form.Label>Dropoff Date</Form.Label>
+                             <Form.Control type="date" value={checkOut} readOnly />
+                           </Col>
+                           <Col md={2}>
+                              <Form.Label>Adults</Form.Label>
+                              <Form.Select 
+                                value={transferAdults} 
+                                onChange={(e) => setTransferAdults(parseInt(e.target.value) || 1)}
+                              >
+                                {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                                  <option key={num} value={num}>
+                                    {num} 
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Col>
+                            <Col md={2}>
+                              <Form.Label>Children</Form.Label>
+                              <Form.Select 
+                                value={transferChildren} 
+                                onChange={(e) => setTransferChildren(parseInt(e.target.value) || 0)}
+                              >
+                                {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                                  <option key={num} value={num}>
+                                    {num} 
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Col>
+                           {transferChildren > 0 && (
+                             <Col md={4}>
+                               <Form.Label className="mb-2">Child Ages</Form.Label>
+                               <Row className="g-2">
+                                 {transferChildAges.map((age, index) => (
+                                   <Col key={index} md={3} sm={4} xs={6}>
+                                     <Form.Control
+                                       type="number"
+                                       min="0"
+                                       max="17"
+                                       placeholder={`Child ${index + 1} age`}
+                                       value={age}
+                                       onChange={(e) => handleTransferChildAgeChange(index, e.target.value)}
+                                     />
+                                   </Col>
+                                 ))}
+                               </Row>
+                             </Col>
+                           )}
+                           <Col md={3} className="d-flex align-items-end cab-search">
+                             <Button 
+                               variant="warning" 
+                               className="w-100 py-2" 
+                               type="submit"
+                               disabled={transferLoading}
+                             >
+                               {transferLoading ? (
+                                 <>
+                                   <Spinner animation="border" size="sm" className="me-2" />
+                                   Searching...
+                                 </>
+                               ) : (
+                                 <>
+                                   <FaSearch className="me-2" /> Search
+                                 </>
+                               )}
+                             </Button>
+                           </Col>
+                         </Row>
+                       </Form>
 
-                      <div className="text-center text-muted mt-5">
-                        <FaCar className="fs-1 mb-3 text-secondary" />
-                        <h6>No transfer results yet. Run a search to view available transfers.</h6>
-                      </div>
+                      {/* Loading State */}
+                      {transferLoading && (
+                        <Card className="shadow-sm rounded-xl mb-4 mt-4">
+                          <Card.Body className="text-center py-5">
+                            <div className="results-loader">
+                              <div className="loader-ring">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                              </div>
+                              <h4 className="text-primary fw-bold mt-3 mb-1">
+                                Searching Transfers...
+                              </h4>
+                              <p className="text-muted small mb-0">
+                                Finding available transfer options
+                              </p>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      )}
+
+                      {/* Empty State */}
+                      {!hasTransferSearched && !transferLoading && (
+                        <div className="text-center text-muted mt-5">
+                          <FaCar className="fs-1 mb-3 text-secondary" />
+                          <h6>No transfer results yet. Run a search to view available transfers.</h6>
+                        </div>
+                      )}
+
+                      {/* Results Display */}
+                      {hasTransferSearched && !transferLoading && transferResults.length > 0 && (
+                        <div className="mt-4">
+                          <h6 className="fw-bold mb-3">
+                            Transfer Results ({transferResults.length})
+                          </h6>
+                          <Row className="g-4">
+                            {transferResults.map((transfer) => (
+                              <Col key={transfer.id} md={6} lg={4}>
+                                <Card className="h-100 shadow-sm rounded-3 overflow-hidden">
+                                  <LazyImage 
+                                    src={transfer.image} 
+                                    alt={transfer.vehicleName}
+                                    className="card-img-top"
+                                  />
+                                  <Card.Body className="p-3">
+                                    <div className="d-flex justify-content-between align-items-start mb-2">
+                                      <h6 className="fw-bold mb-1">{transfer.vehicleName}</h6>
+                                      <Badge bg="primary">{transfer.vehicleType}</Badge>
+                                    </div>
+                                    
+                                    {transfer.description && (
+                                      <p className="text-muted small mb-2">{transfer.description}</p>
+                                    )}
+
+                                    <div className="mb-2">
+                                      {transfer.pickupLocation && (
+                                        <div className="d-flex align-items-center mb-1">
+                                          <FaMapMarkerAlt className="text-primary me-2" size={12} />
+                                          <small className="text-muted">
+                                            <strong>From:</strong> {transfer.pickupLocation}
+                                          </small>
+                                        </div>
+                                      )}
+                                      {transfer.dropoffLocation && (
+                                        <div className="d-flex align-items-center mb-1">
+                                          <FaMapMarkerAlt className="text-success me-2" size={12} />
+                                          <small className="text-muted">
+                                            <strong>To:</strong> {transfer.dropoffLocation}
+                                          </small>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                      {transfer.capacity > 0 && (
+                                        <small className="text-muted">
+                                          <FaUsers className="me-1" />
+                                          {transfer.capacity} passengers
+                                        </small>
+                                      )}
+                                      {transfer.duration && (
+                                        <small className="text-muted">
+                                          <FaCar className="me-1" />
+                                          {transfer.duration}
+                                        </small>
+                                      )}
+                                    </div>
+
+                                    {transfer.amenities && transfer.amenities.length > 0 && (
+                                      <div className="mb-2">
+                                        <small className="text-muted d-block mb-1">Amenities:</small>
+                                        <div className="d-flex flex-wrap gap-1">
+                                          {transfer.amenities.slice(0, 3).map((amenity, idx) => (
+                                            <Badge key={idx} bg="secondary" className="small">
+                                              {amenity}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    <div 
+                                      className="mt-3 pt-3"
+                                      style={{
+                                        borderTop: '1px solid #eee',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                      }}
+                                    >
+                                      <div style={{
+                                        fontSize: '1.5rem',
+                                        fontWeight: '600',
+                                        color: '#333'
+                                      }}>
+                                        {transfer.price ? `${transfer.currency} ${transfer.price.toLocaleString()}` : 'Price on request'}
+                                      </div>
+                                      <Button
+                                        variant="primary"
+                                        size="sm"
+                                      >
+                                        Select Transfer
+                                      </Button>
+                                    </div>
+                                  </Card.Body>
+                                </Card>
+                              </Col>
+                            ))}
+                          </Row>
+                        </div>
+                      )}
+
+                      {/* No Results State */}
+                      {hasTransferSearched && !transferLoading && transferResults.length === 0 && (
+                        <div className="text-center text-muted mt-5">
+                          <FaCar className="fs-1 mb-3 text-secondary" />
+                          <h6>No transfers found for the selected dates.</h6>
+                          <p className="small">Please try different dates or contact support.</p>
+                        </div>
+                      )}
                     </Card.Body>
                   </Card>
                 </Tab>
@@ -1034,7 +1598,7 @@ export default function MakePkgCombineSearch() {
                             <Form.Label>Tour Date</Form.Label>
                             <Form.Control type="date" value={travelDate} readOnly />
                           </Col>
-                          <Col md={4} className="d-flex align-items-end">
+                          <Col md={4} className="d-flex align-items-end activity-search">
                             <Button variant="warning" className="w-100 py-2">
                               <FaSearch className="me-2" /> Search
                             </Button>
