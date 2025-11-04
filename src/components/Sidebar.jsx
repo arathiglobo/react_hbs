@@ -34,7 +34,7 @@ export default function Sidebar() {
     dashboardPath = "/staffDashboard";
     labelForDashboard = "Staff Dashboard"
   } else if (currentRole === "extranet") {
-    dashboardPath = "/hotelDashboard";
+    dashboardPath = "/extranetDashboard";
     labelForDashboard = "Hotel Dashboard"
   }
 
@@ -164,7 +164,7 @@ export default function Sidebar() {
     },
     {
       label: "Booking List",
-      roles: ["admin", "agent", "staff", "hotel"],
+      roles: ["admin", "agent", "staff"],
       children: [
         {
           label: "Hotel Booking",
