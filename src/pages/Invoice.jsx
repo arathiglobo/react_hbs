@@ -266,23 +266,25 @@ export default function Invoice() {
         params.append("search", searchTerm.trim());
       }
 
-      const res = await axiosInstance.get(
-        `/api/invoiceList?${params.toString()}`
-      );
+      // const res = await axiosInstance.get(
+      //   `/api/invoiceList?${params.toString()}`
+      // );
 
-      if (res.data && Array.isArray(res.data)) {
-        setItems(res.data);
-        if (res.data.length < 10) {
-          setTotalPages(pageNum + 1);
-        } else {
-          setTotalPages(Math.max(totalPages, pageNum + 2));
-        }
-        setPage(pageNum);
-      } else {
-        setItems([]);
-        setTotalPages(0);
-        setPage(0);
-      }
+      // if (res.data && Array.isArray(res.data)) {
+      //   setItems(res.data);
+      //   if (res.data.length < 10) {
+      //     setTotalPages(pageNum + 1);
+      //   } else {
+      //     setTotalPages(Math.max(totalPages, pageNum + 2));
+      //   }
+      //   setPage(pageNum);
+      // } else {
+      //   setItems([]);
+      //   setTotalPages(0);
+      //   setPage(0);
+      // }
+
+       setItems(dummyInvoiceData);
     } catch (err) {
       toast.error("Failed to load offers");
       setItems([]);
