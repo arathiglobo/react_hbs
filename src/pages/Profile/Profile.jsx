@@ -4,6 +4,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import TopBar from "../../components/TopBar";
 import Sidebar from "../../components/Sidebar";
 
+
 const Profile = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);

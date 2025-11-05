@@ -1,11 +1,12 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import { Container, Row, Col, Button, Card } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
+import axiosInstance from '../components/AxiosInstance';
 
 const kpiData = {
   totalBookings: 1245,
@@ -22,6 +23,23 @@ const revenueData = [3000,4800,5500,4000,6800];
 
 export default function AdminDashboard(){
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        if (userName) {
+          const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+          console.log("Profile Data:", response.data);
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: '100vh' }}>
       <TopBar/>

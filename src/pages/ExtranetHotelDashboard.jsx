@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect , useState } from "react";
 import { Link } from "react-router-dom"; // ✅ Import Link
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
+import axiosInstance from "../components/AxiosInstance";
 import {
   FaUser,
   FaImages,
@@ -10,6 +11,26 @@ import {
 } from "react-icons/fa";
 
 const ExtranetHotelDashboard = () => {
+
+  const [userId, setUSerId] = useState(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        if (userName) {
+          const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+          console.log("Profile Data:", response.data);
+          setUSerId(response.data.id);
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
   return (
     <div className="d-flex">
       {/* Sidebar */}
@@ -28,8 +49,8 @@ const ExtranetHotelDashboard = () => {
           <div className="d-flex flex-wrap gap-4 mb-5 justify-content-start">
 
             {/* My Profile */}
-            <Link
-              to="/registration/hotel/create/:id"  // ✅ Redirect to Profile page
+            <Link 
+              to={`/registration/hotel/create/${userId}`} // ✅ Redirect to Profile page
               className="text-decoration-none"
             >
               <div

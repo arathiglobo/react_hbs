@@ -62,6 +62,22 @@ export default function AgentDashboard(){
     fetchCreditLimit();
   }, []);
 
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        if (userName) {
+          const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+          console.log("Profile Data:", response.data);
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar/>
