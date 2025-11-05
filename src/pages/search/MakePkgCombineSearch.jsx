@@ -629,59 +629,65 @@ export default function MakePkgCombineSearch() {
     setTourResults([]);
 
     try {
-      // Prepare payload for tour/activity search matching backend DTO
-      const tourPayload = {
-        tourDate: tourDate || travelDate || checkIn,
-        nativeCountryId: nationality?.value ? Number(nationality.value) : null,
-        searchCityorCountryId: destination?.value || "",
-        searchCorCtype: "city", // Assuming city search - adjust if needed
-        agentid: String(agentId || agent || 1),
-        childAge: tourChildAges.length > 0 ? tourChildAges : [],
-        adult: tourAdults || 1,
-        child: tourChildren || 0,
+      // Format date to DD/MM/YYYY format
+      const formatDate = (dateString) => {
+        if (!dateString) return "";
+        const date = new Date(dateString);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+      };
+
+      console.log
+      // Prepare payload for activity search matching backend DTO
+      const activityPayload = {
+        activityDate: formatDate(tourDate || travelDate || checkIn),
+        nativeCountryId: nationality?.value ? String(nationality.value) : "",
+        // searchCityorCountryId: destination?.value || "",
+        destinationCountryId: destination?.countryId || "",
+        destinationCityId: destination?.value || "",
+        searchCorCtype: destination?.type || "State", // Use destination type or default to "State"
+        agentId: String(agentId || agent || 1),
+        childAge: tourChildAges.length > 0 ? tourChildAges.map(age => String(age)) : [],
+        adult: String(tourAdults || 1),
+        child: String(tourChildren || 0),
       };
 
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/getTourInhouse",
-        tourPayload
+        "/api/makeYourOwnPackage/getActivityInhouse",
+        activityPayload
       );
 
-      // Map API response to tour results format
+      // Map API response to activity results format
       const mappedResults = Array.isArray(response.data)
-        ? response.data.map((tour, index) => ({
-            id: tour.id || `tour-${index}`,
-            tourName: tour.tourName || tour.activityName || "Tour Activity",
-            description: tour.description || "",
-            duration: tour.duration || tour.tourDuration || "",
-            price: tour.price || tour.totalPrice || tour.rate || 0,
-            currency: tour.currency || "AED",
-            image: tour.image || tour.tourImage || tour.activityImage || "https://via.placeholder.com/400x225?text=Tour",
-            location: tour.location || tour.address || "",
-            category: tour.category || tour.tourType || "Tour",
-            rating: tour.rating || 0,
-            inclusions: tour.inclusions || [],
-            exclusions: tour.exclusions || [],
-          }))
-        : response.data?.data && Array.isArray(response.data.data)
-        ? response.data.data.map((tour, index) => ({
-            id: tour.id || `tour-${index}`,
-            tourName: tour.tourName || tour.activityName || "Tour Activity",
-            description: tour.description || "",
-            duration: tour.duration || tour.tourDuration || "",
-            price: tour.price || tour.totalPrice || tour.rate || 0,
-            currency: tour.currency || "AED",
-            image: tour.image || tour.tourImage || tour.activityImage || "https://via.placeholder.com/400x225?text=Tour",
-            location: tour.location || tour.address || "",
-            category: tour.category || tour.tourType || "Tour",
-            rating: tour.rating || 0,
-            inclusions: tour.inclusions || [],
-            exclusions: tour.exclusions || [],
+        ? response.data.map((activity, index) => ({
+            id: activity.activityId || `activity-${index}`,
+            activityName: activity.activityname || "Activity",
+            activityDetails: activity.activityDetails || "",
+            starRating: activity.starRating || 0,
+            totalRate: activity.totalRate || activity.activityRate || 0,
+            totalRateWithoutMrk: activity.totalRateWithoutmrk || activity.activityRate || 0,
+            activityImage: activity.activityImage || "https://via.placeholder.com/400x225?text=Activity",
+            childMax: activity.childMax || 0,
+            childMin: activity.childMin || 0,
+            adultRate: activity.adultRate || 0,
+            childRate: activity.childRate || 0,
+            activityType: activity.activityType || 1,
+            maxPax: activity.maxPax || 0,
+            minPaxsic: activity.minPaxsic || 0,
+            currency: activity.currencyCode || "AED",
+            duration: activity.viatorActivityDurationFrom && activity.viatorActivityDurationTo 
+              ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
+              : null,
+            apiType: activity.apiType || null,
+            viatorProductCode: activity.viatorProductCode || null,
           }))
         : [];
 
       setTourResults(mappedResults);
     } catch (err) {
-      console.error("Tour search failed:", err);
+      console.error("Activity search failed:", err);
       setTourResults([]);
     } finally {
       setTourLoading(false);
@@ -1709,7 +1715,7 @@ export default function MakePkgCombineSearch() {
                   <Tab eventKey="tours" title={<><FaTicketAlt className="me-2" /> Tours & Activities</>}>
                     <Card className="border-0 shadow-sm rounded-4">
                       <Card.Body>
-                        <h5 className="fw-bold text-primary mb-3">Tours & Activities Search</h5>
+                        <h5 className="fw-bold text-primary mb-3">Activities Search</h5>
                         <Form onSubmit={handleTourSearchSubmit}>
                           <Row className="g-3">
                             <Col md={2}>
@@ -1800,10 +1806,10 @@ export default function MakePkgCombineSearch() {
                                   <span></span>
                                 </div>
                                 <h4 className="text-primary fw-bold mt-3 mb-1">
-                                  Searching Tours & Activities...
+                                  Searching Activities...
                                 </h4>
                                 <p className="text-muted small mb-0">
-                                  Finding available tour options
+                                  Finding available activity options
                                 </p>
                               </div>
                             </Card.Body>
@@ -1814,7 +1820,7 @@ export default function MakePkgCombineSearch() {
                         {!hasTourSearched && !tourLoading && (
                           <div className="text-center text-muted mt-5">
                             <FaTicketAlt className="fs-1 mb-3 text-secondary" />
-                            <h6>No tour activities yet. Run a search to view available tours.</h6>
+                            <h6>No activities yet. Run a search to view available activities.</h6>
                           </div>
                         )}
 
@@ -1824,91 +1830,149 @@ export default function MakePkgCombineSearch() {
                             <h6 className="fw-bold mb-3">
                               Tour & Activity Results ({tourResults.length})
                             </h6>
-                            <Row className="g-4">
-                              {tourResults.map((tour) => (
-                                <Col key={tour.id} md={6} lg={4}>
-                                  <Card className="h-100 shadow-sm rounded-3 overflow-hidden">
-                                    <LazyImage 
-                                      src={tour.image} 
-                                      alt={tour.tourName}
-                                      className="card-img-top"
-                                    />
-                                    <Card.Body className="p-3">
-                                      <div className="d-flex justify-content-between align-items-start mb-2">
-                                        <h6 className="fw-bold mb-1">{tour.tourName}</h6>
-                                        <Badge bg="primary">{tour.category}</Badge>
+                            <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
+                              {tourResults.map((activity) => (
+                                <Col key={activity.id}>
+                                  <div style={{
+                                    backgroundColor: 'white',
+                                    border: '1px solid #dee2e6',
+                                    borderRadius: '12px',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                    marginBottom: '20px',
+                                    overflow: 'hidden'
+                                  }}>
+                                    <div style={{
+                                      position: 'relative',
+                                      height: '200px',
+                                      overflow: 'hidden'
+                                    }}>
+                                      <LazyImage src={activity.activityImage} alt={activity.activityName} />
+                                      <div style={{
+                                        position: 'absolute',
+                                        top: '10px',
+                                        right: '10px',
+                                        backgroundColor: 'rgba(0,0,0,0.7)',
+                                        color: 'white',
+                                        padding: '5px 10px',
+                                        borderRadius: '15px',
+                                        fontSize: '12px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px'
+                                      }}>
+                                        {activity.starRating > 0 && (
+                                          <>
+                                            <FaStar className="text-warning me-1" />
+                                            {activity.starRating}
+                                          </>
+                                        )}
+                                        {activity.apiType && (
+                                          <span style={{marginLeft: '5px', backgroundColor: '#6c757d', padding: '2px 6px', borderRadius: '10px'}}>
+                                            {activity.apiType.toUpperCase()}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    <div style={{
+                                      padding: '16px',
+                                      backgroundColor: 'white'
+                                    }}>
+                                      <h6 style={{
+                                        fontSize: '1.3rem',
+                                        fontWeight: '600',
+                                        marginBottom: '8px',
+                                        color: '#333',
+                                        lineHeight: '1.3'
+                                      }}>
+                                        {activity.activityName || 'Activity Name Not Available'}
+                                      </h6>
+                                      
+                                      {activity.activityDetails && (
+                                        <p style={{
+                                          fontSize: '0.875rem',
+                                          color: '#666',
+                                          marginBottom: '8px',
+                                          lineHeight: '1.4'
+                                        }}>
+                                          {activity.activityDetails}
+                                        </p>
+                                      )}
+
+                                      <div style={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '8px',
+                                        marginBottom: '12px'
+                                      }}>
+                                        {activity.minPaxsic > 0 && (
+                                          <Badge bg="info" className="small">
+                                            Min Pax: {activity.minPaxsic}
+                                          </Badge>
+                                        )}
+                                        {activity.maxPax > 0 && (
+                                          <Badge bg="info" className="small">
+                                            Max Pax: {activity.maxPax}
+                                          </Badge>
+                                        )}
+                                        {activity.childMin > 0 && (
+                                          <Badge bg="warning" className="small">
+                                            Child Age: {activity.childMin}-{activity.childMax} years
+                                          </Badge>
+                                        )}
+                                      </div>
+
+                                      {activity.duration && (
+                                        <div style={{
+                                          fontSize: '0.875rem',
+                                          color: '#666',
+                                          marginBottom: '12px'
+                                        }}>
+                                          <FaTicketAlt className="text-info me-2" />
+                                          Duration: {activity.duration}
+                                        </div>
+                                      )}
+                                      
+                                      <div style={{
+                                        backgroundColor: activity.totalRate > 0 ? '#28a745' : '#6c757d',
+                                        color: 'white',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '500',
+                                        display: 'inline-block',
+                                        marginBottom: '12px'
+                                      }}>
+                                        {activity.totalRate > 0 ? 'Rate Available' : 'Rate on Request'}
                                       </div>
                                       
-                                      {tour.description && (
-                                        <p className="text-muted small mb-2">{tour.description}</p>
-                                      )}
-
-                                      <div className="mb-2">
-                                        {tour.location && (
-                                          <div className="d-flex align-items-center mb-1">
-                                            <FaMapMarkerAlt className="text-primary me-2" size={12} />
-                                            <small className="text-muted">
-                                              <strong>Location:</strong> {tour.location}
-                                            </small>
-                                          </div>
-                                        )}
-                                        {tour.duration && (
-                                          <div className="d-flex align-items-center mb-1">
-                                            <FaTicketAlt className="text-info me-2" size={12} />
-                                            <small className="text-muted">
-                                              <strong>Duration:</strong> {tour.duration}
-                                            </small>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {tour.rating > 0 && (
-                                        <div className="mb-2">
-                                          <small className="text-muted">
-                                            <FaStar className="text-warning me-1" />
-                                            {tour.rating} Rating
-                                          </small>
-                                        </div>
-                                      )}
-
-                                      {tour.inclusions && tour.inclusions.length > 0 && (
-                                        <div className="mb-2">
-                                          <small className="text-muted d-block mb-1">Inclusions:</small>
-                                          <div className="d-flex flex-wrap gap-1">
-                                            {tour.inclusions.slice(0, 3).map((inclusion, idx) => (
-                                              <Badge key={idx} bg="success" className="small">
-                                                {inclusion}
-                                              </Badge>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      <div 
-                                        className="mt-3 pt-3"
-                                        style={{
-                                          borderTop: '1px solid #eee',
-                                          display: 'flex',
-                                          justifyContent: 'space-between',
-                                          alignItems: 'center'
-                                        }}
-                                      >
+                                      <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        marginTop: '12px',
+                                        paddingTop: '12px',
+                                        borderTop: '1px solid #eee'
+                                      }}>
                                         <div style={{
                                           fontSize: '1.5rem',
                                           fontWeight: '600',
                                           color: '#333'
                                         }}>
-                                          {tour.price ? `${tour.currency} ${tour.price.toLocaleString()}` : 'Price on request'}
+                                          {activity.totalRate > 0 
+                                            ? `${activity.currency} ${activity.totalRate.toLocaleString()}`
+                                            : 'Price on request'}
                                         </div>
+
                                         <Button
                                           variant="primary"
                                           size="sm"
                                         >
-                                          Select Tour
+                                          Select Activity
                                         </Button>
                                       </div>
-                                    </Card.Body>
-                                  </Card>
+                                    </div>
+                                  </div>
                                 </Col>
                               ))}
                             </Row>
@@ -1919,7 +1983,7 @@ export default function MakePkgCombineSearch() {
                         {hasTourSearched && !tourLoading && tourResults.length === 0 && (
                           <div className="text-center text-muted mt-5">
                             <FaTicketAlt className="fs-1 mb-3 text-secondary" />
-                            <h6>No tours found for the selected date.</h6>
+                            <h6>No activities found for the selected date.</h6>
                             <p className="small">Please try different dates or contact support.</p>
                           </div>
                         )}

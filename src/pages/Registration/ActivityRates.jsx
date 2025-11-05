@@ -279,6 +279,8 @@ const ActivityRates = () => {
     reportingPoint: "",
     rating: "",
     marketType: "",
+    activityImage: null,
+    activityImagePreview: null,
   });
 
   // Validity dates state
@@ -477,6 +479,8 @@ const ActivityRates = () => {
       reportingPoint: "",
       rating: "",
       marketType: "",
+      activityImage: null,
+      activityImagePreview: null,
     });
     setValidityDates([
       {
@@ -510,6 +514,8 @@ const ActivityRates = () => {
       reportingPoint: "",
       rating: "",
       marketType: "",
+      activityImage: null,
+      activityImagePreview: null,
     });
     setValidityDates([
       {
@@ -549,7 +555,9 @@ const ActivityRates = () => {
       durationMin: item.durationMin || item.duration_min || "",
       reportingPoint: item.reportingPoint || item.reporting_point || "", 
       rating: item.rating || "",
-      marketType: item.marketType || item.market_type || "",  
+      marketType: item.marketType || item.market_type || "",
+      activityImage: null,
+      activityImagePreview: item.imagePath || item.activityImage || item.activity_image || null,
     });
     
     // Handle validity dates - check for different possible field names
@@ -614,6 +622,8 @@ const ActivityRates = () => {
       reportingPoint: item.reportingPoint || item.reporting_point || "",
       rating: item.rating || "",
       marketType: item.marketType || item.market_type || "",
+      activityImage: null,
+      activityImagePreview: item.imagePath || item.activityImage || item.activity_image || null,
     });
     
     // Handle validity dates - check for different possible field names
@@ -691,6 +701,35 @@ const ActivityRates = () => {
         ...prev,
         marketType: ""
       }));
+    }
+  };
+
+  // Handle image file selection
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error("Please select an image file");
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size should be less than 5MB");
+        return;
+      }
+
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({
+          ...prev,
+          activityImage: file,
+          activityImagePreview: reader.result
+        }));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -833,6 +872,11 @@ const ActivityRates = () => {
       // Add market type
       formDataPayload.append('marketType', formData.marketType);
 
+      // Add activity image if provided
+      if (formData.activityImage) {
+        formDataPayload.append('activityImage', formData.activityImage);
+      }
+
       // Add validity dates
       validityDates.forEach((validity, index) => {
         formDataPayload.append(`validity[${index}].validityFrom`, formatDateForAPI(validity.validityFrom));
@@ -904,6 +948,11 @@ const ActivityRates = () => {
       
       // Add market type
       formDataPayload.append('marketType', formData.marketType);
+
+      // Add activity image if provided
+      if (formData.activityImage) {
+        formDataPayload.append('activityImage', formData.activityImage);
+      }
 
       // Add validity dates
       validityDates.forEach((validity, index) => {
@@ -1367,6 +1416,49 @@ const ActivityRates = () => {
                         </Form.Group>
                       </Col>
                     </Row>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>
+                        Activity Image
+                      </Form.Label>
+                      <Form.Control
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageChange}
+                        disabled={isViewMode}
+                      />
+                      {formData.activityImagePreview && (
+                        <div className="mt-2">
+                          <img
+                            src={formData.activityImagePreview}
+                            alt="Activity preview"
+                            style={{
+                              maxWidth: "200px",
+                              maxHeight: "200px",
+                              objectFit: "contain",
+                              border: "1px solid #dee2e6",
+                              borderRadius: "4px",
+                              padding: "4px",
+                            }}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                          {!isViewMode && (
+                            <div className="mt-2">
+                              <small className="text-muted">
+                                Selected image will replace the existing one
+                              </small>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {!formData.activityImagePreview && isViewMode && (
+                        <div className="mt-2">
+                          <small className="text-muted">No image available</small>
+                        </div>
+                      )}
+                    </Form.Group>
 
                     <Form.Group className="mb-3">
                       <Form.Label>
