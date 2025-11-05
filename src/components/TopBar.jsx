@@ -22,24 +22,24 @@ export default function TopBar() {
 
   // Fetch cart data from redis
   const fetchCartData = async () => {
-    try {
-      setCartLoading(true);
-      const response = await axiosInstance.get("/api/cart/get");
+    // try {
+    //   setCartLoading(true);
+    //    const response = await axiosInstance.get("/api/cart/get");
       
-      if (response.data && response.data.items) {
-        setCartItems(response.data.items || []);
-        setCartCount(response.data.items?.length || 0);
-      } else {
-        setCartItems([]);
-        setCartCount(0);
-      }
-    } catch (err) {
-      console.error("Error fetching cart:", err);
-      setCartItems([]);
-      setCartCount(0);
-    } finally {
-      setCartLoading(false);
-    }
+    //   if (response.data && response.data.items) {
+    //     setCartItems(response.data.items || []);
+    //     setCartCount(response.data.items?.length || 0);
+    //   } else {
+    //     setCartItems([]);
+    //     setCartCount(0);
+    //   }
+    // } catch (err) {
+    //   console.error("Error fetching cart:", err);
+    //   setCartItems([]);
+    //   setCartCount(0);
+    // } finally {
+    //   setCartLoading(false);
+    // }
   };
 
   // Remove item from cart

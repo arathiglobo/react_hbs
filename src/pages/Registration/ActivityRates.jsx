@@ -25,6 +25,7 @@ import {
   FaDollarSign,
   FaBackward,
   FaCog,
+  FaTimes,
 } from "react-icons/fa";
 
 // Enhanced SearchableSelect Component with loading support
@@ -245,6 +246,12 @@ const ActivityRates = () => {
   const [loading, setLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsActivityRateId, setSettingsActivityRateId] = useState(null);
+  const [inclusions, setInclusions] = useState([{ id: 1, value: "" }]);
+  const [termsAndConditions, setTermsAndConditions] = useState([{ id: 1, value: "" }]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsFetching, setSettingsFetching] = useState(false);
   const [editing, setEditing] = useState(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [search, setSearch] = useState("");
@@ -526,16 +533,156 @@ const ActivityRates = () => {
     ]);
   };
 
+  // Settings modal handlers
+  const handleOpenSettings = async (rate) => {
+    const activityRateId = rate.activityRateId;
+    setSettingsActivityRateId(activityRateId);
+    setSettingsFetching(true);
+    setShowSettingsModal(true);
+    
+    try {
+      // Fetch existing inclusions and terms from API
+      const response = await axiosInstance.get(
+        `/api/activityRate/inclutionAndTerms/${activityRateId}`
+      );
+      
+      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+        // Separate inclusions (type: 1) and terms (type: 2)
+        const inclusionsData = response.data
+          .filter(item => item.type === 1)
+          .map((item, idx) => ({ id: idx + 1, value: item.data || "" }));
+        
+        const termsData = response.data
+          .filter(item => item.type === 2)
+          .map((item, idx) => ({ id: idx + 1, value: item.data || "" }));
+        
+        // Set the data if it exists, otherwise use empty array with one empty item
+        setInclusions(inclusionsData.length > 0 
+          ? inclusionsData 
+          : [{ id: 1, value: "" }]);
+        setTermsAndConditions(termsData.length > 0
+          ? termsData
+          : [{ id: 1, value: "" }]);
+      } else {
+        // No data found, initialize with empty arrays
+        setInclusions([{ id: 1, value: "" }]);
+        setTermsAndConditions([{ id: 1, value: "" }]);
+      }
+    } catch (error) {
+      console.error("Error fetching inclusions and terms:", error);
+      // If error (like 404), initialize with empty arrays
+      setInclusions([{ id: 1, value: "" }]);
+      setTermsAndConditions([{ id: 1, value: "" }]);
+    } finally {
+      setSettingsFetching(false);
+    }
+  };
+
+  const handleCloseSettings = () => {
+    setShowSettingsModal(false);
+    setSettingsActivityRateId(null);
+    setInclusions([{ id: 1, value: "" }]);
+    setTermsAndConditions([{ id: 1, value: "" }]);
+    setSettingsFetching(false);
+  };
+
+  const handleAddInclusion = () => {
+    const newId = Math.max(...inclusions.map(i => i.id), 0) + 1;
+    setInclusions([...inclusions, { id: newId, value: "" }]);
+  };
+
+  const handleRemoveInclusion = (id) => {
+    if (inclusions.length > 1) {
+      setInclusions(inclusions.filter(item => item.id !== id));
+    }
+  };
+
+  const handleInclusionChange = (id, value) => {
+    setInclusions(inclusions.map(item => 
+      item.id === id ? { ...item, value } : item
+    ));
+  };
+
+  const handleAddTerm = () => {
+    const newId = Math.max(...termsAndConditions.map(t => t.id), 0) + 1;
+    setTermsAndConditions([...termsAndConditions, { id: newId, value: "" }]);
+  };
+
+  const handleRemoveTerm = (id) => {
+    if (termsAndConditions.length > 1) {
+      setTermsAndConditions(termsAndConditions.filter(item => item.id !== id));
+    }
+  };
+
+  const handleTermChange = (id, value) => {
+    setTermsAndConditions(termsAndConditions.map(item => 
+      item.id === id ? { ...item, value } : item
+    ));
+  };
+
+  const handleSaveSettings = async () => {
+    // Validate that all fields are filled
+    const emptyInclusions = inclusions.filter(inc => !inc.value.trim());
+    const emptyTerms = termsAndConditions.filter(term => !term.value.trim());
+
+    if (emptyInclusions.length > 0) {
+      toast.error("Please fill all inclusion fields");
+      return;
+    }
+
+    if (emptyTerms.length > 0) {
+      toast.error("Please fill all terms and condition fields");
+      return;
+    }
+
+    try {
+      setSettingsLoading(true);
+      
+      // Transform data to match API payload structure
+      // type: 1 = Inclusion, type: 2 = Terms and condition
+      const payload = [
+        // Add all inclusions with type 1
+        ...inclusions
+          .filter(inc => inc.value.trim())
+          .map(inc => ({
+            activityRateId: String(settingsActivityRateId),
+            data: inc.value.trim(),
+            type: 1
+          })),
+        // Add all terms and conditions with type 2
+        ...termsAndConditions
+          .filter(term => term.value.trim())
+          .map(term => ({
+            activityRateId: String(settingsActivityRateId),
+            data: term.value.trim(),
+            type: 2
+          }))
+      ];
+
+      const response = await axiosInstance.post(
+        "/api/activityRate/inclutionAndTerms/save",
+        payload
+      );
+
+      toast.success("Settings saved successfully!");
+      handleCloseSettings();
+      // Optionally refresh the rates list
+      // loadRates();
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      toast.error(error.response?.data?.message || "Failed to save settings");
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleResetSettings = () => {
+    setInclusions([{ id: 1, value: "" }]);
+    setTermsAndConditions([{ id: 1, value: "" }]);
+  };
+
   const handleEdit = (item) => {
     console.log("Edit item data:", item);
-    console.log("All item keys:", Object.keys(item));
-    console.log("Child Age Min:", item.childAgeMin);
-    console.log("Child Age Max:", item.childAgeMax);
-    console.log("Child age min (snake):", item.child_age_min);
-    console.log("Child age max (snake):", item.child_age_max);
-    console.log("Validity data:", item.validity);
-    console.log("Validity periods:", item.validity_periods);
-    console.log("Validity dates:", item.validityDates);
     
     setEditing(item);
     setIsViewMode(false);
@@ -1094,6 +1241,12 @@ const ActivityRates = () => {
                             onClick={() => handleView(rate)}
                             title="View"
                           />
+                          <FaCog
+                            className="text-secondary"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleOpenSettings(rate)}
+                            title="Settings"
+                          />
                           <FaTrash
                             className="text-danger delete"
                             style={{ cursor: "pointer", fontSize: "18px" }}
@@ -1608,6 +1761,203 @@ const ActivityRates = () => {
                     : "Create"}
                 </Button>
               )}
+            </Modal.Footer>
+          </Modal>
+
+          {/* Settings Modal */}
+          <Modal
+            show={showSettingsModal}
+            onHide={handleCloseSettings}
+            size="lg"
+            centered
+          >
+            <Modal.Header 
+              style={{ 
+                backgroundColor: "#28a745", 
+                color: "white",
+                borderBottom: "none"
+              }}
+            >
+              <Modal.Title className="w-100 text-center">Inclusion Settings</Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{ padding: "20px" }}>
+              {settingsFetching ? (
+                <div className="text-center py-4">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <p className="mt-2 text-muted">Loading settings...</p>
+                </div>
+              ) : (
+                <>
+              {/* Inclusion Section */}
+              <Form.Group className="mb-4">
+                <div className="d-flex align-items-center mb-2">
+                  <Form.Label className="mb-0 me-2" style={{ color: "#0d6efd", fontWeight: "bold" }}>
+                    <span className="text-danger">*</span> INCLUSION
+                  </Form.Label>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    style={{
+                      width: "32px",
+                      height: "32px",
+                      borderRadius: "50%",
+                      padding: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: "#28a745",
+                      borderColor: "#28a745",
+                      minWidth: "32px",
+                    }}
+                    onClick={handleAddInclusion}
+                    title="Add Inclusion"
+                  >
+                    <FaPlus size={18} style={{ color: "white" }} />
+                  </Button>
+                </div>
+                {inclusions.map((inclusion, index) => (
+                  <div key={inclusion.id} className="d-flex align-items-start mb-2">
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      value={inclusion.value}
+                      onChange={(e) => handleInclusionChange(inclusion.id, e.target.value)}
+                      placeholder="Enter inclusion..."
+                      className="me-2"
+                    />
+                    {inclusions.length > 1 && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        style={{
+                          width: "32px",
+                          height: "32px",
+                          borderRadius: "50%",
+                          padding: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          backgroundColor: "#dc3545",
+                          borderColor: "#dc3545",
+                          minWidth: "32px",
+                        }}
+                        onClick={() => handleRemoveInclusion(inclusion.id)}
+                        title="Remove Inclusion"
+                      >
+                        <FaTimes size={18} style={{ color: "white" }} />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </Form.Group>
+
+              {/* Terms and Condition Section */}
+              <Form.Group className="mb-4">
+                <div className="d-flex align-items-center mb-2">
+                  <Form.Label className="mb-0 me-2" style={{ color: "#dc3545", fontWeight: "bold" }}>
+                    <span className="text-danger">*</span> TERMS AND CONDITION
+                  </Form.Label>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    style={{
+                      width: "32px",
+                      height: "32px",
+                      borderRadius: "50%",
+                      padding: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: "#28a745",
+                      borderColor: "#28a745",
+                      minWidth: "32px",
+                    }}
+                    onClick={handleAddTerm}
+                    title="Add Terms and Condition"
+                  >
+                    <FaPlus size={18} style={{ color: "white" }} />
+                  </Button>
+                </div>
+                {termsAndConditions.map((term, index) => (
+                  <div key={term.id} className="d-flex align-items-start mb-2">
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      value={term.value}
+                      onChange={(e) => handleTermChange(term.id, e.target.value)}
+                      placeholder="Enter terms and condition..."
+                      className="me-2"
+                    />
+                    {termsAndConditions.length > 1 && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        style={{
+                          width: "32px",
+                          height: "32px",
+                          borderRadius: "50%",
+                          padding: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          backgroundColor: "#dc3545",
+                          borderColor: "#dc3545",
+                          minWidth: "32px",
+                        }}
+                        onClick={() => handleRemoveTerm(term.id)}
+                        title="Remove Terms and Condition"
+                      >
+                        <FaTimes size={18} style={{ color: "white" }} />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </Form.Group>
+              </>
+              )}
+            </Modal.Body>
+            <Modal.Footer style={{ borderTop: "none", padding: "15px 20px" }}>
+              <Button
+                variant="danger"
+                onClick={handleCloseSettings}
+                disabled={settingsLoading || settingsFetching}
+                style={{ minWidth: "100px" }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="success"
+                onClick={handleSaveSettings}
+                disabled={settingsLoading || settingsFetching}
+                style={{ minWidth: "100px" }}
+              >
+                {settingsLoading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    Create <i className="fas fa-arrow-right ms-2"></i>
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleResetSettings}
+                disabled={settingsLoading || settingsFetching}
+                style={{ minWidth: "100px" }}
+              >
+                Reset <i className="fas fa-redo ms-2"></i>
+              </Button>
             </Modal.Footer>
           </Modal>
         </main>

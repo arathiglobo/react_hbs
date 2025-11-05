@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { Card, Row, Col, Form, Button, Tabs, Tab, Spinner, ButtonGroup, ToggleButton, Pagination, Badge } from "react-bootstrap";
+import { Card, Row, Col, Form, Button, Tabs, Tab, Spinner, ButtonGroup, ToggleButton, Pagination, Badge, Modal } from "react-bootstrap";
 import Select from "react-select";
 import {
   FaSearch,
@@ -12,6 +12,7 @@ import {
   FaGlobe,
   FaSort,
   FaUsers,
+  FaEye,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -158,6 +159,8 @@ export default function MakePkgCombineSearch() {
       const [tourChildren, setTourChildren] = useState(0);
       const [tourChildAges, setTourChildAges] = useState([]);
       const [tourDate, setTourDate] = useState(travelDate || "");
+      const [showActivityModal, setShowActivityModal] = useState(false);
+      const [selectedActivity, setSelectedActivity] = useState(null);
 
   // Filter options
   const starOptions = [
@@ -663,7 +666,7 @@ export default function MakePkgCombineSearch() {
       const mappedResults = Array.isArray(response.data)
         ? response.data.map((activity, index) => ({
             id: activity.activityId || `activity-${index}`,
-            activityName: activity.activityname || "Activity",
+            activityName: activity.activityname || "",
             activityDetails: activity.activityDetails || "",
             starRating: activity.starRating || 0,
             totalRate: activity.totalRate || activity.activityRate || 0,
@@ -1888,7 +1891,7 @@ export default function MakePkgCombineSearch() {
                                         {activity.activityName || 'Activity Name Not Available'}
                                       </h6>
                                       
-                                      {activity.activityDetails && (
+                                      {/* {activity.activityDetails && (
                                         <p style={{
                                           fontSize: '0.875rem',
                                           color: '#666',
@@ -1897,7 +1900,7 @@ export default function MakePkgCombineSearch() {
                                         }}>
                                           {activity.activityDetails}
                                         </p>
-                                      )}
+                                      )} */}
 
                                       <div style={{
                                         display: 'flex',
@@ -1905,7 +1908,7 @@ export default function MakePkgCombineSearch() {
                                         gap: '8px',
                                         marginBottom: '12px'
                                       }}>
-                                        {activity.minPaxsic > 0 && (
+                                        {/* {activity.minPaxsic > 0 && (
                                           <Badge bg="info" className="small">
                                             Min Pax: {activity.minPaxsic}
                                           </Badge>
@@ -1919,7 +1922,7 @@ export default function MakePkgCombineSearch() {
                                           <Badge bg="warning" className="small">
                                             Child Age: {activity.childMin}-{activity.childMax} years
                                           </Badge>
-                                        )}
+                                        )} */}
                                       </div>
 
                                       {activity.duration && (
@@ -1964,12 +1967,32 @@ export default function MakePkgCombineSearch() {
                                             : 'Price on request'}
                                         </div>
 
-                                        <Button
-                                          variant="primary"
-                                          size="sm"
-                                        >
-                                          Select Activity
-                                        </Button>
+                                        <div className="d-flex gap-2 align-items-center">
+                                          <Button
+                                            variant="info"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedActivity(activity);
+                                              setShowActivityModal(true);
+                                            }}
+                                            style={{
+                                              minWidth: "40px",
+                                              padding: "6px 8px",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                            }}
+                                            title="View Details"
+                                          >
+                                            <FaEye size={14} />
+                                          </Button>
+                                          <Button
+                                            variant="primary"
+                                            size="sm"
+                                          >
+                                            Add to Cart
+                                          </Button>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
@@ -1993,6 +2016,155 @@ export default function MakePkgCombineSearch() {
               </Tabs>
             </Card.Body>
           </Card>
+
+          {/* Activity Details Modal */}
+          <Modal
+            show={showActivityModal}
+            onHide={() => {
+              setShowActivityModal(false);
+              setSelectedActivity(null);
+            }}
+            size="lg"
+            centered
+          >
+            <Modal.Header closeButton>
+              <Modal.Title>Activity Details</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {selectedActivity && (
+                <>
+                  <div className="mb-4">
+                    <img
+                      src={selectedActivity.activityImage}
+                      alt={selectedActivity.activityName}
+                      style={{
+                        width: "100%",
+                        height: "300px",
+                        objectFit: "cover",
+                        borderRadius: "8px",
+                      }}
+                      onError={(e) => {
+                        e.target.src = "https://via.placeholder.com/800x300?text=Activity+Image";
+                      }}
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <h4 className="fw-bold">{selectedActivity.activityName || "Activity Name"}</h4>
+                    {selectedActivity.starRating > 0 && (
+                      <div className="d-flex align-items-center mb-2">
+                        <FaStar className="text-warning me-1" />
+                        <span>{selectedActivity.starRating} Star Rating</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedActivity.activityDetails && (
+                    <div className="mb-3">
+                      <h6 className="fw-semibold mb-2">Description</h6>
+                      <p className="text-muted" style={{ whiteSpace: "pre-wrap" }}>
+                        {selectedActivity.activityDetails}
+                      </p>
+                    </div>
+                  )}
+
+                  <Row className="g-3 mb-3">
+                    {selectedActivity.minPaxsic > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Min Pax:</strong> {selectedActivity.minPaxsic}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.maxPax > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Max Pax:</strong> {selectedActivity.maxPax}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.childMin > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Child Age Range:</strong> {selectedActivity.childMin} - {selectedActivity.childMax} years
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.duration && (
+                      <Col md={6}>
+                        <div>
+                          <FaTicketAlt className="me-2" />
+                          <strong>Duration:</strong> {selectedActivity.duration}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.adultRate > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Adult Rate:</strong> {selectedActivity.currency} {selectedActivity.adultRate.toLocaleString()}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.childRate > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Child Rate:</strong> {selectedActivity.currency} {selectedActivity.childRate.toLocaleString()}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.apiType && (
+                      <Col md={6}>
+                        <div>
+                          <strong>API Type:</strong> {selectedActivity.apiType}
+                        </div>
+                      </Col>
+                    )}
+                  </Row>
+
+                  <div className="mt-4 p-3 bg-light rounded">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <div>
+                        <h5 className="mb-0">
+                          {selectedActivity.totalRate > 0 
+                            ? `${selectedActivity.currency} ${selectedActivity.totalRate.toLocaleString()}`
+                            : "Price on request"}
+                        </h5>
+                        {selectedActivity.totalRateWithoutMrk > 0 && selectedActivity.totalRateWithoutMrk !== selectedActivity.totalRate && (
+                          <small className="text-muted">
+                            Without markup: {selectedActivity.currency} {selectedActivity.totalRateWithoutMrk.toLocaleString()}
+                          </small>
+                        )}
+                      </div>
+                      <Badge bg={selectedActivity.totalRate > 0 ? "success" : "secondary"}>
+                        {selectedActivity.totalRate > 0 ? "Rate Available" : "Rate on Request"}
+                      </Badge>
+                    </div>
+                  </div>
+                </>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowActivityModal(false);
+                  setSelectedActivity(null);
+                }}
+              >
+                Close
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  // Handle select activity action here if needed
+                  setShowActivityModal(false);
+                  setSelectedActivity(null);
+                }}
+              >
+                Select Activity
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>
