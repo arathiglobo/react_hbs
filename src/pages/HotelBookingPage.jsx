@@ -238,6 +238,14 @@ const HotelBookingPage = () => {
       // ✅ Construct booking payload
       // ---------------------------
 
+      // Calculate nights difference between check-in and check-out
+      const checkIn = new Date(bookingData.payload.checkInDate);
+      const checkOut = new Date(bookingData.payload.checkOutDate);
+      const nights = Math.max(
+        1,
+        Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24))
+      );
+
       const payload = {
         agentId: bookingData.payload.agentId || null,
         apiId: "INHOUSE", //bookingData.payload.apiId || null,
@@ -247,12 +255,55 @@ const HotelBookingPage = () => {
         starRating: bookingData.hotelStaticData.starRating,
         checkInDate: bookingData.payload.checkInDate,
         checkOutDate: bookingData.payload.checkOutDate,
-        nights: 1, //nights,
+        nights: nights,
         employeeId: primaryGuest.employeeId || null,
         cancellationPolicy:
           bookingData.selectedRate.cancellationPolicy?.map(
             (p) => p.policyText
           ) || [],
+        
+        // Calculate deadlineDate based on nonRefundable and cancellationPolicy
+        deadlineDate: (() => {
+          const nonRefundable = 
+            bookingData.selectedRate.nonRefundable === true ||
+            bookingData.selectedRate.nonRefundable === "true";
+          
+          if (nonRefundable === true) {
+            // 2 days before current date
+            const today = new Date();
+            const deadline = new Date(today);
+            deadline.setDate(today.getDate() - 2);
+            deadline.setHours(0, 0, 0, 0); // Set to midnight
+            const year = deadline.getFullYear();
+            const month = String(deadline.getMonth() + 1).padStart(2, "0");
+            const day = String(deadline.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}T00:00:00`;
+          } else {
+            // 2 days before earliest fromDate from cancellationPolicy
+            const policies = bookingData.selectedRate.cancellationPolicy || [];
+            if (policies.length === 0) {
+              return null;
+            }
+            
+            // Find earliest fromDate
+            const dates = policies
+              .map(p => p.fromDate ? new Date(p.fromDate) : null)
+              .filter(date => date !== null && !isNaN(date.getTime()));
+            
+            if (dates.length === 0) {
+              return null;
+            }
+            
+            const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
+            const deadline = new Date(earliestDate);
+            deadline.setDate(earliestDate.getDate() - 2);
+            deadline.setHours(0, 0, 0, 0); // Set to midnight
+            const year = deadline.getFullYear();
+            const month = String(deadline.getMonth() + 1).padStart(2, "0");
+            const day = String(deadline.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}T00:00:00`;
+          }
+        })(),
 
         // ✅ Primary guest details
         primaryGuest: {
