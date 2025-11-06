@@ -234,6 +234,7 @@ const RoomList = () => {
             rate: rate.totalRate,
             currency: "AED",
             cancellationPolicy: hotelsdetail.cancellationPolicies,
+            roomStatus : rate.roomStatus,
           },
           hotelStaticData: roomData.meta,
           payload: payload,

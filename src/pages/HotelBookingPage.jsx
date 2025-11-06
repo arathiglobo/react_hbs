@@ -43,6 +43,10 @@ const HotelBookingPage = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
   const [employees, setEmployees] = useState([]);
+  const [tourismDirhams, setTourismDirhams] = useState("0");
+  const [remarks, setRemarks] = useState("");
+  const [specialRequests, setSpecialRequests] = useState("");
+  const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
 
   // Fetch employees list
   useEffect(() => {
@@ -257,6 +261,7 @@ const HotelBookingPage = () => {
         checkOutDate: bookingData.payload.checkOutDate,
         nights: nights,
         employeeId: primaryGuest.employeeId || null,
+        roomStatus : bookingData.selectedRate.roomStatus,
         cancellationPolicy:
           bookingData.selectedRate.cancellationPolicy?.map(
             (p) => p.policyText
@@ -304,6 +309,15 @@ const HotelBookingPage = () => {
             return `${year}-${month}-${day}T00:00:00`;
           }
         })(),
+        isBookandVoucher: (() => {
+          if (selectedRate.roomStatus === "On Request") {
+            // User selects from radio buttons
+            return bookingConfirmation === "Book & Voucher" ? true : false;
+          } else {
+            // For "Available" or any other status, automatically set to true
+            return true;
+          }
+        })(),
 
         // ✅ Primary guest details
         primaryGuest: {
@@ -345,13 +359,10 @@ const HotelBookingPage = () => {
         })),
 
         // ✅ Additional remarks
-        remarks:
-          document.querySelector("textarea[placeholder='Any remarks...']")
-            ?.value || "",
-        specialRequests:
-          document.querySelector(
-            "textarea[placeholder='Any special requests...']"
-          )?.value || "",
+        remarks: remarks || "",
+        specialRequests: specialRequests || "",
+        tourismDirhams: parseFloat(tourismDirhams) || 0,
+        bookingConfirmation: bookingConfirmation || "Book & Voucher",
 
         // ✅ Metadata
       };
@@ -933,7 +944,20 @@ const HotelBookingPage = () => {
               {/* Remarks & Requests */}
               <Card className="p-4 mb-2 shadow-sm border-0">
                 <h5 className="mb-3 fw-bold">Remarks & Special Requests</h5>
-                <Row>
+                <Row className="g-3">
+                  <Col md={12}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Tourism Dirhams (AED)</Form.Label>
+                      <Form.Control
+                        type="number"
+                        value={tourismDirhams}
+                        onChange={(e) => setTourismDirhams(e.target.value)}
+                        placeholder="0"
+                        min="0"
+                        step="0.01"
+                      />
+                    </Form.Group>
+                  </Col>
                   <Col md={6}>
                     <Form.Group className="mb-3">
                       <Form.Label>Remarks</Form.Label>
@@ -941,19 +965,51 @@ const HotelBookingPage = () => {
                         as="textarea"
                         rows={3}
                         placeholder="Any remarks..."
+                        value={remarks}
+                        onChange={(e) => setRemarks(e.target.value)}
                       />
                     </Form.Group>
                   </Col>
-                  <Col>
-                    <Form.Group>
-                      <Form.Label>Special Requests</Form.Label>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Special Request</Form.Label>
                       <Form.Control
                         as="textarea"
                         rows={3}
                         placeholder="Any special requests..."
+                        value={specialRequests}
+                        onChange={(e) => setSpecialRequests(e.target.value)}
                       />
                     </Form.Group>
                   </Col>
+                  {selectedRate?.roomStatus === "On Request" && (
+                    <Col md={12}>
+                      <Form.Group className="mb-3">
+                        <Form.Label className="mb-2 fw-semibold">Are you sure to continue booking?</Form.Label>
+                        <div className="mt-2">
+                          <Form.Check
+                            type="radio"
+                            id="book-voucher"
+                            name="bookingConfirmation"
+                            label="Book & Voucher"
+                            value="Book & Voucher"
+                            checked={bookingConfirmation === "Book & Voucher"}
+                            onChange={(e) => setBookingConfirmation(e.target.value)}
+                            className="mb-2"
+                          />
+                          <Form.Check
+                            type="radio"
+                            id="book-now-voucher-later"
+                            name="bookingConfirmation"
+                            label="Book Now & Voucher later"
+                            value="Book Now & Voucher later"
+                            checked={bookingConfirmation === "Book Now & Voucher later"}
+                            onChange={(e) => setBookingConfirmation(e.target.value)}
+                          />
+                        </div>
+                      </Form.Group>
+                    </Col>
+                  )}
                 </Row>
               </Card>
 

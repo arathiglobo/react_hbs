@@ -140,7 +140,7 @@ const HotelBookingList = () => {
         pagination.totalElements = apiData.cancelledBookings.totalElements || 0;
         break;
       default:
-        currentBookings = [];
+        currentBookings = []; 
     }
 
     setBookings(currentBookings);
