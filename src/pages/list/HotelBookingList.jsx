@@ -15,7 +15,14 @@ import {
   Pagination,
   Modal,
 } from "react-bootstrap";
-import { FaSearch, FaEye, FaTrash, FaInbox, FaEnvelope, FaPaperPlane } from "react-icons/fa";
+import {
+  FaSearch,
+  FaEye,
+  FaTrash,
+  FaInbox,
+  FaEnvelope,
+  FaPaperPlane,
+} from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -90,7 +97,9 @@ const HotelBookingList = () => {
   const fetchBookingDetails = async (bookingId) => {
     try {
       setLoadingBookingId(bookingId);
-      const response = await axiosInstance.get(`/api/hotel-booking/details/${bookingId}`);
+      const response = await axiosInstance.get(
+        `/api/hotel-booking/details/${bookingId}`
+      );
       console.log("Booking Details Response:", response.data);
 
       if (response.data && response.data.success) {
@@ -177,8 +186,18 @@ const HotelBookingList = () => {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4" style={{ width: "100%", overflow: "hidden" }}>
-          <Container fluid style={{ maxWidth: "100%", paddingLeft: "1rem", paddingRight: "1rem" }}>
+        <main
+          className="flex-grow-1 p-4"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "1rem",
+              paddingRight: "1rem",
+            }}
+          >
             <div className="d-flex justify-content-between align-items-center mb-2">
               <h3 className="fw-bold text-dark">Hotel Bookings</h3>
             </div>
@@ -187,11 +206,13 @@ const HotelBookingList = () => {
             <Row className="mb-3">
               <Col md={3}>
                 <InputGroup style={{ height: "42px" }}>
-                  <InputGroup.Text style={{ 
-                    backgroundColor: "#f8f9fa",
-                    borderRight: "none",
-                    borderColor: "#dee2e6"
-                  }}>
+                  <InputGroup.Text
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRight: "none",
+                      borderColor: "#dee2e6",
+                    }}
+                  >
                     <FaSearch style={{ color: "#6c757d" }} />
                   </InputGroup.Text>
                   <Form.Control
@@ -202,7 +223,7 @@ const HotelBookingList = () => {
                     style={{
                       borderLeft: "none",
                       fontSize: "0.9rem",
-                      borderColor: "#dee2e6"
+                      borderColor: "#dee2e6",
                     }}
                   />
                 </InputGroup>
@@ -212,9 +233,15 @@ const HotelBookingList = () => {
             {/* Filters Section */}
             <Row className="mb-3 g-2">
               <Col md={5}>
-                <Card className="shadow-sm border-0" style={{ borderRadius: "8px" }}>
+                <Card
+                  className="shadow-sm border-0"
+                  style={{ borderRadius: "8px" }}
+                >
                   <Card.Body className="p-3">
-                    <h6 className="mb-2 fw-bold text-dark" style={{ fontSize: "0.9rem", letterSpacing: "0.5px" }}>
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.9rem", letterSpacing: "0.5px" }}
+                    >
                       Booking Types
                     </h6>
                     <div className="d-flex gap-4">
@@ -253,9 +280,15 @@ const HotelBookingList = () => {
                 </Card>
               </Col>
               <Col md={3}>
-                <Card className="shadow-sm border-0" style={{ borderRadius: "8px" }}>
+                <Card
+                  className="shadow-sm border-0"
+                  style={{ borderRadius: "8px" }}
+                >
                   <Card.Body className="p-3">
-                    <h6 className="mb-2 fw-bold text-dark" style={{ fontSize: "0.9rem", letterSpacing: "0.5px" }}>
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.9rem", letterSpacing: "0.5px" }}
+                    >
                       Time Period
                     </h6>
                     <Row>
@@ -298,7 +331,10 @@ const HotelBookingList = () => {
             </Row>
 
             {/* Table */}
-            <Card className="shadow-sm border-0" style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}>
+            <Card
+              className="shadow-sm border-0"
+              style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}
+            >
               <Card.Body className="p-0" style={{ width: "100%" }}>
                 {loading ? (
                   <div className="text-center p-5">
@@ -308,159 +344,181 @@ const HotelBookingList = () => {
                 ) : (
                   <div
                     className="table-responsive"
-                    style={{ 
-                      maxHeight: "600px", 
+                    style={{
+                      maxHeight: "600px",
                       overflowY: "auto",
                       overflowX: "auto",
                       position: "relative",
-                      width: "100%"
+                      width: "100%",
                     }}
                   >
                     <Table
                       hover
                       className="mb-0 align-middle table-bordered"
-                      style={{ 
-                        tableLayout: "auto", 
+                      style={{
+                        tableLayout: "auto",
                         width: "100%",
                         minWidth: "1200px",
                         fontSize: "0.875rem",
                         marginBottom: 0,
                         borderCollapse: "separate",
-                        borderSpacing: 0
+                        borderSpacing: 0,
                       }}
                     >
-                      <thead style={{ 
-                        backgroundColor: "#f8f9fa", 
-                        borderBottom: "2px solid #dee2e6",
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 10,
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                      }}>
+                      <thead
+                        style={{
+                          backgroundColor: "#f8f9fa",
+                          borderBottom: "2px solid #dee2e6",
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 10,
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                        }}
+                      >
                         <tr>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            textAlign: "center",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             S.N
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Agent Name
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Customer Name
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Booking Code
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Reference Code
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            textAlign: "center",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Book Date
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Booking Details
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            textAlign: "center",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Deadline Date
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            textAlign: "center",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Notification
                           </th>
-                          <th style={{
-                            padding: "0.5rem 0.75rem",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "#495057",
-                            textAlign: "center",
-                            border: "1px solid #dee2e6",
-                            whiteSpace: "nowrap"
-                          }}>
+                          <th
+                            style={{
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             Action
                           </th>
                         </tr>
@@ -471,9 +529,9 @@ const HotelBookingList = () => {
                             <td
                               colSpan={10}
                               className="text-center py-5 text-muted"
-                              style={{ 
+                              style={{
                                 border: "1px solid #dee2e6",
-                                backgroundColor: "#ffffff"
+                                backgroundColor: "#ffffff",
                               }}
                             >
                               <FaInbox
@@ -483,7 +541,9 @@ const HotelBookingList = () => {
                                   color: "#adb5bd",
                                 }}
                               />
-                              <p className="mt-2 mb-0 fs-5">No bookings found.</p>
+                              <p className="mt-2 mb-0 fs-5">
+                                No bookings found.
+                              </p>
                             </td>
                           </tr>
                         ) : (
@@ -519,17 +579,20 @@ const HotelBookingList = () => {
                             };
 
                             return (
-                              <tr 
+                              <tr
                                 key={b.bookingId}
                                 style={{
-                                  backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8f9fa",
-                                  transition: "background-color 0.2s ease"
+                                  backgroundColor:
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa",
+                                  transition: "background-color 0.2s ease",
                                 }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = "#e7f3ff";
+                                  e.currentTarget.style.backgroundColor =
+                                    "#e7f3ff";
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = i % 2 === 0 ? "#ffffff" : "#f8f9fa";
+                                  e.currentTarget.style.backgroundColor =
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa";
                                 }}
                               >
                                 <td
@@ -547,28 +610,37 @@ const HotelBookingList = () => {
                                     ...baseCellStyle,
                                   }}
                                 >
-                                  <span className="fw-medium">{b.agentId || "N/A"}</span>
+                                  <span className="fw-medium">
+                                    {b.agentId || "N/A"}
+                                  </span>
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
                                   }}
                                 >
-                                  <span className="fw-medium text-dark">{b.primaryGuestName || "-"}</span>
+                                  <span className="fw-medium text-dark">
+                                    {b.primaryGuestName || "-"}
+                                  </span>
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
                                   }}
                                 >
-                                  <span className="fw-bold text-primary">{b.bookingCode || "-"}</span>
+                                  <span className="fw-bold text-primary">
+                                    {b.bookingCode || "-"}
+                                  </span>
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
                                   }}
                                 >
-                                  <span className="text-muted small" style={{ fontSize: "0.8rem" }}>
+                                  <span
+                                    className="text-muted small"
+                                    style={{ fontSize: "0.8rem" }}
+                                  >
                                     {b.referenceNumber || "-"}
                                   </span>
                                 </td>
@@ -586,18 +658,34 @@ const HotelBookingList = () => {
                                     ...baseCellStyle,
                                   }}
                                 >
-                                  <div className="d-flex align-items-center gap-2" style={{ whiteSpace: "nowrap" }}>
-                                    <span className="fw-semibold text-dark" style={{ fontSize: "0.875rem" }}>
+                                  <div
+                                    className="d-flex align-items-center gap-2"
+                                    style={{ whiteSpace: "nowrap" }}
+                                  >
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.875rem" }}
+                                    >
                                       {b.hotelName || "-"}
                                     </span>
-                                    {formatDate(b.checkInDate) && formatDate(b.checkOutDate) && (
-                                      <>
-                                        <span className="text-muted" style={{ fontSize: "0.75rem" }}>•</span>
-                                        <span className="text-muted" style={{ fontSize: "0.75rem" }}>
-                                          ({formatDate(b.checkInDate)} - {formatDate(b.checkOutDate)})
-                                        </span>
-                                      </>
-                                    )}
+                                    {formatDate(b.checkInDate) &&
+                                      formatDate(b.checkOutDate) && (
+                                        <>
+                                          <span
+                                            className="text-muted"
+                                            style={{ fontSize: "0.75rem" }}
+                                          >
+                                            •
+                                          </span>
+                                          <span
+                                            className="text-muted"
+                                            style={{ fontSize: "0.75rem" }}
+                                          >
+                                            ({formatDate(b.checkInDate)} -{" "}
+                                            {formatDate(b.checkOutDate)})
+                                          </span>
+                                        </>
+                                      )}
                                   </div>
                                 </td>
                                 <td
@@ -616,8 +704,9 @@ const HotelBookingList = () => {
                                     textAlign: "center",
                                   }}
                                 >
-                                  {b.bookingId !== 0 && b.bookingCode != null ? (
-                                    // <Badge bg="success" style={{ 
+                                  {b.bookingId !== 0 &&
+                                  b.bookingCode != null ? (
+                                    // <Badge bg="success" style={{
                                     //   padding: "0.4rem 0.6rem",
                                     //   fontSize: "0.75rem",
                                     //   fontWeight: "500"
@@ -625,20 +714,20 @@ const HotelBookingList = () => {
                                     //   Confirmed
                                     // </Badge>
                                     <span
-  style={{
-    color: "#06a301ff",
-    // backgroundColor: "#f8d7da",
-    padding: "0.4rem 0.6rem",
-    fontSize: "0.90rem",
-    fontWeight: "500",
-    borderRadius: "0.375rem",
-    display: "inline-block"
-  }}
->
-   Confirmed
-</span>
+                                      style={{
+                                        color: "#06a301ff",
+                                        // backgroundColor: "#f8d7da",
+                                        padding: "0.4rem 0.6rem",
+                                        fontSize: "0.90rem",
+                                        fontWeight: "500",
+                                        borderRadius: "0.375rem",
+                                        display: "inline-block",
+                                      }}
+                                    >
+                                      Confirmed
+                                    </span>
                                   ) : (
-                                    // <Badge bg="danger" style={{ 
+                                    // <Badge bg="danger" style={{
                                     //   padding: "0.4rem 0.6rem",
                                     //   fontSize: "0.75rem",
                                     //   fontWeight: "500"
@@ -646,18 +735,18 @@ const HotelBookingList = () => {
                                     //   Not Confirmed
                                     // </Badge>
                                     <span
-  style={{
-    color: "#721c24",
-    // backgroundColor: "#f8d7da",
-    padding: "0.4rem 0.6rem",
-    fontSize: "0.90rem",
-    fontWeight: "500",
-    borderRadius: "0.375rem",
-    display: "inline-block"
-  }}
->
-  Not Confirmed
-</span>
+                                      style={{
+                                        color: "#721c24",
+                                        // backgroundColor: "#f8d7da",
+                                        padding: "0.4rem 0.6rem",
+                                        fontSize: "0.90rem",
+                                        fontWeight: "500",
+                                        borderRadius: "0.375rem",
+                                        display: "inline-block",
+                                      }}
+                                    >
+                                      Not Confirmed
+                                    </span>
                                   )}
                                 </td>
                                 <td
@@ -668,24 +757,34 @@ const HotelBookingList = () => {
                                 >
                                   <div className="d-flex gap-3 justify-content-center align-items-center">
                                     {loadingBookingId === b.bookingId ? (
-                                      <Spinner animation="border" size="sm" style={{ color: "#2196f3" }} />
+                                      <Spinner
+                                        animation="border"
+                                        size="sm"
+                                        style={{ color: "#2196f3" }}
+                                      />
                                     ) : (
                                       <FaEye
                                         style={{
                                           fontSize: "18px",
                                           color: "#2196f3",
                                           cursor: "pointer",
-                                          transition: "all 0.2s ease"
+                                          transition: "all 0.2s ease",
                                         }}
-                                      title="View"
-                                        onClick={() => fetchBookingDetails(b.bookingId)}
+                                        title="View"
+                                        onClick={() =>
+                                          fetchBookingDetails(b.bookingId)
+                                        }
                                         onMouseEnter={(e) => {
-                                          e.currentTarget.style.color = "#1976d2";
-                                          e.currentTarget.style.transform = "scale(1.2)";
+                                          e.currentTarget.style.color =
+                                            "#1976d2";
+                                          e.currentTarget.style.transform =
+                                            "scale(1.2)";
                                         }}
                                         onMouseLeave={(e) => {
-                                          e.currentTarget.style.color = "#2196f3";
-                                          e.currentTarget.style.transform = "scale(1)";
+                                          e.currentTarget.style.color =
+                                            "#2196f3";
+                                          e.currentTarget.style.transform =
+                                            "scale(1)";
                                         }}
                                       />
                                     )}
@@ -694,7 +793,7 @@ const HotelBookingList = () => {
                                         fontSize: "18px",
                                         color: "#4caf50",
                                         cursor: "pointer",
-                                        transition: "all 0.2s ease"
+                                        transition: "all 0.2s ease",
                                       }}
                                       title="Send request or confirmation"
                                       onClick={() => {
@@ -704,11 +803,13 @@ const HotelBookingList = () => {
                                       }}
                                       onMouseEnter={(e) => {
                                         e.currentTarget.style.color = "#388e3c";
-                                        e.currentTarget.style.transform = "scale(1.2)";
+                                        e.currentTarget.style.transform =
+                                          "scale(1.2)";
                                       }}
                                       onMouseLeave={(e) => {
                                         e.currentTarget.style.color = "#4caf50";
-                                        e.currentTarget.style.transform = "scale(1)";
+                                        e.currentTarget.style.transform =
+                                          "scale(1)";
                                       }}
                                     />
                                     <FaTrash
@@ -716,16 +817,18 @@ const HotelBookingList = () => {
                                         fontSize: "18px",
                                         color: "#f44336",
                                         cursor: "pointer",
-                                        transition: "all 0.2s ease"
+                                        transition: "all 0.2s ease",
                                       }}
                                       title="Delete"
                                       onMouseEnter={(e) => {
                                         e.currentTarget.style.color = "#d32f2f";
-                                        e.currentTarget.style.transform = "scale(1.2)";
+                                        e.currentTarget.style.transform =
+                                          "scale(1.2)";
                                       }}
                                       onMouseLeave={(e) => {
                                         e.currentTarget.style.color = "#f44336";
-                                        e.currentTarget.style.transform = "scale(1)";
+                                        e.currentTarget.style.transform =
+                                          "scale(1)";
                                       }}
                                     />
                                   </div>
@@ -743,13 +846,29 @@ const HotelBookingList = () => {
 
             {/* Pagination */}
             {!loading && filteredBookings.length > 0 && (
-              <Card className="shadow-sm border-0 mt-3" style={{ borderRadius: "8px" }}>
+              <Card
+                className="shadow-sm border-0 mt-3"
+                style={{ borderRadius: "8px" }}
+              >
                 <Card.Body className="py-3">
                   <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                    <div className="text-muted" style={{ fontSize: "0.875rem" }}>
-                      Showing <span className="fw-semibold text-dark">{(page - 1) * perPage + 1}</span> to{" "}
-                      <span className="fw-semibold text-dark">{Math.min(page * perPage, filteredBookings.length)}</span> of{" "}
-                      <span className="fw-semibold text-dark">{filteredBookings.length}</span> entries
+                    <div
+                      className="text-muted"
+                      style={{ fontSize: "0.875rem" }}
+                    >
+                      Showing{" "}
+                      <span className="fw-semibold text-dark">
+                        {(page - 1) * perPage + 1}
+                      </span>{" "}
+                      to{" "}
+                      <span className="fw-semibold text-dark">
+                        {Math.min(page * perPage, filteredBookings.length)}
+                      </span>{" "}
+                      of{" "}
+                      <span className="fw-semibold text-dark">
+                        {filteredBookings.length}
+                      </span>{" "}
+                      entries
                     </div>
                     <Pagination className="mb-0">
                       <Pagination.Prev
@@ -757,7 +876,7 @@ const HotelBookingList = () => {
                         onClick={() => page > 1 && setPage(page - 1)}
                         style={{
                           cursor: page === 1 ? "not-allowed" : "pointer",
-                          opacity: page === 1 ? 0.5 : 1
+                          opacity: page === 1 ? 0.5 : 1,
                         }}
                       />
                       {[
@@ -770,7 +889,7 @@ const HotelBookingList = () => {
                           style={{
                             cursor: "pointer",
                             minWidth: "38px",
-                            textAlign: "center"
+                            textAlign: "center",
                           }}
                         >
                           {i + 1}
@@ -785,8 +904,16 @@ const HotelBookingList = () => {
                           setPage(page + 1)
                         }
                         style={{
-                          cursor: page === Math.ceil(filteredBookings.length / perPage) ? "not-allowed" : "pointer",
-                          opacity: page === Math.ceil(filteredBookings.length / perPage) ? 0.5 : 1
+                          cursor:
+                            page ===
+                            Math.ceil(filteredBookings.length / perPage)
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity:
+                            page ===
+                            Math.ceil(filteredBookings.length / perPage)
+                              ? 0.5
+                              : 1,
                         }}
                       />
                     </Pagination>
@@ -802,7 +929,13 @@ const HotelBookingList = () => {
               size="lg"
               centered
             >
-              <Modal.Header closeButton style={{ backgroundColor: "#fff", borderBottom: "2px solid #e9ecef" }}>
+              <Modal.Header
+                closeButton
+                style={{
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #e9ecef",
+                }}
+              >
                 <Modal.Title className="fw-bold d-flex align-items-center">
                   <FaEye className="me-2 text-primary" />
                   <span>Booking Details</span>
@@ -812,7 +945,9 @@ const HotelBookingList = () => {
                 {loadingBookingId !== null ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
-                    <p className="mt-2 text-muted">Loading booking details...</p>
+                    <p className="mt-2 text-muted">
+                      Loading booking details...
+                    </p>
                   </div>
                 ) : bookingDetails ? (
                   <div>
@@ -822,27 +957,37 @@ const HotelBookingList = () => {
                         <Col md={8}>
                           <div className="d-flex align-items-center gap-3 mb-2">
                             <h5 className="mb-0 fw-bold text-dark">
-                              {bookingDetails.bookingHeader?.bookingCode || "N/A"}
+                              {bookingDetails.bookingHeader?.bookingCode ||
+                                "N/A"}
                             </h5>
                             <Badge
                               bg={
-                                bookingDetails.bookingHeader?.bookingStatus === "UPCOMING"
+                                bookingDetails.bookingHeader?.bookingStatus ===
+                                "UPCOMING"
                                   ? "warning"
-                                  : bookingDetails.bookingHeader?.bookingStatus === "COMPLETED"
+                                  : bookingDetails.bookingHeader
+                                      ?.bookingStatus === "COMPLETED"
                                   ? "success"
                                   : "danger"
                               }
-                              style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
+                              style={{
+                                fontSize: "0.75rem",
+                                padding: "0.4rem 0.8rem",
+                              }}
                             >
-                              {bookingDetails.bookingHeader?.bookingStatus || "-"}
+                              {bookingDetails.bookingHeader?.bookingStatus ||
+                                "-"}
                             </Badge>
                           </div>
                           <div className="text-muted small">
                             <span className="me-3">
-                              <strong>Booking ID:</strong> {bookingDetails.bookingHeader?.bookingId || "-"}
+                              <strong>Booking ID:</strong>{" "}
+                              {bookingDetails.bookingHeader?.bookingId || "-"}
                             </span>
                             <span>
-                              <strong>Reference:</strong> {bookingDetails.bookingHeader?.referenceNumber || "-"}
+                              <strong>Reference:</strong>{" "}
+                              {bookingDetails.bookingHeader?.referenceNumber ||
+                                "-"}
                             </span>
                           </div>
                         </Col>
@@ -853,10 +998,12 @@ const HotelBookingList = () => {
                             </div>
                             <div>
                               {bookingDetails.bookingHeader?.bookingDate
-                                ? new Date(bookingDetails.bookingHeader.bookingDate).toLocaleDateString("en-US", {
+                                ? new Date(
+                                    bookingDetails.bookingHeader.bookingDate
+                                  ).toLocaleDateString("en-US", {
                                     year: "numeric",
                                     month: "short",
-                                    day: "numeric"
+                                    day: "numeric",
                                   })
                                 : "-"}
                             </div>
@@ -866,10 +1013,12 @@ const HotelBookingList = () => {
                                   <strong>Deadline:</strong>
                                 </div>
                                 <div>
-                                  {new Date(bookingDetails.bookingHeader.deadlineDate).toLocaleDateString("en-US", {
+                                  {new Date(
+                                    bookingDetails.bookingHeader.deadlineDate
+                                  ).toLocaleDateString("en-US", {
                                     year: "numeric",
                                     month: "short",
-                                    day: "numeric"
+                                    day: "numeric",
                                   })}
                                 </div>
                               </>
@@ -884,31 +1033,57 @@ const HotelBookingList = () => {
                       <Col md={7}>
                         {/* Guest Information */}
                         <Card className="mb-3 border-0 shadow-sm">
-                          <Card.Header className="bg-light border-bottom fw-semibold" style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}>
+                          <Card.Header
+                            className="bg-light border-bottom fw-semibold"
+                            style={{
+                              fontSize: "0.9rem",
+                              padding: "0.75rem 1rem",
+                            }}
+                          >
                             Guest Information
                           </Card.Header>
                           <Card.Body>
                             <div className="mb-3">
-                              <div className="text-muted small mb-1">Guest Name</div>
-                              <div className="fw-semibold">{bookingDetails.guestInformation?.guestName || "-"}</div>
+                              <div className="text-muted small mb-1">
+                                Guest Name
+                              </div>
+                              <div className="fw-semibold">
+                                {bookingDetails.guestInformation?.guestName ||
+                                  "-"}
+                              </div>
                             </div>
                             <Row>
                               <Col md={6}>
                                 <div className="mb-3">
-                                  <div className="text-muted small mb-1">Email</div>
-                                  <div>{bookingDetails.guestInformation?.email || "-"}</div>
+                                  <div className="text-muted small mb-1">
+                                    Email
+                                  </div>
+                                  <div>
+                                    {bookingDetails.guestInformation?.email ||
+                                      "-"}
+                                  </div>
                                 </div>
                               </Col>
                               <Col md={6}>
                                 <div className="mb-3">
-                                  <div className="text-muted small mb-1">Mobile Number</div>
-                                  <div>{bookingDetails.guestInformation?.mobileNumber || "-"}</div>
+                                  <div className="text-muted small mb-1">
+                                    Mobile Number
+                                  </div>
+                                  <div>
+                                    {bookingDetails.guestInformation
+                                      ?.mobileNumber || "-"}
+                                  </div>
                                 </div>
                               </Col>
                             </Row>
                             <div>
-                              <div className="text-muted small mb-1">Nationality</div>
-                              <div>{bookingDetails.guestInformation?.nativeCountry || "-"}</div>
+                              <div className="text-muted small mb-1">
+                                Nationality
+                              </div>
+                              <div>
+                                {bookingDetails.guestInformation
+                                  ?.nativeCountry || "-"}
+                              </div>
                             </div>
                           </Card.Body>
                         </Card>
@@ -916,8 +1091,17 @@ const HotelBookingList = () => {
 
                       {/* Right Column - Pricing Summary */}
                       <Col md={5}>
-                        <Card className="border-0 shadow-sm" style={{ position: "sticky", top: "1rem" }}>
-                          <Card.Header className="bg-light border-bottom fw-semibold" style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}>
+                        <Card
+                          className="border-0 shadow-sm"
+                          style={{ position: "sticky", top: "1rem" }}
+                        >
+                          <Card.Header
+                            className="bg-light border-bottom fw-semibold"
+                            style={{
+                              fontSize: "0.9rem",
+                              padding: "0.75rem 1rem",
+                            }}
+                          >
                             Pricing Summary
                           </Card.Header>
                           <Card.Body>
@@ -925,19 +1109,39 @@ const HotelBookingList = () => {
                               <div className="d-flex justify-content-between mb-2">
                                 <span className="text-muted">Room Rate</span>
                                 <span className="fw-semibold">
-                                  {bookingDetails.bookingDetails?.currency || "AED"}{" "}
-                                  {bookingDetails.bookingDetails?.rate?.toFixed(2) || "0.00"}
+                                  {bookingDetails.bookingDetails?.currency ||
+                                    "AED"}{" "}
+                                  {bookingDetails.bookingDetails?.rate?.toFixed(
+                                    2
+                                  ) || "0.00"}
                                 </span>
                               </div>
-                              {bookingDetails.bookingDetails?.taxDiscount !== 0 && (
+                              {bookingDetails.bookingDetails?.taxDiscount !==
+                                0 && (
                                 <div className="d-flex justify-content-between mb-2">
                                   <span className="text-muted">
-                                    {bookingDetails.bookingDetails.taxDiscount > 0 ? "Tax" : "Discount"}
+                                    {bookingDetails.bookingDetails.taxDiscount >
+                                    0
+                                      ? "Tax"
+                                      : "Discount"}
                                   </span>
-                                  <span className={bookingDetails.bookingDetails.taxDiscount > 0 ? "text-danger" : "text-success"}>
-                                    {bookingDetails.bookingDetails.taxDiscount > 0 ? "+" : "-"}{" "}
-                                    {bookingDetails.bookingDetails?.currency || "AED"}{" "}
-                                    {Math.abs(bookingDetails.bookingDetails.taxDiscount).toFixed(2)}
+                                  <span
+                                    className={
+                                      bookingDetails.bookingDetails
+                                        .taxDiscount > 0
+                                        ? "text-danger"
+                                        : "text-success"
+                                    }
+                                  >
+                                    {bookingDetails.bookingDetails.taxDiscount >
+                                    0
+                                      ? "+"
+                                      : "-"}{" "}
+                                    {bookingDetails.bookingDetails?.currency ||
+                                      "AED"}{" "}
+                                    {Math.abs(
+                                      bookingDetails.bookingDetails.taxDiscount
+                                    ).toFixed(2)}
                                   </span>
                                 </div>
                               )}
@@ -946,8 +1150,11 @@ const HotelBookingList = () => {
                             <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
                               <span className="fw-bold fs-5">Total Amount</span>
                               <span className="text-success fw-bold fs-4">
-                                {bookingDetails.bookingDetails?.currency || "AED"}{" "}
-                                {bookingDetails.bookingDetails?.total?.toFixed(2) || "0.00"}
+                                {bookingDetails.bookingDetails?.currency ||
+                                  "AED"}{" "}
+                                {bookingDetails.bookingDetails?.total?.toFixed(
+                                  2
+                                ) || "0.00"}
                               </span>
                             </div>
                           </Card.Body>
@@ -957,47 +1164,80 @@ const HotelBookingList = () => {
 
                     {/* Reservation Details - Full Width */}
                     <Card className="mb-3 border-0 shadow-sm">
-                      <Card.Header className="bg-light border-bottom fw-semibold" style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}>
+                      <Card.Header
+                        className="bg-light border-bottom fw-semibold"
+                        style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}
+                      >
                         Reservation Details
                       </Card.Header>
                       <Card.Body>
                         <div className="mb-3">
-                          <div className="text-muted small mb-1">Hotel Name</div>
-                          <div className="fw-semibold">{bookingDetails.bookingDetails?.hotelName || "-"}</div>
+                          <div className="text-muted small mb-1">
+                            Hotel Name
+                          </div>
+                          <div className="fw-semibold">
+                            {bookingDetails.bookingDetails?.hotelName || "-"}
+                          </div>
                         </div>
                         <Row>
                           <Col md={6}>
                             <div className="mb-3">
-                              <div className="text-muted small mb-1">Check-In Date</div>
-                              <div>{bookingDetails.bookingDetails?.checkInDate || "-"}</div>
+                              <div className="text-muted small mb-1">
+                                Check-In Date
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails?.checkInDate ||
+                                  "-"}
+                              </div>
                             </div>
                           </Col>
                           <Col md={6}>
                             <div className="mb-3">
-                              <div className="text-muted small mb-1">Check-Out Date</div>
-                              <div>{bookingDetails.bookingDetails?.checkOutDate || "-"}</div>
+                              <div className="text-muted small mb-1">
+                                Check-Out Date
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails?.checkOutDate ||
+                                  "-"}
+                              </div>
                             </div>
                           </Col>
                         </Row>
                         <Row>
                           <Col md={4}>
                             <div className="mb-3">
-                              <div className="text-muted small mb-1">Duration</div>
-                              <div>{bookingDetails.bookingDetails?.numberOfNights || "0"} Night(s)</div>
-                            </div>
-                          </Col>
-                          <Col md={4}>
-                            <div className="mb-3">
-                              <div className="text-muted small mb-1">Number of Rooms</div>
-                              <div>{bookingDetails.bookingDetails?.numberOfRooms || "0"}</div>
-                            </div>
-                          </Col>
-                          <Col md={4}>
-                            <div className="mb-3">
-                              <div className="text-muted small mb-1">Total Guests</div>
+                              <div className="text-muted small mb-1">
+                                Duration
+                              </div>
                               <div>
-                                {bookingDetails.bookingDetails?.numberOfAdults || "0"} Adults
-                                {bookingDetails.bookingDetails?.numberOfChildren > 0 && 
+                                {bookingDetails.bookingDetails
+                                  ?.numberOfNights || "0"}{" "}
+                                Night(s)
+                              </div>
+                            </div>
+                          </Col>
+                          <Col md={4}>
+                            <div className="mb-3">
+                              <div className="text-muted small mb-1">
+                                Number of Rooms
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails?.numberOfRooms ||
+                                  "0"}
+                              </div>
+                            </div>
+                          </Col>
+                          <Col md={4}>
+                            <div className="mb-3">
+                              <div className="text-muted small mb-1">
+                                Total Guests
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails
+                                  ?.numberOfAdults || "0"}{" "}
+                                Adults
+                                {bookingDetails.bookingDetails
+                                  ?.numberOfChildren > 0 &&
                                   `, ${bookingDetails.bookingDetails.numberOfChildren} Children`}
                               </div>
                             </div>
@@ -1011,48 +1251,133 @@ const HotelBookingList = () => {
                       bookingDetails.bookingDetails.rooms.length > 0 && (
                         <div className="p-4 bg-light rounded border">
                           <div className="mb-3">
-                            <h6 className="fw-bold text-dark mb-3">Room Details</h6>
+                            <h6 className="fw-bold text-dark mb-3">
+                              Room Details
+                            </h6>
                           </div>
                           <div className="table-responsive">
                             <Table bordered hover className="mb-0 bg-white">
                               <thead className="table-light">
                                 <tr>
-                                  <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Room No</th>
-                                  <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Room Category</th>
-                                  <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Meal Plan</th>
-                                  <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Adults</th>
-                                  <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Children</th>
-                                  <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600", textAlign: "right" }}>Rate</th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Room No
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Room Category
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Meal Plan
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Adults
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Children
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    Rate
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {bookingDetails.bookingDetails.rooms.map((room, index) => (
-                                  <tr key={index}>
-                                    <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
-                                      <span className="fw-bold text-primary">
-                                        Room {room.roomNo || index + 1}
-                                      </span>
-                                    </td>
-                                    <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
-                                      {room.roomCategory || "-"}
-                                    </td>
-                                    <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
-                                      {room.mealPlan || "-"}
-                                    </td>
-                                    <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "center" }}>
-                                      {room.adults || "0"}
-                                    </td>
-                                    <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "center" }}>
-                                      {room.children || "0"}
-                                    </td>
-                                    <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "right" }}>
-                                    
-                                        {bookingDetails.bookingDetails?.currency || "AED"}{" "}
+                                {bookingDetails.bookingDetails.rooms.map(
+                                  (room, index) => (
+                                    <tr key={index}>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                        }}
+                                      >
+                                        <span className="fw-bold text-primary">
+                                          Room {room.roomNo || index + 1}
+                                        </span>
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                        }}
+                                      >
+                                        {room.roomCategory || "-"}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                        }}
+                                      >
+                                        {room.mealPlan || "-"}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        {room.adults || "0"}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        {room.children || "0"}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                          textAlign: "right",
+                                        }}
+                                      >
+                                        {bookingDetails.bookingDetails
+                                          ?.currency || "AED"}{" "}
                                         {room.rate?.toFixed(2) || "0.00"}
-                                    
-                                    </td>
-                                  </tr>
-                                ))}
+                                      </td>
+                                    </tr>
+                                  )
+                                )}
                               </tbody>
                             </Table>
                           </div>
@@ -1065,7 +1390,12 @@ const HotelBookingList = () => {
                   </div>
                 )}
               </Modal.Body>
-              <Modal.Footer style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
                 <Button
                   variant="secondary"
                   onClick={() => setShowDetailsModal(false)}
@@ -1083,10 +1413,15 @@ const HotelBookingList = () => {
                 setSelectedBooking(null);
                 setSelectedVoucherType("Request");
               }}
-              size="lg"
+              size="xl"
               centered
+              backdrop="static"
+              keyboard={false}
             >
-              <Modal.Header closeButton style={{ backgroundColor: "#0d6efd", color: "#fff" }}>
+              <Modal.Header
+                closeButton
+                style={{ backgroundColor: "#0d6efd", color: "#fff" }}
+              >
                 <Modal.Title className="fw-bold">
                   Request Confirmation Voucher
                 </Modal.Title>
@@ -1130,103 +1465,276 @@ const HotelBookingList = () => {
                       <Table bordered hover className="mb-0">
                         <thead className="table-light">
                           <tr>
-                            <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Hotel</th>
-                            <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Confirmation Status</th>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Hotel
+                            </th>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Confirmation Status
+                            </th>
                             {selectedVoucherType === "Request" && (
                               <>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Booking code</th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Confirmation Reference</th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Price Reference</th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Booking code
+                                </th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Confirmation Reference
+                                </th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Price Reference
+                                </th>
                               </>
                             )}
                             {selectedVoucherType === "Confirmation" && (
                               <>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Confirmation Reference</th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Supplier Reference</th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Confirmation Reference
+                                </th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Supplier Reference
+                                </th>
                               </>
                             )}
                             {selectedVoucherType === "Voucher" && (
                               <>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Confirmation Reference</th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Supplier Reference</th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Confirmation Reference
+                                </th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Supplier Reference
+                                </th>
                               </>
                             )}
-                            <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Check In</th>
-                            <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Check Out</th>
-                            <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>Action</th>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Check In
+                            </th>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Check Out
+                            </th>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Action
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
                           <tr>
-                            <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                            <td
+                              style={{
+                                padding: "0.75rem",
+                                verticalAlign: "middle",
+                              }}
+                            >
                               {selectedBooking.hotelName || "-"}
                             </td>
-                            <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
-                              <Badge
-                                bg={
-                                  selectedBooking.bookingId !== 0 && selectedBooking.bookingCode != null
-                                    ? "success"
-                                    : "danger"
-                                }
-                                style={{ fontSize: "0.75rem", padding: "0.4rem 0.6rem" }}
+                            <td
+                              style={{
+                                padding: "0.75rem",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "0.75rem",
+                                  padding: "0.4rem 0.6rem",
+                                  fontWeight: "500",
+                                  color:
+                                    selectedBooking.bookingId !== 0 &&
+                                    selectedBooking.bookingCode != null
+                                      ? "#28a745" // Bootstrap success green
+                                      : "#dc3545", // Bootstrap danger red
+                                  backgroundColor:
+                                    selectedBooking.bookingId !== 0 &&
+                                    selectedBooking.bookingCode != null
+                                      ? "#d4edda" // Light green background
+                                      : "#f8d7da", // Light red background
+                                  borderRadius: "0.375rem",
+                                  display: "inline-block",
+                                }}
                               >
-                                {selectedBooking.bookingId !== 0 && selectedBooking.bookingCode != null
+                                {selectedBooking.bookingId !== 0 &&
+                                selectedBooking.bookingCode != null
                                   ? "CONFIRMED"
                                   : "NOT CONFIRMED"}
-                              </Badge>
+                              </span>
                             </td>
                             {selectedVoucherType === "Request" && (
                               <>
-                                <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                <td
+                                  style={{
+                                    padding: "0.75rem",
+                                    verticalAlign: "middle",
+                                  }}
+                                >
                                   {selectedBooking.bookingCode || "-"}
                                 </td>
-                                <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                <td
+                                  style={{
+                                    padding: "0.75rem",
+                                    verticalAlign: "middle",
+                                  }}
+                                >
                                   {selectedBooking.referenceNumber || "null"}
                                 </td>
-                                <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                <td
+                                  style={{
+                                    padding: "0.75rem",
+                                    verticalAlign: "middle",
+                                  }}
+                                >
                                   null
                                 </td>
                               </>
                             )}
                             {selectedVoucherType === "Confirmation" && (
                               <>
-                                <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                <td
+                                  style={{
+                                    padding: "0.75rem",
+                                    verticalAlign: "middle",
+                                  }}
+                                >
                                   {selectedBooking.referenceNumber || "null"}
                                 </td>
-                                <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                <td
+                                  style={{
+                                    padding: "0.75rem",
+                                    verticalAlign: "middle",
+                                  }}
+                                >
                                   0
                                 </td>
                               </>
                             )}
                             {selectedVoucherType === "Voucher" && (
                               <>
-                                <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                <td
+                                  style={{
+                                    padding: "0.75rem",
+                                    verticalAlign: "middle",
+                                  }}
+                                >
                                   {selectedBooking.referenceNumber || "null"}
                                 </td>
-                                <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                <td
+                                  style={{
+                                    padding: "0.75rem",
+                                    verticalAlign: "middle",
+                                  }}
+                                >
                                   0
                                 </td>
                               </>
                             )}
-                            <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                            <td
+                              style={{
+                                padding: "0.75rem",
+                                verticalAlign: "middle",
+                              }}
+                            >
                               {selectedBooking.checkInDate
-                                ? new Date(selectedBooking.checkInDate).toLocaleDateString("en-GB", {
+                                ? new Date(
+                                    selectedBooking.checkInDate
+                                  ).toLocaleDateString("en-GB", {
                                     day: "2-digit",
                                     month: "short",
-                                    year: "numeric"
+                                    year: "numeric",
                                   })
                                 : "-"}
                             </td>
-                            <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                            <td
+                              style={{
+                                padding: "0.75rem",
+                                verticalAlign: "middle",
+                              }}
+                            >
                               {selectedBooking.checkOutDate
-                                ? new Date(selectedBooking.checkOutDate).toLocaleDateString("en-GB", {
+                                ? new Date(
+                                    selectedBooking.checkOutDate
+                                  ).toLocaleDateString("en-GB", {
                                     day: "2-digit",
                                     month: "short",
-                                    year: "numeric"
+                                    year: "numeric",
                                   })
                                 : "-"}
                             </td>
-                            <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "center" }}>
+                            <td
+                              style={{
+                                padding: "0.75rem",
+                                verticalAlign: "middle",
+                                textAlign: "center",
+                              }}
+                            >
                               <Button
                                 variant="primary"
                                 size="sm"
@@ -1236,7 +1744,7 @@ const HotelBookingList = () => {
                                   padding: 0,
                                   display: "flex",
                                   alignItems: "center",
-                                  justifyContent: "center"
+                                  justifyContent: "center",
                                 }}
                                 title="Send"
                               >
@@ -1250,7 +1758,12 @@ const HotelBookingList = () => {
                   </>
                 )}
               </Modal.Body>
-              <Modal.Footer style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
                 <Button
                   variant="primary"
                   onClick={() => {
