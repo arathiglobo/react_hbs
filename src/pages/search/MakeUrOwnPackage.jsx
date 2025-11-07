@@ -192,6 +192,11 @@ export default function MakeUrOwnPackage() {
     return;
   }
 
+  if (agent) {
+    sessionStorage.setItem("makeYourOwnPackageAgentId", agent);
+    localStorage.setItem("makeYourOwnPackageAgentId", agent);
+  }
+
   // Navigate to new Package Generation page
  navigate("/new-booking/make-your-own-package/search", {
   state: {

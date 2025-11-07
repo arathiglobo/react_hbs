@@ -18,6 +18,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { useLocation } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
+import { toast } from "react-hot-toast";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -160,7 +161,18 @@ export default function MakePkgCombineSearch() {
       const [tourChildAges, setTourChildAges] = useState([]);
       const [tourDate, setTourDate] = useState(travelDate || "");
       const [showActivityModal, setShowActivityModal] = useState(false);
-      const [selectedActivity, setSelectedActivity] = useState(null);
+  const [selectedActivity, setSelectedActivity] = useState(null);
+  const [addingActivityId, setAddingActivityId] = useState(null);
+
+  const formatDateToDDMMYYYY = (dateString) => {
+    if (!dateString) return "";
+    const parsedDate = new Date(dateString);
+    if (Number.isNaN(parsedDate.getTime())) return "";
+    const day = String(parsedDate.getDate()).padStart(2, "0");
+    const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
+    const year = parsedDate.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
   // Filter options
   const starOptions = [
@@ -194,6 +206,13 @@ export default function MakePkgCombineSearch() {
       setCheckOut(outDate.toISOString().split("T")[0]);
     }
   }, [checkIn, nightsCount]);
+
+  useEffect(() => {
+    if (agentId) {
+      sessionStorage.setItem("makeYourOwnPackageAgentId", agentId);
+      localStorage.setItem("makeYourOwnPackageAgentId", agentId);
+    }
+  }, [agentId]);
 
   // Update transfer child ages when number of children changes
   useEffect(() => {
@@ -694,6 +713,66 @@ export default function MakePkgCombineSearch() {
       setTourResults([]);
     } finally {
       setTourLoading(false);
+    }
+  };
+
+  const handleAddActivityToCart = async (activity) => {
+    if (!activity) return;
+
+    const agentValue = String(agentId || agent || 1);
+    const activityDateValue =
+      formatDateToDDMMYYYY(tourDate) ||
+      formatDateToDDMMYYYY(travelDate) ||
+      formatDateToDDMMYYYY(checkIn);
+
+    if (!activityDateValue) {
+      toast.error("Select a valid activity date before adding to cart.");
+      return;
+    }
+
+    if (!nationality?.value) {
+      toast.error("Select a nationality before adding to cart.");
+      return;
+    }
+
+    const payload = {
+      activityDate: activityDateValue,
+      nativeCountryId: String(nationality.value),
+      childAge:
+        Array.isArray(tourChildAges) && tourChildAges.length > 0
+          ? tourChildAges.map((age) => String(age))
+          : [],
+      adult: String(tourAdults || 1),
+      child: String(tourChildren || 0),
+      activityId: String(activity.id || activity.activityId || ""),
+      activityName: activity.activityName || "",
+      agentId: agentValue,
+    };
+
+    if (!payload.activityId) {
+      toast.error("Unable to determine the activity identifier.");
+      return;
+    }
+
+    setAddingActivityId(activity.id || activity.activityId);
+
+    try {
+      const response = await axiosInstance.post(
+        "/api/makeYourOwnPackage/saveActivityDetailsToCart",
+        payload
+      );
+
+      if (response.data === "1" || response.data === 1) {
+        toast.success("Activity added to cart successfully.");
+        window.dispatchEvent(new Event("cartUpdated"));
+      } else {
+        throw new Error("Unexpected response");
+      }
+    } catch (error) {
+      console.error("Failed to add activity to cart:", error);
+      toast.error("Failed to add activity to cart. Please try again.");
+    } finally {
+      setAddingActivityId(null);
     }
   };
 
@@ -1992,8 +2071,25 @@ export default function MakePkgCombineSearch() {
                                             variant="primary"
                                             size="sm"
                                             className="activity-add-to-cart"
+                                            disabled={
+                                              addingActivityId ===
+                                              (activity.id || activity.activityId)
+                                            }
+                                            onClick={() => handleAddActivityToCart(activity)}
                                           >
-                                            Add to Cart
+                                            {addingActivityId ===
+                                            (activity.id || activity.activityId) ? (
+                                              <>
+                                                <Spinner
+                                                  animation="border"
+                                                  size="sm"
+                                                  className="me-2"
+                                                />
+                                                Adding...
+                                              </>
+                                            ) : (
+                                              "Add to Cart"
+                                            )}
                                           </Button>
                                         </div>
                                       </div>

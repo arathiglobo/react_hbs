@@ -1,13 +1,222 @@
 import React, { useState, useEffect } from "react";
 import { Navbar, Container, Nav, Dropdown, Image, Button, Modal, Badge, Card, Row, Col, Spinner } from "react-bootstrap";
-import { FaKey, FaUser, FaSignOutAlt, FaShoppingCart, FaTrash, FaCalendarAlt, FaUsers, FaBed, FaMapMarkerAlt } from "react-icons/fa";
+import {
+  FaKey,
+  FaUser,
+  FaSignOutAlt,
+  FaShoppingCart,
+  FaTrash,
+  FaCalendarAlt,
+  FaUsers,
+  FaBed,
+  FaMapMarkerAlt,
+  FaTicketAlt,
+  FaChild,
+} from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
+import { toast } from "react-hot-toast";
 
 export default function TopBar() {
   const [showCartModal, setShowCartModal] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+
+  const getCartAgentId = () =>
+    sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+    localStorage.getItem("makeYourOwnPackageAgentId") ||
+    "";
+
+  const renderActivityItem = (item) => {
+    const activity = item.activity;
+    if (!activity) return null;
+
+    return (
+      <Card key={item.id} className="shadow-sm">
+        <Card.Body>
+          <div className="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <Badge bg="info" className="mb-2">
+                Activity
+              </Badge>
+              <h6 className="fw-bold mb-2">
+                {activity.activityName || "Activity"}
+              </h6>
+            </div>
+            <Button
+              variant="outline-danger"
+              size="sm"
+              onClick={() => handleRemoveFromCart(item.id)}
+            >
+              <FaTrash className="me-1" /> Remove
+            </Button>
+          </div>
+
+          <Row className="g-2 small text-muted">
+            <Col sm={6} className="d-flex align-items-center">
+              <FaTicketAlt className="me-2 text-primary" />
+              <span>
+                <strong>Date:</strong> {activity.activityDate || "-"}
+              </span>
+            </Col>
+            <Col sm={6} className="d-flex align-items-center">
+              <FaUsers className="me-2 text-success" />
+              <span>
+                <strong>Adults:</strong> {activity.adult ?? "-"}
+              </span>
+            </Col>
+            <Col sm={6} className="d-flex align-items-center">
+              <FaChild className="me-2 text-warning" />
+              <span>
+                <strong>Children:</strong> {activity.child ?? "-"}
+              </span>
+            </Col>
+            <Col sm={6} className="d-flex align-items-center">
+              <FaMapMarkerAlt className="me-2 text-danger" />
+              <span>
+                <strong>Country ID:</strong> {activity.nativeCountryId || "-"}
+              </span>
+            </Col>
+          </Row>
+
+          {Array.isArray(activity.childAge) && activity.childAge.length > 0 && (
+            <div className="mt-2 small text-muted">
+              <strong>Child Ages:</strong> {activity.childAge.join(", ")}
+            </div>
+          )}
+        </Card.Body>
+      </Card>
+    );
+  };
+
+  const renderHotelItem = (item) => {
+    const hotel = item.hotel || {};
+    const meta = hotel.meta || {};
+    const details = hotel.details || {};
+
+    return (
+      <Card key={item.id} className="shadow-sm">
+        <Card.Body>
+          <div className="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <Badge bg="primary" className="mb-2">
+                Hotel
+              </Badge>
+              <h6 className="fw-bold mb-2">
+                {meta.hotelName || hotel.hotelName || "Hotel"}
+              </h6>
+              {(meta.address || hotel.hotelAddress) && (
+                <p className="text-muted small mb-2">
+                  <FaMapMarkerAlt className="me-1" />
+                  {meta.address || hotel.hotelAddress}
+                </p>
+              )}
+            </div>
+            <Button
+              variant="outline-danger"
+              size="sm"
+              onClick={() => handleRemoveFromCart(item.id)}
+            >
+              <FaTrash className="me-1" /> Remove
+            </Button>
+          </div>
+
+          <Row className="g-2 small text-muted">
+            {details.checkInDate && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaCalendarAlt className="me-2 text-primary" />
+                <span>
+                  <strong>Check-in:</strong> {details.checkInDate}
+                </span>
+              </Col>
+            )}
+            {details.checkOutDate && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaCalendarAlt className="me-2 text-primary" />
+                <span>
+                  <strong>Check-out:</strong> {details.checkOutDate}
+                </span>
+              </Col>
+            )}
+            {details.roomCategory && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaBed className="me-2 text-success" />
+                <span>
+                  <strong>Room:</strong> {details.roomCategory}
+                </span>
+              </Col>
+            )}
+            {details.mealPlan && (
+              <Col sm={6} className="d-flex align-items-center">
+                <span>
+                  <strong>Meal:</strong> {details.mealPlan}
+                </span>
+              </Col>
+            )}
+          </Row>
+        </Card.Body>
+      </Card>
+    );
+  };
+
+  const renderCabItem = (item) => {
+    const cab = item.cab || {};
+    return (
+      <Card key={item.id} className="shadow-sm">
+        <Card.Body>
+          <div className="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <Badge bg="secondary" className="mb-2">
+                Transfer
+              </Badge>
+              <h6 className="fw-bold mb-2">{cab.vehicleName || "Transfer"}</h6>
+            </div>
+            <Button
+              variant="outline-danger"
+              size="sm"
+              onClick={() => handleRemoveFromCart(item.id)}
+            >
+              <FaTrash className="me-1" /> Remove
+            </Button>
+          </div>
+
+          <Row className="g-2 small text-muted">
+            {cab.pickupLocation && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaMapMarkerAlt className="me-2 text-primary" />
+                <span>
+                  <strong>Pickup:</strong> {cab.pickupLocation}
+                </span>
+              </Col>
+            )}
+            {cab.dropoffLocation && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaMapMarkerAlt className="me-2 text-success" />
+                <span>
+                  <strong>Dropoff:</strong> {cab.dropoffLocation}
+                </span>
+              </Col>
+            )}
+            {cab.capacity && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaUsers className="me-2 text-warning" />
+                <span>
+                  <strong>Capacity:</strong> {cab.capacity}
+                </span>
+              </Col>
+            )}
+          </Row>
+        </Card.Body>
+      </Card>
+    );
+  };
+
+  const renderCartItem = (item) => {
+    if (item.activity) return renderActivityItem(item);
+    if (item.hotel) return renderHotelItem(item);
+    if (item.cab) return renderCabItem(item);
+    return null;
+  };
 
   const handleLogout = () => {
     // Remove specific items
@@ -22,24 +231,37 @@ export default function TopBar() {
 
   // Fetch cart data from redis
   const fetchCartData = async () => {
-    // try {
-    //   setCartLoading(true);
-    //    const response = await axiosInstance.get("/api/cart/get");
-      
-    //   if (response.data && response.data.items) {
-    //     setCartItems(response.data.items || []);
-    //     setCartCount(response.data.items?.length || 0);
-    //   } else {
-    //     setCartItems([]);
-    //     setCartCount(0);
-    //   }
-    // } catch (err) {
-    //   console.error("Error fetching cart:", err);
-    //   setCartItems([]);
-    //   setCartCount(0);
-    // } finally {
-    //   setCartLoading(false);
-    // }
+    try {
+      setCartLoading(true);
+      const agentId = getCartAgentId();
+
+      if (!agentId) {
+        setCartItems([]);
+        setCartCount(0);
+        return;
+      }
+
+      const response = await axiosInstance.post(
+        `/api/makeYourOwnPackage/fetchDataFromRedis?cartKey=${encodeURIComponent(
+          agentId
+        )}`
+      );
+
+      if (Array.isArray(response.data)) {
+        setCartItems(response.data || []);
+        setCartCount(response.data.length);
+      } else {
+        setCartItems([]);
+        setCartCount(0);
+      }
+    } catch (err) {
+      console.error("Error fetching cart:", err);
+      setCartItems([]);
+      setCartCount(0);
+      toast.error("Failed to load cart items. Please try again.");
+    } finally {
+      setCartLoading(false);
+    }
   };
 
   // Remove item from cart
@@ -60,6 +282,11 @@ export default function TopBar() {
 
   // Handle cart modal open
   const handleCartClick = () => {
+    const agentId = getCartAgentId();
+    if (!agentId) {
+      toast.error("Select an agent and search to view the cart.");
+      return;
+    }
     setShowCartModal(true);
     fetchCartData();
   };
@@ -156,76 +383,7 @@ export default function TopBar() {
             </div>
           ) : (
             <div className="d-flex flex-column gap-3">
-              {cartItems.map((item, index) => (
-                <Card key={index} className="shadow-sm">
-                  <Card.Body>
-                    <Row>
-                      <Col md={8}>
-                        <h6 className="fw-bold mb-2">{item.hotelName || "Hotel Name"}</h6>
-                        {item.hotelAddress && (
-                          <p className="text-muted small mb-2">
-                            <FaMapMarkerAlt className="me-1" />
-                            {item.hotelAddress}
-                          </p>
-                        )}
-                        <div className="d-flex flex-wrap gap-3 mb-2 small">
-                          {item.checkInDate && (
-                            <div>
-                              <FaCalendarAlt className="me-1 text-muted" />
-                              <strong>Check-in:</strong> {item.checkInDate}
-                            </div>
-                          )}
-                          {item.checkOutDate && (
-                            <div>
-                              <FaCalendarAlt className="me-1 text-muted" />
-                              <strong>Check-out:</strong> {item.checkOutDate}
-                            </div>
-                          )}
-                        </div>
-                        <div className="d-flex flex-wrap gap-3 mb-2 small">
-                          {item.roomCategory && (
-                            <div>
-                              <FaBed className="me-1 text-muted" />
-                              <strong>Room:</strong> {item.roomCategory}
-                            </div>
-                          )}
-                          {item.mealPlan && (
-                            <div>
-                              <strong>Meal:</strong> {item.mealPlan}
-                            </div>
-                          )}
-                        </div>
-                        {item.guestBreakdown && (
-                          <div className="small mb-2">
-                            <FaUsers className="me-1 text-muted" />
-                            <strong>Guests:</strong> {item.guestBreakdown}
-                          </div>
-                        )}
-                      </Col>
-                      <Col md={4} className="text-end">
-                        <div className="mb-3">
-                          <h5 className="text-primary mb-0">
-                            {item.totalRate ? `${item.currency || "AED"} ${item.totalRate.toLocaleString()}` : "Price on request"}
-                          </h5>
-                          {item.nonRefundable && (
-                            <Badge bg={item.nonRefundable === "true" ? "danger" : "success"} className="mt-2">
-                              {item.nonRefundable === "true" ? "Non-Refundable" : "Refundable"}
-                            </Badge>
-                          )}
-                        </div>
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          onClick={() => handleRemoveFromCart(item.id || index)}
-                        >
-                          <FaTrash className="me-1" />
-                          Remove
-                        </Button>
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
-              ))}
+              {cartItems.map((item) => renderCartItem(item))}
             </div>
           )}
         </Modal.Body>
