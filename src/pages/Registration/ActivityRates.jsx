@@ -278,6 +278,9 @@ const ActivityRates = () => {
     totalUsersAllowed: "",
     activityRate: "",
     maxPax: "",
+    adultRate: "",
+    childRate: "",
+    minPax: "",
     activityType: "",
     countryId: "",
     placeId: "",
@@ -478,6 +481,9 @@ const ActivityRates = () => {
       totalUsersAllowed: "",
       activityRate: "",
       maxPax: "",
+      adultRate: "",
+      childRate: "",
+      minPax: "",
       activityType: "",
       countryId: "",
       placeId: "",
@@ -513,6 +519,9 @@ const ActivityRates = () => {
       totalUsersAllowed: "",
       activityRate: "",
       maxPax: "",
+      adultRate: "",
+      childRate: "",
+      minPax: "",
       activityType: "",
       countryId: "",
       placeId: "",
@@ -681,6 +690,10 @@ const ActivityRates = () => {
     setTermsAndConditions([{ id: 1, value: "" }]);
   };
 
+  const activityTypeValue = String(formData.activityType || "");
+  const isPrivateActivity = activityTypeValue === "1";
+  const isSicActivity = activityTypeValue === "2";
+
   const handleEdit = (item) => {
     console.log("Edit item data:", item);
     
@@ -695,7 +708,16 @@ const ActivityRates = () => {
       totalUsersAllowed: item.totalUsersAllowed || item.total_users_allowed || "",
       activityRate: item.activityRate || item.activity_rate || "",
       maxPax: item.maxPax || item.max_pax || "",
-      activityType: item.activityType || item.activity_type || "",
+      adultRate: item.adultRate || item.adult_rate || "",
+      childRate: item.childRate || item.child_rate || "",
+      minPax:
+        item.minPax || item.min_pax || item.minPaxsic || item.min_pax_sic || "",
+      activityType:
+        item.activityType !== undefined && item.activityType !== null
+          ? String(item.activityType)
+          : item.activity_type !== undefined && item.activity_type !== null
+          ? String(item.activity_type)
+          : "",
       countryId: item.countryId || item.country_id || "",
       placeId: item.placeId || item.place_id || "",
       durationHr: item.durationHr || item.duration_hr || "",
@@ -761,7 +783,16 @@ const ActivityRates = () => {
       totalUsersAllowed: item.totalUsersAllowed || item.total_users_allowed || "",
       activityRate: item.activityRate || item.activity_rate || "",
       maxPax: item.maxPax || item.max_pax || "",
-      activityType: item.activityType || item.activity_type || "",
+      adultRate: item.adultRate || item.adult_rate || "",
+      childRate: item.childRate || item.child_rate || "",
+      minPax:
+        item.minPax || item.min_pax || item.minPaxsic || item.min_pax_sic || "",
+      activityType:
+        item.activityType !== undefined && item.activityType !== null
+          ? String(item.activityType)
+          : item.activity_type !== undefined && item.activity_type !== null
+          ? String(item.activity_type)
+          : "",
       countryId: item.countryId || item.country_id || "",
       placeId: item.placeId || item.place_id || "",
       durationHr: item.durationHr || item.duration_hr || "",
@@ -882,18 +913,51 @@ const ActivityRates = () => {
 
   // Generic function to handle form field changes and clear validation errors
   const handleFieldChange = (fieldName, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [fieldName]: value
-    }));
-
-    // Clear validation error for this field when user starts typing
-    if (validationErrors[fieldName]) {
-      setValidationErrors(prev => ({
+    setFormData((prev) => {
+      const next = {
         ...prev,
-        [fieldName]: ""
-      }));
-    }
+        [fieldName]: value,
+      };
+
+      if (fieldName === "activityType") {
+        const selectedType = String(value || "");
+        if (selectedType === "1") {
+          next.adultRate = "";
+          next.childRate = "";
+          next.minPax = "";
+        } else if (selectedType === "2") {
+          next.activityRate = "";
+          next.maxPax = "";
+        }
+      }
+
+      return next;
+    });
+
+    setValidationErrors((prev) => {
+      if (!prev || (!prev[fieldName] && fieldName !== "activityType")) {
+        if (fieldName !== "activityType") {
+          return prev;
+        }
+      }
+
+      if (fieldName === "activityType") {
+        return {
+          ...prev,
+          activityType: "",
+          activityRate: "",
+          maxPax: "",
+          adultRate: "",
+          childRate: "",
+          minPax: "",
+        };
+      }
+
+      return {
+        ...prev,
+        [fieldName]: "",
+      };
+    });
   };
 
 
@@ -942,12 +1006,13 @@ const ActivityRates = () => {
 
   const validateForm = (data) => {
     const errors = {};
+    const activityTypeValue = String(data.activityType || "");
+    const isPrivate = activityTypeValue === "1";
+    const isSic = activityTypeValue === "2";
     
     if (!data.activityName?.trim()) errors.activityName = "Activity Name is required";
     if (!data.activityCode?.trim()) errors.activityCode = "Activity Code is required";
     if (!data.activityDetails?.trim()) errors.activityDetails = "Activity Details is required";
-    if (!data.activityRate || (typeof data.activityRate === 'string' && !data.activityRate.trim())) errors.activityRate = "Activity Rate is required";
-    if (!data.maxPax || (typeof data.maxPax === 'string' && !data.maxPax.trim())) errors.maxPax = "Max Pax is required";
     if (!data.activityType) errors.activityType = "Activity Type is required";
     if (!data.countryId) errors.countryId = "Country is required";
     if (!data.placeId) errors.placeId = "Place is required";
@@ -956,6 +1021,27 @@ const ActivityRates = () => {
     if (!data.reportingPoint?.trim()) errors.reportingPoint = "Reporting Point is required";
     if (!data.rating) errors.rating = "Rating is required";
     if (!data.marketType || (typeof data.marketType === 'string' && !data.marketType.trim())) errors.marketType = "Market Type is required";
+
+    if (isPrivate) {
+      if (!data.activityRate || (typeof data.activityRate === "string" && !data.activityRate.trim())) {
+        errors.activityRate = "Activity Rate is required for private activities";
+      }
+      if (!data.maxPax || (typeof data.maxPax === "string" && !data.maxPax.trim())) {
+        errors.maxPax = "Maximum pax is required for private activities";
+      }
+    }
+
+    if (isSic) {
+      if (!data.adultRate || (typeof data.adultRate === "string" && !data.adultRate.trim())) {
+        errors.adultRate = "Adult rate is required for SIC activities";
+      }
+      if (!data.childRate || (typeof data.childRate === "string" && !data.childRate.trim())) {
+        errors.childRate = "Child rate is required for SIC activities";
+      }
+      if (!data.minPax || (typeof data.minPax === "string" && !data.minPax.trim())) {
+        errors.minPax = "Minimum pax is required for SIC activities";
+      }
+    }
     
     return errors;
   };
@@ -997,6 +1083,10 @@ const ActivityRates = () => {
     try {
       setIsLoading(true);
       
+      const activityTypeValue = String(formData.activityType || "");
+      const isPrivate = activityTypeValue === "1";
+      const isSic = activityTypeValue === "2";
+
       const formDataPayload = new FormData();
       formDataPayload.append('providerId', providerId);
       formDataPayload.append('activityRateId', '');
@@ -1006,8 +1096,15 @@ const ActivityRates = () => {
       formDataPayload.append('childAgeMin', formData.childAgeMin);
       formDataPayload.append('childAgeMax', formData.childAgeMax);
       formDataPayload.append('totalUsersAllowed', formData.totalUsersAllowed);
-      formDataPayload.append('activityRate', formData.activityRate);
-      formDataPayload.append('maxPax', formData.maxPax);
+      formDataPayload.append('activityRate', isPrivate ? formData.activityRate : "0");
+      formDataPayload.append('maxPax', isPrivate ? formData.maxPax : "0");
+      formDataPayload.append('adultRate', isSic ? formData.adultRate : "0");
+      formDataPayload.append('adult_rate', isSic ? formData.adultRate : "0");
+      formDataPayload.append('childRate', isSic ? formData.childRate : "0");
+      formDataPayload.append('child_rate', isSic ? formData.childRate : "0");
+      formDataPayload.append('minPax', isSic ? formData.minPax : "0");
+      formDataPayload.append('minPaxsic', isSic ? formData.minPax : "0");
+      formDataPayload.append('minPaxsic', isSic ? formData.minPax : "0");
       formDataPayload.append('activityType', formData.activityType);
       formDataPayload.append('countryId', formData.countryId);
       formDataPayload.append('placeId', formData.placeId);
@@ -1074,6 +1171,10 @@ const ActivityRates = () => {
     try {
       setIsLoading(true);
       
+      const activityTypeValue = String(formData.activityType || "");
+      const isPrivate = activityTypeValue === "1";
+      const isSic = activityTypeValue === "2";
+
       const formDataPayload = new FormData();
       formDataPayload.append('providerId', providerId);
       formDataPayload.append('activityRateId', editing.activityRateId || '');
@@ -1083,8 +1184,13 @@ const ActivityRates = () => {
       formDataPayload.append('childAgeMin', formData.childAgeMin);
       formDataPayload.append('childAgeMax', formData.childAgeMax);
       formDataPayload.append('totalUsersAllowed', formData.totalUsersAllowed);
-      formDataPayload.append('activityRate', formData.activityRate);
-      formDataPayload.append('maxPax', formData.maxPax);
+      formDataPayload.append('activityRate', isPrivate ? formData.activityRate : "0");
+      formDataPayload.append('maxPax', isPrivate ? formData.maxPax : "0");
+      formDataPayload.append('adultRate', isSic ? formData.adultRate : "0");
+      formDataPayload.append('adult_rate', isSic ? formData.adultRate : "0");
+      formDataPayload.append('childRate', isSic ? formData.childRate : "0");
+      formDataPayload.append('child_rate', isSic ? formData.childRate : "0");
+      formDataPayload.append('minPax', isSic ? formData.minPax : "0");
       formDataPayload.append('activityType', formData.activityType);
       formDataPayload.append('countryId', formData.countryId);
       formDataPayload.append('placeId', formData.placeId);
@@ -1421,42 +1527,6 @@ const ActivityRates = () => {
 
                     <Form.Group className="mb-3">
                       <Form.Label>
-                        Activity Rate <span className="text-danger">*</span>
-                      </Form.Label>
-                      <Form.Control
-                        type="number"
-                        value={formData.activityRate}
-                        onChange={(e) => handleFieldChange('activityRate', e.target.value)}
-                        disabled={isViewMode}
-                        isInvalid={!!validationErrors.activityRate}
-                      />
-                      {validationErrors.activityRate && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.activityRate}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        Max Pax <span className="text-danger">*</span>
-                      </Form.Label>
-                      <Form.Control
-                        type="number"
-                        value={formData.maxPax}
-                        onChange={(e) => handleFieldChange('maxPax', e.target.value)}
-                        disabled={isViewMode}
-                        isInvalid={!!validationErrors.maxPax}
-                      />
-                      {validationErrors.maxPax && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.maxPax}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-
-                    <Form.Group className="mb-3">
-                      <Form.Label>
                         Activity Type <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Select
@@ -1476,6 +1546,104 @@ const ActivityRates = () => {
                         </Form.Control.Feedback>
                       )}
                     </Form.Group>
+
+                    {isPrivateActivity && (
+                      <>
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            Activity Rate <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={formData.activityRate}
+                            onChange={(e) => handleFieldChange('activityRate', e.target.value)}
+                            disabled={isViewMode}
+                            isInvalid={!!validationErrors.activityRate}
+                          />
+                          {validationErrors.activityRate && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.activityRate}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            Maximum Pax <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={formData.maxPax}
+                            onChange={(e) => handleFieldChange('maxPax', e.target.value)}
+                            disabled={isViewMode}
+                            isInvalid={!!validationErrors.maxPax}
+                          />
+                          {validationErrors.maxPax && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.maxPax}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </>
+                    )}
+
+                    {isSicActivity && (
+                      <>
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            Adult Rate <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={formData.adultRate}
+                            onChange={(e) => handleFieldChange('adultRate', e.target.value)}
+                            disabled={isViewMode}
+                            isInvalid={!!validationErrors.adultRate}
+                          />
+                          {validationErrors.adultRate && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.adultRate}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            Child Rate <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={formData.childRate}
+                            onChange={(e) => handleFieldChange('childRate', e.target.value)}
+                            disabled={isViewMode}
+                            isInvalid={!!validationErrors.childRate}
+                          />
+                          {validationErrors.childRate && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.childRate}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            Minimum Pax <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={formData.minPax}
+                            onChange={(e) => handleFieldChange('minPax', e.target.value)}
+                            disabled={isViewMode}
+                            isInvalid={!!validationErrors.minPax}
+                          />
+                          {validationErrors.minPax && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.minPax}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </>
+                    )}
 
                     <Form.Group className="mb-3">
                       <Form.Label>

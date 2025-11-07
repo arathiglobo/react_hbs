@@ -133,6 +133,8 @@ export default function TopBar() {
         onHide={() => setShowCartModal(false)}
         size="lg"
         centered
+        backdrop="static"
+        keyboard={false}
       >
         <Modal.Header closeButton>
           <Modal.Title>
@@ -150,7 +152,7 @@ export default function TopBar() {
             <div className="text-center py-5">
               <FaShoppingCart size={48} className="text-muted mb-3" />
               <h5 className="text-muted">Your cart is empty</h5>
-              <p className="text-muted">Add rooms to your cart to see them here.</p>
+              <p className="text-muted">Add rooms or cabs or activities to your cart to see them here.</p>
             </div>
           ) : (
             <div className="d-flex flex-column gap-3">

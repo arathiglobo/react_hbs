@@ -709,7 +709,9 @@ export default function MakePkgCombineSearch() {
         checkIn: transferPickupDate || travelDate || checkIn,
         checkOut: transferDropoffDate || checkOut,
         nativeCountryId: nationality?.value ? Number(nationality.value) : null,
-        searchCityorCountryId: destination?.value || "",
+        // searchCityorCountryId: destination?.value || "",
+        destinationCountryId: destination?.countryId || "",
+        destinationCityId: destination?.value || "",
         searchCorCtype: "city", // Assuming city search - adjust if needed (could be "city" or "country")
         agentid: String(agentId || agent || 1),
         childAge: transferChildAges.length > 0 ? transferChildAges : [],
@@ -1964,7 +1966,7 @@ export default function MakePkgCombineSearch() {
                                         }}>
                                           {activity.totalRate > 0 
                                             ? `${activity.currency} ${activity.totalRate.toLocaleString()}`
-                                            : 'Price on request'}
+                                            : '-'}
                                         </div>
 
                                         <div className="d-flex gap-2 align-items-center">
@@ -1989,6 +1991,7 @@ export default function MakePkgCombineSearch() {
                                           <Button
                                             variant="primary"
                                             size="sm"
+                                            className="activity-add-to-cart"
                                           >
                                             Add to Cart
                                           </Button>
