@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Container,
   Row,
@@ -34,10 +34,14 @@ const HotelBookingList = () => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("upcoming");
   const [search, setSearch] = useState("");
-  const [perPage, setPerPage] = useState(10);
-  const [page, setPage] = useState(1);
-  const [selectedMonth, setSelectedMonth] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(null);
+  const [pagination, setPagination] = useState({
+    upcoming: { page: 1, perPage: 10 },
+    completed: { page: 1, perPage: 10 },
+    cancelled: { page: 1, perPage: 10 },
+  });
+  const hasTimeFilter = selectedMonth !== null && selectedYear !== null;
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [apiData, setApiData] = useState({
@@ -69,14 +73,35 @@ const HotelBookingList = () => {
   ];
 
   // Generate years (2020 to current year + 1)
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: currentYear - 2014 }, (_, i) => 2020 + i);
+  const years = useMemo(() => {
+    const startYear = 2020;
+    const currentYear = new Date().getFullYear();
+    const span = currentYear - startYear + 2; // up to current year + 1
+    return Array.from({ length: Math.max(span, 1) }, (_, i) => startYear + i);
+  }, []);
 
   // Fetch data from API
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get("/api/bookings/list");
+
+      const params = {
+        upcomingPage: Math.max(pagination.upcoming.page - 1, 0),
+        upcomingSize: pagination.upcoming.perPage,
+        completedPage: Math.max(pagination.completed.page - 1, 0),
+        completedSize: pagination.completed.perPage,
+        cancelledPage: Math.max(pagination.cancelled.page - 1, 0),
+        cancelledSize: pagination.cancelled.perPage,
+      };
+
+      if (hasTimeFilter) {
+        params.month = selectedMonth;
+        params.year = selectedYear;
+      }
+
+      const response = await axiosInstance.get("/api/bookings/list", {
+        params,
+      });
       console.log("API Response:", response.data);
 
       if (response.data && response.data.success) {
@@ -91,7 +116,73 @@ const HotelBookingList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination, selectedMonth, selectedYear, hasTimeFilter]);
+
+  const resetAllPages = useCallback(() => {
+    setPagination((prev) => {
+      if (
+        prev.upcoming.page === 1 &&
+        prev.completed.page === 1 &&
+        prev.cancelled.page === 1
+      ) {
+        return prev;
+      }
+
+      return {
+        upcoming: { ...prev.upcoming, page: 1 },
+        completed: { ...prev.completed, page: 1 },
+        cancelled: { ...prev.cancelled, page: 1 },
+      };
+    });
+  }, []);
+
+  const handlePageChange = useCallback(
+    (nextPage) => {
+      setPagination((prev) => {
+        if (prev[status].page === nextPage) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [status]: { ...prev[status], page: nextPage },
+        };
+      });
+    },
+    [status]
+  );
+
+  const handlePageSizeChange = useCallback(
+    (nextSize) => {
+      setPagination((prev) => {
+        if (prev[status].perPage === nextSize && prev[status].page === 1) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [status]: { ...prev[status], perPage: nextSize, page: 1 },
+        };
+      });
+    },
+    [status]
+  );
+
+  const handleMonthChange = useCallback(
+    (value) => {
+      setSelectedMonth(value);
+      resetAllPages();
+    },
+    [resetAllPages]
+  );
+
+  const handleYearChange = useCallback(
+    (value) => {
+      setSelectedYear(value);
+      resetAllPages();
+    },
+    [resetAllPages]
+  );
 
   // Fetch booking details
   const fetchBookingDetails = async (bookingId) => {
@@ -116,37 +207,36 @@ const HotelBookingList = () => {
 
   useEffect(() => {
     fetchBookings();
-  }, []);
+  }, [fetchBookings]);
 
   // Get bookings based on selected status
   useEffect(() => {
     let currentBookings = [];
-    let pagination = { totalPages: 0, totalElements: 0 };
+    let paginationMeta = { totalPages: 0, totalElements: 0 };
 
     switch (status) {
       case "upcoming":
         currentBookings = apiData.upcomingBookings.content || [];
-        pagination.totalPages = apiData.upcomingBookings.totalPages || 0;
-        pagination.totalElements = apiData.upcomingBookings.totalElements || 0;
+        paginationMeta.totalPages = apiData.upcomingBookings.totalPages || 0;
+        paginationMeta.totalElements = apiData.upcomingBookings.totalElements || 0;
         break;
       case "completed":
         currentBookings = apiData.completedBookings.content || [];
-        pagination.totalPages = apiData.completedBookings.totalPages || 0;
-        pagination.totalElements = apiData.completedBookings.totalElements || 0;
+        paginationMeta.totalPages = apiData.completedBookings.totalPages || 0;
+        paginationMeta.totalElements = apiData.completedBookings.totalElements || 0;
         break;
       case "cancelled":
         currentBookings = apiData.cancelledBookings.content || [];
-        pagination.totalPages = apiData.cancelledBookings.totalPages || 0;
-        pagination.totalElements = apiData.cancelledBookings.totalElements || 0;
+        paginationMeta.totalPages = apiData.cancelledBookings.totalPages || 0;
+        paginationMeta.totalElements = apiData.cancelledBookings.totalElements || 0;
         break;
       default:
-        currentBookings = []; 
+        currentBookings = [];
     }
 
     setBookings(currentBookings);
-    setTotalPages(pagination.totalPages);
-    setTotalElements(pagination.totalElements);
-    setPage(1); // Reset to first page when status changes
+    setTotalPages(paginationMeta.totalPages);
+    setTotalElements(paginationMeta.totalElements);
   }, [status, apiData]);
 
   // Filter bookings based on search term
@@ -158,12 +248,6 @@ const HotelBookingList = () => {
       String(booking.bookingId).toLowerCase().includes(search.toLowerCase())
     );
   }, [bookings, search]);
-
-  const pagedBookings = useMemo(() => {
-    const startIndex = (page - 1) * perPage;
-    const endIndex = startIndex + perPage;
-    return filteredBookings.slice(startIndex, endIndex);
-  }, [filteredBookings, page, perPage]);
 
   const getStatusBadge = (s) => {
     switch (s?.toLowerCase()) {
@@ -180,6 +264,29 @@ const HotelBookingList = () => {
         return "secondary";
     }
   };
+
+  const currentPaginationState = pagination[status] || { page: 1, perPage: 10 };
+  const currentPage = currentPaginationState.page;
+  const currentPerPage = currentPaginationState.perPage;
+  const totalEntries =
+    typeof totalElements === "number" && totalElements >= 0
+      ? totalElements
+      : bookings.length;
+  const serialNumberBase = (currentPage - 1) * currentPerPage;
+  const hasResults = filteredBookings.length > 0;
+  const computedEnd = serialNumberBase + filteredBookings.length;
+  const displayStart = hasResults ? serialNumberBase + 1 : 0;
+  const displayEnd = hasResults
+    ? totalEntries > 0
+      ? Math.min(computedEnd, totalEntries)
+      : computedEnd
+    : 0;
+  const safeTotalPages =
+    totalPages && totalPages > 0
+      ? totalPages
+      : hasResults
+      ? Math.max(1, Math.ceil((totalEntries || filteredBookings.length) / currentPerPage))
+      : 0;
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -294,8 +401,12 @@ const HotelBookingList = () => {
                     <Row>
                       <Col md={6}>
                         <Form.Select
-                          value={selectedMonth}
-                          onChange={(e) => setSelectedMonth(e.target.value)}
+                          value={selectedMonth ?? ""}
+                          onChange={(e) =>
+                            handleMonthChange(
+                              e.target.value ? Number(e.target.value) : null
+                            )
+                          }
                           className="form-control"
                           size="sm"
                           style={{ fontSize: "0.875rem" }}
@@ -310,8 +421,12 @@ const HotelBookingList = () => {
                       </Col>
                       <Col md={6}>
                         <Form.Select
-                          value={selectedYear}
-                          onChange={(e) => setSelectedYear(e.target.value)}
+                          value={selectedYear ?? ""}
+                          onChange={(e) =>
+                            handleYearChange(
+                              e.target.value ? Number(e.target.value) : null
+                            )
+                          }
                           className="form-control"
                           size="sm"
                           style={{ fontSize: "0.875rem" }}
@@ -325,6 +440,12 @@ const HotelBookingList = () => {
                         </Form.Select>
                       </Col>
                     </Row>
+                    {((selectedMonth !== null && selectedYear === null) ||
+                      (selectedMonth === null && selectedYear !== null)) && (
+                      <p className="text-muted small mt-3 mb-0">
+                        Select both month and year to apply the time-period filter.
+                      </p>
+                    )}
                   </Card.Body>
                 </Card>
               </Col>
@@ -524,7 +645,7 @@ const HotelBookingList = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {pagedBookings.length === 0 ? (
+                        {filteredBookings.length === 0 ? (
                           <tr>
                             <td
                               colSpan={10}
@@ -547,7 +668,7 @@ const HotelBookingList = () => {
                             </td>
                           </tr>
                         ) : (
-                          pagedBookings.map((b, i) => {
+                          filteredBookings.map((b, i) => {
                             // Format dates
                             const formatDate = (dateString) => {
                               if (!dateString) return "";
@@ -603,7 +724,7 @@ const HotelBookingList = () => {
                                     color: "#6c757d",
                                   }}
                                 >
-                                  {i + 1}
+                                  {serialNumberBase + i + 1}
                                 </td>
                                 <td
                                   style={{
@@ -611,7 +732,7 @@ const HotelBookingList = () => {
                                   }}
                                 >
                                   <span className="fw-medium">
-                                    {b.agentId || "N/A"}
+                                    {b.agentName}
                                   </span>
                                 </td>
                                 <td
@@ -698,57 +819,51 @@ const HotelBookingList = () => {
                                 >
                                   {formatDeadlineDate(b.deadlineDate)}
                                 </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    textAlign: "center",
-                                  }}
-                                >
-                                  {b.bookingId !== 0 &&
-                                  b.bookingCode != null ? (
-                                    // <Badge bg="success" style={{
-                                    //   padding: "0.4rem 0.6rem",
-                                    //   fontSize: "0.75rem",
-                                    //   fontWeight: "500"
-                                    // }}>
-                                    //   Confirmed
-                                    // </Badge>
-                                    <span
-                                      style={{
-                                        color: "#06a301ff",
-                                        // backgroundColor: "#f8d7da",
-                                        padding: "0.4rem 0.6rem",
-                                        fontSize: "0.90rem",
-                                        fontWeight: "500",
-                                        borderRadius: "0.375rem",
-                                        display: "inline-block",
-                                      }}
-                                    >
-                                      Confirmed
-                                    </span>
-                                  ) : (
-                                    // <Badge bg="danger" style={{
-                                    //   padding: "0.4rem 0.6rem",
-                                    //   fontSize: "0.75rem",
-                                    //   fontWeight: "500"
-                                    // }}>
-                                    //   Not Confirmed
-                                    // </Badge>
-                                    <span
-                                      style={{
-                                        color: "#721c24",
-                                        // backgroundColor: "#f8d7da",
-                                        padding: "0.4rem 0.6rem",
-                                        fontSize: "0.90rem",
-                                        fontWeight: "500",
-                                        borderRadius: "0.375rem",
-                                        display: "inline-block",
-                                      }}
-                                    >
-                                      Not Confirmed
-                                    </span>
-                                  )}
-                                </td>
+                             <td
+  style={{
+    ...baseCellStyle,
+    textAlign: "center",
+  }}
+>
+  {b.confirmationStatus === "Confirmed" ? (
+    <span
+      style={{
+        color: "#06a301", // green
+        padding: "0.4rem 0.6rem",
+        fontSize: "0.9rem",
+        fontWeight: "500",
+        borderRadius: "0.375rem",
+        display: "inline-block",
+      }}
+    >
+      Confirmed
+    </span>
+  ) : b.confirmationStatus === "Not Confirmed" ? (
+    <span
+      style={{
+        color: "#dc3545", // red (danger)
+        padding: "0.4rem 0.6rem",
+        fontSize: "0.9rem",
+        fontWeight: "500",
+        borderRadius: "0.375rem",
+        display: "inline-block",
+      }}
+    >
+      Not Confirmed
+    </span>
+  ) : (
+    <span
+      style={{
+        color: "#6c757d", // gray for null
+        fontSize: "0.9rem",
+        fontWeight: "500",
+      }}
+    >
+      -
+    </span>
+  )}
+</td>
+
                                 <td
                                   style={{
                                     ...baseCellStyle,
@@ -858,60 +973,75 @@ const HotelBookingList = () => {
                     >
                       Showing{" "}
                       <span className="fw-semibold text-dark">
-                        {(page - 1) * perPage + 1}
+                        {displayStart}
                       </span>{" "}
                       to{" "}
                       <span className="fw-semibold text-dark">
-                        {Math.min(page * perPage, filteredBookings.length)}
+                        {displayEnd}
                       </span>{" "}
                       of{" "}
                       <span className="fw-semibold text-dark">
-                        {filteredBookings.length}
+                        {totalEntries}
                       </span>{" "}
                       entries
                     </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="text-muted" style={{ fontSize: "0.875rem" }}>
+                        Rows per page
+                      </span>
+                      <Form.Select
+                        size="sm"
+                        value={currentPerPage}
+                        onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                        style={{ width: "auto" }}
+                      >
+                        {PER_PAGE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
                     <Pagination className="mb-0">
                       <Pagination.Prev
-                        disabled={page === 1}
-                        onClick={() => page > 1 && setPage(page - 1)}
+                        disabled={currentPage === 1}
+                        onClick={() =>
+                          currentPage > 1 && handlePageChange(currentPage - 1)
+                        }
                         style={{
-                          cursor: page === 1 ? "not-allowed" : "pointer",
-                          opacity: page === 1 ? 0.5 : 1,
+                          cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                          opacity: currentPage === 1 ? 0.5 : 1,
                         }}
                       />
-                      {[
-                        ...Array(Math.ceil(filteredBookings.length / perPage)),
-                      ].map((_, i) => (
+                      {Array.from({ length: safeTotalPages }, (_, i) => i + 1).map(
+                        (pageNumber) => (
                         <Pagination.Item
-                          key={i + 1}
-                          active={page === i + 1}
-                          onClick={() => setPage(i + 1)}
+                          key={pageNumber}
+                          active={currentPage === pageNumber}
+                          onClick={() => handlePageChange(pageNumber)}
                           style={{
                             cursor: "pointer",
                             minWidth: "38px",
                             textAlign: "center",
                           }}
                         >
-                          {i + 1}
+                          {pageNumber}
                         </Pagination.Item>
-                      ))}
+                        )
+                      )}
                       <Pagination.Next
-                        disabled={
-                          page === Math.ceil(filteredBookings.length / perPage)
-                        }
+                        disabled={currentPage === safeTotalPages || safeTotalPages === 0}
                         onClick={() =>
-                          page < Math.ceil(filteredBookings.length / perPage) &&
-                          setPage(page + 1)
+                          currentPage < safeTotalPages &&
+                          handlePageChange(currentPage + 1)
                         }
                         style={{
                           cursor:
-                            page ===
-                            Math.ceil(filteredBookings.length / perPage)
+                            currentPage === safeTotalPages || safeTotalPages === 0
                               ? "not-allowed"
                               : "pointer",
                           opacity:
-                            page ===
-                            Math.ceil(filteredBookings.length / perPage)
+                            currentPage === safeTotalPages || safeTotalPages === 0
                               ? 0.5
                               : 1,
                         }}
