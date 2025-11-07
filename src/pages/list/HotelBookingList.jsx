@@ -20,6 +20,7 @@ import {
   FaInbox,
   FaEnvelope,
   FaPaperPlane,
+  FaExclamationCircle,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -66,6 +67,9 @@ const HotelBookingList = () => {
   const [showVoucherModal, setShowVoucherModal] = useState(false);
   const [selectedVoucherType, setSelectedVoucherType] = useState("Request");
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [bookingToConfirm, setBookingToConfirm] = useState(null);
+  const [confirmingBooking, setConfirmingBooking] = useState(false);
   const hasTimeFilter = Boolean(selectedMonth) && Boolean(selectedYear);
   const statusOptions = useMemo(
     () => [
@@ -155,6 +159,42 @@ const HotelBookingList = () => {
     }
   };
 
+  // Handle confirm booking click
+  const handleConfirmBookingClick = (booking) => {
+    setBookingToConfirm(booking);
+    setShowConfirmModal(true);
+  };
+
+  // Confirm booking API call
+  const confirmBooking = async () => {
+    if (!bookingToConfirm) return;
+
+    try {
+      setConfirmingBooking(true);
+      const response = await axiosInstance.put(
+        `/api/hotel-booking/confirm/${bookingToConfirm.bookingId}`
+      );
+
+      if (response.data && response.data.success) {
+        // Refresh bookings list
+        await fetchBookings();
+        setShowConfirmModal(false);
+        setBookingToConfirm(null);
+        alert("Booking confirmed successfully!");
+      } else {
+        alert(response.data?.message || "Failed to confirm booking.");
+      }
+    } catch (error) {
+      console.error("Error confirming booking:", error);
+      alert(
+        error.response?.data?.message ||
+          "Failed to confirm booking. Please try again."
+      );
+    } finally {
+      setConfirmingBooking(false);
+    }
+  };
+
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
@@ -168,17 +208,20 @@ const HotelBookingList = () => {
       case "upcoming":
         currentBookings = apiData.upcomingBookings.content || [];
         paginationMeta.totalPages = apiData.upcomingBookings.totalPages || 0;
-        paginationMeta.totalElements = apiData.upcomingBookings.totalElements || 0;
+        paginationMeta.totalElements =
+          apiData.upcomingBookings.totalElements || 0;
         break;
       case "completed":
         currentBookings = apiData.completedBookings.content || [];
         paginationMeta.totalPages = apiData.completedBookings.totalPages || 0;
-        paginationMeta.totalElements = apiData.completedBookings.totalElements || 0;
+        paginationMeta.totalElements =
+          apiData.completedBookings.totalElements || 0;
         break;
       case "cancelled":
         currentBookings = apiData.cancelledBookings.content || [];
         paginationMeta.totalPages = apiData.cancelledBookings.totalPages || 0;
-        paginationMeta.totalElements = apiData.cancelledBookings.totalElements || 0;
+        paginationMeta.totalElements =
+          apiData.cancelledBookings.totalElements || 0;
         break;
       default:
         currentBookings = [];
@@ -191,7 +234,10 @@ const HotelBookingList = () => {
     setPagination((prev) => {
       const currentState = prev[status];
       const effectiveTotalPages = paginationMeta.totalPages || 1;
-      const clampedPage = Math.min(currentState.page, Math.max(effectiveTotalPages, 1));
+      const clampedPage = Math.min(
+        currentState.page,
+        Math.max(effectiveTotalPages, 1)
+      );
       if (clampedPage === currentState.page) {
         return prev;
       }
@@ -352,9 +398,15 @@ const HotelBookingList = () => {
             {/* Filters Section */}
             <Row className="mb-3 g-3 align-items-stretch flex-column flex-lg-row">
               <Col md={5} sm={12} className="order-1 order-lg-0">
-                <Card className="shadow-sm border-0 h-100" style={{ borderRadius: "8px" }}>
+                <Card
+                  className="shadow-sm border-0 h-100"
+                  style={{ borderRadius: "8px" }}
+                >
                   <Card.Body className="p-3">
-                    <h6 className="mb-2 fw-bold text-dark" style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}>
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                    >
                       Booking Types
                     </h6>
                     <div className="d-flex flex-wrap gap-3">
@@ -393,9 +445,15 @@ const HotelBookingList = () => {
                 </Card>
               </Col>
               <Col md={4} sm={12} className="ms-lg-auto order-0 order-lg-1">
-                <Card className="shadow-sm border-0 h-100" style={{ borderRadius: "8px" }}>
+                <Card
+                  className="shadow-sm border-0 h-100"
+                  style={{ borderRadius: "8px" }}
+                >
                   <Card.Body className="p-3">
-                    <h6 className="mb-2 fw-bold text-dark" style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}>
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                    >
                       Time Period
                     </h6>
                     <Row className="g-2">
@@ -438,7 +496,10 @@ const HotelBookingList = () => {
             </Row>
 
             {/* Table */}
-            <Card className="shadow-sm border-0" style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}>
+            <Card
+              className="shadow-sm border-0"
+              style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}
+            >
               <Card.Body className="p-0" style={{ width: "100%" }}>
                 {loading ? (
                   <div className="text-center p-5">
@@ -738,7 +799,10 @@ const HotelBookingList = () => {
                                     minWidth: COLUMN_WIDTHS.referenceCode,
                                   }}
                                 >
-                                  <span className="text-muted" style={{ fontSize: "0.78rem" }}>
+                                  <span
+                                    className="text-muted"
+                                    style={{ fontSize: "0.78rem" }}
+                                  >
                                     {b.referenceNumber || "-"}
                                   </span>
                                 </td>
@@ -774,7 +838,8 @@ const HotelBookingList = () => {
                                           className="text-muted"
                                           style={{ fontSize: "0.75rem" }}
                                         >
-                                          ({formatDate(b.checkInDate)} - {formatDate(b.checkOutDate)})
+                                          ({formatDate(b.checkInDate)} -{" "}
+                                          {formatDate(b.checkOutDate)})
                                         </span>
                                       )}
                                   </div>
@@ -797,34 +862,89 @@ const HotelBookingList = () => {
                                     minWidth: COLUMN_WIDTHS.notification,
                                   }}
                                 >
-                                  {b.bookingId !== 0 && b.bookingCode != null ? (
-                                    <span
-                                      style={{
-                                        color: "#06a301",
-                                        padding: "0.32rem 0.55rem",
-                                        fontSize: "0.78rem",
-                                        fontWeight: "500",
-                                        borderRadius: "0.375rem",
-                                        display: "inline-block",
-                                      }}
-                                    >
-                                      Confirmed
-                                    </span>
-                                  ) : (
-                                    <span
-                                      style={{
-                                        color: "#721c24",
-                                        padding: "0.32rem 0.55rem",
-                                        fontSize: "0.78rem",
-                                        fontWeight: "500",
-                                        borderRadius: "0.375rem",
-                                        display: "inline-block",
-                                      }}
-                                    >
-                                      Not Confirmed
-                                    </span>
-                                  )}
+                                  {(() => {
+                                    const normalizedStatus = String(
+                                      b.confirmationStatus || ""
+                                    )
+                                      .replace(/\s+/g, "")
+                                      .toLowerCase();
+                                    const isConfirmed =
+                                      normalizedStatus === "confirmed";
+                                    const isNotConfirmed =
+                                      normalizedStatus === "notconfirmed";
+                                    const showConfirmIcon = isNotConfirmed;
+
+                                    if (isConfirmed) {
+                                      return (
+                                        <span
+                                          style={{
+                                            color: "#06a301",
+                                            padding: "0.32rem 0.6rem",
+                                            fontSize: "0.82rem",
+                                            fontWeight: "600",
+                                            borderRadius: "0.375rem",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "0.35rem",
+                                          }}
+                                        >
+                                          Confirmed
+                                        </span>
+                                      );
+                                    }
+
+                                    const label = isNotConfirmed
+                                      ? "Not Confirmed"
+                                      : b.confirmationStatus || "-";
+
+                                    return (
+                                      <div
+                                        className="d-inline-flex align-items-center justify-content-center gap-2"
+                                        title="Non-refundable booking. Click to confirm."
+                                        style={{
+                                          padding: "0.32rem 0.6rem",
+                                          borderRadius: "0.375rem",
+                                          backgroundColor: "transparent",
+                                          color: isNotConfirmed
+                                            ? "#dc3545"
+                                            : "#6c757d",
+                                          fontSize: "0.72rem",
+                                          fontWeight: "600",
+                                          cursor: "pointer",
+                                          transition: "all 0.2s ease",
+                                        }}
+                                        onClick={() =>
+                                          handleConfirmBookingClick(b)
+                                        }
+                                      >
+                                        <span>{label}</span>
+                                        {showConfirmIcon && (
+                                          <FaExclamationCircle
+                                            style={{
+                                              fontSize: "15px",
+                                              color: "#ff9800",
+                                              transition: "all 0.2s ease",
+                                            }}
+                                            title="Non-refundable booking. Click to confirm."
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.style.color =
+                                                "#f57c00";
+                                              e.currentTarget.style.transform =
+                                                "scale(1.15)";
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.style.color =
+                                                "#ff9800";
+                                              e.currentTarget.style.transform =
+                                                "scale(1)";
+                                            }}
+                                          />
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
+
                                 <td
                                   style={{
                                     ...baseCellStyle,
@@ -934,21 +1054,32 @@ const HotelBookingList = () => {
                       style={{ fontSize: "0.875rem" }}
                     >
                       Showing {""}
-                      <span className="fw-semibold text-dark">{displayStart}</span>{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayStart}
+                      </span>{" "}
                       to {""}
-                      <span className="fw-semibold text-dark">{displayEnd}</span>{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayEnd}
+                      </span>{" "}
                       of {""}
-                      <span className="fw-semibold text-dark">{totalEntries}</span>{" "}
+                      <span className="fw-semibold text-dark">
+                        {totalEntries}
+                      </span>{" "}
                       entries
                     </div>
                     <div className="d-flex align-items-center gap-2">
-                      <span className="text-muted" style={{ fontSize: "0.8rem" }}>
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: "0.8rem" }}
+                      >
                         Rows per page
                       </span>
                       <Form.Select
                         size="sm"
                         value={currentPerPage}
-                        onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                        onChange={(e) =>
+                          handlePageSizeChange(Number(e.target.value))
+                        }
                         style={{ width: "auto", fontSize: "0.8rem" }}
                       >
                         {PER_PAGE_OPTIONS.map((option) => (
@@ -961,13 +1092,18 @@ const HotelBookingList = () => {
                     <Pagination className="mb-0">
                       <Pagination.Prev
                         disabled={currentPage === 1}
-                        onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
+                        onClick={() =>
+                          currentPage > 1 && handlePageChange(currentPage - 1)
+                        }
                         style={{
                           cursor: currentPage === 1 ? "not-allowed" : "pointer",
                           opacity: currentPage === 1 ? 0.5 : 1,
                         }}
                       />
-                      {Array.from({ length: safeTotalPages }, (_, i) => i + 1).map((pageNumber) => (
+                      {Array.from(
+                        { length: safeTotalPages },
+                        (_, i) => i + 1
+                      ).map((pageNumber) => (
                         <Pagination.Item
                           key={pageNumber}
                           active={currentPage === pageNumber}
@@ -992,10 +1128,7 @@ const HotelBookingList = () => {
                             currentPage === safeTotalPages
                               ? "not-allowed"
                               : "pointer",
-                          opacity:
-                            currentPage === safeTotalPages
-                              ? 0.5
-                              : 1,
+                          opacity: currentPage === safeTotalPages ? 0.5 : 1,
                         }}
                       />
                     </Pagination>
@@ -1855,6 +1988,88 @@ const HotelBookingList = () => {
                   }}
                 >
                   <i className="bi bi-check-circle me-1"></i> Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Confirm Booking Modal */}
+            <Modal
+              show={showConfirmModal}
+              onHide={() => {
+                if (!confirmingBooking) {
+                  setShowConfirmModal(false);
+                  setBookingToConfirm(null);
+                }
+              }}
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header
+                closeButton={!confirmingBooking}
+                style={{
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #e9ecef",
+                }}
+              >
+                <Modal.Title className="fw-bold d-flex align-items-center">
+                  <FaExclamationCircle className="me-2 text-warning" />
+                  <span>Confirm Booking</span>
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: "1.5rem" }}>
+                <div className="text-center">
+                  <p className="fs-5 mb-3">
+                    Are you sure you want to confirm the booking?
+                  </p>
+                  {bookingToConfirm && (
+                    <div className="text-muted small mb-3">
+                      <div>
+                        <strong>Booking Code:</strong>{" "}
+                        {bookingToConfirm.bookingCode || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Customer:</strong>{" "}
+                        {bookingToConfirm.primaryGuestName || "N/A"}
+                      </div>
+                      {bookingToConfirm.hotelName && (
+                        <div>
+                          <strong>Hotel:</strong> {bookingToConfirm.hotelName}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setBookingToConfirm(null);
+                  }}
+                  disabled={confirmingBooking}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={confirmBooking}
+                  disabled={confirmingBooking}
+                >
+                  {confirmingBooking ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Confirming...
+                    </>
+                  ) : (
+                    "OK"
+                  )}
                 </Button>
               </Modal.Footer>
             </Modal>
