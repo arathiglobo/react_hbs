@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect , useState  } from 'react';
 import Sidebar from '../components/Sidebar';
 import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
@@ -23,9 +23,9 @@ const revenueData = [3000,4800,5500,4000,6800];
 
 export default function AdminDashboard(){
   const navigate = useNavigate();
+  const [dashboardStatus, setDashboardStatus] = useState(null);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
+     const fetchProfile = async () => {
       try {
         const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
         if (userName) {
@@ -37,7 +37,21 @@ export default function AdminDashboard(){
       }
     };
 
+    const fetchDashboardStatus = async () => {
+      try {
+        
+          const response = await axiosInstance.get(`/api/dashboard/stats`);
+          console.log("dashboard status Data:", response.data);
+          setDashboardStatus(response.data);
+        
+      } catch (error) {
+        console.error("Error fetching dashboard status:", error);
+      }
+    };
+
+  useEffect(() => {
     fetchProfile();
+    fetchDashboardStatus();
   }, []);
 
   return (
@@ -60,12 +74,12 @@ export default function AdminDashboard(){
 
         <Container fluid className="px-0">
           <Row xs={1} sm={2} lg={3} className="g-4 mb-3 mx-0">
-            <Col><KpiCard title="Total Bookings" value={kpiData.totalBookings} /></Col>
-            <Col><KpiCard title="Today's Bookings" value={kpiData.todaysBookings} /></Col>
-            <Col><KpiCard title="Total Revenue" value={`$${kpiData.totalRevenue.toLocaleString()}`} /></Col>
-            <Col><KpiCard title="Active Agents" value={kpiData.activeAgents} /></Col>
-            <Col><KpiCard title="Hotels Listed" value={kpiData.hotelsListed} /></Col>
-            <Col><KpiCard title="API Bookings" value={kpiData.apiBookings} /></Col>
+            <Col><KpiCard title="Total Bookings" value={dashboardStatus.totalBookings} /></Col>
+            <Col><KpiCard title="Today's Bookings" value={dashboardStatus.todayBookings} /></Col>
+            <Col><KpiCard title="Total Revenue" value={`AED ${dashboardStatus.totalRevenue.toLocaleString()}`} /></Col>
+            <Col><KpiCard title="Active Agents" value={dashboardStatus.totalActiveAgents} /></Col>
+            <Col><KpiCard title="Hotels Listed" value={dashboardStatus.totalHotels} /></Col>
+            <Col><KpiCard title="API Bookings" value={dashboardStatus.totalApiBookings} /></Col>
           </Row>
 
           <Row className="g-4 mx-0">
