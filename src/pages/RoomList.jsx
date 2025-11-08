@@ -232,6 +232,7 @@ const RoomList = () => {
             contractLabel: rate.contractLabel,
             nonRefundable: rate.nonRefundable,
             rate: rate.totalRate,
+            rateWithoutMarkup :  rate.totalRateWithoutMarkup,
             currency: "AED",
             cancellationPolicy: hotelsdetail.cancellationPolicies,
             roomStatus : rate.roomStatus,

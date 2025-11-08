@@ -27,12 +27,27 @@ export default function TopBar() {
     localStorage.getItem("makeYourOwnPackageAgentId") ||
     "";
 
-  const renderActivityItem = (item) => {
+  const getCartKey = (item) => {
+    if (!item) return "";
+    return (
+      item.cartKey ||
+      item.id ||
+      item.key ||
+      item.activity?.cartKey ||
+      item.activity?.id ||
+      item.activity?.activityId ||
+      item.hotel?.cartKey ||
+      item.cab?.cartKey ||
+      ""
+    );
+  };
+
+  const renderActivityItem = (item, key) => {
     const activity = item.activity;
     if (!activity) return null;
 
     return (
-      <Card key={item.id} className="shadow-sm">
+      <Card key={key} className="shadow-sm">
         <Card.Body>
           <div className="d-flex justify-content-between align-items-start mb-2">
             <div>
@@ -46,7 +61,7 @@ export default function TopBar() {
             <Button
               variant="outline-danger"
               size="sm"
-              onClick={() => handleRemoveFromCart(item.id)}
+              onClick={() => handleRemoveFromCart(item)}
             >
               <FaTrash className="me-1" /> Remove
             </Button>
@@ -89,13 +104,13 @@ export default function TopBar() {
     );
   };
 
-  const renderHotelItem = (item) => {
+  const renderHotelItem = (item, key) => {
     const hotel = item.hotel || {};
     const meta = hotel.meta || {};
     const details = hotel.details || {};
 
     return (
-      <Card key={item.id} className="shadow-sm">
+      <Card key={key} className="shadow-sm">
         <Card.Body>
           <div className="d-flex justify-content-between align-items-start mb-2">
             <div>
@@ -115,7 +130,7 @@ export default function TopBar() {
             <Button
               variant="outline-danger"
               size="sm"
-              onClick={() => handleRemoveFromCart(item.id)}
+              onClick={() => handleRemoveFromCart(item)}
             >
               <FaTrash className="me-1" /> Remove
             </Button>
@@ -159,10 +174,10 @@ export default function TopBar() {
     );
   };
 
-  const renderCabItem = (item) => {
+  const renderCabItem = (item, key) => {
     const cab = item.cab || {};
     return (
-      <Card key={item.id} className="shadow-sm">
+      <Card key={key} className="shadow-sm">
         <Card.Body>
           <div className="d-flex justify-content-between align-items-start mb-2">
             <div>
@@ -174,7 +189,7 @@ export default function TopBar() {
             <Button
               variant="outline-danger"
               size="sm"
-              onClick={() => handleRemoveFromCart(item.id)}
+              onClick={() => handleRemoveFromCart(item)}
             >
               <FaTrash className="me-1" /> Remove
             </Button>
@@ -211,10 +226,17 @@ export default function TopBar() {
     );
   };
 
-  const renderCartItem = (item) => {
-    if (item.activity) return renderActivityItem(item);
-    if (item.hotel) return renderHotelItem(item);
-    if (item.cab) return renderCabItem(item);
+  const renderCartItem = (item, index) => {
+    const key =
+      getCartKey(item) ||
+      item.activity?.activityId ||
+      item.hotel?.hotelId ||
+      item.cab?.cabId ||
+      `cart-item-${index}`;
+
+    if (item.activity) return renderActivityItem(item, key);
+    if (item.hotel) return renderHotelItem(item, key);
+    if (item.cab) return renderCabItem(item, key);
     return null;
   };
 
@@ -265,18 +287,53 @@ export default function TopBar() {
   };
 
   // Remove item from cart
-  const handleRemoveFromCart = async (itemId) => {
+  const handleRemoveFromCart = async (item) => {
     try {
-      const response = await axiosInstance.delete(`/api/cart/remove/${itemId}`);
-      if (response.data && response.data.success !== false) {
-        // Refresh cart data
+      const agentId = getCartAgentId();
+
+      if (!agentId) {
+        toast.error("Select an agent before modifying the cart.");
+        return;
+      }
+
+      const cartKey = getCartKey(item);
+
+      if (!cartKey) {
+        toast.error("Unable to identify the selected cart item.");
+        return;
+      }
+
+      const response = await axiosInstance.post(
+        "/api/makeYourOwnPackage/deleteCabDetailsToCart",
+        null,
+        {
+          params: {
+            agentId: agentId,
+            cartKey: cartKey,
+          },
+        }
+      );
+      console.log("Response:", response.data);
+      if (response.data === 1) {
+        toast.success("Item removed from cart.");
         fetchCartData();
+        // let nextCart = [];
+        // setCartItems((prev) => {
+        //   nextCart = prev.filter(
+        //     (cartItem) => getCartKey(cartItem) !== cartKey
+        //   );
+        //   return nextCart;
+        // });
+        // setCartCount(nextCart.length);
+
+        // Ensure UI stays in sync with backend state
+        // await fetchCartData();
       } else {
-        alert(response.data?.message || "Failed to remove item from cart");
+        toast.error("Failed to remove item from cart.");
       }
     } catch (err) {
       console.error("Error removing from cart:", err);
-      alert("Failed to remove item from cart. Please try again.");
+      toast.error("Failed to remove item from cart. Please try again.");
     }
   };
 
@@ -383,7 +440,7 @@ export default function TopBar() {
             </div>
           ) : (
             <div className="d-flex flex-column gap-3">
-              {cartItems.map((item) => renderCartItem(item))}
+              {cartItems.map((item, index) => renderCartItem(item, index))}
             </div>
           )}
         </Modal.Body>

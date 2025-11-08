@@ -344,7 +344,7 @@ const HotelBookingPage = () => {
               : false,
           currency: bookingData.selectedRate.currency || "AED",
           rate: bookingData.selectedRate.rate,
-          rateWithoutMarkup: bookingData.selectedRate.rate,
+          rateWithoutMarkup: bookingData.selectedRate.rateWithoutMarkup,
           adults: room.adults,
           children: room.children,
           childAges: room.childAges || [],

@@ -21,9 +21,23 @@ const bookingsLabels = ['Aug 1','Aug 2','Aug 3','Aug 4','Aug 5'];
 const bookingsData = [20,35,50,40,65];
 const revenueData = [3000,4800,5500,4000,6800];
 
+const formatNumber = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toLocaleString() : "0";
+};
+
 export default function AdminDashboard(){
   const navigate = useNavigate();
-  const [dashboardStatus, setDashboardStatus] = useState(null);
+  const defaultDashboardStatus = {
+    totalBookings: 0,
+    todayBookings: 0,
+    totalRevenue: 0,
+    totalActiveAgents: 0,
+    totalHotels: 0,
+    totalApiBookings: 0,
+  };
+
+  const [dashboardStatus, setDashboardStatus] = useState(defaultDashboardStatus);
 
      const fetchProfile = async () => {
       try {
@@ -42,10 +56,18 @@ export default function AdminDashboard(){
         
           const response = await axiosInstance.get(`/api/dashboard/stats`);
           console.log("dashboard status Data:", response.data);
-          setDashboardStatus(response.data);
+          if (response.data && typeof response.data === "object") {
+            setDashboardStatus((prev) => ({
+              ...prev,
+              ...response.data,
+            }));
+          } else {
+            setDashboardStatus(defaultDashboardStatus);
+          }
         
       } catch (error) {
         console.error("Error fetching dashboard status:", error);
+        setDashboardStatus(defaultDashboardStatus);
       }
     };
 
@@ -76,7 +98,7 @@ export default function AdminDashboard(){
           <Row xs={1} sm={2} lg={3} className="g-4 mb-3 mx-0">
             <Col><KpiCard title="Total Bookings" value={dashboardStatus.totalBookings} /></Col>
             <Col><KpiCard title="Today's Bookings" value={dashboardStatus.todayBookings} /></Col>
-            <Col><KpiCard title="Total Revenue" value={`AED ${dashboardStatus.totalRevenue.toLocaleString()}`} /></Col>
+            <Col><KpiCard title="Total Revenue" value={`AED ${formatNumber(dashboardStatus.totalRevenue)}`} /></Col>
             <Col><KpiCard title="Active Agents" value={dashboardStatus.totalActiveAgents} /></Col>
             <Col><KpiCard title="Hotels Listed" value={dashboardStatus.totalHotels} /></Col>
             <Col><KpiCard title="API Bookings" value={dashboardStatus.totalApiBookings} /></Col>

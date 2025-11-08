@@ -1324,14 +1324,18 @@ const HotelBookingList = () => {
                               <div className="d-flex justify-content-between mb-2">
                                 <span className="text-muted">Room Rate</span>
                                 <span className="fw-semibold">
-                                  {bookingDetails.bookingDetails?.currency ||
-                                    "AED"}{" "}
-                                  {bookingDetails.bookingDetails?.rate?.toFixed(
-                                    2
-                                  ) || "0.00"}
+                                  {console.log("bookingDetails:::###::" ,bookingDetails)}
+                                  {bookingDetails?.bookingDetails?.currency ||
+                                    ""}{" "}
+                                  {bookingDetails?.bookingDetails?.total
+                                    ? bookingDetails.bookingDetails.total.toFixed(
+                                        2
+                                      )
+                                    : "0.00"}
                                 </span>
                               </div>
-                              {bookingDetails.bookingDetails?.taxDiscount !==
+
+                              {/* {bookingDetails.bookingDetails?.taxDiscount !==
                                 0 && (
                                 <div className="d-flex justify-content-between mb-2">
                                   <span className="text-muted">
@@ -1359,7 +1363,7 @@ const HotelBookingList = () => {
                                     ).toFixed(2)}
                                   </span>
                                 </div>
-                              )}
+                              )} */}
                             </div>
                             <hr className="my-3" />
                             <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">

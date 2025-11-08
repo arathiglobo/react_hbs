@@ -1855,7 +1855,14 @@ const AgentReg = () => {
             </Card.Body>
           </Card>
 
-          <Modal show={showModal} onHide={closeModal} centered size="lg">
+          <Modal
+            show={showModal}
+            onHide={closeModal}
+            centered
+            size="lg"
+            backdrop="static"
+            keyboard={false}
+          >
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
                 {isViewMode ? "View Details" : (editing ? "Update Agent" : "Create Agent")}
@@ -2881,6 +2888,8 @@ const AgentReg = () => {
             onHide={closeLoginModal}
             centered
             key={loginModalKey}
+            backdrop="static"
+            keyboard={false}
           >
             <Modal.Header closeButton>
               <Modal.Title>
@@ -3138,6 +3147,8 @@ const AgentReg = () => {
             onHide={closeCreditLimitModal}
             centered
             size="md"
+            backdrop="static"
+            keyboard={false}
           >
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
@@ -3348,6 +3359,8 @@ const AgentReg = () => {
             onHide={closeExclusionModal}
             centered
             size="md"
+            backdrop="static"
+            keyboard={false}
           >
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
