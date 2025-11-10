@@ -169,8 +169,8 @@ const AccomodationRoomList = () => {
       };
 
       // Call API to add to cart
-      const response = await axiosInstance.post("/api/cart/add", cartItem);
-      
+      const response = await axiosInstance.post("/api/makeYourOwnPackageHotel/saveHotelDetailsToCart", cartItem);
+      console.log("response for cart:", response.data);
       if (response.data && response.data.success !== false) {
         // Show success message (you can use toast here if available)
         alert("Room added to cart successfully!");

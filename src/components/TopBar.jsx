@@ -264,7 +264,7 @@ export default function TopBar() {
       }
 
       const response = await axiosInstance.post(
-        `/api/makeYourOwnPackage/fetchDataFromRedis?cartKey=${encodeURIComponent(
+        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
           agentId
         )}`
       );
