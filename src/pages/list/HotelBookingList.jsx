@@ -25,6 +25,7 @@ import {
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import toast from "react-hot-toast";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 const COLUMN_WIDTHS = {
@@ -52,7 +53,6 @@ const normalizeBoolean = (value, truthyMatchers = [], falsyMatchers = []) => {
 };
 
 const isCancellationAllowed = (booking) => {
- 
   const refundStatus = booking?.refundStatus?.toLowerCase();
   const isNonRefundable = refundStatus === "non-refundable";
 
@@ -392,21 +392,23 @@ const HotelBookingList = () => {
         { params }
       );
 
-      if (response.data && response.data.success) {
+      if (
+        response.data &&
+        response.data.success &&
+        response.data.confirmationStatus === "Cancelled"
+      ) {
         await fetchBookings();
         setShowCancelModal(false);
         setBookingToCancel(null);
         setCancellationReason("");
-        alert("Booking cancelled successfully!");
+        // console.log("Booking cancelled successfully!");
+        toast.success(response.data.message);
       } else {
-        alert(response.data?.message || "Failed to cancel booking.");
+        // alert(response.data?.message || "Failed to cancel booking.");
+        toast.error(response.data.message);
       }
     } catch (error) {
       console.error("Error cancelling booking:", error);
-      alert(
-        error.response?.data?.message ||
-          "Failed to cancel booking. Please try again."
-      );
     } finally {
       setCancellingBooking(false);
     }
@@ -1248,12 +1250,18 @@ const HotelBookingList = () => {
                                 "N/A"}
                             </h5>
                             <Badge
+                              // bg={
+                              //   bookingDetails.bookingHeader?.bookingStatus ===
+                              //   "UPCOMING"
+                              //     ? "warning"
+                              //     : bookingDetails.bookingHeader
+                              //         ?.bookingStatus === "COMPLETED"
+                              //     ? "success"
+                              //     : "danger"
+                              // }
                               bg={
-                                bookingDetails.bookingHeader?.bookingStatus ===
-                                "UPCOMING"
-                                  ? "warning"
-                                  : bookingDetails.bookingHeader
-                                      ?.bookingStatus === "COMPLETED"
+                                bookingDetails.bookingHeader
+                                  ?.confirmationStatus === "Confirmed"
                                   ? "success"
                                   : "danger"
                               }
@@ -1262,8 +1270,9 @@ const HotelBookingList = () => {
                                 padding: "0.4rem 0.8rem",
                               }}
                             >
-                              {bookingDetails.bookingHeader?.bookingStatus ||
-                                "-"}
+                              {bookingDetails.bookingHeader?.confirmationStatus
+                                ? bookingDetails.bookingHeader.confirmationStatus.toUpperCase()
+                                : "-"}
                             </Badge>
                           </div>
                           <div className="text-muted small">
