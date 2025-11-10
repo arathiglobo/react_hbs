@@ -391,12 +391,7 @@ const HotelBookingPage = () => {
         0
       );
 
-      console.log(
-        "🔍 Checking credit for Agent:",
-        agentId,
-        "Amount:",
-        requiredAmount
-      );
+      console.log("🔍 Checking credit for Agent:",agentId,"Amount:", requiredAmount);
 
       const creditResponse = await axiosInstance.get(
         `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`

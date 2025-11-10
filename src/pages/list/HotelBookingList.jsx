@@ -40,6 +40,28 @@ const COLUMN_WIDTHS = {
   action: "clamp(10ch, 11ch + 0.5vw, 15ch)",
 };
 
+const normalizeBoolean = (value, truthyMatchers = [], falsyMatchers = []) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (truthyMatchers.includes(normalized)) return true;
+    if (falsyMatchers.includes(normalized)) return false;
+  }
+  return false;
+};
+
+const isCancellationAllowed = (booking) => {
+ 
+  const refundStatus = booking?.refundStatus?.toLowerCase();
+  const isNonRefundable = refundStatus === "non-refundable";
+
+  console.log("isNonRefundable::", isNonRefundable);
+  //  Returns false when it's “Non-Refundable”.
+  // Returns true for “Flexi” or any other refundable type.
+  return !isNonRefundable;
+};
+
 const HotelBookingList = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -70,6 +92,10 @@ const HotelBookingList = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [bookingToConfirm, setBookingToConfirm] = useState(null);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState(null);
+  const [cancellingBooking, setCancellingBooking] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
   const hasTimeFilter = Boolean(selectedMonth) && Boolean(selectedYear);
   const statusOptions = useMemo(
     () => [
@@ -343,6 +369,46 @@ const HotelBookingList = () => {
         return "warning";
       default:
         return "secondary";
+    }
+  };
+
+  const handleDeleteBooking = (booking) => {
+    setBookingToCancel(booking);
+    setCancellationReason("");
+    setShowCancelModal(true);
+  };
+
+  const cancelBooking = async () => {
+    if (!bookingToCancel) return;
+
+    try {
+      setCancellingBooking(true);
+      const params = cancellationReason.trim()
+        ? { reason: cancellationReason.trim() }
+        : undefined;
+
+      const response = await axiosInstance.delete(
+        `/api/hotel-booking/${bookingToCancel.bookingId}/cancel`,
+        { params }
+      );
+
+      if (response.data && response.data.success) {
+        await fetchBookings();
+        setShowCancelModal(false);
+        setBookingToCancel(null);
+        setCancellationReason("");
+        alert("Booking cancelled successfully!");
+      } else {
+        alert(response.data?.message || "Failed to cancel booking.");
+      }
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+      alert(
+        error.response?.data?.message ||
+          "Failed to cancel booking. Please try again."
+      );
+    } finally {
+      setCancellingBooking(false);
     }
   };
 
@@ -1009,25 +1075,31 @@ const HotelBookingList = () => {
                                           "scale(1)";
                                       }}
                                     />
-                                    <FaTrash
-                                      style={{
-                                        fontSize: "16px",
-                                        color: "#f44336",
-                                        cursor: "pointer",
-                                        transition: "all 0.2s ease",
-                                      }}
-                                      title="Delete"
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.color = "#d32f2f";
-                                        e.currentTarget.style.transform =
-                                          "scale(1.15)";
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.color = "#f44336";
-                                        e.currentTarget.style.transform =
-                                          "scale(1)";
-                                      }}
-                                    />
+                                    {isCancellationAllowed(b) && (
+                                      <FaTrash
+                                        style={{
+                                          fontSize: "16px",
+                                          color: "#f44336",
+                                          cursor: "pointer",
+                                          transition: "all 0.2s ease",
+                                        }}
+                                        title="Delete"
+                                        className="delete-booking"
+                                        onClick={() => handleDeleteBooking(b)}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.color =
+                                            "#d32f2f";
+                                          e.currentTarget.style.transform =
+                                            "scale(1.15)";
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.color =
+                                            "#f44336";
+                                          e.currentTarget.style.transform =
+                                            "scale(1)";
+                                        }}
+                                      />
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -1324,7 +1396,10 @@ const HotelBookingList = () => {
                               <div className="d-flex justify-content-between mb-2">
                                 <span className="text-muted">Room Rate</span>
                                 <span className="fw-semibold">
-                                  {console.log("bookingDetails:::###::" ,bookingDetails)}
+                                  {console.log(
+                                    "bookingDetails:::###::",
+                                    bookingDetails
+                                  )}
                                   {bookingDetails?.bookingDetails?.currency ||
                                     ""}{" "}
                                   {bookingDetails?.bookingDetails?.total
@@ -2073,6 +2148,104 @@ const HotelBookingList = () => {
                     </>
                   ) : (
                     "OK"
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Cancel Booking Modal */}
+            <Modal
+              show={showCancelModal}
+              onHide={() => {
+                if (!cancellingBooking) {
+                  setShowCancelModal(false);
+                  setBookingToCancel(null);
+                  setCancellationReason("");
+                }
+              }}
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header
+                closeButton={!cancellingBooking}
+                style={{
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #e9ecef",
+                }}
+              >
+                <Modal.Title className="fw-bold d-flex align-items-center">
+                  <FaExclamationCircle className="me-2 text-danger" />
+                  <span>Cancel Booking</span>
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: "1.5rem" }}>
+                <div className="text-center">
+                  <p className="fs-5 mb-3">
+                    Are you sure you want to cancel this booking?
+                  </p>
+                  {bookingToCancel && (
+                    <div className="text-muted small mb-3">
+                      <div>
+                        <strong>Booking Code:</strong>{" "}
+                        {bookingToCancel.bookingCode || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Customer:</strong>{" "}
+                        {bookingToCancel.primaryGuestName || "N/A"}
+                      </div>
+                      {bookingToCancel.hotelName && (
+                        <div>
+                          <strong>Hotel:</strong> {bookingToCancel.hotelName}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <Form.Group controlId="cancellationReason">
+                    <Form.Label className="fw-semibold">
+                      Cancellation Reason{" "}
+                      <span className="text-muted">(optional)</span>
+                    </Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      placeholder="Add a reason for cancellation (optional)"
+                      value={cancellationReason}
+                      onChange={(e) => setCancellationReason(e.target.value)}
+                      disabled={cancellingBooking}
+                    />
+                  </Form.Group>
+                </div>
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowCancelModal(false);
+                    setBookingToCancel(null);
+                    setCancellationReason("");
+                  }}
+                  disabled={cancellingBooking}
+                >
+                  No
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={cancelBooking}
+                  disabled={cancellingBooking}
+                >
+                  {cancellingBooking ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Cancelling...
+                    </>
+                  ) : (
+                    "Yes, Cancel"
                   )}
                 </Button>
               </Modal.Footer>
