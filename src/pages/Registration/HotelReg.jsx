@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Card,
   Button,
@@ -811,6 +811,11 @@ const handleAmenityChange = (e) => {
   const [selectedRoomCategory, setSelectedRoomCategory] = useState("");
   const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
   const [availableRoomTypes, setAvailableRoomTypes] = useState([]);
+  const usedRoomCategoryIds = useMemo(() => {
+    return new Set(
+      (formData.rooms || []).map((room) => String(room.roomCategoryId))
+    );
+  }, [formData.rooms]);
 
   // Load room types when room category is selected
   const handleRoomCategoryChange = async (roomCategoryId) => {
@@ -2670,14 +2675,27 @@ const handleAmenityChange = (e) => {
                                       className="me-2"
                                     >
                                       <option value="">SELECT</option>
-                                      {roomCategories.map((category) => (
-                                        <option
-                                          key={category.roomCategoryId}
-                                          value={category.roomCategoryId}
-                                        >
-                                          {category.roomCategory}
-                                        </option>
-                                      ))}
+                                      {roomCategories.map((category) => {
+                                        const categoryId = String(
+                                          category.roomCategoryId
+                                        );
+                                        const isCategoryUsed =
+                                          usedRoomCategoryIds.has(categoryId);
+
+                                        return (
+                                          <option
+                                            key={category.roomCategoryId}
+                                            value={category.roomCategoryId}
+                                            disabled={
+                                              isCategoryUsed &&
+                                              String(selectedRoomCategory) !==
+                                                categoryId
+                                            }
+                                          >
+                                            {category.roomCategory}
+                                          </option>
+                                        );
+                                      })}
                                     </Form.Select>
                                   </div>
                                 </Form.Group>

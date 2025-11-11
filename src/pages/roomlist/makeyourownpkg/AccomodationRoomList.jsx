@@ -148,9 +148,9 @@ const AccomodationRoomList = () => {
       const cartItem = {
         hotelId: hotelsdetail.hotelId,
         hotelName: hotelsdetail.hotelName,
-        hotelAddress: hotelsdetail.hotelAddress,
-        starRating: hotelsdetail.starRating,
-        hotelImage: roomData.meta?.hotelImage || "",
+        // hotelAddress: hotelsdetail.hotelAddress,
+        // starRating: hotelsdetail.starRating,
+        // hotelImage: roomData.meta?.hotelImage || "",
         roomCategory: rate.roomCategory,
         mealPlan: rate.mealPlan,
         contractLabel: rate.contractLabel,
@@ -167,6 +167,35 @@ const AccomodationRoomList = () => {
         rooms: payload.rooms,
         cancellationPolicies: rate.cancellationPolicies || [],
       };
+//       {
+   
+    
+//     "roomtypeId": "3994",
+//     "roomcategory": "2224",
+//     "roomCategory": "Room Category Classic Room Balcony",
+//     "roomType": " Meal Type Room Only",
+//     "available": "False",
+//     "api": 0,
+//     "token": "null@false",
+//     "destinationCityId": "3",
+//     "destinationCountryId": "235",
+//     "checkIn": "11/12/2025",
+//     "checkOut": "12/12/2025",
+//     "nativeContryId": "2",
+//     "noOfRoom": "1",
+//     "refundstatus": "Y",
+//     "intoken": "291~2224~3994~Y",
+// //    "finalfile": "~!~details~!~searchresult~!~final_20251108023431296.txt",
+//     "searchRoomDTOs": [
+//         {
+//             "roomCount": 1,
+//             "adult": "1",
+//             "child": "0",
+//             "childAge": []
+//         }
+//     ],
+//     "agentId": "5"
+// }
 
       // Call API to add to cart
       const response = await axiosInstance.post("/api/makeYourOwnPackageHotel/saveHotelDetailsToCart", cartItem);

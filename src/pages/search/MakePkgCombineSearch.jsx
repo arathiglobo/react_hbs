@@ -508,110 +508,162 @@ export default function MakePkgCombineSearch() {
         noOfRooms,
         roomConfigurations,
         agentId: agentIdFinal,
+        apiType:["INHOUSE"]
       };
 
-      const searchKeyRes = await axiosInstance.post(
-        "/hotel-search/search",
+      // const searchKeyRes = await axiosInstance.post(
+      //   "/hotel-search/search",
+      //   searchPayloadReq
+      // );
+      const searchRes = await axiosInstance.post(
+        "/api/makeYourOwnPackageHotel/search",
         searchPayloadReq
       );
-      const searchIdRes = searchKeyRes.data.searchId;
-      if (!searchIdRes) throw new Error("No searchId returned");
-      setSearchId(searchIdRes);
+      console.log("searchRes", searchRes);
 
-      const params = {
-        agentId: agentIdFinal, // Use the dynamic agentId
-        page: 0,
-        pageSize,
-        sortBy:
-          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
-        sortOrder:
-          sortBy === "priceAsc" ||
-          sortBy === "ratingAsc" ||
-          sortBy === "nameAsc"
-            ? "asc"
-            : "desc",
-        starRating: starRating.map((s) => s.value).join(",") || undefined,
-        apiType:
-          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+      const ensureHttpImage = (imageUrl) => {
+        if (!imageUrl) {
+          return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
+        }
+
+        if (/^https?:\/\//i.test(imageUrl)) {
+          return imageUrl;
+        }
+
+        if (typeof imageUrl === "string") {
+          const fileName = imageUrl.split(/[/\\]/).pop();
+          if (fileName) {
+            return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
+          }
+        }
+
+        return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
       };
 
-      const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
+      const responseData = Array.isArray(searchRes.data) ? searchRes.data : [];
 
-      await pollUntilComplete(
-        `/hotel-search/results/${searchIdRes}`,
-        params,
-        (data) => {
-          // Check if any individual API is completed OR if finalStatus is completed
-          const currentStatuses = data.status || {};
-          const hasAnyCompleted = expectedChannels.some(ch => currentStatuses[ch] === "COMPLETED");
-          return hasAnyCompleted || data.finalStatus === "COMPLETED";
-        },
-        (data, pollCount) => {
+      const mappedResults = responseData.map((hotel, index) => ({
+        id: hotel.hotelCode ? `local-${hotel.hotelCode}` : `local-h${index + 1}`,
+        searchId: "local",
+        hotelCode: hotel.hotelCode || null,
+        name: hotel.hotelName || "Unknown Hotel",
+        address: hotel.hotelAddress || "",
+        city: hotel.hotelAddress
+          ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+          : "Unknown City",
+        price: hotel.baseRate ?? null,
+        badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+        image: ensureHttpImage(hotel.hotelImage),
+        rating: hotel.starRating || 0,
+        hotelType: "hotel",
+        channelType: hotel.apiType?.toLowerCase() || "inhouse",
+      }));
+
+      setAllResults(mappedResults);
+      setTotalElements(mappedResults.length);
+      setTotalPages(Math.max(1, Math.ceil(mappedResults.length / pageSize)));
+      setHasSearchResult(true);
+      setIsInitialResultsLoaded(true);
+      setPollStatus("COMPLETED");
+      setSearchId(null);
+      // const searchIdRes = searchKeyRes.data.searchId;
+      // if (!searchIdRes) throw new Error("No searchId returned");
+      // setSearchId(searchIdRes);
+
+      // const params = {
+      //   agentId: agentIdFinal, // Use the dynamic agentId
+      //   page: 0,
+      //   pageSize,
+      //   sortBy:
+      //     sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
+      //   sortOrder:
+      //     sortBy === "priceAsc" ||
+      //     sortBy === "ratingAsc" ||
+      //     sortBy === "nameAsc"
+      //       ? "asc"
+      //       : "desc",
+      //   starRating: starRating.map((s) => s.value).join(",") || undefined,
+      //   apiType:
+      //     channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+      // };
+
+      // const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
+
+      // await pollUntilComplete(
+      //   `/hotel-search/results/${searchIdRes}`,
+      //   params,
+      //   (data) => {
+      //     // Check if any individual API is completed OR if finalStatus is completed
+      //     const currentStatuses = data.status || {};
+      //     const hasAnyCompleted = expectedChannels.some(ch => currentStatuses[ch] === "COMPLETED");
+      //     return hasAnyCompleted || data.finalStatus === "COMPLETED";
+      //   },
+      //   (data, pollCount) => {
          
-          const mappedResults = Array.isArray(data.result)
-            ? data.result.map((hotel, index) => ({
-                id: hotel.hotelCode
-                  ? `${searchIdRes}-${hotel.hotelCode}`
-                  : `${searchIdRes}-h${index + 1}`,
-                searchId: searchIdRes,
-                hotelCode: hotel.hotelCode || null,
-                name: hotel.hotelName || "Unknown Hotel",
-                address: hotel.hotelAddress || "",
-                city: hotel.hotelAddress
-                  ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-                  : "Unknown City",
-                price: hotel.baseRate || null,
-                badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-                image:
-                  hotel.hotelImage ||
-                  "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-                rating: hotel.starRating || 0,
-                hotelType: "hotel",
-                channelType: hotel.apiType?.toLowerCase() ,
-              }))
-            : [];
+      //     const mappedResults = Array.isArray(data.result)
+      //       ? data.result.map((hotel, index) => ({
+      //           id: hotel.hotelCode
+      //             ? `${searchIdRes}-${hotel.hotelCode}`
+      //             : `${searchIdRes}-h${index + 1}`,
+      //           searchId: searchIdRes,
+      //           hotelCode: hotel.hotelCode || null,
+      //           name: hotel.hotelName || "Unknown Hotel",
+      //           address: hotel.hotelAddress || "",
+      //           city: hotel.hotelAddress
+      //             ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+      //             : "Unknown City",
+      //           price: hotel.baseRate || null,
+      //           badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+      //           image:
+      //             hotel.hotelImage ||
+      //             "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+      //           rating: hotel.starRating || 0,
+      //           hotelType: "hotel",
+      //           channelType: hotel.apiType?.toLowerCase() ,
+      //         }))
+      //       : [];
 
-          // Update results for the current page
-          setAllResults(mappedResults);
+      //     // Update results for the current page
+      //     setAllResults(mappedResults);
 
-          const currentStatuses = data.status || {};
-          const newCompleted = new Set(completedChannels);
-          expectedChannels.forEach((ch) => {
-            if (
-              currentStatuses[ch] === "COMPLETED" &&
-              !completedChannels.has(ch)
-            ) {
-              newCompleted.add(ch);
-              // console.log(`Channel ${ch} completed at poll ${pollCount}`);
-            }
-          });
-          setCompletedChannels(newCompleted);
+      //     const currentStatuses = data.status || {};
+      //     const newCompleted = new Set(completedChannels);
+      //     expectedChannels.forEach((ch) => {
+      //       if (
+      //         currentStatuses[ch] === "COMPLETED" &&
+      //         !completedChannels.has(ch)
+      //       ) {
+      //         newCompleted.add(ch);
+      //         // console.log(`Channel ${ch} completed at poll ${pollCount}`);
+      //       }
+      //     });
+      //     setCompletedChannels(newCompleted);
 
-          // Show results immediately if any channel is completed or we have results
-          if (pollCount === 1 || mappedResults.length > 0) {
-            setHasSearchResult(true);
-            // Show results as soon as any channel completes or we have data
-            if (newCompleted.size >= 1 || mappedResults.length > 0) {
-              setIsInitialResultsLoaded(true);
-            }
-          }
+      //     // Show results immediately if any channel is completed or we have results
+      //     if (pollCount === 1 || mappedResults.length > 0) {
+      //       setHasSearchResult(true);
+      //       // Show results as soon as any channel completes or we have data
+      //       if (newCompleted.size >= 1 || mappedResults.length > 0) {
+      //         setIsInitialResultsLoaded(true);
+      //       }
+      //     }
 
-          setTotalElements(
-            Number(data.totalResults) || mappedResults.length
-          );
-          setTotalPages(
-            Math.max(
-              1,
-              Math.ceil(
-                (Number(data.totalResults) || mappedResults.length) / pageSize
-              )
-            )
-          );
-        },
-        4000,
-        20000,
-        2000
-      );
+      //     setTotalElements(
+      //       Number(data.totalResults) || mappedResults.length
+      //     );
+      //     setTotalPages(
+      //       Math.max(
+      //         1,
+      //         Math.ceil(
+      //           (Number(data.totalResults) || mappedResults.length) / pageSize
+      //         )
+      //       )
+      //     );
+      //   },
+      //   4000,
+      //   20000,
+      //   2000
+      // );
     } catch (err) {
       console.error("Search failed:", err);
       setHasSearched(false);
