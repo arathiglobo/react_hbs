@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card,
@@ -193,6 +193,41 @@ const CabProviderReg = () => {
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [pickupDropoffList, setPickupDropoffList] = useState([]);
   const [editingCab, setEditingCab] = useState(null);
+  const [placeLookup, setPlaceLookup] = useState({});
+  const placeOptions = useMemo(() => {
+    return Array.isArray(places) ? places : [];
+  }, [places]);
+  const getPlaceIdString = (cab) => {
+    const rawId =
+      cab.placeid ??
+      cab.placeId ??
+      cab.placeID ??
+      cab.place_id ??
+      cab.place ??
+      "";
+    return rawId !== undefined && rawId !== null ? String(rawId) : "";
+  };
+
+  const resolvePlaceName = (cab, lookup = placeLookup) => {
+    const placeId = getPlaceIdString(cab);
+    return (
+      cab.placeName ||
+      cab.stateName ||
+      cab.cityName ||
+      cab.place ||
+      (placeId ? lookup[placeId] : "") ||
+      ""
+    );
+  };
+
+  const normalizeCab = (cab, lookup = placeLookup) => {
+    const placeId = getPlaceIdString(cab);
+    return {
+      ...cab,
+      placeid: placeId,
+      placeName: resolvePlaceName({ ...cab, placeid: placeId }, lookup),
+    };
+  };
   const [formData, setFormData] = useState({
     cabProviderName: "",
     contactPerson: "",
@@ -277,7 +312,8 @@ const CabProviderReg = () => {
     // First, try to use existing cab data from the item
     if (item.cabList && Array.isArray(item.cabList) && item.cabList.length > 0) {
       console.log("Loading existing cab list from item:", item.cabList);
-      setCabList(item.cabList);
+      const normalized = item.cabList.map((cab) => normalizeCab(cab));
+      setCabList(normalized);
     } else {
       console.log("No cab list found in item, attempting to fetch detailed data");
       // Try to fetch detailed cab data for this provider
@@ -288,10 +324,12 @@ const CabProviderReg = () => {
         
         if (detailedResponse.data && detailedResponse.data.cabList && Array.isArray(detailedResponse.data.cabList)) {
           console.log("Loading detailed cab list:", detailedResponse.data.cabList);
-          setCabList(detailedResponse.data.cabList);
+          const normalized = detailedResponse.data.cabList.map((cab) => normalizeCab(cab));
+          setCabList(normalized);
         } else if (detailedResponse.data && Array.isArray(detailedResponse.data)) {
           console.log("Loading cab list from array response:", detailedResponse.data);
-          setCabList(detailedResponse.data);
+          const normalized = detailedResponse.data.map((cab) => normalizeCab(cab));
+          setCabList(normalized);
         } else {
           console.log("No cab list found in detailed response, setting empty array");
           setCabList([]);
@@ -360,7 +398,8 @@ const CabProviderReg = () => {
     // First, try to use existing cab data from the item
     if (item.cabList && Array.isArray(item.cabList) && item.cabList.length > 0) {
       console.log("Loading existing cab list from item for view:", item.cabList);
-      setCabList(item.cabList);
+      const normalized = item.cabList.map((cab) => normalizeCab(cab));
+      setCabList(normalized);
     } else {
       console.log("No cab list found in item for view, attempting to fetch detailed data");
       // Try to fetch detailed cab data for this provider
@@ -371,10 +410,12 @@ const CabProviderReg = () => {
         
         if (detailedResponse.data && detailedResponse.data.cabList && Array.isArray(detailedResponse.data.cabList)) {
           console.log("Loading detailed cab list for view:", detailedResponse.data.cabList);
-          setCabList(detailedResponse.data.cabList);
+          const normalized = detailedResponse.data.cabList.map((cab) => normalizeCab(cab));
+          setCabList(normalized);
         } else if (detailedResponse.data && Array.isArray(detailedResponse.data)) {
           console.log("Loading cab list from array response for view:", detailedResponse.data);
-          setCabList(detailedResponse.data);
+          const normalized = detailedResponse.data.map((cab) => normalizeCab(cab));
+          setCabList(normalized);
         } else {
           console.log("No cab list found in detailed response for view, setting empty array");
           setCabList([]);
@@ -411,8 +452,52 @@ const CabProviderReg = () => {
   const cityList = async (countryId) => {
     try {
       setIsLoadingPlaces(true);
-      const response = await axiosInstance.post(`/api/destination/getCitiesByCountryId/${countryId}`);
-      setPlaces(Array.isArray(response.data) ? response.data : []);
+
+      const response = await axiosInstance.get(
+        `/api/province/getByCountryId/${countryId}`
+      );
+
+      const provinces = Array.isArray(response.data) ? response.data : [];
+
+      const formattedPlaces = provinces
+        .map((province) => {
+          const rawId =
+            province.id ??
+            province.stateId ??
+            province.placeId ??
+            province.provinceId ??
+            "";
+
+          const displayName =
+            province.stateName ||
+            province.name ||
+            province.placeName ||
+            province.stateCode ||
+            "";
+
+          if (!rawId || !displayName) {
+            return null;
+          }
+
+          return {
+            id: String(rawId),
+            name: displayName,
+          };
+        })
+        .filter(Boolean);
+
+      setPlaces(formattedPlaces);
+      if (formattedPlaces.length > 0) {
+        setPlaceLookup((prev) => {
+          const next = { ...prev };
+          formattedPlaces.forEach((place) => {
+            if (place.id) {
+              next[place.id] = place.name;
+            }
+          });
+          return next;
+        });
+      }
     } catch (error) {
       console.log("axios call error for city list : ", error);
       setPlaces([]);
@@ -420,6 +505,102 @@ const CabProviderReg = () => {
       setIsLoadingPlaces(false);
     }
   };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const missingPlaceCabs = cabList.filter((cab) => {
+      const placeId = String(cab.placeid || cab.placeId || "");
+      if (!placeId) return false;
+      return !(cab.placeName || placeLookup[placeId]);
+    });
+
+    if (missingPlaceCabs.length === 0) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const fetchAndUpdatePlaces = async () => {
+      const nameUpdates = {};
+      const uniqueCountryIds = [
+        ...new Set(
+          missingPlaceCabs
+            .map((cab) => cab.countryid || cab.countryId)
+            .filter(Boolean)
+        ),
+      ];
+
+      for (const countryId of uniqueCountryIds) {
+        try {
+          const res = await axiosInstance.get(
+            `/api/province/getByCountryId/${countryId}`
+          );
+          const provinces = Array.isArray(res.data) ? res.data : [];
+          provinces.forEach((province) => {
+            const rawId =
+              province.id ??
+              province.stateId ??
+              province.placeId ??
+              province.provinceId ??
+              "";
+            const displayName =
+              province.stateName ||
+              province.name ||
+              province.placeName ||
+              province.stateCode ||
+              "";
+            if (rawId && displayName) {
+              nameUpdates[String(rawId)] = displayName;
+            }
+          });
+        } catch (error) {
+          console.log(
+            "Failed to load provinces for country",
+            countryId,
+            error
+          );
+        }
+      }
+
+      if (!isMounted || Object.keys(nameUpdates).length === 0) {
+        return;
+      }
+
+      setPlaceLookup((prev) => ({
+        ...prev,
+        ...nameUpdates,
+      }));
+
+      setCabList((prev) =>
+        prev.map((cab) => {
+          const placeId = String(cab.placeid || cab.placeId || "");
+          if (!placeId || cab.placeName) {
+            return cab;
+          }
+          const resolvedName =
+            nameUpdates[placeId] ||
+            placeLookup[placeId] ||
+            cab.stateName ||
+            cab.place ||
+            cab.placeid;
+          if (!resolvedName) {
+            return cab;
+          }
+          return {
+            ...cab,
+            placeName: resolvedName,
+          };
+        })
+      );
+    };
+
+    fetchAndUpdatePlaces();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [cabList, placeLookup]);
 
   // Handle country change
   const handleCountryChange = (e) => {
@@ -510,12 +691,19 @@ const CabProviderReg = () => {
       return;
     }
 
+    const placeIdString = String(formData.placeId);
+    const selectedPlaceName =
+      placeLookup[placeIdString] ||
+      placeOptions.find((place) => String(place.id) === placeIdString)?.name ||
+      "";
+
     const newCab = {
       cabId: editingCab ? editingCab.cabId : Date.now(), // Keep existing ID if editing
       cabCode: formData.cabCode,
       name: formData.cabName, // Use 'name' to match your data structure
       countryid: formData.countryId, // Use 'countryid' to match your data structure
       placeid: formData.placeId, // Use 'placeid' to match your data structure
+      placeName: selectedPlaceName,
       cabImage: formData.cabImage, // Include the uploaded image
       cabLocationDTOList: pickupDropoffList.map((location, index) => ({
         cablocationId: location.id || Date.now() + index,
@@ -525,7 +713,8 @@ const CabProviderReg = () => {
       }))
     };
 
-    setCabList([...cabList, newCab]);
+    const normalizedCab = normalizeCab(newCab);
+    setCabList((prev) => [...prev, normalizedCab]);
     
     // Clear cab form fields and pickup/dropoff list
     setFormData(prev => ({
@@ -669,28 +858,38 @@ const CabProviderReg = () => {
       
       // Add cab list data
       safeCabList.forEach((cab, index) => {
-        formDataPayload.append(`cabList[${index}][cabId]`, '');
-        formDataPayload.append(`cabList[${index}][name]`, cab.name || cab.cabName || '');
-        formDataPayload.append(`cabList[${index}][cabprovider]`, '');
-        formDataPayload.append(`cabList[${index}][cabCode]`, cab.cabCode || '');
-        formDataPayload.append(`cabList[${index}][countryid]`, cab.countryid || cab.countryId || '');
-        formDataPayload.append(`cabList[${index}][placeid]`, parseInt(cab.placeid || cab.placeId || 0));
-        formDataPayload.append(`cabList[${index}][providername]`, '');
-        
-        // Add cab image if exists
-        if (cab.cabImage) {
-          formDataPayload.append(`cabList[${index}][cabpic]`, cab.cabImage);
-        } else {
-          formDataPayload.append(`cabList[${index}][cabpic]`, '');
+        const prefix = `cabList[${index}]`;
+        formDataPayload.append(`${prefix}.cabId`, '');
+        formDataPayload.append(`${prefix}.name`, cab.name || cab.cabName || '');
+        formDataPayload.append(`${prefix}.cabprovider`, '');
+        formDataPayload.append(`${prefix}.cabCode`, cab.cabCode || '');
+        formDataPayload.append(`${prefix}.countryid`, cab.countryid || cab.countryId || '');
+        formDataPayload.append(`${prefix}.placeid`, String(cab.placeid || cab.placeId || ''));
+        formDataPayload.append(`${prefix}.providername`, '');
+
+        const cabPicName =
+          cab.cabpic ||
+          (cab.cabImage && cab.cabImage.name) ||
+          '';
+        formDataPayload.append(`${prefix}.cabpic`, cabPicName);
+
+        const cabImageFile =
+          cab.cabImage instanceof File
+            ? cab.cabImage
+            : cab.cabImage && cab.cabImage instanceof Blob
+            ? cab.cabImage
+            : null;
+        if (cabImageFile) {
+          formDataPayload.append(`${prefix}.cabImage`, cabImageFile);
         }
         
-        // Add location data
         if (cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0) {
           cab.cabLocationDTOList.forEach((location, locIndex) => {
-            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][cablocationId]`, '');
-            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][cabid]`, '');
-            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][pickup]`, location.pickup || '');
-            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][dropoff]`, location.dropoff || location.dropOff || '');
+            const locPrefix = `${prefix}.cabLocationDTOList[${locIndex}]`;
+            formDataPayload.append(`${locPrefix}.cablocationId`, '');
+            formDataPayload.append(`${locPrefix}.cabid`, '');
+            formDataPayload.append(`${locPrefix}.pickup`, location.pickup || '');
+            formDataPayload.append(`${locPrefix}.dropoff`, location.dropoff || location.dropOff || '');
           });
         }
       });
@@ -756,31 +955,42 @@ const CabProviderReg = () => {
     // Add cab list data
     safeCabList.forEach((cab, index) => {
         // Find the corresponding cab in editing.cabList by cabId or index
+        console.log("cab.cabId:", cab);
         const editingCab = (editing.cabList || []).find(c => c.cabId === cab.cabId) || (editing.cabList || [])[index] || {};
         
-        formDataPayload.append(`cabList[${index}][cabId]`, editingCab.cabId || '');
-        formDataPayload.append(`cabList[${index}][name]`, cab.name || cab.cabName || '');
-        formDataPayload.append(`cabList[${index}][cabprovider]`, '');
-        formDataPayload.append(`cabList[${index}][cabCode]`, cab.cabCode || '');
-        formDataPayload.append(`cabList[${index}][countryid]`, cab.countryid || cab.countryId || '');
-        formDataPayload.append(`cabList[${index}][placeid]`, parseInt(cab.placeid || cab.placeId || 0));
-        formDataPayload.append(`cabList[${index}][providername]`, '');
-        
-        // Add cab image if exists
-        if (cab.cabImage) {
-          formDataPayload.append(`cabList[${index}][cabpic]`, cab.cabImage);
-        } else {
-          formDataPayload.append(`cabList[${index}][cabpic]`, '');
+        const prefix = `cabList[${index}]`;
+        formDataPayload.append(`${prefix}.cabId`, editingCab.cabId || '');
+        formDataPayload.append(`${prefix}.name`, cab.name || cab.cabName || '');
+        formDataPayload.append(`${prefix}.cabprovider`, '');
+        formDataPayload.append(`${prefix}.cabCode`, cab.cabCode || '');
+        formDataPayload.append(`${prefix}.countryid`, cab.countryid || cab.countryId || '');
+        formDataPayload.append(`${prefix}.placeid`, String(cab.placeid || cab.placeId || ''));
+        formDataPayload.append(`${prefix}.providername`, '');
+
+        const cabPicName =
+          cab.cabpic ||
+          (cab.cabImage && cab.cabImage.name) ||
+          '';
+        formDataPayload.append(`${prefix}.cabpic`, cabPicName);
+
+        const cabImageFile =
+          cab.cabImage instanceof File
+            ? cab.cabImage
+            : cab.cabImage && cab.cabImage instanceof Blob
+            ? cab.cabImage
+            : null;
+        if (cabImageFile) {
+          formDataPayload.append(`${prefix}.cabImage`, cabImageFile);
         }
         
-        // Add location data
         if (cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0) {
           cab.cabLocationDTOList.forEach((location, locIndex) => {
             const editingLocation = (editingCab.cabLocationDTOList || [])[locIndex] || {};
-            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][cablocationId]`, editingLocation.cablocationId || '');
-            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][cabid]`, '');
-            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][pickup]`, location.pickup || '');
-            formDataPayload.append(`cabList[${index}][cabLocationDTOList][${locIndex}][dropoff]`, location.dropoff || location.dropOff || '');
+            const locPrefix = `${prefix}.cabLocationDTOList[${locIndex}]`;
+            formDataPayload.append(`${locPrefix}.cablocationId`, editingLocation.cablocationId || '');
+            formDataPayload.append(`${locPrefix}.cabid`, '');
+            formDataPayload.append(`${locPrefix}.pickup`, location.pickup || '');
+            formDataPayload.append(`${locPrefix}.dropoff`, location.dropoff || location.dropOff || '');
           });
         }
     });
@@ -1312,16 +1522,22 @@ const CabProviderReg = () => {
                       <Col md={3}>
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            <span style={{ color: 'red' }}>*</span>Place
+                            <span style={{ color: 'red' }}>*</span>STATE
                           </Form.Label>
                           <SearchableSelect
                             name="placeId"
                             value={formData.placeId}
                             onChange={handlePlaceChange}
-                            placeholder={isLoadingPlaces ? "Loading places..." : "Search and select place"}
-                            options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name })) : []}
+                            placeholder={
+                              isLoadingPlaces
+                                ? "Loading states..."
+                                : "Search and select state"
+                            }
+                            options={placeOptions}
                             isInvalid={!!validationErrors.placeId}
-                            disabled={isViewMode || !formData.countryId || isLoadingPlaces}
+                            disabled={
+                              isViewMode || !formData.countryId || isLoadingPlaces
+                            }
                             isLoading={isLoadingPlaces}
                           />
                           {validationErrors.placeId && (
@@ -1502,7 +1718,18 @@ const CabProviderReg = () => {
                                     {countries.find(c => String(c.id) === String(cab.countryid))?.name || cab.countryid}
                                   </td>
                                   <td>
-                                    {places.find(p => String(p.id) === String(cab.placeid))?.name || cab.placeid}
+                                    {cab.placeName ||
+                                      placeLookup[
+                                        String(cab.placeid || cab.placeId || "")
+                                      ] ||
+                                      placeOptions.find(
+                                        (p) =>
+                                          String(p.id) ===
+                                          String(cab.placeid || cab.placeId)
+                                      )?.name ||
+                                      cab.stateName ||
+                                      cab.place ||
+                                      cab.placeid}
                                   </td>
                                   <td>
                                     {cab.cabImage ? (
