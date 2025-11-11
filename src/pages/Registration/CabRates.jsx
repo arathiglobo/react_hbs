@@ -29,9 +29,15 @@ import {
 const CabRates = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  console.log("location state:::", location.state);
 
   // Get cabProviderId from navigation state
-  const cabProviderId = location.state?.cabProviderId || "";
+  const cabProviderId =
+    location.state?.cabProviderId ??
+    location.state?.cabProvider?.cabprovider ??
+    location.state?.cabProvider?.cabproviderId ??
+    location.state?.cabProvider?.id ??
+    "";
   const cabProviderName = location.state?.cabProviderName || "";
   const [rates, setRates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -43,6 +49,7 @@ const CabRates = () => {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [marketTypeList, setMarketTypeList] = useState([]);
+  const [cabFullList, setCabFullList] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
 
   // Form state for modal
@@ -383,9 +390,16 @@ const CabRates = () => {
 
   // Fetch cab rates list
   const fetchCabRatesList = async (searchTerm = "") => {
+    if (!cabProviderId) {
+      setRates([]);
+      return;
+    }
     try {
       setIsLoading(true);
-      const params = searchTerm ? { search: searchTerm } : {};
+      const params = {
+        cabProviderId,
+        ...(searchTerm ? { search: searchTerm } : {}),
+      };
       const response = await axiosInstance.get("/api/cabRates", { params });
       setRates(response.data || []);
       console.log("cab rates list ::", rates);
@@ -397,10 +411,34 @@ const CabRates = () => {
     }
   };
 
+  
+  //cab list 
+  const cabsList = async () => {
+    if (!cabProviderId) return;
+    try {
+   const cabList = await axiosInstance.get(`/api/cabProvider/cabs/${cabProviderId}`);
+   console.log("cab list::", cabList.data);
+   setCabFullList(cabList.data);
+      
+    } catch (error) {
+      console.error("cab list error:", error);
+     
+    }
+  };
+
   useEffect(() => {
     loadMarketTypes();
-    fetchCabRatesList();
   }, []);
+
+  useEffect(() => {
+    if (cabProviderId) {
+      fetchCabRatesList();
+      cabsList();
+    } else {
+      setRates([]);
+      setCabFullList([]);
+    }
+  }, [cabProviderId]);
 
   // Search functionality
   useEffect(() => {
@@ -821,10 +859,11 @@ const CabRates = () => {
                         disabled={isViewMode}
                       >
                         <option value="">SELECT</option>
-                        <option value="1">Alto</option>
-                        <option value="2">Swift</option>
-                        <option value="7">Innova</option>
-                        <option value="8">Fortuner</option>
+                        {cabFullList.map((cab) => (
+                          <option key={cab.cabId} value={cab.cabId}>
+                            {cab.cabName}
+                          </option>
+                        ))}
                       </Form.Select>
                       {validationErrors.cabId && (
                         <Form.Control.Feedback type="invalid">

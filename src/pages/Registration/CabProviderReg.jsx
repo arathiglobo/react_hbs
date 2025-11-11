@@ -1124,7 +1124,7 @@ const CabProviderReg = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/cabProvider/${item.id}`)
+          .delete(`/api/cabProvider/${item.cabprovider}`)
           .then(() => {
             toast.success("Cab Provider deleted successfully");
             fetchCabList(page, search);
@@ -1139,10 +1139,12 @@ const CabProviderReg = () => {
 
   const handleCabRates = (item) => {
     // Navigate to CabRates page with the cab provider data
+    console.log("Navigating to CabRates page with data:", item);
+    const providerId = item.cabprovider || item.id;
     navigate('/cab-rates', { 
       state: { 
         cabProvider: item,
-        cabProviderId: item.cabprovider || item.id,
+        cabProviderId: providerId,
         cabProviderName: item.providername 
       } 
     });
