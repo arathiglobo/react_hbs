@@ -426,6 +426,11 @@ const AccomodationRoomList = () => {
         return;
       }
 
+      // Only call the API if apiId is equal to 1 or inhouse
+      if (roomData.payload?.apiId !== 1) {
+        return;
+      }
+
       try {
         const hotelsdetail = roomData.hotels[0];
         const response = await axiosInstance.get(`/api/hotels/${hotelsdetail.hotelId}/policies`);
