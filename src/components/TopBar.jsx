@@ -1,5 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { Navbar, Container, Nav, Dropdown, Image, Button, Modal, Badge, Card, Row, Col, Spinner } from "react-bootstrap";
+import { useNavigate } from "react-router-dom";
+import {
+  Navbar,
+  Container,
+  Nav,
+  Dropdown,
+  Image,
+  Button,
+  Modal,
+  Badge,
+  Card,
+  Row,
+  Col,
+  Spinner,
+} from "react-bootstrap";
 import {
   FaKey,
   FaUser,
@@ -17,6 +31,7 @@ import axiosInstance from "./AxiosInstance";
 import { toast } from "react-hot-toast";
 
 export default function TopBar() {
+  const navigate = useNavigate();
   const [showCartModal, setShowCartModal] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
@@ -105,6 +120,7 @@ export default function TopBar() {
   };
 
   const renderHotelItem = (item, key) => {
+    console.log("renderHotelItem:::", item);
     const hotel = item.hotel || {};
     const meta = hotel.meta || {};
     const details = hotel.details || {};
@@ -120,11 +136,46 @@ export default function TopBar() {
               <h6 className="fw-bold mb-2">
                 {meta.hotelName || hotel.hotelName || "Hotel"}
               </h6>
-              {(meta.address || hotel.hotelAddress) && (
+              {hotel.hotelAddress && (
                 <p className="text-muted small mb-2">
                   <FaMapMarkerAlt className="me-1" />
-                  {meta.address || hotel.hotelAddress}
+                  {hotel.hotelAddress}
                 </p>
+              )}
+              {hotel.roomCategory && (
+                <Col sm={8} className="d-flex align-items-center">
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    Room Type: {hotel.roomCategory}
+                  </span>
+                </Col>
+              )}
+              {hotel.checkInDate && (
+                <Col sm={8} className="d-flex align-items-center">
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    Check In: {hotel.checkInDate}
+                  </span>
+                </Col>
+              )}
+              {hotel.checkOutDate && (
+                <Col sm={8} className="d-flex align-items-center">
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    Check Out: {hotel.checkOutDate}
+                  </span>
+                </Col>
+              )}
+              {hotel.adult && (
+                <Col sm={8} className="d-flex align-items-center">
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    Adult: {hotel.adult}
+                  </span>
+                </Col>
+              )}
+              {hotel.child && (
+                <Col sm={8} className="d-flex align-items-center">
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    Child : {hotel.child} Age : {hotel.childAge}
+                  </span>
+                </Col>
               )}
             </div>
             <Button
@@ -304,7 +355,7 @@ export default function TopBar() {
       }
 
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/deleteCabDetailsToCart",
+        "/api/makeYourOwnPackage/deleteFromCart",
         null,
         {
           params: {
@@ -348,19 +399,23 @@ export default function TopBar() {
     fetchCartData();
   };
 
+  const handleContinueBooking = () => {
+    navigate("/new-booking/make-your-own-package/booking-page");
+  };
+
   // Listen for cart updates
   useEffect(() => {
     const handleCartUpdate = () => {
       fetchCartData();
     };
 
-    window.addEventListener('cartUpdated', handleCartUpdate);
-    
+    window.addEventListener("cartUpdated", handleCartUpdate);
+
     // Initial fetch
     fetchCartData();
 
     return () => {
-      window.removeEventListener('cartUpdated', handleCartUpdate);
+      window.removeEventListener("cartUpdated", handleCartUpdate);
     };
   }, []);
 
@@ -436,7 +491,9 @@ export default function TopBar() {
             <div className="text-center py-5">
               <FaShoppingCart size={48} className="text-muted mb-3" />
               <h5 className="text-muted">Your cart is empty</h5>
-              <p className="text-muted">Add rooms or cabs or activities to your cart to see them here.</p>
+              <p className="text-muted">
+                Add rooms or cabs or activities to your cart to see them here.
+              </p>
             </div>
           ) : (
             <div className="d-flex flex-column gap-3">
@@ -458,7 +515,10 @@ export default function TopBar() {
                 Close
               </Button>
               {cartItems.length > 0 && (
-                <Button variant="primary">
+                <Button
+                  variant="primary continue-booking"
+                  onClick={handleContinueBooking}
+                >
                   Proceed to Checkout
                 </Button>
               )}
@@ -472,24 +532,27 @@ export default function TopBar() {
 
 const ProfileToggle = React.forwardRef(({ onClick }, ref) => {
   const [userName, setUserName] = React.useState("");
-  
+
   React.useEffect(() => {
     const updateUserName = () => {
-      const name = localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
+      const name =
+        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
+        "";
       setUserName(name);
     };
-    
+
     // Initial load
     updateUserName();
-    
+
     // Listen for storage changes (in case username is updated in another tab)
     window.addEventListener("storage", updateUserName);
-    
+
     return () => {
       window.removeEventListener("storage", updateUserName);
     };
   }, []);
-  
+
   return (
     <a
       href="#profile"
@@ -500,7 +563,13 @@ const ProfileToggle = React.forwardRef(({ onClick }, ref) => {
       }}
       className="d-flex align-items-center gap-2 text-decoration-none profile-toggle"
     >
-      <Image roundedCircle width={34} height={34} src={avatarUrl} alt="profile" />
+      <Image
+        roundedCircle
+        width={34}
+        height={34}
+        src={avatarUrl}
+        alt="profile"
+      />
       <span className="d-none d-sm-inline text-dark">
         {userName ? `Hi ${userName}` : "Profile"}
       </span>
