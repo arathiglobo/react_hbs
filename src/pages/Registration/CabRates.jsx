@@ -31,14 +31,20 @@ const CabRates = () => {
   const location = useLocation();
   console.log("location state:::", location.state);
 
-  // Get cabProviderId from navigation state
-  const cabProviderId =
-    location.state?.cabProviderId ??
-    location.state?.cabProvider?.cabprovider ??
-    location.state?.cabProvider?.cabproviderId ??
-    location.state?.cabProvider?.id ??
-    "";
-  const cabProviderName = location.state?.cabProviderName || "";
+  // Get cabProviderId from navigation state - make it reactive
+  const [cabProviderId, setCabProviderId] = useState(() => {
+    const state = location.state;
+    const id =
+      state?.cabProviderId ??
+      state?.cabProvider?.cabprovider ??
+      state?.cabProvider?.cabproviderId ??
+      state?.cabProvider?.id ??
+      "";
+    return String(id || "");
+  });
+  const [cabProviderName, setCabProviderName] = useState(() => {
+    return location.state?.cabProviderName || "";
+  });
   const [rates, setRates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -396,16 +402,17 @@ const CabRates = () => {
     }
     try {
       setIsLoading(true);
-      const params = {
-        cabProviderId,
-        ...(searchTerm ? { search: searchTerm } : {}),
-      };
-      const response = await axiosInstance.get("/api/cabRates", { params });
+      // Clear rates at the start to prevent showing stale data during loading
+      setRates([]);
+     const response = await axiosInstance.get(`/api/cabRates`);
+
       setRates(response.data || []);
-      console.log("cab rates list ::", rates);
+      console.log("cab rates list ::", response.data);
     } catch (error) {
+      
       console.error("Error loading cab rates:", error);
-      toast.error("Failed to load cab rates");
+      // toast.error("Failed to load cab rates");
+      setRates([]); // Clear rates on error as well
     } finally {
       setIsLoading(false);
     }
@@ -429,6 +436,33 @@ const CabRates = () => {
   useEffect(() => {
     loadMarketTypes();
   }, []);
+
+  // Update cabProviderId and cabProviderName when location.state changes
+  useEffect(() => {
+    const state = location.state;
+    const newProviderId =
+      state?.cabProviderId ??
+      state?.cabProvider?.cabprovider ??
+      state?.cabProvider?.cabproviderId ??
+      state?.cabProvider?.id ??
+      "";
+    const newProviderName = state?.cabProviderName || "";
+
+    // Normalize IDs to strings for comparison
+    const normalizedNewId = String(newProviderId || "");
+    const normalizedCurrentId = String(cabProviderId || "");
+
+    // If provider ID changed, clear rates immediately and update state
+    if (normalizedNewId !== normalizedCurrentId && normalizedNewId !== "") {
+      setRates([]); // Clear rates immediately to prevent showing stale data
+      setCabFullList([]); // Clear cab list as well
+      setSearch(""); // Clear search term
+      setCabProviderId(normalizedNewId);
+      setCabProviderName(newProviderName);
+    } else if (newProviderName !== cabProviderName) {
+      setCabProviderName(newProviderName);
+    }
+  }, [location.state, location.key, cabProviderId, cabProviderName]);
 
   useEffect(() => {
     if (cabProviderId) {
@@ -780,6 +814,7 @@ const CabRates = () => {
                       </td>
                     </tr>
                   )}
+                  {console.log("Rates:", rates)}
                   {!isLoading &&
                     rates.map((rate, index) => (
                       <tr key={rate.cabratesId || index}>
