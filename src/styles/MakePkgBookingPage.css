@@ -1,0 +1,514 @@
+/* Make Package Booking Page Styles - Industry Standard */
+
+.make-pkg-booking-container {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+.content-wrapper {
+  background: transparent;
+  padding: 1rem;
+}
+
+.booking-page-header {
+  background: white;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #007bff;
+}
+
+.booking-page-header h2 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.75rem;
+  color: #212529;
+}
+
+.booking-page-header p {
+  margin: 0.5rem 0 0 0;
+  color: #6c757d;
+  font-size: 0.95rem;
+}
+
+/* Accordion Styling */
+.booking-accordion .accordion-item {
+  border: 1px solid #dee2e6;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.booking-accordion .accordion-header {
+  background: #f8f9fa;
+}
+
+.booking-accordion .accordion-button {
+  background: #f8f9fa;
+  color: #212529;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.875rem 1.25rem;
+  border: none;
+  box-shadow: none;
+}
+
+.booking-accordion .accordion-button:not(.collapsed) {
+  background: #f8f9fa;
+  color: #212529;
+  box-shadow: none;
+}
+
+.booking-accordion .accordion-button:focus {
+  box-shadow: none;
+  border: none;
+}
+
+.booking-accordion .accordion-body {
+  background: white;
+  padding: 1.25rem;
+}
+
+/* Itinerary Checkboxes */
+.itinerary-checkbox {
+  padding: 0.875rem 1rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.itinerary-checkbox:hover {
+  border-color: #007bff;
+  background: #f8f9ff;
+}
+
+.itinerary-checkbox input[type="checkbox"]:checked + label {
+  color: #007bff;
+  font-weight: 600;
+}
+
+/* Hotel Item Card */
+.hotel-item-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.hotel-item-card .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.875rem 1rem;
+  border-left: 4px solid #007bff;
+}
+
+.hotel-item-card .card-body {
+  padding: 1.25rem;
+}
+
+.hotel-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.hotel-section-header h6 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #212529;
+}
+
+/* Room Table */
+.room-table {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #dee2e6;
+}
+
+.room-table thead {
+  background: #f8f9fa;
+}
+
+.room-table thead th {
+  border: none;
+  padding: 0.75rem 0.875rem;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.room-table tbody td {
+  padding: 0.75rem 0.875rem;
+}
+
+.room-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.room-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Guest Details Card */
+.guest-details-card {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.guest-details-card .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.875rem 1.25rem;
+}
+
+.guest-details-card .card-header h6 {
+  margin: 0;
+  font-weight: 600;
+  color: #212529;
+  font-size: 0.95rem;
+}
+
+.guest-details-card .card-body {
+  background: white;
+  padding: 1rem;
+}
+
+.guest-row-item {
+  padding: 0.875rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  border-left: 3px solid #007bff;
+}
+
+.guest-row-item h6 {
+  color: #495057;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+/* Activity Item Card */
+.activity-item-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.activity-item-card .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.875rem 1rem;
+}
+
+.activity-item-card .card-body {
+  padding: 1.25rem;
+}
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.activity-header h6 {
+  margin: 0;
+  font-weight: 600;
+  color: #212529;
+}
+
+/* Transfer Item Card */
+.transfer-item-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.transfer-item-card .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.875rem 1rem;
+}
+
+.transfer-item-card .card-body {
+  padding: 1.25rem;
+}
+
+.transfer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.transfer-header h6 {
+  margin: 0;
+  font-weight: 600;
+  color: #212529;
+}
+
+/* Price Summary Sidebar */
+.price-summary-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #dee2e6;
+  overflow: hidden;
+  position: sticky;
+  top: 20px;
+}
+
+.price-summary-header {
+  background: #f8f9fa;
+  padding: 1.25rem;
+  text-align: center;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.price-summary-header h5 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #212529;
+}
+
+.price-summary-body {
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.price-display {
+  margin-bottom: 1.5rem;
+}
+
+.price-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #212529;
+  margin-bottom: 0.5rem;
+}
+
+.price-label {
+  font-size: 0.875rem;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.price-divider {
+  border: none;
+  border-top: 1px solid #dee2e6;
+  margin: 1.5rem 0;
+}
+
+/* Form Styling */
+.booking-form .form-label {
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.booking-form .form-control,
+.booking-form .form-select {
+  border-radius: 6px;
+  border: 1px solid #ced4da;
+  padding: 0.5rem 0.75rem;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.booking-form .form-control:focus,
+.booking-form .form-select:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.1);
+}
+
+/* Visa Section */
+.visa-section {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin-top: 1rem;
+}
+
+.visa-form-row {
+  background: white;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+  border: 1px solid #dee2e6;
+}
+
+/* Buttons */
+.btn-booking {
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-booking-primary {
+  background: #007bff;
+  border: none;
+  color: white;
+}
+
+.btn-booking-primary:hover {
+  background: #0056b3;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.btn-booking-danger {
+  background: #dc3545;
+  border: none;
+  color: white;
+}
+
+.btn-booking-danger:hover {
+  background: #c82333;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+/* Edit Icon */
+.edit-icon {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.edit-icon:hover {
+  transform: scale(1.15);
+  color: #28a745 !important;
+}
+
+/* Date Pricing Table */
+.date-pricing-table {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #dee2e6;
+}
+
+.date-pricing-table thead {
+  background: #f8f9fa;
+}
+
+.date-pricing-table thead th {
+  border: none;
+  padding: 0.75rem 0.875rem;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.875rem;
+}
+
+.date-pricing-table tbody td {
+  padding: 0.75rem 0.875rem;
+}
+
+/* Transfer Table */
+.transfer-table {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #dee2e6;
+}
+
+.transfer-table thead {
+  background: #f8f9fa;
+}
+
+.transfer-table thead th {
+  border: none;
+  padding: 0.75rem 0.875rem;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.875rem;
+}
+
+.transfer-table tbody td {
+  padding: 0.75rem 0.875rem;
+}
+
+/* Date Display */
+.date-display {
+  padding: 0.625rem 0.875rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  border-left: 3px solid #007bff;
+}
+
+/* Loading State */
+.loading-container {
+  background: white;
+  border-radius: 8px;
+  padding: 3rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #dee2e6;
+}
+
+/* Empty State */
+.empty-state {
+  background: white;
+  border-radius: 8px;
+  padding: 3rem;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #dee2e6;
+}
+
+/* Responsive */
+@media (max-width: 991px) {
+  .price-summary-card {
+    position: relative;
+    margin-top: 2rem;
+  }
+  
+  .booking-page-header h2 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .content-wrapper {
+    padding: 1rem;
+  }
+  
+  .booking-accordion .accordion-body {
+    padding: 1rem;
+  }
+  
+  .price-value {
+    font-size: 1.75rem;
+  }
+  
+  .btn-booking {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+}

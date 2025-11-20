@@ -35,6 +35,7 @@ export default function MakeUrOwnPackage() {
   const [agent, setAgent] = useState("");
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
+  const [childAges, setChildAges] = useState([]);
   const [nights, setNights] = useState(1);
   const [agents, setAgents] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -169,6 +170,14 @@ export default function MakeUrOwnPackage() {
       newErrors.children = "Number of children cannot be negative";
     }
 
+    if (children > 0 && childAges.length !== children) {
+      newErrors.childAges = "Please enter age for all children";
+    }
+
+    if (children > 0 && childAges.some(age => !age || age < 0 || age > 17)) {
+      newErrors.childAges = "Child age must be between 0 and 17";
+    }
+
     if (!nights || nights < 1) {
       newErrors.nights = "Number of nights must be at least 1";
     }
@@ -206,6 +215,7 @@ export default function MakeUrOwnPackage() {
     destination: selectedDestination,
     adults,
     children,
+    childAges: childAges.map(age => parseInt(age) || 0),
     nights,
   },
 });
@@ -370,10 +380,7 @@ export default function MakeUrOwnPackage() {
                         <FaUsers className="me-2" />
                         No of adult <span className="text-danger">*</span>
                       </Form.Label>
-                      <Form.Control
-                        type="number"
-                        min="1"
-                        max="20"
+                      <Form.Select
                         value={adults}
                         onChange={(e) => {
                           setAdults(parseInt(e.target.value) || 1);
@@ -381,7 +388,13 @@ export default function MakeUrOwnPackage() {
                         }}
                         className="form-control-modern"
                         isInvalid={!!errors.adults}
-                      />
+                      >
+                        {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                          <option key={num} value={num}>
+                            {num}
+                          </option>
+                        ))}
+                      </Form.Select>
                       {errors.adults && (
                         <div className="text-danger small mt-1">
                           {errors.adults}
@@ -396,18 +409,32 @@ export default function MakeUrOwnPackage() {
                         <FaChild className="me-2" />
                         No of Child <span className="text-danger">*</span>
                       </Form.Label>
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        max="20"
+                      <Form.Select
                         value={children}
                         onChange={(e) => {
-                          setChildren(parseInt(e.target.value) || 0);
+                          const newChildren = parseInt(e.target.value) || 0;
+                          setChildren(newChildren);
+                          // Initialize or adjust child ages array
+                          if (newChildren > 0) {
+                            const newChildAges = Array.from({ length: newChildren }, (_, i) => 
+                              childAges[i] || ""
+                            );
+                            setChildAges(newChildAges);
+                          } else {
+                            setChildAges([]);
+                          }
                           if (e.target.value) clearError("children");
+                          clearError("childAges");
                         }}
                         className="form-control-modern"
                         isInvalid={!!errors.children}
-                      />
+                      >
+                        {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                          <option key={num} value={num}>
+                            {num}
+                          </option>
+                        ))}
+                      </Form.Select>
                       {errors.children && (
                         <div className="text-danger small mt-1">
                           {errors.children}
@@ -415,6 +442,42 @@ export default function MakeUrOwnPackage() {
                       )}
                     </Form.Group>
                   </Col>
+
+                  {/* Child Age Fields */}
+                  {children > 0 && (
+                    <>
+                      {Array.from({ length: children }, (_, i) => (
+                        <Col key={i} lg={3} md={4} sm={6}>
+                          <Form.Group>
+                            <Form.Label className="fw-semibold text-dark">
+                              <FaChild className="me-2" />
+                              Child {i + 1} Age <span className="text-danger">*</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="number"
+                              min="0"
+                              max="17"
+                              value={childAges[i] || ""}
+                              onChange={(e) => {
+                                const newAges = [...childAges];
+                                newAges[i] = e.target.value;
+                                setChildAges(newAges);
+                                clearError("childAges");
+                              }}
+                              placeholder="Enter age"
+                              className="form-control-modern"
+                              isInvalid={!!errors.childAges}
+                            />
+                            {errors.childAges && i === 0 && (
+                              <div className="text-danger small mt-1">
+                                {errors.childAges}
+                              </div>
+                            )}
+                          </Form.Group>
+                        </Col>
+                      ))}
+                    </>
+                  )}
 
                   <Col lg={6} md={6}>
                     <Form.Group>

@@ -106,6 +106,7 @@ export default function MakePkgCombineSearch() {
     destination,
     adults,
     children,
+    childAges: initialChildAges = [],
     nights,
   } = searchCriteria || {};
 
@@ -118,8 +119,12 @@ export default function MakePkgCombineSearch() {
   const [agentId, setAgentId] = useState(agent || "");
   const [activeTab, setActiveTab] = useState("accommodation");
   const [roomsOpen, setRoomsOpen] = useState(false);
-  const [rooms, setRooms] = useState([{ adults: 1, children: 0, childAges: [] }]);
-  const [childAges, setChildAges] = useState([]);
+  const [rooms, setRooms] = useState([{ 
+    adults: adults || 1, 
+    children: children || 0, 
+    childAges: initialChildAges || [] 
+  }]);
+  const [childAges, setChildAges] = useState(initialChildAges || []);
   const [allResults, setAllResults] = useState([]);
   const [hasSearchResult, setHasSearchResult] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -146,9 +151,9 @@ export default function MakePkgCombineSearch() {
       const [transferResults, setTransferResults] = useState([]);
       const [transferLoading, setTransferLoading] = useState(false);
       const [hasTransferSearched, setHasTransferSearched] = useState(false);
-      const [transferAdults, setTransferAdults] = useState(1);
-      const [transferChildren, setTransferChildren] = useState(0);
-      const [transferChildAges, setTransferChildAges] = useState([]);
+      const [transferAdults, setTransferAdults] = useState(adults || 1);
+      const [transferChildren, setTransferChildren] = useState(children || 0);
+      const [transferChildAges, setTransferChildAges] = useState(initialChildAges || []);
       const [transferPickupDate, setTransferPickupDate] = useState(travelDate || "");
       const [transferDropoffDate, setTransferDropoffDate] = useState("");
 
@@ -156,9 +161,9 @@ export default function MakePkgCombineSearch() {
       const [tourResults, setTourResults] = useState([]);
       const [tourLoading, setTourLoading] = useState(false);
       const [hasTourSearched, setHasTourSearched] = useState(false);
-      const [tourAdults, setTourAdults] = useState(1);
-      const [tourChildren, setTourChildren] = useState(0);
-      const [tourChildAges, setTourChildAges] = useState([]);
+      const [tourAdults, setTourAdults] = useState(adults || 1);
+      const [tourChildren, setTourChildren] = useState(children || 0);
+      const [tourChildAges, setTourChildAges] = useState(initialChildAges || []);
       const [tourDate, setTourDate] = useState(travelDate || "");
       const [showActivityModal, setShowActivityModal] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState(null);
@@ -219,9 +224,15 @@ export default function MakePkgCombineSearch() {
     if (transferChildren > 0) {
       setTransferChildAges((prevAges) => {
         const currentAges = [...prevAges];
+        // If we have initial child ages and they match the count, use them
+        if (initialChildAges && initialChildAges.length === transferChildren) {
+          return [...initialChildAges];
+        }
         // Ensure we have the right number of age inputs
         while (currentAges.length < transferChildren) {
-          currentAges.push(5); // Default age
+          currentAges.push(initialChildAges && currentAges.length < initialChildAges.length 
+            ? initialChildAges[currentAges.length] 
+            : 5); // Default age or from initial
         }
         // Remove extra ages if children count decreased
         if (currentAges.length > transferChildren) {
@@ -232,16 +243,37 @@ export default function MakePkgCombineSearch() {
     } else {
       setTransferChildAges([]);
     }
-  }, [transferChildren]);
+  }, [transferChildren, initialChildAges]);
+
+  // Initialize rooms and child ages from search criteria
+  useEffect(() => {
+    if (adults || children) {
+      const initialRooms = [{
+        adults: adults || 1,
+        children: children || 0,
+        childAges: initialChildAges || []
+      }];
+      setRooms(initialRooms);
+      if (initialChildAges && initialChildAges.length > 0) {
+        setChildAges(initialChildAges);
+      }
+    }
+  }, [adults, children, initialChildAges]);
 
   // Update tour child ages when number of children changes
   useEffect(() => {
     if (tourChildren > 0) {
       setTourChildAges((prevAges) => {
         const currentAges = [...prevAges];
+        // If we have initial child ages and they match the count, use them
+        if (initialChildAges && initialChildAges.length === tourChildren) {
+          return [...initialChildAges];
+        }
         // Ensure we have the right number of age inputs
         while (currentAges.length < tourChildren) {
-          currentAges.push(5); // Default age
+          currentAges.push(initialChildAges && currentAges.length < initialChildAges.length 
+            ? initialChildAges[currentAges.length] 
+            : 5); // Default age or from initial
         }
         // Remove extra ages if children count decreased
         if (currentAges.length > tourChildren) {
@@ -252,7 +284,7 @@ export default function MakePkgCombineSearch() {
     } else {
       setTourChildAges([]);
     }
-  }, [tourChildren]);
+  }, [tourChildren, initialChildAges]);
 
   const handleChildAgeChange = (index, value) => {
     const updatedAges = [...childAges];
@@ -492,7 +524,9 @@ export default function MakePkgCombineSearch() {
         roomNo: index + 1,
         adultCount: String(room.adults || 1),
         childCount: String(room.children || 0),
-        childAges: room.childAges?.length ? room.childAges : [0],
+        childAges: room.childAges && room.childAges.length > 0 
+          ? room.childAges.map(age => parseInt(age) || 0)
+          : (room.children > 0 ? Array(room.children).fill(0) : [0]),
         adultAges: room.adultAges?.length ? room.adultAges : [25],
       }));
 
@@ -723,9 +757,11 @@ export default function MakePkgCombineSearch() {
         destinationCityId: destination?.value || "",
         searchCorCtype: destination?.type || "State", // Use destination type or default to "State"
         agentId: String(agentId || agent || 1),
-        childAge: tourChildAges.length > 0 ? tourChildAges.map(age => String(age)) : [],
-        adult: String(tourAdults || 1),
-        child: String(tourChildren || 0),
+        childAge: tourChildAges && tourChildAges.length > 0 
+          ? tourChildAges.map(age => String(parseInt(age) || 0))
+          : (tourChildren > 0 ? Array(tourChildren).fill("0") : []),
+        adult: String(tourAdults || adults || 1),
+        child: String(tourChildren || children || 0),
       };
 
       const response = await axiosInstance.post(
@@ -799,6 +835,9 @@ export default function MakePkgCombineSearch() {
       activityId: String(activity.id || activity.activityId || ""),
       activityName: activity.activityName || "",
       agentId: agentValue,
+      totalRate : activity.totalRate || 0,
+      totalRateWithoutMrk : activity.totalRateWithoutMrk || 0,
+
     };
 
     if (!payload.activityId) {
@@ -845,9 +884,11 @@ export default function MakePkgCombineSearch() {
         destinationCityId: destination?.value || "",
         searchCorCtype: "city", // Assuming city search - adjust if needed (could be "city" or "country")
         agentid: String(agentId || agent || 1),
-        childAge: transferChildAges.length > 0 ? transferChildAges : [],
-        adult: transferAdults || 1,
-        child: transferChildren || 0,
+        childAge: transferChildAges && transferChildAges.length > 0 
+          ? transferChildAges.map(age => parseInt(age) || 0)
+          : (transferChildren > 0 ? Array(transferChildren).fill(0) : []),
+        adult: transferAdults || adults || 1,
+        child: transferChildren || children || 0,
       };
 
       const response = await axiosInstance.post(

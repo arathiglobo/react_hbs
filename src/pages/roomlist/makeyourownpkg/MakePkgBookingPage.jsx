@@ -25,12 +25,14 @@ import {
   FaChevronUp,
   FaCheckCircle,
   FaEdit,
+  FaShoppingCart,
 } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
+import "../../../styles/MakePkgBookingPage.css";
 
 const MakePkgBookingPage = () => {
   const navigate = useNavigate();
@@ -71,6 +73,9 @@ const MakePkgBookingPage = () => {
   // Guest details for each room
   const [roomGuests, setRoomGuests] = useState({});
 
+  // Transfer/Cab details state
+  const [transferDetails, setTransferDetails] = useState({});
+
   // Initialize guest details for rooms
   const initializeRoomGuests = (cartItems) => {
     const guests = {};
@@ -98,6 +103,24 @@ const MakePkgBookingPage = () => {
     setRoomGuests(guests);
   };
 
+  // Initialize transfer details
+  const initializeTransferDetails = (cartItems) => {
+    const details = {};
+    cartItems.forEach((item, index) => {
+      if (item.cab) {
+        const cab = item.cab || {};
+        const cabDetails = cab.details || {};
+        details[index] = {
+          transporterName: cab.transporter || cab.transporterName || cabDetails.transporter || cabDetails.transporterName || "",
+          contactNumber: cab.contactNumber || cabDetails.contactNumber || "",
+          driverName: cab.driverName || cabDetails.driverName || "",
+          driverContact: cab.driverContact || cabDetails.driverContact || "",
+        };
+      }
+    });
+    setTransferDetails(details);
+  };
+
   // Load cart data on mount
   useEffect(() => {
     const loadCartData = () => {
@@ -109,6 +132,7 @@ const MakePkgBookingPage = () => {
           setCartData(parsed);
           calculatePrices(parsed);
           initializeRoomGuests(parsed);
+          initializeTransferDetails(parsed);
         } else {
           toast.error("No cart data found. Please add items to cart first.");
           navigate("/new-booking/make-your-own-package");
@@ -407,29 +431,46 @@ const MakePkgBookingPage = () => {
           sellingPrice: "0",
           totalPrice: "0",
         })),
-        customBookingCabDTO: transfers.map((item) => ({
-          cabId: item.cab?.cabId || "",
-          noOfCabs: "1",
-          pickupDate: item.cab?.pickupDate || "",
-          dropOffDate: item.cab?.dropDate || "",
-          travelType: item.cab?.travelType || "1",
-          hourDetails: "0",
-          dropDetails: "3",
-          paxDetails: "1",
-          luggage: true,
-          locationId: item.cab?.locationId || "",
-          noOfAdult: item.cab?.adult || "1",
-          noOfChild: item.cab?.child || "0",
-          childAgeArray: Array.isArray(item.cab?.childAge) 
-            ? item.cab.childAge.map(String)
-            : item.cab?.childAge ? [String(item.cab.childAge)] : [],
-          totalRate: "0",
-          totalRateWithoutmrk: "0",
-          transporter: item.cab?.transporter || "",
-          contactNumber: item.cab?.contactNumber || "",
-          driverName: item.cab?.driverName || "",
-          driverContact: item.cab?.driverContact || "",
-        })),
+        customBookingCabDTO: transfers.map((item, transferArrayIndex) => {
+          // Find the actual index in cartData for this transfer
+          let transferIndexInCart = -1;
+          let cabCount = 0;
+          for (let i = 0; i < cartData.length; i++) {
+            if (cartData[i].cab) {
+              if (cabCount === transferArrayIndex) {
+                transferIndexInCart = i;
+                break;
+              }
+              cabCount++;
+            }
+          }
+          const actualIndex = transferIndexInCart >= 0 ? transferIndexInCart : 0;
+          const transferDetail = transferDetails[actualIndex] || {};
+
+          return {
+            cabId: item.cab?.cabId || "",
+            noOfCabs: "1",
+            pickupDate: item.cab?.pickupDate || "",
+            dropOffDate: item.cab?.dropDate || "",
+            travelType: item.cab?.travelType || "1",
+            hourDetails: "0",
+            dropDetails: "3",
+            paxDetails: "1",
+            luggage: true,
+            locationId: item.cab?.locationId || "",
+            noOfAdult: item.cab?.adult || "1",
+            noOfChild: item.cab?.child || "0",
+            childAgeArray: Array.isArray(item.cab?.childAge) 
+              ? item.cab.childAge.map(String)
+              : item.cab?.childAge ? [String(item.cab.childAge)] : [],
+            totalRate: "0",
+            totalRateWithoutmrk: "0",
+            transporter: transferDetail.transporterName || item.cab?.transporter || "",
+            contactNumber: transferDetail.contactNumber || item.cab?.contactNumber || "",
+            driverName: transferDetail.driverName || item.cab?.driverName || "",
+            driverContact: transferDetail.driverContact || item.cab?.driverContact || "",
+          };
+        }),
         customBookingItinearyDTO: selectedItineraries.map((itineraryId) => ({
           itinearyId: String(itineraryId),
           days: 1,
@@ -465,9 +506,9 @@ const MakePkgBookingPage = () => {
         <div className="flex-grow-1 d-flex flex-column">
           <TopBar />
           <main className="flex-grow-1 d-flex justify-content-center align-items-center">
-            <div className="text-center">
-              <Spinner animation="border" variant="primary" />
-              <p className="mt-3 text-muted">Loading booking details...</p>
+            <div className="loading-container text-center">
+              <Spinner animation="border" variant="primary" size="lg" />
+              <p className="mt-3 text-muted fw-semibold">Loading booking details...</p>
             </div>
           </main>
         </div>
@@ -481,17 +522,20 @@ const MakePkgBookingPage = () => {
         <Sidebar />
         <div className="flex-grow-1 d-flex flex-column">
           <TopBar />
-          <main className="flex-grow-1 d-flex justify-content-center align-items-center">
-            <Alert variant="warning" className="text-center">
-              <Alert.Heading>No Items in Cart</Alert.Heading>
-              <p>Your cart is empty. Please add items to cart first.</p>
+          <main className="flex-grow-1 d-flex justify-content-center align-items-center p-4">
+            <div className="empty-state">
+              <FaShoppingCart size={64} className="text-muted mb-3" />
+              <Alert.Heading className="mb-3">No Items in Cart</Alert.Heading>
+              <p className="text-muted mb-4">Your cart is empty. Please add items to cart first.</p>
               <Button
                 variant="primary"
+                size="lg"
+                className="btn-booking btn-booking-primary"
                 onClick={() => navigate("/new-booking/make-your-own-package")}
               >
                 Go to Search
               </Button>
-            </Alert>
+            </div>
           </main>
         </div>
       </div>
@@ -503,19 +547,35 @@ const MakePkgBookingPage = () => {
   const transfers = getTransfers();
 
   return (
-    <div className="hotel-booking-container">
+    <div className="hotel-booking-container make-pkg-booking-container">
       <Sidebar />
       <div className="main-content">
         <TopBar />
         <main className="content-wrapper py-4">
           <Container fluid>
-            <Row>
-              <Col lg={8}>
-                <h2 className="mb-4 text-primary fw-bold">Confirm Booking</h2>
+            <div className="booking-page-header mb-3">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h2 className="mb-1">Confirm Booking</h2>
+                </div>
+                <div className="d-flex align-items-center gap-4">
+                  <div className="text-end">
+                    <div className="text-muted small mb-1">Selling Price</div>
+                    <div className="h4 mb-0 fw-bold text-primary">{sellingPrice.toFixed(2)}</div>
+                  </div>
+                  <div className="text-end">
+                    <div className="text-muted small mb-1">Total Price</div>
+                    <div className="h4 mb-0 fw-bold text-primary">{totalPrice.toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                <Accordion defaultActiveKey="0">
+            <Row>
+              <Col lg={12}>
+                <Accordion defaultActiveKey="0" className="booking-accordion">
                   {/* Itinerary Option Section */}
-                  <Accordion.Item eventKey="0" className="mb-3">
+                  <Accordion.Item eventKey="0" className="mb-2">
                     <Accordion.Header onClick={fetchItineraryDetails}>
                       <h5 className="mb-0 fw-bold">Itinerary option</h5>
                     </Accordion.Header>
@@ -528,15 +588,16 @@ const MakePkgBookingPage = () => {
                       ) : itineraryList.length > 0 ? (
                         <div>
                           {itineraryList.map((itinerary) => (
-                            <Form.Check
-                              key={itinerary.itineraryId}
-                              type="checkbox"
-                              id={`itinerary-${itinerary.itineraryId}`}
-                              label={itinerary.itineraryHeading}
-                              checked={selectedItineraries.includes(itinerary.itineraryId)}
-                              onChange={() => handleItineraryToggle(itinerary.itineraryId)}
-                              className="mb-3 p-2 border rounded"
-                            />
+                            <div key={itinerary.itineraryId} className="itinerary-checkbox">
+                              <Form.Check
+                                type="checkbox"
+                                id={`itinerary-${itinerary.itineraryId}`}
+                                label={itinerary.itineraryHeading}
+                                checked={selectedItineraries.includes(itinerary.itineraryId)}
+                                onChange={() => handleItineraryToggle(itinerary.itineraryId)}
+                                className="mb-0"
+                              />
+                            </div>
                           ))}
                         </div>
                       ) : (
@@ -547,7 +608,7 @@ const MakePkgBookingPage = () => {
 
                   {/* Hotel Option Section */}
                   {hotels.length > 0 && (
-                    <Accordion.Item eventKey="1" className="mb-3">
+                    <Accordion.Item eventKey="1" className="mb-2">
                       <Accordion.Header>
                         <h5 className="mb-0 fw-bold">Hotel option</h5>
                       </Accordion.Header>
@@ -597,21 +658,26 @@ const MakePkgBookingPage = () => {
                           const pricePerNight = dateRange.length > 0 ? hotelTotalPrice / dateRange.length : hotelTotalPrice;
 
                           return (
-                            <div key={hotelIndex} className="mb-4">
-                              <div className="d-flex align-items-center gap-2 mb-3">
-                                <FaBed className="text-primary" size={20} />
-                                <h6 className="mb-0 fw-bold">
-                                  {hotel.hotelName || "Hotel"}
-                                </h6>
-                              </div>
+                            <Card key={hotelIndex} className="mb-3 hotel-item-card">
+                              <Card.Header className="hotel-section-header">
+                                <div className="d-flex align-items-center gap-2">
+                                  <FaBed className="text-primary" size={20} />
+                                  <h6 className="mb-0 fw-bold">
+                                    {hotels.length > 1 ? `Hotel ${hotelIndex + 1}: ` : ""}
+                                    {hotel.hotelName || "Hotel"}
+                                  </h6>
+                                </div>
+                              </Card.Header>
+                              <Card.Body>
                               
-                              <p className="text-muted mb-3">
-                                <strong>Checkin :</strong> {formatDate(checkIn)} <strong>Checkout :</strong> {formatDate(checkOut)}
-                              </p>
+                              <div className="date-display">
+                                <FaCalendarAlt className="text-primary me-2" />
+                                <strong>Checkin :</strong> {formatDate(checkIn)} <strong className="ms-3">Checkout :</strong> {formatDate(checkOut)}
+                              </div>
 
                               {searchRoomDTOs.length > 0 && (
                                 <>
-                                  <Table striped bordered hover responsive size="sm" className="mb-3">
+                                  <Table striped bordered hover responsive size="sm" className="mb-3 room-table">
                                     <thead>
                                       <tr>
                                         <th>No.</th>
@@ -629,6 +695,8 @@ const MakePkgBookingPage = () => {
                                           childAges = Array.isArray(room.childAges) ? room.childAges : [room.childAges];
                                         }
 
+                                        const childCount = parseInt(room.child || room.children || 0);
+
                                         return (
                                           <tr key={roomIndex}>
                                             <td>{roomIndex + 1}</td>
@@ -637,7 +705,29 @@ const MakePkgBookingPage = () => {
                                               {hotel.roomType && ` - ${hotel.roomType}`}
                                             </td>
                                             <td>{room.adult || room.adults || "-"}</td>
-                                            <td>{room.child || room.children || "-"}</td>
+                                            <td>
+                                              {childCount > 0 ? (
+                                                <>
+                                                  {childCount}
+                                                  {childAges.length > 0 && childAges.length === 1 && (
+                                                    <small className="text-muted d-block mt-1">
+                                                      {childCount} Child : {childAges[0]} Age
+                                                    </small>
+                                                  )}
+                                                  {childAges.length > 1 && (
+                                                    <small className="text-muted d-block mt-1">
+                                                      {childAges.map((age, idx) => (
+                                                        <span key={idx}>
+                                                          {idx + 1} Child : {age} Age{idx < childAges.length - 1 ? ", " : ""}
+                                                        </span>
+                                                      ))}
+                                                    </small>
+                                                  )}
+                                                </>
+                                              ) : (
+                                                "-"
+                                              )}
+                                            </td>
                                           </tr>
                                         );
                                       })}
@@ -655,8 +745,8 @@ const MakePkgBookingPage = () => {
                                     if (totalGuests === 0) return null;
 
                                     return (
-                                      <Card key={`guest-${roomIndex}`} className="mb-3">
-                                        <Card.Header className="bg-primary text-white">
+                                      <Card key={`guest-${roomIndex}`} className="mb-2 guest-details-card">
+                                        <Card.Header>
                                           <h6 className="mb-0">
                                             Room {roomIndex + 1} - Guest Details
                                           </h6>
@@ -673,8 +763,8 @@ const MakePkgBookingPage = () => {
                                             };
 
                                             return (
-                                              <div key={guestIndex} className="mb-3 pb-3 border-bottom">
-                                                <h6 className="mb-2 text-muted">
+                                              <div key={guestIndex} className="guest-row-item">
+                                                <h6 className="mb-2">
                                                   {isChild
                                                     ? `Child ${guestIndex - adults + 1}${guest.age ? ` (Age: ${guest.age})` : ""}`
                                                     : `Adult ${guestIndex + 1}`}
@@ -784,7 +874,7 @@ const MakePkgBookingPage = () => {
 
                               {/* Date-wise Pricing Table */}
                               {dateRange.length > 0 && (
-                                <Table striped bordered hover responsive size="sm" className="mb-3">
+                                <Table striped bordered hover responsive size="sm" className="mb-2 date-pricing-table">
                                   <thead>
                                     <tr>
                                       <th>Date</th>
@@ -830,7 +920,7 @@ const MakePkgBookingPage = () => {
                               </div> */}
 
                               {/* Tourism Dirhams */}
-                              <Row className="mb-3">
+                              <Row className="mb-2">
                                 <Col md={6}>
                                   <Form.Label>Tourism Dirhams (AED)</Form.Label>
                                   <Form.Control
@@ -843,7 +933,7 @@ const MakePkgBookingPage = () => {
                               </Row>
 
                               {/* Remarks */}
-                              <Row className="mb-3">
+                              <Row className="mb-2">
                                 <Col>
                                   <Form.Label>Remarks</Form.Label>
                                   <Form.Control
@@ -857,7 +947,7 @@ const MakePkgBookingPage = () => {
                               </Row>
 
                               {/* Special Request */}
-                              <Row className="mb-3">
+                              <Row className="mb-2">
                                 <Col>
                                   <Form.Label>Special Request</Form.Label>
                                   <Form.Control
@@ -897,7 +987,8 @@ const MakePkgBookingPage = () => {
                                   />
                                 </div>
                               </div>
-                            </div>
+                              </Card.Body>
+                            </Card>
                           );
                         })}
                       </Accordion.Body>
@@ -906,7 +997,7 @@ const MakePkgBookingPage = () => {
 
                   {/* Activity Option Section */}
                   {activities.length > 0 && (
-                    <Accordion.Item eventKey="2" className="mb-3">
+                    <Accordion.Item eventKey="2" className="mb-2">
                       <Accordion.Header>
                         <h5 className="mb-0 fw-bold">Tour option</h5>
                       </Accordion.Header>
@@ -922,23 +1013,26 @@ const MakePkgBookingPage = () => {
                           let childAges = [];
                           if (activity.childAge) {
                             childAges = Array.isArray(activity.childAge) ? activity.childAge : [activity.childAge];
-                          } else if (activity.childAges) {
-                            childAges = Array.isArray(activity.childAges) ? activity.childAges : [activity.childAges];
-                          } else if (activity.childAgeArray) {
-                            childAges = Array.isArray(activity.childAgeArray) ? activity.childAgeArray : [activity.childAgeArray];
-                          }
+                          } 
 
-                          const sellingPrice = parseFloat(activity.sellingPrice || activity.totalPrice || details.sellingPrice || details.totalPrice || 0);
-                          const totalPrice = parseFloat(activity.totalPrice || activity.price || details.totalPrice || details.price || 0);
+                          const sellingPrice = parseFloat(activity.totalRate || 0);
+                          const totalPrice = parseFloat(activity.totalRateWithoutmrk || 0);
 
                           return (
-                            <div key={activityIndex} className="mb-4">
-                              <div className="d-flex align-items-center gap-2 mb-3">
-                                <FaTicketAlt className="text-primary" size={20} />
-                                <h6 className="mb-0 fw-bold">{activityName}</h6>
-                              </div>
+                            <Card key={activityIndex} className="mb-3 activity-item-card">
+                              <Card.Header className="activity-header">
+                                <div className="d-flex align-items-center gap-2">
+                                  <FaTicketAlt className="text-primary" size={20} />
+                                  <h6 className="mb-0 fw-bold">
+                                    {activities.length > 1 ? `Activity ${activityIndex + 1}: ` : ""}
+                                    {activityName}
+                                  </h6>
+                                </div>
+                              </Card.Header>
+                              <Card.Body>
 
-                              <div className="mb-3">
+                              <div className="date-display">
+                                <FaCalendarAlt className="text-primary me-2" />
                                 <strong>Tour date:</strong> {formatDate(activityDate)}
                               </div>
 
@@ -991,7 +1085,7 @@ const MakePkgBookingPage = () => {
                                     <strong>Selling Price</strong>
                                     <div className="d-flex align-items-center gap-2">
                                       <span className="text-success fw-bold">{sellingPrice.toFixed(2)}</span>
-                                      <FaEdit className="text-success" style={{ cursor: "pointer" }} />
+                                      {/* <FaEdit className="text-success" style={{ cursor: "pointer" }} /> */}
                                     </div>
                                   </div>
                                 </Col>
@@ -1000,12 +1094,13 @@ const MakePkgBookingPage = () => {
                                     <strong>Total Price</strong>
                                     <div className="d-flex align-items-center gap-2">
                                       <span className="text-primary fw-bold">{totalPrice.toFixed(2)}</span>
-                                      <FaEdit className="text-success" style={{ cursor: "pointer" }} />
+                                      {/* <FaEdit className="text-success" style={{ cursor: "pointer" }} /> */}
                                     </div>
                                   </div>
                                 </Col>
                               </Row>
-                            </div>
+                              </Card.Body>
+                            </Card>
                           );
                         })}
                       </Accordion.Body>
@@ -1014,7 +1109,7 @@ const MakePkgBookingPage = () => {
 
                   {/* Transfer Option Section */}
                   {transfers.length > 0 && (
-                    <Accordion.Item eventKey="3" className="mb-3">
+                    <Accordion.Item eventKey="3" className="mb-2">
                       <Accordion.Header>
                         <h5 className="mb-0 fw-bold">Transfer option</h5>
                       </Accordion.Header>
@@ -1023,52 +1118,190 @@ const MakePkgBookingPage = () => {
                           const cab = item.cab || {};
                           const details = cab.details || {};
                           const vehicleName = cab.vehicleName || details.vehicleName || "Transfer";
+                          const capacity = cab.capacity || details.capacity || "";
                           const pickupDate = cab.pickupDate || details.pickupDate || "";
                           const dropDate = cab.dropDate || details.dropDate || details.dropOffDate || "";
-                          const pickupLocation = cab.pickupLocation || details.pickupLocation || "";
-                          const dropoffLocation = cab.dropoffLocation || details.dropoffLocation || "";
-                          const adult = cab.adult || details.adult || cab.noOfAdult || "";
-                          const child = cab.child || details.child || cab.noOfChild || "";
+                          const adult = cab.adult || details.adult || cab.noOfAdult || "0";
+                          const child = cab.child || details.child || cab.noOfChild || "0";
+                          const travelType = cab.travelType || details.travelType || "1";
+                          const shareType = cab.shareType || details.shareType || "Private";
+
+                          // Handle childAge
+                          let childAges = [];
+                          if (cab.childAge) {
+                            childAges = Array.isArray(cab.childAge) ? cab.childAge : [cab.childAge];
+                          } else if (cab.childAges) {
+                            childAges = Array.isArray(cab.childAges) ? cab.childAges : [cab.childAges];
+                          } else if (cab.childAgeArray) {
+                            childAges = Array.isArray(cab.childAgeArray) ? cab.childAgeArray : [cab.childAgeArray];
+                          } else if (details.childAge) {
+                            childAges = Array.isArray(details.childAge) ? details.childAge : [details.childAge];
+                          } else if (details.childAgeArray) {
+                            childAges = Array.isArray(details.childAgeArray) ? details.childAgeArray : [details.childAgeArray];
+                          }
+
+                          const transferDetail = transferDetails[transferIndex] || {};
+                          const sellingPrice = parseFloat(cab.totalRate || cab.totalPrice || details.totalRate || details.totalPrice || 0);
+                          const totalPrice = parseFloat(cab.totalRateWithoutmrk || cab.totalPrice || details.totalRateWithoutmrk || details.totalPrice || 0);
+
+                          // Get travel type label
+                          const getTravelTypeLabel = (type) => {
+                            if (type === "1") return "Arrival & Departure";
+                            if (type === "2") return "Arrival";
+                            if (type === "3") return "Departure";
+                            return type;
+                          };
 
                           return (
-                            <div key={transferIndex} className="mb-3">
-                              <div className="d-flex align-items-center gap-2 mb-2">
-                                <FaCar className="text-warning" size={20} />
-                                <strong>{vehicleName}</strong>
+                            <Card key={transferIndex} className="mb-3 transfer-item-card">
+                              <Card.Header className="transfer-header">
+                                <div className="d-flex align-items-center gap-2">
+                                  <FaCar className="text-primary" size={20} />
+                                  <h6 className="mb-0 fw-bold">
+                                    {transfers.length > 1 ? `Transfer ${transferIndex + 1}: ` : ""}
+                                    {capacity ? `${capacity} Seater` : vehicleName}
+                                  </h6>
+                                </div>
+                              </Card.Header>
+                              <Card.Body>
+
+                              <div className="date-display">
+                                <FaCalendarAlt className="text-primary me-2" />
+                                <strong>Pickup date :</strong> {formatDate(pickupDate)} <strong className="ms-3">Drop date :</strong> {formatDate(dropDate)}
                               </div>
-                              <Row className="g-2 small text-muted">
-                                {pickupDate && (
-                                  <Col sm={6}>
-                                    <strong>Pickup date:</strong> {formatDate(pickupDate)}
-                                  </Col>
-                                )}
-                                {dropDate && (
-                                  <Col sm={6}>
-                                    <strong>Drop date:</strong> {formatDate(dropDate)}
-                                  </Col>
-                                )}
-                                {pickupLocation && (
-                                  <Col sm={6}>
-                                    <strong>Pickup:</strong> {pickupLocation}
-                                  </Col>
-                                )}
-                                {dropoffLocation && (
-                                  <Col sm={6}>
-                                    <strong>Dropoff:</strong> {dropoffLocation}
-                                  </Col>
-                                )}
-                                {adult && (
-                                  <Col sm={6}>
-                                    <strong>Adult Count:</strong> {adult}
-                                  </Col>
-                                )}
-                                {child && (
-                                  <Col sm={6}>
-                                    <strong>Child Count:</strong> {child}
-                                  </Col>
-                                )}
+
+                              {/* Transfer Option/Share type Table */}
+                              <Table striped bordered hover responsive size="sm" className="mb-3 transfer-table">
+                                <thead>
+                                  <tr>
+                                    <th>Transfer Option/Share type</th>
+                                    <th>Adult Count</th>
+                                    <th>Child Count</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td>{getTravelTypeLabel(travelType)} / {shareType}</td>
+                                    <td>{adult}</td>
+                                    <td>
+                                      {child}
+                                      {childAges.length > 0 && childAges.length === 1 && (
+                                        <small className="text-muted d-block">
+                                          {child} Child : {childAges[0]} Age
+                                        </small>
+                                      )}
+                                      {childAges.length > 1 && (
+                                        <small className="text-muted d-block">
+                                          {childAges.map((age, idx) => (
+                                            <span key={idx}>
+                                              {idx + 1} Child : {age} Age{idx < childAges.length - 1 ? ", " : ""}
+                                            </span>
+                                          ))}
+                                        </small>
+                                      )}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </Table>
+
+                              {/* Transporter and Driver Details */}
+                              <div className="mb-3 p-3 bg-light rounded">
+                                <h6 className="mb-3 fw-bold text-primary">Transporter & Driver Details</h6>
+                                <Row className="g-3">
+                                <Col md={6}>
+                                  <Form.Label>Transporter Name</Form.Label>
+                                  <Form.Control
+                                    type="text"
+                                    value={transferDetail.transporterName || ""}
+                                    onChange={(e) =>
+                                      setTransferDetails({
+                                        ...transferDetails,
+                                        [transferIndex]: {
+                                          ...transferDetail,
+                                          transporterName: e.target.value,
+                                        },
+                                      })
+                                    }
+                                    placeholder="Enter transporter name"
+                                  />
+                                </Col>
+                                <Col md={6}>
+                                  <Form.Label>Contact Number</Form.Label>
+                                  <Form.Control
+                                    type="text"
+                                    value={transferDetail.contactNumber || ""}
+                                    onChange={(e) =>
+                                      setTransferDetails({
+                                        ...transferDetails,
+                                        [transferIndex]: {
+                                          ...transferDetail,
+                                          contactNumber: e.target.value,
+                                        },
+                                      })
+                                    }
+                                    placeholder="Enter contact number"
+                                  />
+                                </Col>
+                                <Col md={6}>
+                                  <Form.Label>Driver Name</Form.Label>
+                                  <Form.Control
+                                    type="text"
+                                    value={transferDetail.driverName || ""}
+                                    onChange={(e) =>
+                                      setTransferDetails({
+                                        ...transferDetails,
+                                        [transferIndex]: {
+                                          ...transferDetail,
+                                          driverName: e.target.value,
+                                        },
+                                      })
+                                    }
+                                    placeholder="Enter driver name"
+                                  />
+                                </Col>
+                                <Col md={6}>
+                                  <Form.Label>Driver Contact</Form.Label>
+                                  <Form.Control
+                                    type="text"
+                                    value={transferDetail.driverContact || ""}
+                                    onChange={(e) =>
+                                      setTransferDetails({
+                                        ...transferDetails,
+                                        [transferIndex]: {
+                                          ...transferDetail,
+                                          driverContact: e.target.value,
+                                        },
+                                      })
+                                    }
+                                    placeholder="Enter driver contact"
+                                  />
+                                </Col>
+                                </Row>
+                              </div>
+
+                              {/* Selling Price and Total Price */}
+                              <Row className="g-3">
+                                <Col md={6}>
+                                  <div className="d-flex align-items-center justify-content-between">
+                                    <strong>Selling Price</strong>
+                                    <div className="d-flex align-items-center gap-2">
+                                      <span className="text-success fw-bold">{sellingPrice.toFixed(2)}</span>
+                                      <FaEdit className="text-success edit-icon" />
+                                    </div>
+                                  </div>
+                                </Col>
+                                <Col md={6}>
+                                  <div className="d-flex align-items-center justify-content-between">
+                                    <strong>Total Price</strong>
+                                    <div className="d-flex align-items-center gap-2">
+                                      <span className="text-primary fw-bold">{totalPrice.toFixed(2)}</span>
+                                      <FaEdit className="text-success edit-icon" />
+                                    </div>
+                                  </div>
+                                </Col>
                               </Row>
-                            </div>
+                              </Card.Body>
+                            </Card>
                           );
                         })}
                       </Accordion.Body>
@@ -1076,7 +1309,7 @@ const MakePkgBookingPage = () => {
                   )}
 
                   {/* Visa Information Section */}
-                  <Accordion.Item eventKey="4" className="mb-3">
+                  <Accordion.Item eventKey="4" className="mb-2">
                     <Accordion.Header>
                       <h5 className="mb-0 fw-bold">Visa Information</h5>
                     </Accordion.Header>
@@ -1086,11 +1319,13 @@ const MakePkgBookingPage = () => {
                         label="Visa Required"
                         checked={visaRequired}
                         onChange={(e) => setVisaRequired(e.target.checked)}
-                        className="mb-3"
+                        className="mb-2"
                       />
                       
                       {visaRequired && (
-                        <Row className="g-3">
+                        <div className="visa-section">
+                          <h6 className="mb-3 fw-bold text-warning">Visa Details</h6>
+                          <Row className="g-3 visa-form-row">
                           <Col md={6}>
                             <Form.Label>Visa Adult</Form.Label>
                             <Form.Control
@@ -1160,19 +1395,20 @@ const MakePkgBookingPage = () => {
                               step="0.01"
                             />
                           </Col>
-                        </Row>
+                          </Row>
+                        </div>
                       )}
                     </Accordion.Body>
                   </Accordion.Item>
 
                   {/* Guest Details Section */}
-                  <Accordion.Item eventKey="5" className="mb-3">
+                  <Accordion.Item eventKey="5" className="mb-2">
                     <Accordion.Header>
                       <h5 className="mb-0 fw-bold">Guest Details</h5>
                     </Accordion.Header>
                     <Accordion.Body>
-                      <Form onSubmit={handleSubmit}>
-                        <Row className="g-3">
+                      <Form onSubmit={handleSubmit} className="booking-form">
+                        <Row className="g-2">
                           <Col md={3}>
                             <Form.Label>
                               Title <span className="text-danger">*</span>
@@ -1296,44 +1532,30 @@ const MakePkgBookingPage = () => {
                         </Row>
 
                         {/* Submit Buttons */}
-                        <div className="mt-4 d-flex gap-2">
-                          <Button type="submit" variant="primary" size="lg">
-                            BOOK →
-                          </Button>
+                        <div className="mt-3 d-flex gap-2 justify-content-end">
                           <Button
                             type="button"
                             variant="danger"
                             size="lg"
+                            className="btn-booking btn-booking-danger"
                             onClick={() => navigate(-1)}
                           >
                             × Cancel
+                          </Button>
+                          <Button 
+                            type="submit" 
+                            variant="primary" 
+                            size="lg"
+                            className="btn-booking btn-booking-primary"
+                          >
+                            <FaCheckCircle className="me-2" />
+                            BOOK →
                           </Button>
                         </div>
                       </Form>
                     </Accordion.Body>
                   </Accordion.Item>
                 </Accordion>
-              </Col>
-
-              {/* Price Summary Sidebar */}
-              <Col lg={4}>
-                <Card className="sticky-top shadow-sm" style={{ top: "20px" }}>
-                  <Card.Body className="text-center">
-                    <div className="mb-3">
-                      <h3 className="text-primary fw-bold mb-1">
-                        {sellingPrice.toFixed(2)}
-                      </h3>
-                      <small className="text-muted">(Selling Price)</small>
-                    </div>
-                    <hr />
-                    <div className="mt-3">
-                      <h3 className="text-primary fw-bold mb-1">
-                        {totalPrice.toFixed(2)}
-                      </h3>
-                      <small className="text-muted">(Total Price)</small>
-                    </div>
-                  </Card.Body>
-                </Card>
               </Col>
             </Row>
           </Container>

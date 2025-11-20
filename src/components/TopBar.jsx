@@ -440,13 +440,8 @@ export default function TopBar() {
 
   // Handle cart modal open
   const handleCartClick = () => {
-    const agentId = getCartAgentId();
-    if (!agentId) {
-      toast.error("Select an agent and search to view the cart.");
-      return;
-    }
-    setShowCartModal(true);
     fetchCartData();
+    setShowCartModal(true);
   };
 
   const handleContinueBooking = async () => {
@@ -487,7 +482,7 @@ export default function TopBar() {
     window.addEventListener("cartUpdated", handleCartUpdate);
 
     // Initial fetch
-    fetchCartData();
+    // fetchCartData();
 
     return () => {
       window.removeEventListener("cartUpdated", handleCartUpdate);
