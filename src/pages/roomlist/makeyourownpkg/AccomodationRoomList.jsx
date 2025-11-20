@@ -34,6 +34,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import "../../../styles/RoomList.css";
 import axiosInstance from "../../../components/AxiosInstance";
 import axios from "axios";
+import toast from "react-hot-toast";
 
 const AccomodationRoomList = () => {
   const [roomData, setRoomData] = useState(null);
@@ -144,73 +145,62 @@ const AccomodationRoomList = () => {
     const hotelsdetail = hotels[0];
 
     try {
-      // Prepare cart item data
+      // Transform searchRoomDTOs to match CustomSearchRoomDTO structure
+      const searchRoomDTOs = (payload.rooms || []).map((room) => ({
+        roomCount: 1, // Each room in the array represents one room
+        adult: String(room.adults || room.adult || 1),
+        child: String(room.children || room.child || 0),
+        childAge: Array.isArray(room.childAges) 
+          ? room.childAges.map(age => Number(age))
+          : (Array.isArray(room.childAge) ? room.childAge.map(age => Number(age)) : [])
+      }));
+
+      // Determine available status based on roomStatus
+      const available = rate.roomStatus === "Available" ? "True" : "False";
+
+      // Convert nonRefundable to refundstatus format ("Y" or "N")
+      const refundstatus = 
+        rate.nonRefundable === true || 
+        rate.nonRefundable === "true" || 
+        String(rate.nonRefundable).toLowerCase() === "true"
+          ? "N" 
+          : "Y";
+
+      // Prepare cart item data matching CustomPackageHotelDTO
       const cartItem = {
-        hotelId: hotelsdetail.hotelId,
-        hotelName: hotelsdetail.hotelName,
-        // hotelAddress: hotelsdetail.hotelAddress,
-        // starRating: hotelsdetail.starRating,
-        // hotelImage: roomData.meta?.hotelImage || "",
-        roomCategory: rate.roomCategory,
-        mealPlan: rate.mealPlan,
-        contractLabel: rate.contractLabel,
-        nonRefundable: rate.nonRefundable,
-        totalRate: rate.totalRate,
-        currency: "AED",
-        checkInDate: payload.checkInDate,
-        checkOutDate: payload.checkOutDate,
-        guestBreakdown: hotelsdetail.guestBreakdown,
-        numberOfRooms: hotelsdetail.numberOfRooms,
-        nationality: payload.nationality,
-        agentId: payload.agentId,
-        apiId: payload.apiId,
-        rooms: payload.rooms,
-        cancellationPolicies: rate.cancellationPolicies || [],
+        hotelId: String(hotelsdetail.hotelId || ""),
+        hotelName: hotelsdetail.hotelName || "",
+        roomtypeId: String(rate.roomTypeCode || rate.roomtypeId || ""),
+        roomCategoryId: String(rate.roomCategoryId || rate.roomcategoryId || ""),
+        roomCategory: rate.roomCategory || "",
+        roomType: rate.mealPlan || "",
+        available: available,
+        api: Number(payload.apiId || payload.api || 0),
+        destinationCityId: String(payload.destinationCityId || payload.cityId || ""),
+        destinationCountryId: String(payload.destinationCountryId || payload.countryId || ""),
+        checkIn: payload.checkInDate || payload.checkIn || "",
+        checkOut: payload.checkOutDate || payload.checkOut || "",
+        nativeContryId: String(payload.nationality || payload.nativeContryId || ""),
+        noOfRoom: String(hotelsdetail.numberOfRooms || payload.noOfRoom || "1"),
+        refundstatus: refundstatus,
+        searchRoomDTOs: searchRoomDTOs,
+        agentId: String(payload.agentId || ""),
       };
-//       {
-   
-    
-//     "roomtypeId": "3994",
-//     "roomcategory": "2224",
-//     "roomCategory": "Room Category Classic Room Balcony",
-//     "roomType": " Meal Type Room Only",
-//     "available": "False",
-//     "api": 0,
-//     "token": "null@false",
-//     "destinationCityId": "3",
-//     "destinationCountryId": "235",
-//     "checkIn": "11/12/2025",
-//     "checkOut": "12/12/2025",
-//     "nativeContryId": "2",
-//     "noOfRoom": "1",
-//     "refundstatus": "Y",
-//     "intoken": "291~2224~3994~Y",
-// //    "finalfile": "~!~details~!~searchresult~!~final_20251108023431296.txt",
-//     "searchRoomDTOs": [
-//         {
-//             "roomCount": 1,
-//             "adult": "1",
-//             "child": "0",
-//             "childAge": []
-//         }
-//     ],
-//     "agentId": "5"
-// }
 
       // Call API to add to cart
       const response = await axiosInstance.post("/api/makeYourOwnPackageHotel/saveHotelDetailsToCart", cartItem);
       console.log("response for cart:", response.data);
       if (response.data && response.data.success !== false) {
         // Show success message (you can use toast here if available)
-        alert("Room added to cart successfully!");
+        toast.success("Room added to cart successfully!");
         // Optionally refresh cart count if you have a global state
         window.dispatchEvent(new CustomEvent('cartUpdated'));
       } else {
-        alert(response.data?.message || "Failed to add item to cart");
+        toast.error(response.data?.message || "Failed to add item to cart");
       }
     } catch (err) {
       console.error("Error adding to cart:", err);
-      alert("Failed to add item to cart. Please try again.");
+      toast.error("Failed to add item to cart. Please try again.");
     }
   };
 

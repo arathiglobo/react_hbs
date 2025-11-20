@@ -125,6 +125,28 @@ export default function TopBar() {
     const meta = hotel.meta || {};
     const details = hotel.details || {};
 
+    // Get values from hotel or details
+    const hotelName = hotel.hotelName || "Hotel";
+    const hotelAddress = hotel.hotelAddress || details.hotelAddress || "";
+    const checkIn = hotel.checkIn || details.checkInDate || details.checkIn || "";
+    const checkOut = hotel.checkOut || details.checkOutDate || details.checkOut || "";
+    const roomCategory = hotel.roomCategory || details.roomCategory || "";
+    const roomType = hotel.roomType || details.mealPlan || "";
+    const adult = hotel.adult || details.adult || "";
+    const child = hotel.child || details.child || "";
+    
+    // Handle childAges - could be array or string
+    let childAges = [];
+    if (hotel.childAge) {
+      childAges = Array.isArray(hotel.childAge) ? hotel.childAge : [hotel.childAge];
+    } else if (hotel.childAges) {
+      childAges = Array.isArray(hotel.childAges) ? hotel.childAges : [hotel.childAges];
+    } else if (details.childAge) {
+      childAges = Array.isArray(details.childAge) ? details.childAge : [details.childAge];
+    } else if (details.childAges) {
+      childAges = Array.isArray(details.childAges) ? details.childAges : [details.childAges];
+    }
+
     return (
       <Card key={key} className="shadow-sm">
         <Card.Body>
@@ -134,49 +156,8 @@ export default function TopBar() {
                 Hotel
               </Badge>
               <h6 className="fw-bold mb-2">
-                {meta.hotelName || hotel.hotelName || "Hotel"}
+                {hotelName}
               </h6>
-              {hotel.hotelAddress && (
-                <p className="text-muted small mb-2">
-                  <FaMapMarkerAlt className="me-1" />
-                  {hotel.hotelAddress}
-                </p>
-              )}
-              {hotel.roomCategory && (
-                <Col sm={8} className="d-flex align-items-center">
-                  <span style={{ whiteSpace: "nowrap" }}>
-                    Room Type: {hotel.roomCategory}
-                  </span>
-                </Col>
-              )}
-              {hotel.checkInDate && (
-                <Col sm={8} className="d-flex align-items-center">
-                  <span style={{ whiteSpace: "nowrap" }}>
-                    Check In: {hotel.checkInDate}
-                  </span>
-                </Col>
-              )}
-              {hotel.checkOutDate && (
-                <Col sm={8} className="d-flex align-items-center">
-                  <span style={{ whiteSpace: "nowrap" }}>
-                    Check Out: {hotel.checkOutDate}
-                  </span>
-                </Col>
-              )}
-              {hotel.adult && (
-                <Col sm={8} className="d-flex align-items-center">
-                  <span style={{ whiteSpace: "nowrap" }}>
-                    Adult: {hotel.adult}
-                  </span>
-                </Col>
-              )}
-              {hotel.child && (
-                <Col sm={8} className="d-flex align-items-center">
-                  <span style={{ whiteSpace: "nowrap" }}>
-                    Child : {hotel.child} Age : {hotel.childAge}
-                  </span>
-                </Col>
-              )}
             </div>
             <Button
               variant="outline-danger"
@@ -188,38 +169,68 @@ export default function TopBar() {
           </div>
 
           <Row className="g-2 small text-muted">
-            {details.checkInDate && (
+            {hotelAddress && (
               <Col sm={6} className="d-flex align-items-center">
-                <FaCalendarAlt className="me-2 text-primary" />
+                <FaMapMarkerAlt className="me-2 text-danger" />
                 <span>
-                  <strong>Check-in:</strong> {details.checkInDate}
+                  <strong>Address:</strong> {hotelAddress}
                 </span>
               </Col>
             )}
-            {details.checkOutDate && (
+            {checkIn && (
               <Col sm={6} className="d-flex align-items-center">
                 <FaCalendarAlt className="me-2 text-primary" />
                 <span>
-                  <strong>Check-out:</strong> {details.checkOutDate}
+                  <strong>Check-in:</strong> {checkIn}
                 </span>
               </Col>
             )}
-            {details.roomCategory && (
+            {checkOut && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaCalendarAlt className="me-2 text-primary" />
+                <span>
+                  <strong>Check-out:</strong> {checkOut}
+                </span>
+              </Col>
+            )}
+            {roomCategory && (
               <Col sm={6} className="d-flex align-items-center">
                 <FaBed className="me-2 text-success" />
                 <span>
-                  <strong>Room:</strong> {details.roomCategory}
+                  <strong>Room:</strong> {roomCategory}
                 </span>
               </Col>
             )}
-            {details.mealPlan && (
+            {roomType && (
               <Col sm={6} className="d-flex align-items-center">
                 <span>
-                  <strong>Meal:</strong> {details.mealPlan}
+                  <strong>Meal Plan:</strong> {roomType}
+                </span>
+              </Col>
+            )}
+            {adult && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaUsers className="me-2 text-success" />
+                <span>
+                  <strong>Adults:</strong> {adult}
+                </span>
+              </Col>
+            )}
+            {child && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaChild className="me-2 text-warning" />
+                <span>
+                  <strong>Children:</strong> {child}
                 </span>
               </Col>
             )}
           </Row>
+
+          {childAges.length > 0 && (
+            <div className="mt-2 small text-muted">
+              <strong>Child Ages:</strong> {childAges.join(", ")}
+            </div>
+          )}
         </Card.Body>
       </Card>
     );
@@ -388,6 +399,45 @@ export default function TopBar() {
     }
   };
 
+  // Clear all items from cart
+  const handleClearCart = async () => {
+    try {
+      const agentId = getCartAgentId();
+
+      if (!agentId) {
+        toast.error("Select an agent before modifying the cart.");
+        return;
+      }
+
+      if (cartItems.length === 0) {
+        toast.info("Cart is already empty.");
+        return;
+      }
+
+      const response = await axiosInstance.post(
+        "/api/makeYourOwnPackage/clearFromCart",
+        null,
+        {
+          params: {
+            agentId: agentId,
+          },
+        }
+      );
+      
+      console.log("Clear cart response:", response.data);
+      
+      if (response.data === 1 || response.data === true || response.data?.success === true) {
+        toast.success("Cart cleared successfully.");
+        fetchCartData();
+      } else {
+        toast.error("Failed to clear cart.");
+      }
+    } catch (err) {
+      console.error("Error clearing cart:", err);
+      toast.error("Failed to clear cart. Please try again.");
+    }
+  };
+
   // Handle cart modal open
   const handleCartClick = () => {
     const agentId = getCartAgentId();
@@ -399,8 +449,33 @@ export default function TopBar() {
     fetchCartData();
   };
 
-  const handleContinueBooking = () => {
-    navigate("/new-booking/make-your-own-package/booking-page");
+  const handleContinueBooking = async () => {
+    try {
+      const agentId = getCartAgentId();
+      if (!agentId) {
+        toast.error("Select an agent before proceeding to checkout.");
+        return;
+      }
+
+      // Fetch latest cart data before navigating
+      const response = await axiosInstance.post(
+        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
+          agentId
+        )}`
+      );
+
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        // Store cart data in sessionStorage for the booking page
+        sessionStorage.setItem("makePkgCartData", JSON.stringify(response.data));
+        sessionStorage.setItem("makePkgAgentId", agentId);
+       window.open("/new-booking/make-your-own-package/booking-page");
+      } else {
+        toast.error("Your cart is empty. Please add items to cart first.");
+      }
+    } catch (err) {
+      console.error("Error fetching cart data:", err);
+      toast.error("Failed to load cart data. Please try again.");
+    }
   };
 
   // Listen for cart updates
@@ -504,9 +579,19 @@ export default function TopBar() {
         <Modal.Footer>
           <div className="d-flex justify-content-between w-100 align-items-center">
             <div>
+              {cartItems.length > 0 && (
+                <Button
+                  variant="outline-danger"
+                  onClick={handleClearCart}
+                  className="me-2"
+                >
+                  Clear
+                </Button>
+              )}
               <strong>Total Items:</strong> {cartCount}
             </div>
             <div>
+              
               <Button
                 variant="secondary"
                 onClick={() => setShowCartModal(false)}
@@ -516,10 +601,18 @@ export default function TopBar() {
               </Button>
               {cartItems.length > 0 && (
                 <Button
-                  variant="primary continue-booking"
+                  variant="outline-success continue-booking"
                   onClick={handleContinueBooking}
                 >
                   Proceed to Checkout
+                </Button>
+              )}
+               {cartItems.length > 0 && (
+                <Button
+                  variant="outline-primary generate-quotation"
+                  // onClick={handleQuotationBooking}
+                >
+                  Generate Quotation
                 </Button>
               )}
             </div>
