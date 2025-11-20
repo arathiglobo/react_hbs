@@ -76,6 +76,9 @@ const MakePkgBookingPage = () => {
   // Transfer/Cab details state
   const [transferDetails, setTransferDetails] = useState({});
 
+  // Validation errors state
+  const [validationErrors, setValidationErrors] = useState({});
+
   // Initialize guest details for rooms
   const initializeRoomGuests = (cartItems) => {
     const guests = {};
@@ -158,15 +161,64 @@ const MakePkgBookingPage = () => {
         updated[key] = [];
       }
       const guests = [...updated[key]];
-      if (guests[guestIndex]) {
+      
+      // Ensure guest object exists, create if it doesn't
+      if (!guests[guestIndex]) {
         guests[guestIndex] = {
-          ...guests[guestIndex],
-          [field]: value,
+          salutation: "",
+          firstName: "",
+          lastName: "",
+          gender: "",
+          isChild: false,
+          age: "",
         };
       }
+      
+      // Update the guest field
+      guests[guestIndex] = {
+        ...guests[guestIndex],
+        [field]: value,
+      };
+      
       updated[key] = guests;
       return updated;
     });
+
+    // Clear validation error when user starts typing
+    const errorKey = `hotel_${hotelIndex}_room_${roomIndex}_guest_${guestIndex}_${field}`;
+    if (validationErrors[errorKey]) {
+      setValidationErrors((prev) => {
+        const updated = { ...prev };
+        delete updated[errorKey];
+        return updated;
+      });
+    }
+  };
+
+  // Handle primary guest change
+  const handlePrimaryGuestChange = (field, value) => {
+    setPrimaryGuest((prev) => ({ ...prev, [field]: value }));
+
+    // Real-time validation for email format
+    if (field === "emailId" && value.trim() !== "") {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          primaryGuest_emailId: "Please enter a valid email address",
+        }));
+        return;
+      }
+    }
+
+    // Clear validation error when user starts typing
+    const errorKey = `primaryGuest_${field}`;
+    if (validationErrors[errorKey]) {
+      setValidationErrors((prev) => {
+        const updated = { ...prev };
+        delete updated[errorKey];
+        return updated;
+      });
+    }
   };
 
   // Fetch itinerary details
@@ -305,132 +357,306 @@ const MakePkgBookingPage = () => {
     }
   };
 
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Format date to YYYY-MM-DD for backend
+  const formatDateToYYYYMMDD = (dateString) => {
+    if (!dateString) return "";
+    try {
+      let date;
+      if (dateString.includes("/")) {
+        // Handle DD/MM/YYYY format
+        const [day, month, year] = dateString.split("/");
+        date = new Date(year, month - 1, day);
+      } else {
+        date = new Date(dateString);
+      }
+      if (isNaN(date.getTime())) return "";
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    } catch {
+      return dateString;
+    }
+  };
 
-    if (!primaryGuest.firstName || !primaryGuest.lastName) {
-      toast.error("Please fill in all required guest details.");
-      return;
+  // Format date to DD-MM-YYYY for backend (for tourDate, pickupDate, dropOffDate)
+  const formatDateToDDMMYYYY = (dateString) => {
+    if (!dateString) return "";
+    try {
+      let date;
+      if (dateString.includes("/")) {
+        // Already in DD/MM/YYYY format, convert to DD-MM-YYYY
+        return dateString.replace(/\//g, "-");
+      } else {
+        date = new Date(dateString);
+      }
+      if (isNaN(date.getTime())) return "";
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      return `${day}-${month}-${year}`;
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Calculate nights between two dates
+  const calculateNights = (checkIn, checkOut) => {
+    if (!checkIn || !checkOut) return 1;
+    try {
+      let start, end;
+      if (checkIn.includes("/")) {
+        const [day, month, year] = checkIn.split("/");
+        start = new Date(year, month - 1, day);
+      } else {
+        start = new Date(checkIn);
+      }
+      
+      if (checkOut.includes("/")) {
+        const [day, month, year] = checkOut.split("/");
+        end = new Date(year, month - 1, day);
+      } else {
+        end = new Date(checkOut);
+      }
+      
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return Math.max(1, diffDays);
+    } catch {
+      return 1;
+    }
+  };
+
+  // Validate form
+  const validateForm = () => {
+    const errors = {};
+    let hasErrors = false;
+
+    // Validate primary guest details
+    if (!primaryGuest.salutation || primaryGuest.salutation.trim() === "") {
+      errors.primaryGuest_salutation = "Salutation is required";
+      hasErrors = true;
+    }
+    if (!primaryGuest.firstName || primaryGuest.firstName.trim() === "") {
+      errors.primaryGuest_firstName = "First Name is required";
+      hasErrors = true;
+    }
+    if (!primaryGuest.lastName || primaryGuest.lastName.trim() === "") {
+      errors.primaryGuest_lastName = "Last Name is required";
+      hasErrors = true;
+    }
+    if (!primaryGuest.contactNumber || primaryGuest.contactNumber.trim() === "") {
+      errors.primaryGuest_contactNumber = "Contact Number is required";
+      hasErrors = true;
+    }
+    if (!primaryGuest.emailId || primaryGuest.emailId.trim() === "") {
+      errors.primaryGuest_emailId = "Email Id is required";
+      hasErrors = true;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.emailId)) {
+      errors.primaryGuest_emailId = "Please enter a valid email address";
+      hasErrors = true;
+    }
+    if (!primaryGuest.lpo || primaryGuest.lpo.trim() === "") {
+      errors.primaryGuest_lpo = "LPO is required";
+      hasErrors = true;
     }
 
-    if (!primaryGuest.lpo) {
-      toast.error("LPO is required.");
-      return;
-    }
-
-    // Validate room guest details
+    // Validate hotel room guest details
     const hotels = getHotels();
     if (hotels.length > 0) {
-      // Find hotel index in cartData
-      const hotelIndexInCart = cartData.findIndex((item) => item.hotel);
-      
-      if (hotelIndexInCart >= 0) {
-        const hotel = hotels[0].hotel || {};
+      hotels.forEach((item, hotelIndex) => {
+        const hotel = item.hotel || {};
         const searchRoomDTOs = hotel.searchRoomDTOs || [];
         
-        for (let roomIndex = 0; roomIndex < searchRoomDTOs.length; roomIndex++) {
-          const guestKey = `${hotelIndexInCart}-${roomIndex}`;
-          const guests = roomGuests[guestKey] || [];
-          
-          for (let guestIndex = 0; guestIndex < guests.length; guestIndex++) {
-            const guest = guests[guestIndex];
-            if (!guest.salutation || !guest.firstName || !guest.lastName || !guest.gender) {
-              toast.error(`Please fill in all guest details for Room ${roomIndex + 1}, Guest ${guestIndex + 1}.`);
-              return;
+        // Find hotel index in cartData
+        let hotelIndexInCart = -1;
+        let hotelCount = 0;
+        for (let i = 0; i < cartData.length; i++) {
+          if (cartData[i].hotel) {
+            if (hotelCount === hotelIndex) {
+              hotelIndexInCart = i;
+              break;
             }
+            hotelCount++;
           }
         }
-      }
+
+        if (hotelIndexInCart >= 0) {
+          searchRoomDTOs.forEach((room, roomIndex) => {
+            const guestKey = `${hotelIndexInCart}-${roomIndex}`;
+            const guests = roomGuests[guestKey] || [];
+            
+            guests.forEach((guest, guestIndex) => {
+              // Use hotelIndexInCart for error key to match the guestKey used in rendering
+              const errorPrefix = `hotel_${hotelIndexInCart}_room_${roomIndex}_guest_${guestIndex}`;
+              
+              if (!guest.salutation || (typeof guest.salutation === 'string' && guest.salutation.trim() === "")) {
+                errors[`${errorPrefix}_salutation`] = "Salutation is required";
+                hasErrors = true;
+              }
+              if (!guest.firstName || (typeof guest.firstName === 'string' && guest.firstName.trim() === "")) {
+                errors[`${errorPrefix}_firstName`] = "First Name is required";
+                hasErrors = true;
+              }
+              if (!guest.lastName || (typeof guest.lastName === 'string' && guest.lastName.trim() === "")) {
+                errors[`${errorPrefix}_lastName`] = "Last Name is required";
+                hasErrors = true;
+              }
+              if (!guest.gender || (typeof guest.gender === 'string' && guest.gender.trim() === "")) {
+                errors[`${errorPrefix}_gender`] = "Gender is required";
+                hasErrors = true;
+              }
+            });
+          });
+        }
+      });
     }
 
+    return { errors, hasErrors };
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+
+    // Validate form
+    const { errors, hasErrors } = validateForm();
+
+    if (hasErrors) {
+      setValidationErrors(errors);
+      toast.error("Please fill in all required fields correctly.");
+      // Scroll to first error
+      setTimeout(() => {
+        const firstErrorField = document.querySelector('.is-invalid');
+        if (firstErrorField) {
+          firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      return;
+    }
+
+    // Clear validation errors before submission
+    setValidationErrors({});
+
     try {
+      const hotels = getHotels();
       const activities = getActivities();
       const transfers = getTransfers();
       
       // Find hotel index in cartData
-      const hotelIndexInCart = cartData.findIndex((item) => item.hotel);
+      const hotelIndexInCart = hotels.length > 0 
+        ? cartData.findIndex((item) => item.hotel)
+        : -1;
 
       // Prepare booking payload
+      const firstHotel = hotels.length > 0 ? hotels[0].hotel : null;
+      const checkIn = firstHotel?.checkIn || firstHotel?.checkInDate || "";
+      const checkOut = firstHotel?.checkOut || firstHotel?.checkOutDate || "";
+      const nights = calculateNights(checkIn, checkOut);
+      
+      // Get first activity date for tourDate
+      const firstActivity = activities.length > 0 ? activities[0].activity : null;
+      const tourDate = firstActivity?.activityDate 
+        ? formatDateToDDMMYYYY(firstActivity.activityDate) 
+        : (activities.length > 0 ? formatDateToDDMMYYYY(checkIn) : "");
+
       const bookingPayload = {
         customPackageId: "",
-        sellingPrice: sellingPrice.toFixed(2),
-        totalPrice: totalPrice.toFixed(2),
-        tourDate: activities.length > 0 ? formatDate(activities[0].activity?.activityDate) : "",
+        sellingPrice: String(sellingPrice.toFixed(2)),
+        totalPrice: String(totalPrice.toFixed(2)),
+        tourDate: tourDate,
         visaStatus: visaRequired,
-        visaAdult: visaDetails.visaAdult,
-        visaAdultRate: visaDetails.visaAdultRate,
-        visaChild: visaDetails.visaChild,
-        visaChildRate: visaDetails.visaChildRate,
-        visaInfant: visaDetails.visaInfant,
-        visaInfantRate: visaDetails.visaInfantRate,
-        hotelBookingRequest: hotels.length > 0 ? {
-          agentId: sessionStorage.getItem("makePkgAgentId") || "1",
-          apiId: hotels[0].hotel?.api || "INHOUSE",
-          hotelId: hotels[0].hotel?.hotelId || "",
-          hotelName: hotels[0].hotel?.hotelName || "",
-          address: hotels[0].hotel?.hotelAddress || "",
-          starRating: hotels[0].hotel?.starRating || 0,
-          checkInDate: hotels[0].hotel?.checkIn || hotels[0].hotel?.checkInDate || "",
-          checkOutDate: hotels[0].hotel?.checkOut || hotels[0].hotel?.checkOutDate || "",
-          nights: 1,
+        visaAdult: String(visaDetails.visaAdult || "0"),
+        visaAdultRate: String(visaDetails.visaAdultRate || "0"),
+        visaChild: String(visaDetails.visaChild || "0"),
+        visaChildRate: String(visaDetails.visaChildRate || "0"),
+        visaInfant: String(visaDetails.visaInfant || "0"),
+        visaInfantRate: String(visaDetails.visaInfantRate || "0"),
+        hotelBookingRequest: hotels.length > 0 && firstHotel ? {
+          agentId: String(sessionStorage.getItem("makePkgAgentId") || "1"),
+          apiId: String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
+          hotelId: String(firstHotel.hotelId || ""),
+          hotelName: firstHotel.hotelName || "",
+          address: firstHotel.hotelAddress || firstHotel.address || "",
+          starRating: parseInt(firstHotel.starRating || 0),
+          checkInDate: formatDateToYYYYMMDD(checkIn),
+          checkOutDate: formatDateToYYYYMMDD(checkOut),
+          nights: nights,
           employeeId: "1",
-          roomStatus: "Available",
-          cancellationPolicy: [],
-          deadlineDate: "",
+          roomStatus: firstHotel.roomStatus || "Available",
+          cancellationPolicy: Array.isArray(firstHotel.cancellationPolicy) 
+            ? firstHotel.cancellationPolicy 
+            : [],
+          deadlineDate: firstHotel.deadlineDate || "",
           isBookandVoucher: bookingConfirmation === "Book & Voucher",
           primaryGuest: {
-            firstName: primaryGuest.firstName,
+            firstName: primaryGuest.firstName || "",
             middleName: primaryGuest.middleName || "",
-            lastName: primaryGuest.lastName,
-            nativeCountry: "",
+            lastName: primaryGuest.lastName || "",
+            nativeCountry: primaryGuest.nativeCountry || "",
             email: primaryGuest.emailId || "",
             phone: primaryGuest.contactNumber || "",
             passportNo: primaryGuest.passportNumber || "",
-            salutaion: primaryGuest.salutation,
-            agentlpo: primaryGuest.lpo,
+            salutaion: primaryGuest.salutation || "",
+            agentlpo: primaryGuest.lpo || "",
           },
-          rooms: hotels[0].hotel?.searchRoomDTOs?.map((room, idx) => {
+          rooms: firstHotel?.searchRoomDTOs?.map((room, idx) => {
             const guestKey = `${hotelIndexInCart}-${idx}`;
             const guests = roomGuests[guestKey] || [];
             
+            // Get room rate from hotel data
+            const roomRate = parseFloat(firstHotel.totalRate || firstHotel.rate || 0);
+            const roomRateWithoutMarkup = parseFloat(firstHotel.totalPrice || firstHotel.rateWithoutMarkup || roomRate);
+            
             return {
               roomNo: idx + 1,
-              roomCategory: hotels[0].hotel?.roomCategory || "",
-              mealPlan: hotels[0].hotel?.roomType || "",
-              nonRefundable: false,
-              currency: "AED",
-              rate: 0,
-              rateWithoutMarkup: 0,
-              adults: parseInt(room.adult || 1),
-              children: parseInt(room.child || 0),
-              childAges: Array.isArray(room.childAge) ? room.childAge : [],
+              roomCategory: firstHotel.roomCategory || "",
+              mealPlan: firstHotel.roomType || "",
+              nonRefundable: firstHotel.nonRefundable === true || firstHotel.nonRefundable === "true" || firstHotel.refundstatus === "N",
+              currency: firstHotel.currency || "AED",
+              rate: roomRate,
+              rateWithoutMarkup: roomRateWithoutMarkup,
+              adults: parseInt(room.adult || room.adults || 1),
+              children: parseInt(room.child || room.children || 0),
+              childAges: Array.isArray(room.childAge) 
+                ? room.childAge.map(age => parseInt(age) || 0)
+                : (room.childAge ? [parseInt(room.childAge) || 0] : []),
               guests: guests.map((guest) => ({
                 salutation: guest.salutation || "",
                 firstName: guest.firstName || "",
-                middleName: "",
+                middleName: guest.middleName || "",
                 lastName: guest.lastName || "",
                 gender: guest.gender || "",
                 isChild: guest.isChild || false,
               })),
             };
           }) || [],
-          remarks: remarks,
-          specialRequests: specialRequest,
+          remarks: remarks || "",
+          specialRequests: specialRequest || "",
           tourismDirhams: parseFloat(tourismDirhams) || 0,
-          bookingConfirmation: bookingConfirmation,
+          bookingConfirmation: bookingConfirmation || "Book & Voucher",
         } : null,
-        customBookingActivityDTO: activities.map((item) => ({
-          activityId: item.activity?.activityId || "",
-          tourDate: item.activity?.activityDate || "",
-          noOfAdult: item.activity?.adult || "1",
-          noOfChild: item.activity?.child || "0",
-          childAgeArray: Array.isArray(item.activity?.childAge) 
-            ? item.activity.childAge.map(String)
-            : item.activity?.childAge ? [String(item.activity.childAge)] : [],
-          sellingPrice: "0",
-          totalPrice: "0",
-        })),
+        customBookingActivityDTO: activities.map((item) => {
+          const activity = item.activity || {};
+          const details = activity.details || {};
+          const activitySellingPrice = parseFloat(activity.totalRate || activity.sellingPrice || details.totalRate || 0);
+          const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalPrice || details.totalPrice || 0);
+          
+          return {
+            activityId: String(activity.activityId || ""),
+            tourDate: formatDateToDDMMYYYY(activity.activityDate || ""),
+            noOfAdult: String(activity.adult || activity.noOfAdult || "1"),
+            noOfChild: String(activity.child || activity.noOfChild || "0"),
+            childAgeArray: Array.isArray(activity.childAge) 
+              ? activity.childAge.map(age => String(age))
+              : (activity.childAge ? [String(activity.childAge)] : []),
+            sellingPrice: String(activitySellingPrice.toFixed(2)),
+            totalPrice: String(activityTotalPrice.toFixed(2)),
+          };
+        }),
         customBookingCabDTO: transfers.map((item, transferArrayIndex) => {
           // Find the actual index in cartData for this transfer
           let transferIndexInCart = -1;
@@ -446,29 +672,33 @@ const MakePkgBookingPage = () => {
           }
           const actualIndex = transferIndexInCart >= 0 ? transferIndexInCart : 0;
           const transferDetail = transferDetails[actualIndex] || {};
+          const cab = item.cab || {};
+          const details = cab.details || {};
+          const cabTotalRate = parseFloat(cab.totalRate || cab.totalPrice || details.totalRate || 0);
+          const cabTotalRateWithoutMrk = parseFloat(cab.totalRateWithoutmrk || cab.totalPrice || details.totalRateWithoutmrk || 0);
 
           return {
-            cabId: item.cab?.cabId || "",
+            cabId: String(cab.cabId || ""),
             noOfCabs: "1",
-            pickupDate: item.cab?.pickupDate || "",
-            dropOffDate: item.cab?.dropDate || "",
-            travelType: item.cab?.travelType || "1",
+            pickupDate: formatDateToDDMMYYYY(cab.pickupDate || ""),
+            dropOffDate: formatDateToDDMMYYYY(cab.dropDate || cab.dropOffDate || ""),
+            travelType: String(cab.travelType || "1"),
             hourDetails: "0",
             dropDetails: "3",
             paxDetails: "1",
             luggage: true,
-            locationId: item.cab?.locationId || "",
-            noOfAdult: item.cab?.adult || "1",
-            noOfChild: item.cab?.child || "0",
-            childAgeArray: Array.isArray(item.cab?.childAge) 
-              ? item.cab.childAge.map(String)
-              : item.cab?.childAge ? [String(item.cab.childAge)] : [],
-            totalRate: "0",
-            totalRateWithoutmrk: "0",
-            transporter: transferDetail.transporterName || item.cab?.transporter || "",
-            contactNumber: transferDetail.contactNumber || item.cab?.contactNumber || "",
-            driverName: transferDetail.driverName || item.cab?.driverName || "",
-            driverContact: transferDetail.driverContact || item.cab?.driverContact || "",
+            locationId: String(cab.locationId || ""),
+            noOfAdult: String(cab.adult || cab.noOfAdult || "1"),
+            noOfChild: String(cab.child || cab.noOfChild || "0"),
+            childAgeArray: Array.isArray(cab.childAge) 
+              ? cab.childAge.map(age => String(age))
+              : (cab.childAge ? [String(cab.childAge)] : []),
+            totalRate: String(cabTotalRate.toFixed(2)),
+            totalRateWithoutmrk: String(cabTotalRateWithoutMrk.toFixed(2)),
+            transporter: transferDetail.transporterName || cab.transporter || "",
+            contactNumber: transferDetail.contactNumber || cab.contactNumber || "",
+            driverName: transferDetail.driverName || cab.driverName || "",
+            driverContact: transferDetail.driverContact || cab.driverContact || "",
           };
         }),
         customBookingItinearyDTO: selectedItineraries.map((itineraryId) => ({
@@ -476,7 +706,7 @@ const MakePkgBookingPage = () => {
           days: 1,
         })),
         paymentApiId: "",
-        agentId: sessionStorage.getItem("makePkgAgentId") || "1",
+        agentId: String(sessionStorage.getItem("makePkgAgentId") || "1"),
         isCartBooking: true,
       };
 
@@ -487,9 +717,15 @@ const MakePkgBookingPage = () => {
         bookingPayload
       );
 
-      if (response.data && response.data.success !== false) {
-        toast.success("Booking submitted successfully!");
-        navigate("/booking-details/hotel-booking-list");
+      // Check booking response structure
+      if (
+        response.data &&
+        response.data.bookingId != null &&
+        response.data.bookingId != 0 &&
+        response.data.message === "Booking completed successfully"
+      ) {
+        toast.success(response.data.message || "Booking submitted successfully!");
+        navigate("/booking-details/custom-booking-list");
       } else {
         toast.error(response.data?.message || "Failed to submit booking.");
       }
@@ -573,7 +809,7 @@ const MakePkgBookingPage = () => {
 
             <Row>
               <Col lg={12}>
-                <Accordion defaultActiveKey="0" className="booking-accordion">
+                <Accordion defaultActiveKey={["0", "5"]} alwaysOpen className="booking-accordion">
                   {/* Itinerary Option Section */}
                   <Accordion.Item eventKey="0" className="mb-2">
                     <Accordion.Header onClick={fetchItineraryDetails}>
@@ -739,8 +975,23 @@ const MakePkgBookingPage = () => {
                                     const adults = parseInt(room.adult || room.adults || 1);
                                     const children = parseInt(room.child || room.children || 0);
                                     const totalGuests = adults + children;
-                                    const guestKey = `${hotelIndex}-${roomIndex}`;
+                                    
+                                    // Find hotel index in cartData to match validation
+                                    let hotelIndexInCart = -1;
+                                    let hotelCount = 0;
+                                    for (let i = 0; i < cartData.length; i++) {
+                                      if (cartData[i].hotel) {
+                                        if (hotelCount === hotelIndex) {
+                                          hotelIndexInCart = i;
+                                          break;
+                                        }
+                                        hotelCount++;
+                                      }
+                                    }
+                                    
+                                    const guestKey = hotelIndexInCart >= 0 ? `${hotelIndexInCart}-${roomIndex}` : `${hotelIndex}-${roomIndex}`;
                                     const guests = roomGuests[guestKey] || [];
+                                    const actualHotelIndex = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
 
                                     if (totalGuests === 0) return null;
 
@@ -779,7 +1030,7 @@ const MakePkgBookingPage = () => {
                                                       value={guest.salutation}
                                                       onChange={(e) =>
                                                         handleGuestChange(
-                                                          hotelIndex,
+                                                          actualHotelIndex,
                                                           roomIndex,
                                                           guestIndex,
                                                           "salutation",
@@ -787,6 +1038,7 @@ const MakePkgBookingPage = () => {
                                                         )
                                                       }
                                                       required
+                                                      isInvalid={!!validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_salutation`]}
                                                     >
                                                       <option value="">Select</option>
                                                       <option value="Mr">Mr</option>
@@ -795,6 +1047,9 @@ const MakePkgBookingPage = () => {
                                                       <option value="Miss">Miss</option>
                                                       <option value="Dr">Dr</option>
                                                     </Form.Select>
+                                                    <Form.Control.Feedback type="invalid">
+                                                      {validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_salutation`]}
+                                                    </Form.Control.Feedback>
                                                   </Col>
                                                   <Col md={4}>
                                                     <Form.Label className="small">
@@ -803,10 +1058,10 @@ const MakePkgBookingPage = () => {
                                                     <Form.Control
                                                       type="text"
                                                       size="sm"
-                                                      value={guest.firstName}
+                                                      value={guest.firstName || ""}
                                                       onChange={(e) =>
                                                         handleGuestChange(
-                                                          hotelIndex,
+                                                          actualHotelIndex,
                                                           roomIndex,
                                                           guestIndex,
                                                           "firstName",
@@ -815,7 +1070,11 @@ const MakePkgBookingPage = () => {
                                                       }
                                                       required
                                                       placeholder="First Name"
+                                                      isInvalid={!!validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_firstName`]}
                                                     />
+                                                    <Form.Control.Feedback type="invalid">
+                                                      {validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_firstName`]}
+                                                    </Form.Control.Feedback>
                                                   </Col>
                                                   <Col md={5}>
                                                     <Form.Label className="small">
@@ -824,10 +1083,10 @@ const MakePkgBookingPage = () => {
                                                     <Form.Control
                                                       type="text"
                                                       size="sm"
-                                                      value={guest.lastName}
+                                                      value={guest.lastName || ""}
                                                       onChange={(e) =>
                                                         handleGuestChange(
-                                                          hotelIndex,
+                                                          actualHotelIndex,
                                                           roomIndex,
                                                           guestIndex,
                                                           "lastName",
@@ -836,7 +1095,11 @@ const MakePkgBookingPage = () => {
                                                       }
                                                       required
                                                       placeholder="Last Name"
+                                                      isInvalid={!!validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_lastName`]}
                                                     />
+                                                    <Form.Control.Feedback type="invalid">
+                                                      {validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_lastName`]}
+                                                    </Form.Control.Feedback>
                                                   </Col>
                                                   <Col md={4}>
                                                     <Form.Label className="small">
@@ -844,10 +1107,10 @@ const MakePkgBookingPage = () => {
                                                     </Form.Label>
                                                     <Form.Select
                                                       size="sm"
-                                                      value={guest.gender}
+                                                      value={guest.gender || ""}
                                                       onChange={(e) =>
                                                         handleGuestChange(
-                                                          hotelIndex,
+                                                          actualHotelIndex,
                                                           roomIndex,
                                                           guestIndex,
                                                           "gender",
@@ -855,11 +1118,15 @@ const MakePkgBookingPage = () => {
                                                         )
                                                       }
                                                       required
+                                                      isInvalid={!!validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_gender`]}
                                                     >
                                                       <option value="">Select</option>
                                                       <option value="Male">Male</option>
                                                       <option value="Female">Female</option>
                                                     </Form.Select>
+                                                    <Form.Control.Feedback type="invalid">
+                                                      {validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_gender`]}
+                                                    </Form.Control.Feedback>
                                                   </Col>
                                                 </Row>
                                               </div>
@@ -1401,13 +1668,19 @@ const MakePkgBookingPage = () => {
                     </Accordion.Body>
                   </Accordion.Item>
 
-                  {/* Guest Details Section */}
+                  {/* Guest Details Section - Always Open */}
                   <Accordion.Item eventKey="5" className="mb-2">
-                    <Accordion.Header>
+                    <Accordion.Header 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      style={{ cursor: 'default' }}
+                    >
                       <h5 className="mb-0 fw-bold">Guest Details</h5>
                     </Accordion.Header>
                     <Accordion.Body>
-                      <Form onSubmit={handleSubmit} className="booking-form">
+                      <Form className="booking-form">
                         <Row className="g-2">
                           <Col md={3}>
                             <Form.Label>
@@ -1416,18 +1689,20 @@ const MakePkgBookingPage = () => {
                             <Form.Select
                               value={primaryGuest.salutation}
                               onChange={(e) =>
-                                setPrimaryGuest({
-                                  ...primaryGuest,
-                                  salutation: e.target.value,
-                                })
+                                handlePrimaryGuestChange("salutation", e.target.value)
                               }
+                              isInvalid={!!validationErrors.primaryGuest_salutation}
                               required
                             >
+                              <option value="">Select</option>
                               <option value="Mr">Mr</option>
                               <option value="Mrs">Mrs</option>
                               <option value="Ms">Ms</option>
                               <option value="Dr">Dr</option>
                             </Form.Select>
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.primaryGuest_salutation}
+                            </Form.Control.Feedback>
                           </Col>
                           <Col md={4}>
                             <Form.Label>
@@ -1437,13 +1712,14 @@ const MakePkgBookingPage = () => {
                               type="text"
                               value={primaryGuest.firstName}
                               onChange={(e) =>
-                                setPrimaryGuest({
-                                  ...primaryGuest,
-                                  firstName: e.target.value,
-                                })
+                                handlePrimaryGuestChange("firstName", e.target.value)
                               }
+                              isInvalid={!!validationErrors.primaryGuest_firstName}
                               required
                             />
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.primaryGuest_firstName}
+                            </Form.Control.Feedback>
                           </Col>
                           <Col md={5}>
                             <Form.Label>Middle Name</Form.Label>
@@ -1466,39 +1742,48 @@ const MakePkgBookingPage = () => {
                               type="text"
                               value={primaryGuest.lastName}
                               onChange={(e) =>
-                                setPrimaryGuest({
-                                  ...primaryGuest,
-                                  lastName: e.target.value,
-                                })
+                                handlePrimaryGuestChange("lastName", e.target.value)
                               }
+                              isInvalid={!!validationErrors.primaryGuest_lastName}
                               required
                             />
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.primaryGuest_lastName}
+                            </Form.Control.Feedback>
                           </Col>
                           <Col md={4}>
-                            <Form.Label>Contact Number</Form.Label>
+                            <Form.Label>
+                              Contact Number <span className="text-danger">*</span>
+                            </Form.Label>
                             <Form.Control
                               type="tel"
                               value={primaryGuest.contactNumber}
                               onChange={(e) =>
-                                setPrimaryGuest({
-                                  ...primaryGuest,
-                                  contactNumber: e.target.value,
-                                })
+                                handlePrimaryGuestChange("contactNumber", e.target.value)
                               }
+                              isInvalid={!!validationErrors.primaryGuest_contactNumber}
+                              required
                             />
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.primaryGuest_contactNumber}
+                            </Form.Control.Feedback>
                           </Col>
                           <Col md={4}>
-                            <Form.Label>Email Id</Form.Label>
+                            <Form.Label>
+                              Email Id <span className="text-danger">*</span>
+                            </Form.Label>
                             <Form.Control
                               type="email"
                               value={primaryGuest.emailId}
                               onChange={(e) =>
-                                setPrimaryGuest({
-                                  ...primaryGuest,
-                                  emailId: e.target.value,
-                                })
+                                handlePrimaryGuestChange("emailId", e.target.value)
                               }
+                              isInvalid={!!validationErrors.primaryGuest_emailId}
+                              required
                             />
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.primaryGuest_emailId}
+                            </Form.Control.Feedback>
                           </Col>
                           <Col md={4}>
                             <Form.Label>Passport Number</Form.Label>
@@ -1521,41 +1806,47 @@ const MakePkgBookingPage = () => {
                               type="text"
                               value={primaryGuest.lpo}
                               onChange={(e) =>
-                                setPrimaryGuest({
-                                  ...primaryGuest,
-                                  lpo: e.target.value,
-                                })
+                                handlePrimaryGuestChange("lpo", e.target.value)
                               }
+                              isInvalid={!!validationErrors.primaryGuest_lpo}
                               required
                             />
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.primaryGuest_lpo}
+                            </Form.Control.Feedback>
                           </Col>
                         </Row>
-
-                        {/* Submit Buttons */}
-                        <div className="mt-3 d-flex gap-2 justify-content-end">
-                          <Button
-                            type="button"
-                            variant="danger"
-                            size="lg"
-                            className="btn-booking btn-booking-danger"
-                            onClick={() => navigate(-1)}
-                          >
-                            × Cancel
-                          </Button>
-                          <Button 
-                            type="submit" 
-                            variant="primary" 
-                            size="lg"
-                            className="btn-booking btn-booking-primary"
-                          >
-                            <FaCheckCircle className="me-2" />
-                            BOOK →
-                          </Button>
-                        </div>
                       </Form>
                     </Accordion.Body>
                   </Accordion.Item>
                 </Accordion>
+              </Col>
+            </Row>
+
+            {/* Action Buttons at the end of page */}
+            <Row className="mt-4">
+              <Col lg={12}>
+                <div className="d-flex gap-2 justify-content-end">
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="lg"
+                    className="btn-booking btn-booking-danger"
+                    onClick={() => navigate(-1)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="primary" 
+                    size="lg"
+                    className="btn-booking btn-booking-primary"
+                    onClick={handleSubmit}
+                  >
+                    <FaCheckCircle className="me-2" />
+                    Book
+                  </Button>
+                </div>
               </Col>
             </Row>
           </Container>

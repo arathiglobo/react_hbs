@@ -345,6 +345,37 @@
   box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.1);
 }
 
+/* Validation Error Styling - Red Color */
+.booking-form .form-control.is-invalid,
+.booking-form .form-select.is-invalid {
+  border-color: #dc3545;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath d='m5.8 3.6 .4.4.4-.4m0 4.8h.8'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right calc(0.375em + 0.1875rem) center;
+  background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+  padding-right: calc(1.5em + 0.75rem);
+}
+
+.booking-form .form-control.is-invalid:focus,
+.booking-form .form-select.is-invalid:focus {
+  border-color: #dc3545;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+.booking-form .invalid-feedback {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: #dc3545;
+  font-weight: 500;
+}
+
+.booking-form .form-control.is-invalid ~ .invalid-feedback,
+.booking-form .form-select.is-invalid ~ .invalid-feedback {
+  display: block;
+}
+
 /* Visa Section */
 .visa-section {
   background: #fff3cd;
