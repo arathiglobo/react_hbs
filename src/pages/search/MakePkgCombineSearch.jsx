@@ -2292,6 +2292,7 @@ export default function MakePkgCombineSearch() {
                                                       <Button
                                                         variant="success"
                                                         size="sm"
+                                                        className="add-transfer-to-cart"
                                                         onClick={() =>
                                                           handleAddTransferToCart(
                                                             cab,
@@ -2313,9 +2314,7 @@ export default function MakePkgCombineSearch() {
                                                           </>
                                                         ) : (
                                                           <>
-                                                            <span className="me-1">
-                                                              👍
-                                                            </span>
+                                                            
                                                             Add to cart
                                                           </>
                                                         )}
