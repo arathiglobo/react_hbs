@@ -1,5 +1,20 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { Card, Row, Col, Form, Button, Tabs, Tab, Spinner, ButtonGroup, ToggleButton, Pagination, Badge, Modal } from "react-bootstrap";
+import {
+  Card,
+  Row,
+  Col,
+  Form,
+  Button,
+  Tabs,
+  Tab,
+  Spinner,
+  ButtonGroup,
+  ToggleButton,
+  Pagination,
+  Badge,
+  Modal,
+  Table,
+} from "react-bootstrap";
 import Select from "react-select";
 import {
   FaSearch,
@@ -119,11 +134,13 @@ export default function MakePkgCombineSearch() {
   const [agentId, setAgentId] = useState(agent || "");
   const [activeTab, setActiveTab] = useState("accommodation");
   const [roomsOpen, setRoomsOpen] = useState(false);
-  const [rooms, setRooms] = useState([{ 
-    adults: adults || 1, 
-    children: children || 0, 
-    childAges: initialChildAges || [] 
-  }]);
+  const [rooms, setRooms] = useState([
+    {
+      adults: adults || 1,
+      children: children || 0,
+      childAges: initialChildAges || [],
+    },
+  ]);
   const [childAges, setChildAges] = useState(initialChildAges || []);
   const [allResults, setAllResults] = useState([]);
   const [hasSearchResult, setHasSearchResult] = useState(false);
@@ -136,38 +153,43 @@ export default function MakePkgCombineSearch() {
   const [completedChannels, setCompletedChannels] = useState(new Set()); // Track completed channels
   const [searchId, setSearchId] = useState(null);
   const resultsRef = useRef(null);
-   const [hasSearched, setHasSearched] = useState(false);
-   const [sortBy, setSortBy] = useState("priceAsc");
-    const [starRating, setStarRating] = useState([]);
-    const [hotelType, setHotelType] = useState([]);
-      const [channelType, setChannelType] = useState([]);
-      const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
-      const [hotelSearchTerm, setHotelSearchTerm] = useState("");
-      const [errors, setErrors] = useState({});
-      const [clickedHotelIds, setClickedHotelIds] = useState([]);
-      const [view, setView] = useState("card");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [sortBy, setSortBy] = useState("priceAsc");
+  const [starRating, setStarRating] = useState([]);
+  const [hotelType, setHotelType] = useState([]);
+  const [channelType, setChannelType] = useState([]);
+  const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
+  const [hotelSearchTerm, setHotelSearchTerm] = useState("");
+  const [errors, setErrors] = useState({});
+  const [clickedHotelIds, setClickedHotelIds] = useState([]);
+  const [view, setView] = useState("card");
 
-      // Transfer search state
-      const [transferResults, setTransferResults] = useState([]);
-      const [transferLoading, setTransferLoading] = useState(false);
-      const [hasTransferSearched, setHasTransferSearched] = useState(false);
-      const [transferAdults, setTransferAdults] = useState(adults || 1);
-      const [transferChildren, setTransferChildren] = useState(children || 0);
-      const [transferChildAges, setTransferChildAges] = useState(initialChildAges || []);
-      const [transferPickupDate, setTransferPickupDate] = useState(travelDate || "");
-      const [transferDropoffDate, setTransferDropoffDate] = useState("");
+  // Transfer search state
+  const [transferResults, setTransferResults] = useState([]);
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [hasTransferSearched, setHasTransferSearched] = useState(false);
+  const [transferAdults, setTransferAdults] = useState(adults || 1);
+  const [transferChildren, setTransferChildren] = useState(children || 0);
+  const [transferChildAges, setTransferChildAges] = useState(
+    initialChildAges || []
+  );
+  const [transferPickupDate, setTransferPickupDate] = useState(
+    travelDate || ""
+  );
+  const [transferDropoffDate, setTransferDropoffDate] = useState("");
 
-      // Tours and Activities search state
-      const [tourResults, setTourResults] = useState([]);
-      const [tourLoading, setTourLoading] = useState(false);
-      const [hasTourSearched, setHasTourSearched] = useState(false);
-      const [tourAdults, setTourAdults] = useState(adults || 1);
-      const [tourChildren, setTourChildren] = useState(children || 0);
-      const [tourChildAges, setTourChildAges] = useState(initialChildAges || []);
-      const [tourDate, setTourDate] = useState(travelDate || "");
-      const [showActivityModal, setShowActivityModal] = useState(false);
+  // Tours and Activities search state
+  const [tourResults, setTourResults] = useState([]);
+  const [tourLoading, setTourLoading] = useState(false);
+  const [hasTourSearched, setHasTourSearched] = useState(false);
+  const [tourAdults, setTourAdults] = useState(adults || 1);
+  const [tourChildren, setTourChildren] = useState(children || 0);
+  const [tourChildAges, setTourChildAges] = useState(initialChildAges || []);
+  const [tourDate, setTourDate] = useState(travelDate || "");
+  const [showActivityModal, setShowActivityModal] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [addingActivityId, setAddingActivityId] = useState(null);
+  const [addingTransferId, setAddingTransferId] = useState(null);
 
   const formatDateToDDMMYYYY = (dateString) => {
     if (!dateString) return "";
@@ -230,9 +252,11 @@ export default function MakePkgCombineSearch() {
         }
         // Ensure we have the right number of age inputs
         while (currentAges.length < transferChildren) {
-          currentAges.push(initialChildAges && currentAges.length < initialChildAges.length 
-            ? initialChildAges[currentAges.length] 
-            : 5); // Default age or from initial
+          currentAges.push(
+            initialChildAges && currentAges.length < initialChildAges.length
+              ? initialChildAges[currentAges.length]
+              : 5
+          ); // Default age or from initial
         }
         // Remove extra ages if children count decreased
         if (currentAges.length > transferChildren) {
@@ -248,11 +272,13 @@ export default function MakePkgCombineSearch() {
   // Initialize rooms and child ages from search criteria
   useEffect(() => {
     if (adults || children) {
-      const initialRooms = [{
-        adults: adults || 1,
-        children: children || 0,
-        childAges: initialChildAges || []
-      }];
+      const initialRooms = [
+        {
+          adults: adults || 1,
+          children: children || 0,
+          childAges: initialChildAges || [],
+        },
+      ];
       setRooms(initialRooms);
       if (initialChildAges && initialChildAges.length > 0) {
         setChildAges(initialChildAges);
@@ -271,9 +297,11 @@ export default function MakePkgCombineSearch() {
         }
         // Ensure we have the right number of age inputs
         while (currentAges.length < tourChildren) {
-          currentAges.push(initialChildAges && currentAges.length < initialChildAges.length 
-            ? initialChildAges[currentAges.length] 
-            : 5); // Default age or from initial
+          currentAges.push(
+            initialChildAges && currentAges.length < initialChildAges.length
+              ? initialChildAges[currentAges.length]
+              : 5
+          ); // Default age or from initial
         }
         // Remove extra ages if children count decreased
         if (currentAges.length > tourChildren) {
@@ -418,7 +446,9 @@ export default function MakePkgCombineSearch() {
     if (hotelSearchTerm && hotelSearchTerm.trim()) {
       const searchTerm = hotelSearchTerm.trim().toLowerCase();
       results = results.filter((hotel) => {
-        const hotelName = (hotel.name || hotel.hotelName || '').trim().toLowerCase();
+        const hotelName = (hotel.name || hotel.hotelName || "")
+          .trim()
+          .toLowerCase();
         return hotelName.includes(searchTerm);
       });
     }
@@ -468,24 +498,24 @@ export default function MakePkgCombineSearch() {
     }
   };
 
-   useEffect(() => {
-      if (!searchId || !hasSearched) return;
-  
-      setIsLoading(true);
-      fetchHotels(pageIndex, searchId, agent).finally(() => setIsLoading(false));
-    }, [
-      pageIndex,
-      sortBy,
-      starRating,
-      channelType,
-      searchId,
-      agent,
-      hasSearched,
-    ]);
+  useEffect(() => {
+    if (!searchId || !hasSearched) return;
 
-     useEffect(() => {
-        const style = document.createElement("style");
-        style.textContent = `
+    setIsLoading(true);
+    fetchHotels(pageIndex, searchId, agent).finally(() => setIsLoading(false));
+  }, [
+    pageIndex,
+    sortBy,
+    starRating,
+    channelType,
+    searchId,
+    agent,
+    hasSearched,
+  ]);
+
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.textContent = `
           @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -494,11 +524,9 @@ export default function MakePkgCombineSearch() {
             animation: fadeIn 0.5s ease-in;
           }
         `;
-        document.head.appendChild(style);
-        return () => document.head.removeChild(style);
-      }, []);
-    
-
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
   const handleHotelSearchSubmit = async (e) => {
     e.preventDefault();
@@ -524,9 +552,12 @@ export default function MakePkgCombineSearch() {
         roomNo: index + 1,
         adultCount: String(room.adults || 1),
         childCount: String(room.children || 0),
-        childAges: room.childAges && room.childAges.length > 0 
-          ? room.childAges.map(age => parseInt(age) || 0)
-          : (room.children > 0 ? Array(room.children).fill(0) : [0]),
+        childAges:
+          room.childAges && room.childAges.length > 0
+            ? room.childAges.map((age) => parseInt(age) || 0)
+            : room.children > 0
+            ? Array(room.children).fill(0)
+            : [0],
         adultAges: room.adultAges?.length ? room.adultAges : [25],
       }));
 
@@ -542,7 +573,7 @@ export default function MakePkgCombineSearch() {
         noOfRooms,
         roomConfigurations,
         agentId: agentIdFinal,
-        apiType:["INHOUSE"]
+        apiType: ["INHOUSE"],
       };
 
       // const searchKeyRes = await axiosInstance.post(
@@ -577,7 +608,9 @@ export default function MakePkgCombineSearch() {
       const responseData = Array.isArray(searchRes.data) ? searchRes.data : [];
 
       const mappedResults = responseData.map((hotel, index) => ({
-        id: hotel.hotelCode ? `local-${hotel.hotelCode}` : `local-h${index + 1}`,
+        id: hotel.hotelCode
+          ? `local-${hotel.hotelCode}`
+          : `local-h${index + 1}`,
         searchId: "local",
         hotelCode: hotel.hotelCode || null,
         name: hotel.hotelName || "Unknown Hotel",
@@ -633,7 +666,7 @@ export default function MakePkgCombineSearch() {
       //     return hasAnyCompleted || data.finalStatus === "COMPLETED";
       //   },
       //   (data, pollCount) => {
-         
+
       //     const mappedResults = Array.isArray(data.result)
       //       ? data.result.map((hotel, index) => ({
       //           id: hotel.hotelCode
@@ -741,13 +774,13 @@ export default function MakePkgCombineSearch() {
       const formatDate = (dateString) => {
         if (!dateString) return "";
         const date = new Date(dateString);
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, "0");
+        const month = String(date.getMonth() + 1).padStart(2, "0");
         const year = date.getFullYear();
         return `${day}/${month}/${year}`;
       };
 
-      console.log
+      console.log;
       // Prepare payload for activity search matching backend DTO
       const activityPayload = {
         activityDate: formatDate(tourDate || travelDate || checkIn),
@@ -757,9 +790,12 @@ export default function MakePkgCombineSearch() {
         destinationCityId: destination?.value || "",
         searchCorCtype: destination?.type || "State", // Use destination type or default to "State"
         agentId: String(agentId || agent || 1),
-        childAge: tourChildAges && tourChildAges.length > 0 
-          ? tourChildAges.map(age => String(parseInt(age) || 0))
-          : (tourChildren > 0 ? Array(tourChildren).fill("0") : []),
+        childAge:
+          tourChildAges && tourChildAges.length > 0
+            ? tourChildAges.map((age) => String(parseInt(age) || 0))
+            : tourChildren > 0
+            ? Array(tourChildren).fill("0")
+            : [],
         adult: String(tourAdults || adults || 1),
         child: String(tourChildren || children || 0),
       };
@@ -777,8 +813,11 @@ export default function MakePkgCombineSearch() {
             activityDetails: activity.activityDetails || "",
             starRating: activity.starRating || 0,
             totalRate: activity.totalRate || activity.activityRate || 0,
-            totalRateWithoutMrk: activity.totalRateWithoutmrk || activity.activityRate || 0,
-            activityImage: activity.activityImage || "https://via.placeholder.com/400x225?text=Activity",
+            totalRateWithoutMrk:
+              activity.totalRateWithoutmrk || activity.activityRate || 0,
+            activityImage:
+              activity.activityImage ||
+              "https://via.placeholder.com/400x225?text=Activity",
             childMax: activity.childMax || 0,
             childMin: activity.childMin || 0,
             adultRate: activity.adultRate || 0,
@@ -787,9 +826,11 @@ export default function MakePkgCombineSearch() {
             maxPax: activity.maxPax || 0,
             minPaxsic: activity.minPaxsic || 0,
             currency: activity.currencyCode || "AED",
-            duration: activity.viatorActivityDurationFrom && activity.viatorActivityDurationTo 
-              ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
-              : null,
+            duration:
+              activity.viatorActivityDurationFrom &&
+              activity.viatorActivityDurationTo
+                ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
+                : null,
             apiType: activity.apiType || null,
             viatorProductCode: activity.viatorProductCode || null,
           }))
@@ -835,9 +876,8 @@ export default function MakePkgCombineSearch() {
       activityId: String(activity.id || activity.activityId || ""),
       activityName: activity.activityName || "",
       agentId: agentValue,
-      totalRate : activity.totalRate || 0,
-      totalRateWithoutMrk : activity.totalRateWithoutMrk || 0,
-
+      totalRate: activity.totalRate || 0,
+      totalRateWithoutMrk: activity.totalRateWithoutMrk || 0,
     };
 
     if (!payload.activityId) {
@@ -884,9 +924,12 @@ export default function MakePkgCombineSearch() {
         destinationCityId: destination?.value || "",
         searchCorCtype: "city", // Assuming city search - adjust if needed (could be "city" or "country")
         agentid: String(agentId || agent || 1),
-        childAge: transferChildAges && transferChildAges.length > 0 
-          ? transferChildAges.map(age => parseInt(age) || 0)
-          : (transferChildren > 0 ? Array(transferChildren).fill(0) : []),
+        childAge:
+          transferChildAges && transferChildAges.length > 0
+            ? transferChildAges.map((age) => parseInt(age) || 0)
+            : transferChildren > 0
+            ? Array(transferChildren).fill(0)
+            : [],
         adult: transferAdults || adults || 1,
         child: transferChildren || children || 0,
       };
@@ -896,36 +939,33 @@ export default function MakePkgCombineSearch() {
         transferPayload
       );
 
-      // Map API response to transfer results format
+      // Map API response to transfer results format based on new structure
+      const ensureHttpImage = (imageUrl) => {
+        if (!imageUrl) {
+          return "https://via.placeholder.com/400x225?text=Transfer";
+        }
+        if (/^https?:\/\//i.test(imageUrl)) {
+          return imageUrl;
+        }
+        if (typeof imageUrl === "string") {
+          const fileName = imageUrl.split(/[/\\]/).pop();
+          if (fileName) {
+            return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
+          }
+        }
+        return "https://via.placeholder.com/400x225?text=Transfer";
+      };
+
       const mappedResults = Array.isArray(response.data)
-        ? response.data.map((transfer, index) => ({
-            id: transfer.id || `transfer-${index}`,
-            vehicleType: transfer.vehicleType || transfer.vehicleName || "Standard Vehicle",
-            vehicleName: transfer.vehicleName || transfer.vehicleType || "Transfer Vehicle",
-            capacity: transfer.capacity || transfer.passengerCount || 0,
-            price: transfer.price || transfer.totalPrice || transfer.rate || 0,
-            currency: transfer.currency || "AED",
-            image: transfer.image || transfer.vehicleImage || "https://via.placeholder.com/400x225?text=Transfer",
-            pickupLocation: transfer.pickupLocation || transfer.fromLocation || "",
-            dropoffLocation: transfer.dropoffLocation || transfer.toLocation || "",
-            description: transfer.description || "",
-            amenities: transfer.amenities || [],
-            duration: transfer.duration || transfer.estimatedTime || "",
-          }))
-        : response.data?.data && Array.isArray(response.data.data)
-        ? response.data.data.map((transfer, index) => ({
-            id: transfer.id || `transfer-${index}`,
-            vehicleType: transfer.vehicleType || transfer.vehicleName || "Standard Vehicle",
-            vehicleName: transfer.vehicleName || transfer.vehicleType || "Transfer Vehicle",
-            capacity: transfer.capacity || transfer.passengerCount || 0,
-            price: transfer.price || transfer.totalPrice || transfer.rate || 0,
-            currency: transfer.currency || "AED",
-            image: transfer.image || transfer.vehicleImage || "https://via.placeholder.com/400x225?text=Transfer",
-            pickupLocation: transfer.pickupLocation || transfer.fromLocation || "",
-            dropoffLocation: transfer.dropoffLocation || transfer.toLocation || "",
-            description: transfer.description || "",
-            amenities: transfer.amenities || [],
-            duration: transfer.duration || transfer.estimatedTime || "",
+        ? response.data.map((cab, index) => ({
+            cabid: cab.cabid || cab.cabId || `cab-${index}`,
+            cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
+            cabdetails: cab.cabdetails || "",
+            cabpic: ensureHttpImage(cab.cabpic || cab.cabPic),
+            noOfCabs: cab.noOfCabs || 1,
+            searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
+              ? cab.searchCabDetailsDTO
+              : [],
           }))
         : [];
 
@@ -938,6 +978,91 @@ export default function MakePkgCombineSearch() {
     }
   };
 
+  const handleAddTransferToCart = async (cab, cabDetail) => {
+    if (!cab || !cabDetail) return;
+
+    const agentValue = String(agentId || agent || 1);
+    const pickupDateValue = formatDateToDDMMYYYY(
+      transferPickupDate || travelDate || checkIn
+    );
+    const dropoffDateValue = formatDateToDDMMYYYY(
+      transferDropoffDate || checkOut
+    );
+
+    if (!pickupDateValue) {
+      toast.error("Select a valid pickup date before adding to cart.");
+      return;
+    }
+
+    if (!nationality?.value) {
+      toast.error("Select a nationality before adding to cart.");
+      return;
+    }
+
+    // Determine rate based on type (SIC or Private)
+    const rate =
+      cabDetail.types === "SIC" ? cabDetail.sicRate : cabDetail.privateRate;
+    const totalRate = cabDetail.totalRateWithoutMrk || rate || 0;
+
+    const payload = {
+      cabId: String(cab.cabid || ""),
+      cabName: cab.cabname || "",
+      pickupDate: pickupDateValue,
+      dropDate: dropoffDateValue || pickupDateValue,
+      travelType: String(cabDetail.travelType || "1"),
+      dropDetails: String(cabDetail.dropDetails || "1"),
+      paxDetails: String(cabDetail.paxDetails || "1"),
+      locationId: String(cabDetail.locationId || ""),
+      location: cabDetail.location || "",
+      types: cabDetail.types || "Private",
+      dropOff: cabDetail.dropOff || "",
+      adult: String(transferAdults || adults || 1),
+      child: String(transferChildren || children || 0),
+      childAge:
+        Array.isArray(transferChildAges) && transferChildAges.length > 0
+          ? transferChildAges.map((age) => String(age))
+          : [],
+      nativeCountryId: String(nationality.value),
+      agentId: agentValue,
+      totalRate: totalRate,
+      totalRateWithoutmrk: totalRate,
+      minpax: String(cabDetail.minpax || 1),
+      maxpax: String(cabDetail.maxpax || 5),
+    };
+
+    if (!payload.cabId) {
+      toast.error("Unable to determine the transfer identifier.");
+      return;
+    }
+
+    setAddingTransferId(
+      `${cab.cabid}-${cabDetail.dropDetails}-${cabDetail.paxDetails}-${cabDetail.types}`
+    );
+
+    try {
+      const response = await axiosInstance.post(
+        "/api/makeYourOwnPackage/saveCabDetailsToCart",
+        payload
+      );
+
+      if (
+        response.data === "1" ||
+        response.data === 1 ||
+        (response.data && response.data.success !== false)
+      ) {
+        toast.success("Transfer added to cart successfully.");
+        window.dispatchEvent(new Event("cartUpdated"));
+      } else {
+        throw new Error("Unexpected response");
+      }
+    } catch (error) {
+      console.error("Failed to add transfer to cart:", error);
+      toast.error("Failed to add transfer to cart. Please try again.");
+    } finally {
+      setAddingTransferId(null);
+    }
+  };
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -946,31 +1071,48 @@ export default function MakePkgCombineSearch() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl mb-4">
             <Card.Body>
-              
               <h4 className="fw-bold mb-4">
-                Create My Trip <span className="text-muted">- {destinationLabel}</span>
+                Create My Trip{" "}
+                <span className="text-muted">- {destinationLabel}</span>
               </h4>
 
-              <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-3 nav-tabs-custom">
+              <Tabs
+                activeKey={activeTab}
+                onSelect={(k) => setActiveTab(k)}
+                className="mb-3 nav-tabs-custom"
+              >
                 {/* --------------- Accommodation Tab ---------------- */}
-                <Tab eventKey="accommodation" title={<><FaHotel className="me-2" /> Accommodation</>}>
+                <Tab
+                  eventKey="accommodation"
+                  title={
+                    <>
+                      <FaHotel className="me-2" /> Accommodation
+                    </>
+                  }
+                >
                   <Card className="border-0 shadow-sm">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Hotel Search</h5>
+                      <h5 className="fw-bold text-primary mb-3">
+                        Hotel Search
+                      </h5>
                       <Form>
                         <Row className="g-3">
                           <Col md={3}>
                             <Form.Group>
                               <Form.Label>Check In</Form.Label>
-                              <Form.Control type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
+                              <Form.Control
+                                type="date"
+                                value={checkIn}
+                                onChange={(e) => setCheckIn(e.target.value)}
+                              />
                             </Form.Group>
                           </Col>
                           <Col md={3}>
                             <Form.Group>
                               <Form.Label>Check Out</Form.Label>
-                              <Form.Control 
-                                type="date" 
-                                value={checkOut} 
+                              <Form.Control
+                                type="date"
+                                value={checkOut}
                                 onChange={(e) => setCheckOut(e.target.value)}
                                 min={checkIn || undefined}
                               />
@@ -979,64 +1121,84 @@ export default function MakePkgCombineSearch() {
                           <Col md={2}>
                             <Form.Group>
                               <Form.Label>Nights</Form.Label>
-                              <Form.Control type="number" min="1" value={nightsCount} onChange={(e) => setNightsCount(e.target.value)} />
+                              <Form.Control
+                                type="number"
+                                min="1"
+                                value={nightsCount}
+                                onChange={(e) => setNightsCount(e.target.value)}
+                              />
                             </Form.Group>
                           </Col>
                           <Col lg={4} md={6}>
-                            <Form.Label className="fw-semibold text-dark">👥 Rooms & Guests</Form.Label>
-                            <Button variant="outline-primary" className="w-100 text-start" type="button" onClick={() => setRoomsOpen(!roomsOpen)}>
-                              {adultCount} adults{childCount ? `, ${childCount} child` : ""} · {rooms.length} room
-                              <span className="float-end">{roomsOpen ? "▴" : "▾"}</span>
+                            <Form.Label className="fw-semibold text-dark">
+                              👥 Rooms & Guests
+                            </Form.Label>
+                            <Button
+                              variant="outline-primary"
+                              className="w-100 text-start"
+                              type="button"
+                              onClick={() => setRoomsOpen(!roomsOpen)}
+                            >
+                              {adultCount} adults
+                              {childCount ? `, ${childCount} child` : ""} ·{" "}
+                              {rooms.length} room
+                              <span className="float-end">
+                                {roomsOpen ? "▴" : "▾"}
+                              </span>
                             </Button>
                           </Col>
                         </Row>
 
                         <div className="text-center mt-4">
-                          <Button variant="warning" className="px-4 py-2" onClick={handleHotelSearchSubmit}>
+                          <Button
+                            variant="warning"
+                            className="px-4 py-2"
+                            onClick={handleHotelSearchSubmit}
+                          >
                             <FaSearch className="me-2" />
                             Search
                           </Button>
                         </div>
                       </Form>
 
-                     {hasSearched && !showResultsDuringPolling && (
-            <Card className="shadow-sm rounded-xl mb-4">
-              <Card.Body className="text-center py-5">
-                <div className="results-loader">
-                  <div className="loader-ring">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                  <h4 className="text-primary fw-bold mt-3 mb-1">
-                    Fetching Best Results...
-                  </h4>
-                  <p className="text-muted small mb-0">
-                    Comparing rates across multiple providers
-                  </p>
-                </div>
-              </Card.Body>
-            </Card>
-          )}
+                      {hasSearched && !showResultsDuringPolling && (
+                        <Card className="shadow-sm rounded-xl mb-4">
+                          <Card.Body className="text-center py-5">
+                            <div className="results-loader">
+                              <div className="loader-ring">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                              </div>
+                              <h4 className="text-primary fw-bold mt-3 mb-1">
+                                Fetching Best Results...
+                              </h4>
+                              <p className="text-muted small mb-0">
+                                Comparing rates across multiple providers
+                              </p>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      )}
 
-          {!hasSearched && !hasSearchResult && (
-            <Card className="shadow-sm rounded-xl">
-              <Card.Body className="text-center text-muted py-5">
-                <FaSearch className="display-4 text-muted mb-3" />
-                <h4>Ready to Find Your Perfect Stay?</h4>
-                <p>
-                  Use the search form above to discover amazing hotels and
-                  exclusive deals.
-                </p>
-              </Card.Body>
-            </Card>
-          )}
+                      {!hasSearched && !hasSearchResult && (
+                        <Card className="shadow-sm rounded-xl">
+                          <Card.Body className="text-center text-muted py-5">
+                            <FaSearch className="display-4 text-muted mb-3" />
+                            <h4>Ready to Find Your Perfect Stay?</h4>
+                            <p>
+                              Use the search form above to discover amazing
+                              hotels and exclusive deals.
+                            </p>
+                          </Card.Body>
+                        </Card>
+                      )}
 
-          {hasSearched && (
-            <div ref={resultsRef}>
-              {/* Progress bar for channels */}
-              {/* {pollStatus === "IN_PROGRESS" && (
+                      {hasSearched && (
+                        <div ref={resultsRef}>
+                          {/* Progress bar for channels */}
+                          {/* {pollStatus === "IN_PROGRESS" && (
                 <Card className="shadow-sm rounded-xl mb-3">
                   <Card.Body className="p-3">
                     <div className="d-flex align-items-center">
@@ -1053,695 +1215,859 @@ export default function MakePkgCombineSearch() {
                 </Card>
               )} */}
 
-              <Card className="shadow-sm rounded-xl mb-3 filtersection">
-                <Card.Body className="p-3">
-                  <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-3">
-                    <h6 className="mb-2 mb-md-0 fw-bold text-primary">
-                      <FaSearch className="me-2" />
-                      {/* Filters & Sort ({completedChannels.size} channels complete) */}
-                      Filters & Sort
-                    </h6>
-                    <div className="d-flex flex-wrap gap-2">
-                      <ButtonGroup size="sm">
-                        <ToggleButton
-                          id="view-card"
-                          type="radio"
-                          variant={
-                            view === "card" ? "primary" : "outline-secondary"
-                          }
-                          checked={view === "card"}
-                          value="card"
-                          onChange={() => setView("card")}
-                        >
-                          <FaBuilding className="me-1" />
-                          Cards
-                        </ToggleButton>
-                        <ToggleButton
-                          id="view-map"
-                          type="radio"
-                          variant={
-                            view === "map" ? "primary" : "outline-secondary"
-                          }
-                          checked={view === "map"}
-                          value="map"
-                          onChange={() => setView("map")}
-                          disabled
-                        >
-                          🗺️ Map
-                        </ToggleButton>
-                      </ButtonGroup>
-                    </div>
-                  </div>
-
-                  <Row className="g-3">
-                    <Col lg={3} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaSearch className="me-1 text-info" />
-                          Hotel Name
-                        </Form.Label>
-                        <Form.Control
-                          type="text"
-                          placeholder="Search hotels..."
-                          className="form-control-modern-sm"
-                          value={hotelSearchTerm}
-                          onChange={(e) => setHotelSearchTerm(e.target.value)}
-                        />
-                      </Form.Group>
-                    </Col>
-
-                    <Col lg={3} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaStar className="me-1 text-warning" />
-                          Star Rating
-                        </Form.Label>
-                        <Select
-                          isMulti
-                          options={starOptions}
-                          value={starRating}
-                          onChange={setStarRating}
-                          placeholder="All Stars"
-                          className="modern-select-sm"
-                          menuPosition="absolute"
-                          menuPlacement="auto"
-                           menuPortalTarget={document.body}   // 👈 force portal
-                           styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-                            control: (base) => ({
-                              ...base,
-                              minHeight: "36px",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                              fontSize: "0.875rem",
-                              "&:hover": {
-                                borderColor: "#86b7fe",
-                              },
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              zIndex: 99999,
-                              position: "absolute",
-                              marginTop: "2px",
-                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                            }),
-                          }}
-                        />
-                      </Form.Group>
-                    </Col>
-
-                    <Col lg={3} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaBuilding className="me-1 text-info" />
-                          Hotel Type
-                        </Form.Label>
-                        <Select
-                          isMulti
-                          options={hotelTypeOptions}
-                          value={hotelType}
-                          onChange={setHotelType}
-                          placeholder="All Types"
-                          className="modern-select-sm"
-                          menuPosition="absolute"
-                          menuPlacement="auto"
-                           menuPortalTarget={document.body}  
-                          styles={{
-                             menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-                            control: (base) => ({
-                              ...base,
-                              minHeight: "36px",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                              fontSize: "0.875rem",
-                              "&:hover": {
-                                borderColor: "#86b7fe",
-                              },
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              zIndex: 99999,
-                              position: "absolute",
-                              marginTop: "2px",
-                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                            }),
-                          }}
-                        />
-                      </Form.Group>
-                    </Col>
-
-                    <Col lg={3} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaGlobe className="me-1 text-success" />
-                          Channel
-                        </Form.Label>
-                        <Select
-                          isMulti
-                          options={channelTypeOptions}
-                          value={channelType}
-                          onChange={setChannelType}
-                          placeholder="All Channels"
-                          className="modern-select-sm"
-                          menuPosition="absolute"
-                          menuPlacement="auto"
-                           menuPortalTarget={document.body}  
-                          styles={{
-                             menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-                            control: (base) => ({
-                              ...base,
-                              minHeight: "36px",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                              fontSize: "0.875rem",
-                              "&:hover": {
-                                borderColor: "#86b7fe",
-                              },
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              zIndex: 99999,
-                              position: "absolute",
-                              marginTop: "2px",
-                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                              maxHeight: "300px", // Increased from 200px
-                              overflowY: "auto", // Enable scrolling if needed
-                            }),
-                            option: (base, state) => ({
-                              ...base,
-                              backgroundColor: state.isFocused
-                                ? "#f8f9fa"
-                                : "white",
-                              color: state.isSelected ? "white" : "#212529",
-                              "&:active": {
-                                backgroundColor: "#0d6efd",
-                              },
-                            }),
-                          }}
-                        />
-                      </Form.Group>
-                    </Col>
-
-                    <Col lg={2} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaSort className="me-1 text-secondary" />
-                          Sort By
-                        </Form.Label>
-                        <Form.Select
-                          size="sm"
-                          value={sortBy}
-                          onChange={(e) => setSortBy(e.target.value)}
-                          className="form-control-modern-sm"
-                        >
-                          <option value="priceAsc">Price: Low to High</option>
-                          <option value="priceDesc">Price: High to Low</option>
-                        </Form.Select>
-                      </Form.Group>
-                    </Col>
-
-                    <Col
-                      lg={2}
-                      md={4}
-                      sm={6}
-                      className="d-flex align-items-end"
-                    >
-                      <Button
-                        variant="outline-primary"
-                        size="sm"
-                        className="w-100"
-                        onClick={() => {
-                          setStarRating([]);
-                          setHotelType([]);
-                          setChannelType([]);
-                          setSortBy("priceAsc");
-                          setHotelSearchTerm("");
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
-
-                                                                           {/* New Pagination Section After Filters */}
-              {hasSearched && (
-                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-                  <small className="text-muted fw-semibold">
-                    {filteredResults.length > 0 ? (
-                      <>
-                        Showing{" "}
-                        {(hotelSearchTerm?.trim() || hotelType.length > 0 || channelType.length > 0 || starRating.length > 0
-                          ? `1-${filteredResults.length}`
-                          : `${pageIndex * pageSize + 1}-${Math.min(pageIndex * pageSize + pageSize, totalElements)}`
-                        )}{" "}
-                        of{" "}
-                        {(hotelSearchTerm?.trim() || hotelType.length > 0 || channelType.length > 0 || starRating.length > 0
-                          ? filteredResults.length
-                          : totalElements
-                        )}{" "}
-                        results{" "}
-                        {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
-                      </>
-                    ) : (
-                      <>
-                        No results found{" "}
-                        {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
-                      </>
-                    )}
-                  </small>
-                  {filteredResults.length > 0 && !(hotelSearchTerm?.trim() || hotelType.length > 0 || channelType.length > 0 || starRating.length > 0) && (
-                    <Pagination className="mb-0 pagination-modern">
-                      <Pagination.Prev
-                        disabled={pageIndex === 0}
-                        onClick={() => goToPage(pageIndex - 1)}
-                      />
-                      {pageNumbers.map((n) => (
-                        <Pagination.Item
-                          key={n}
-                          active={n === pageIndex + 1}
-                          onClick={() => goToPage(n - 1)}
-                        >
-                          {n}
-                        </Pagination.Item>
-                      ))}
-                      <Pagination.Next
-                        disabled={pageIndex >= effectiveTotalPages - 1}
-                        onClick={() => goToPage(pageIndex + 1)}
-                      />
-                    </Pagination>
-                  )}
-                </div>
-              )}
-
-              {isLoading && (
-                <Card className="shadow-sm rounded-xl mb-4">
-                  <Card.Body className="text-center py-5">
-                    <div className="loading-animation mb-3">
-                      <Spinner animation="border" variant="primary" size="lg" />
-                    </div>
-                    <h4 className="text-primary fw-bold">
-                      Searching the Best Results...
-                    </h4>
-                    <p className="text-muted">
-                      Please wait while we find the perfect hotels for you
-                    </p>
-                  </Card.Body>
-                </Card>
-              )}
-
-              <div>
-                {view === "card" && (
-        <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
-          
-          
-          {filteredResults.length > 0 ? (
-            filteredResults.map((hotel, index) => {
-              // console.log('Hotel data:', hotel);
-              // console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
-              return (
-                        <Col key={hotel.id}>
-                          
-                          <div style={{
-                            backgroundColor: 'white',
-                            border: '1px solid #dee2e6',
-                            borderRadius: '12px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                            marginBottom: '20px',
-                            overflow: 'hidden'
-                          }}>
-                            <div style={{
-                              position: 'relative',
-                              height: '200px',
-                              overflow: 'hidden'
-                            }}>
-                              <LazyImage src={hotel.image} alt={hotel.name} />
-                              <div style={{
-                                position: 'absolute',
-                                top: '10px',
-                                right: '10px',
-                                backgroundColor: 'rgba(0,0,0,0.7)',
-                                color: 'white',
-                                padding: '5px 10px',
-                                borderRadius: '15px',
-                                fontSize: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}>
-                                <FaStar className="text-warning me-1" />
-                                {hotel.rating}
-                                <span style={{marginLeft: '5px', backgroundColor: '#6c757d', padding: '2px 6px', borderRadius: '10px'}}>
-                                  {hotel.channelType.toUpperCase()}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div style={{
-                              padding: '16px',
-                              backgroundColor: 'white'
-                            }}>
-                              <h6 style={{
-                                fontSize: '1.3rem',
-                                fontWeight: '600',
-                                marginBottom: '8px',
-                                color: '#333',
-                                lineHeight: '1.3'
-                              }}>
-                                {hotel.name || 'Hotel Name Not Available'}
-                              </h6>
-                              
-                              <p style={{
-                                fontSize: '0.875rem',
-                                color: '#666',
-                                marginBottom: '8px',
-                                lineHeight: '1.4'
-                              }}>
-                                📍 {hotel.address || 'Address Not Available'}
-                              </p>
-                              
-                              <div style={{
-                                backgroundColor: '#28a745',
-                                color: 'white',
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                display: 'inline-block',
-                                marginBottom: '12px'
-                              }}>
-                                {hotel.badge}
-                              </div>
-                              
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginTop: '12px',
-                                paddingTop: '12px',
-                                borderTop: '1px solid #eee'
-                              }}>
-                                <div style={{
-                                  fontSize: '1.5rem',
-                                  fontWeight: '600',
-                                  color: '#333'
-                                }}>
-                                  {hotel.price ? `AED ${hotel.price.toLocaleString()}` : 'Price on request'}
+                          <Card className="shadow-sm rounded-xl mb-3 filtersection">
+                            <Card.Body className="p-3">
+                              <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-3">
+                                <h6 className="mb-2 mb-md-0 fw-bold text-primary">
+                                  <FaSearch className="me-2" />
+                                  {/* Filters & Sort ({completedChannels.size} channels complete) */}
+                                  Filters & Sort
+                                </h6>
+                                <div className="d-flex flex-wrap gap-2">
+                                  <ButtonGroup size="sm">
+                                    <ToggleButton
+                                      id="view-card"
+                                      type="radio"
+                                      variant={
+                                        view === "card"
+                                          ? "primary"
+                                          : "outline-secondary"
+                                      }
+                                      checked={view === "card"}
+                                      value="card"
+                                      onChange={() => setView("card")}
+                                    >
+                                      <FaBuilding className="me-1" />
+                                      Cards
+                                    </ToggleButton>
+                                    <ToggleButton
+                                      id="view-map"
+                                      type="radio"
+                                      variant={
+                                        view === "map"
+                                          ? "primary"
+                                          : "outline-secondary"
+                                      }
+                                      checked={view === "map"}
+                                      value="map"
+                                      onChange={() => setView("map")}
+                                      disabled
+                                    >
+                                      🗺️ Map
+                                    </ToggleButton>
+                                  </ButtonGroup>
                                 </div>
-
-                                 <Button
-                                  className="btn-view-rooms"
-                                  size="sm"
-                                  //  disabled={clickedHotelIds.includes(hotel.id)}
-                                  variant={clickedHotelIds.includes(hotel.id) ? "secondary" : "primary"}
-                                  onClick={() => {
-
-                                     // Add hotel ID to clickedHotelIds
-                                    setClickedHotelIds((prev) => [...prev, hotel.id]);
-                                    
-                                    const nationalityValue =
-                                      nationality?.value;
-
-                                   const nationalityCode =
-                                      (nationality?.code || "")
-                                        .length === 2
-                                        ? nationality.code
-                                        : " ";
-
-                                    const agentIdToUse = agent; // Use selected agent or default to 1
-
-                                    // console.log("rooms before mapping::", rooms);
-                                    const roomsPayload = rooms.map((r) => ({
-                                      adults: r.adults || 1,
-                                      children: r.children || 0,
-                                      childAges:r.childAges || [],
-                                      adultAges: Array.from(
-                                        { length: r.adults || 1 },
-                                        () => 30
-                                      ),
-                                    }));
-
-                                    // Dynamic apiId based on channelType
-                                    const apiIdMapping = {
-                                      jumeirah: 10,
-                                      iwtx: 12,
-                                      x3: 15,
-                                      inhouse: 1,
-                                      ratehawk: 14,
-                                      darina: 16,
-                                    };
-                                    
-                                    const apiId = apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
-
-
-                                    const payload = {
-                                      checkInDate: checkIn,
-                                      checkOutDate: checkOut,
-                                      hotelCode:
-                                        hotel.hotelCode ||
-                                        hotel.id
-                                          ?.split("-")
-                                          .slice(1)
-                                          .join("-") ||
-                                        "",
-                                      nationality: nationalityCode,
-                                      agentId: String(agentIdToUse),
-                                      apiId: apiId,
-                                      rooms: roomsPayload,
-                                    };
-                                    const meta = {
-                                      hotelName: hotel.name,
-                                      address: hotel.address || hotel.city,
-                                      starRating: hotel.rating || 0,
-                                      phone: "",
-                                      hotelImage: hotel.image,
-                                    };
-
-                                    // console.log("payload::", payload);
-                                    // console.log("meta::", meta);
-                                    try {
-                                      sessionStorage.setItem(
-                                        "makeYourPkgRoomListPayload",
-                                        JSON.stringify({ payload, meta })
-                                      );
-                                      setTimeout(() => {
-                                        window.open("/make-your-pkg-room-list", "_blank");
-                                      }, 50);
-
-                                      // navigate("/room-list", { state: { payload, meta } });
-                                    } catch {}
-
-                                  }}
-                                >
-                                  View Rooms
-                                </Button>
-
-                               
-                             
                               </div>
+
+                              <Row className="g-3">
+                                <Col lg={3} md={4} sm={6}>
+                                  <Form.Group>
+                                    <Form.Label className="mb-1 small fw-semibold text-dark">
+                                      <FaSearch className="me-1 text-info" />
+                                      Hotel Name
+                                    </Form.Label>
+                                    <Form.Control
+                                      type="text"
+                                      placeholder="Search hotels..."
+                                      className="form-control-modern-sm"
+                                      value={hotelSearchTerm}
+                                      onChange={(e) =>
+                                        setHotelSearchTerm(e.target.value)
+                                      }
+                                    />
+                                  </Form.Group>
+                                </Col>
+
+                                <Col lg={3} md={4} sm={6}>
+                                  <Form.Group>
+                                    <Form.Label className="mb-1 small fw-semibold text-dark">
+                                      <FaStar className="me-1 text-warning" />
+                                      Star Rating
+                                    </Form.Label>
+                                    <Select
+                                      isMulti
+                                      options={starOptions}
+                                      value={starRating}
+                                      onChange={setStarRating}
+                                      placeholder="All Stars"
+                                      className="modern-select-sm"
+                                      menuPosition="absolute"
+                                      menuPlacement="auto"
+                                      menuPortalTarget={document.body} // 👈 force portal
+                                      styles={{
+                                        menuPortal: (base) => ({
+                                          ...base,
+                                          zIndex: 9999,
+                                        }), // 👈 keep menu on top
+                                        control: (base) => ({
+                                          ...base,
+                                          minHeight: "36px",
+                                          border: "1px solid #dee2e6",
+                                          borderRadius: "6px",
+                                          fontSize: "0.875rem",
+                                          "&:hover": {
+                                            borderColor: "#86b7fe",
+                                          },
+                                        }),
+                                        menu: (base) => ({
+                                          ...base,
+                                          zIndex: 99999,
+                                          position: "absolute",
+                                          marginTop: "2px",
+                                          boxShadow:
+                                            "0 4px 12px rgba(0, 0, 0, 0.15)",
+                                          border: "1px solid #dee2e6",
+                                          borderRadius: "6px",
+                                        }),
+                                      }}
+                                    />
+                                  </Form.Group>
+                                </Col>
+
+                                <Col lg={3} md={4} sm={6}>
+                                  <Form.Group>
+                                    <Form.Label className="mb-1 small fw-semibold text-dark">
+                                      <FaBuilding className="me-1 text-info" />
+                                      Hotel Type
+                                    </Form.Label>
+                                    <Select
+                                      isMulti
+                                      options={hotelTypeOptions}
+                                      value={hotelType}
+                                      onChange={setHotelType}
+                                      placeholder="All Types"
+                                      className="modern-select-sm"
+                                      menuPosition="absolute"
+                                      menuPlacement="auto"
+                                      menuPortalTarget={document.body}
+                                      styles={{
+                                        menuPortal: (base) => ({
+                                          ...base,
+                                          zIndex: 9999,
+                                        }), // 👈 keep menu on top
+                                        control: (base) => ({
+                                          ...base,
+                                          minHeight: "36px",
+                                          border: "1px solid #dee2e6",
+                                          borderRadius: "6px",
+                                          fontSize: "0.875rem",
+                                          "&:hover": {
+                                            borderColor: "#86b7fe",
+                                          },
+                                        }),
+                                        menu: (base) => ({
+                                          ...base,
+                                          zIndex: 99999,
+                                          position: "absolute",
+                                          marginTop: "2px",
+                                          boxShadow:
+                                            "0 4px 12px rgba(0, 0, 0, 0.15)",
+                                          border: "1px solid #dee2e6",
+                                          borderRadius: "6px",
+                                        }),
+                                      }}
+                                    />
+                                  </Form.Group>
+                                </Col>
+
+                                <Col lg={3} md={4} sm={6}>
+                                  <Form.Group>
+                                    <Form.Label className="mb-1 small fw-semibold text-dark">
+                                      <FaGlobe className="me-1 text-success" />
+                                      Channel
+                                    </Form.Label>
+                                    <Select
+                                      isMulti
+                                      options={channelTypeOptions}
+                                      value={channelType}
+                                      onChange={setChannelType}
+                                      placeholder="All Channels"
+                                      className="modern-select-sm"
+                                      menuPosition="absolute"
+                                      menuPlacement="auto"
+                                      menuPortalTarget={document.body}
+                                      styles={{
+                                        menuPortal: (base) => ({
+                                          ...base,
+                                          zIndex: 9999,
+                                        }), // 👈 keep menu on top
+                                        control: (base) => ({
+                                          ...base,
+                                          minHeight: "36px",
+                                          border: "1px solid #dee2e6",
+                                          borderRadius: "6px",
+                                          fontSize: "0.875rem",
+                                          "&:hover": {
+                                            borderColor: "#86b7fe",
+                                          },
+                                        }),
+                                        menu: (base) => ({
+                                          ...base,
+                                          zIndex: 99999,
+                                          position: "absolute",
+                                          marginTop: "2px",
+                                          boxShadow:
+                                            "0 4px 12px rgba(0, 0, 0, 0.15)",
+                                          border: "1px solid #dee2e6",
+                                          borderRadius: "6px",
+                                          maxHeight: "300px", // Increased from 200px
+                                          overflowY: "auto", // Enable scrolling if needed
+                                        }),
+                                        option: (base, state) => ({
+                                          ...base,
+                                          backgroundColor: state.isFocused
+                                            ? "#f8f9fa"
+                                            : "white",
+                                          color: state.isSelected
+                                            ? "white"
+                                            : "#212529",
+                                          "&:active": {
+                                            backgroundColor: "#0d6efd",
+                                          },
+                                        }),
+                                      }}
+                                    />
+                                  </Form.Group>
+                                </Col>
+
+                                <Col lg={2} md={4} sm={6}>
+                                  <Form.Group>
+                                    <Form.Label className="mb-1 small fw-semibold text-dark">
+                                      <FaSort className="me-1 text-secondary" />
+                                      Sort By
+                                    </Form.Label>
+                                    <Form.Select
+                                      size="sm"
+                                      value={sortBy}
+                                      onChange={(e) =>
+                                        setSortBy(e.target.value)
+                                      }
+                                      className="form-control-modern-sm"
+                                    >
+                                      <option value="priceAsc">
+                                        Price: Low to High
+                                      </option>
+                                      <option value="priceDesc">
+                                        Price: High to Low
+                                      </option>
+                                    </Form.Select>
+                                  </Form.Group>
+                                </Col>
+
+                                <Col
+                                  lg={2}
+                                  md={4}
+                                  sm={6}
+                                  className="d-flex align-items-end"
+                                >
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    className="w-100"
+                                    onClick={() => {
+                                      setStarRating([]);
+                                      setHotelType([]);
+                                      setChannelType([]);
+                                      setSortBy("priceAsc");
+                                      setHotelSearchTerm("");
+                                    }}
+                                  >
+                                    Clear
+                                  </Button>
+                                </Col>
+                              </Row>
+                            </Card.Body>
+                          </Card>
+
+                          {/* New Pagination Section After Filters */}
+                          {hasSearched && (
+                            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+                              <small className="text-muted fw-semibold">
+                                {filteredResults.length > 0 ? (
+                                  <>
+                                    Showing{" "}
+                                    {hotelSearchTerm?.trim() ||
+                                    hotelType.length > 0 ||
+                                    channelType.length > 0 ||
+                                    starRating.length > 0
+                                      ? `1-${filteredResults.length}`
+                                      : `${pageIndex * pageSize + 1}-${Math.min(
+                                          pageIndex * pageSize + pageSize,
+                                          totalElements
+                                        )}`}{" "}
+                                    of{" "}
+                                    {hotelSearchTerm?.trim() ||
+                                    hotelType.length > 0 ||
+                                    channelType.length > 0 ||
+                                    starRating.length > 0
+                                      ? filteredResults.length
+                                      : totalElements}{" "}
+                                    results{" "}
+                                    {pollStatus === "IN_PROGRESS"
+                                      ? "(updating...)"
+                                      : ""}
+                                  </>
+                                ) : (
+                                  <>
+                                    No results found{" "}
+                                    {pollStatus === "IN_PROGRESS"
+                                      ? "(updating...)"
+                                      : ""}
+                                  </>
+                                )}
+                              </small>
+                              {filteredResults.length > 0 &&
+                                !(
+                                  hotelSearchTerm?.trim() ||
+                                  hotelType.length > 0 ||
+                                  channelType.length > 0 ||
+                                  starRating.length > 0
+                                ) && (
+                                  <Pagination className="mb-0 pagination-modern">
+                                    <Pagination.Prev
+                                      disabled={pageIndex === 0}
+                                      onClick={() => goToPage(pageIndex - 1)}
+                                    />
+                                    {pageNumbers.map((n) => (
+                                      <Pagination.Item
+                                        key={n}
+                                        active={n === pageIndex + 1}
+                                        onClick={() => goToPage(n - 1)}
+                                      >
+                                        {n}
+                                      </Pagination.Item>
+                                    ))}
+                                    <Pagination.Next
+                                      disabled={
+                                        pageIndex >= effectiveTotalPages - 1
+                                      }
+                                      onClick={() => goToPage(pageIndex + 1)}
+                                    />
+                                  </Pagination>
+                                )}
                             </div>
-                          </div>
-                        </Col>
-                        );
-                      })
-                    ) : (
-                      <Col xs={12}>
-                        <Card className="shadow-sm rounded-xl">
-                          <Card.Body className="text-center text-muted py-5">
-                            <FaSearch className="display-4 text-muted mb-3" />
-                            <h5>No results found</h5>
-                            <p>
-                              {channelType.length > 0
-                                ? `No hotels found for the selected channel${channelType.length > 1 ? 's' : ''}: ${channelType.map(c => c.label).join(', ')}. Try selecting different channels or clearing the channel filter.`
-                                : hotelSearchTerm ||
-                                  starRating.length > 0 ||
-                                  hotelType.length > 0
-                                ? "No hotels match your current filters. Try adjusting your search criteria or clearing some filters."
-                                : "Try adjusting your filters or search criteria."}
-                            </p>
-                            {(hotelSearchTerm ||
-                              starRating.length > 0 ||
-                              hotelType.length > 0 ||
-                              channelType.length > 0) && (
-                              <Button
-                                variant="outline-primary"
-                                size="sm"
-                                onClick={() => {
-                                  setStarRating([]);
-                                  setHotelType([]);
-                                  setChannelType([]);
-                                  setSortBy("priceAsc");
-                                  setHotelSearchTerm("");
-                                }}
+                          )}
+
+                          {isLoading && (
+                            <Card className="shadow-sm rounded-xl mb-4">
+                              <Card.Body className="text-center py-5">
+                                <div className="loading-animation mb-3">
+                                  <Spinner
+                                    animation="border"
+                                    variant="primary"
+                                    size="lg"
+                                  />
+                                </div>
+                                <h4 className="text-primary fw-bold">
+                                  Searching the Best Results...
+                                </h4>
+                                <p className="text-muted">
+                                  Please wait while we find the perfect hotels
+                                  for you
+                                </p>
+                              </Card.Body>
+                            </Card>
+                          )}
+
+                          <div>
+                            {view === "card" && (
+                              <Row
+                                xs={1}
+                                sm={2}
+                                md={3}
+                                lg={3}
+                                xl={3}
+                                className="g-4"
                               >
-                                Clear All Filters
-                              </Button>
+                                {filteredResults.length > 0 ? (
+                                  filteredResults.map((hotel, index) => {
+                                    // console.log('Hotel data:', hotel);
+                                    // console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
+                                    return (
+                                      <Col key={hotel.id}>
+                                        <div
+                                          style={{
+                                            backgroundColor: "white",
+                                            border: "1px solid #dee2e6",
+                                            borderRadius: "12px",
+                                            boxShadow:
+                                              "0 2px 8px rgba(0,0,0,0.1)",
+                                            marginBottom: "20px",
+                                            overflow: "hidden",
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              position: "relative",
+                                              height: "200px",
+                                              overflow: "hidden",
+                                            }}
+                                          >
+                                            <LazyImage
+                                              src={hotel.image}
+                                              alt={hotel.name}
+                                            />
+                                            <div
+                                              style={{
+                                                position: "absolute",
+                                                top: "10px",
+                                                right: "10px",
+                                                backgroundColor:
+                                                  "rgba(0,0,0,0.7)",
+                                                color: "white",
+                                                padding: "5px 10px",
+                                                borderRadius: "15px",
+                                                fontSize: "12px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: "5px",
+                                              }}
+                                            >
+                                              <FaStar className="text-warning me-1" />
+                                              {hotel.rating}
+                                              <span
+                                                style={{
+                                                  marginLeft: "5px",
+                                                  backgroundColor: "#6c757d",
+                                                  padding: "2px 6px",
+                                                  borderRadius: "10px",
+                                                }}
+                                              >
+                                                {hotel.channelType.toUpperCase()}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <div
+                                            style={{
+                                              padding: "16px",
+                                              backgroundColor: "white",
+                                            }}
+                                          >
+                                            <h6
+                                              style={{
+                                                fontSize: "1.3rem",
+                                                fontWeight: "600",
+                                                marginBottom: "8px",
+                                                color: "#333",
+                                                lineHeight: "1.3",
+                                              }}
+                                            >
+                                              {hotel.name ||
+                                                "Hotel Name Not Available"}
+                                            </h6>
+
+                                            <p
+                                              style={{
+                                                fontSize: "0.875rem",
+                                                color: "#666",
+                                                marginBottom: "8px",
+                                                lineHeight: "1.4",
+                                              }}
+                                            >
+                                              📍{" "}
+                                              {hotel.address ||
+                                                "Address Not Available"}
+                                            </p>
+
+                                            <div
+                                              style={{
+                                                backgroundColor: "#28a745",
+                                                color: "white",
+                                                padding: "4px 8px",
+                                                borderRadius: "4px",
+                                                fontSize: "0.75rem",
+                                                fontWeight: "500",
+                                                display: "inline-block",
+                                                marginBottom: "12px",
+                                              }}
+                                            >
+                                              {hotel.badge}
+                                            </div>
+
+                                            <div
+                                              style={{
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center",
+                                                marginTop: "12px",
+                                                paddingTop: "12px",
+                                                borderTop: "1px solid #eee",
+                                              }}
+                                            >
+                                              <div
+                                                style={{
+                                                  fontSize: "1.5rem",
+                                                  fontWeight: "600",
+                                                  color: "#333",
+                                                }}
+                                              >
+                                                {hotel.price
+                                                  ? `AED ${hotel.price.toLocaleString()}`
+                                                  : "Price on request"}
+                                              </div>
+
+                                              <Button
+                                                className="btn-view-rooms"
+                                                size="sm"
+                                                //  disabled={clickedHotelIds.includes(hotel.id)}
+                                                variant={
+                                                  clickedHotelIds.includes(
+                                                    hotel.id
+                                                  )
+                                                    ? "secondary"
+                                                    : "primary"
+                                                }
+                                                onClick={() => {
+                                                  // Add hotel ID to clickedHotelIds
+                                                  setClickedHotelIds((prev) => [
+                                                    ...prev,
+                                                    hotel.id,
+                                                  ]);
+
+                                                  const nationalityValue =
+                                                    nationality?.value;
+
+                                                  const nationalityCode =
+                                                    (nationality?.code || "")
+                                                      .length === 2
+                                                      ? nationality.code
+                                                      : " ";
+
+                                                  const agentIdToUse = agent; // Use selected agent or default to 1
+
+                                                  // console.log("rooms before mapping::", rooms);
+                                                  const roomsPayload =
+                                                    rooms.map((r) => ({
+                                                      adults: r.adults || 1,
+                                                      children: r.children || 0,
+                                                      childAges:
+                                                        r.childAges || [],
+                                                      adultAges: Array.from(
+                                                        {
+                                                          length: r.adults || 1,
+                                                        },
+                                                        () => 30
+                                                      ),
+                                                    }));
+
+                                                  // Dynamic apiId based on channelType
+                                                  const apiIdMapping = {
+                                                    jumeirah: 10,
+                                                    iwtx: 12,
+                                                    x3: 15,
+                                                    inhouse: 1,
+                                                    ratehawk: 14,
+                                                    darina: 16,
+                                                  };
+
+                                                  const apiId =
+                                                    apiIdMapping[
+                                                      hotel.channelType?.toLowerCase()
+                                                    ] || 0;
+
+                                                  const payload = {
+                                                    checkInDate: checkIn,
+                                                    checkOutDate: checkOut,
+                                                    hotelCode:
+                                                      hotel.hotelCode ||
+                                                      hotel.id
+                                                        ?.split("-")
+                                                        .slice(1)
+                                                        .join("-") ||
+                                                      "",
+                                                    nationality:
+                                                      nationalityCode,
+                                                    agentId:
+                                                      String(agentIdToUse),
+                                                    apiId: apiId,
+                                                    rooms: roomsPayload,
+                                                  };
+                                                  const meta = {
+                                                    hotelName: hotel.name,
+                                                    address:
+                                                      hotel.address ||
+                                                      hotel.city,
+                                                    starRating:
+                                                      hotel.rating || 0,
+                                                    phone: "",
+                                                    hotelImage: hotel.image,
+                                                  };
+
+                                                  // console.log("payload::", payload);
+                                                  // console.log("meta::", meta);
+                                                  try {
+                                                    sessionStorage.setItem(
+                                                      "makeYourPkgRoomListPayload",
+                                                      JSON.stringify({
+                                                        payload,
+                                                        meta,
+                                                      })
+                                                    );
+                                                    setTimeout(() => {
+                                                      window.open(
+                                                        "/make-your-pkg-room-list",
+                                                        "_blank"
+                                                      );
+                                                    }, 50);
+
+                                                    // navigate("/room-list", { state: { payload, meta } });
+                                                  } catch {}
+                                                }}
+                                              >
+                                                View Rooms
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </Col>
+                                    );
+                                  })
+                                ) : (
+                                  <Col xs={12}>
+                                    <Card className="shadow-sm rounded-xl">
+                                      <Card.Body className="text-center text-muted py-5">
+                                        <FaSearch className="display-4 text-muted mb-3" />
+                                        <h5>No results found</h5>
+                                        <p>
+                                          {channelType.length > 0
+                                            ? `No hotels found for the selected channel${
+                                                channelType.length > 1
+                                                  ? "s"
+                                                  : ""
+                                              }: ${channelType
+                                                .map((c) => c.label)
+                                                .join(
+                                                  ", "
+                                                )}. Try selecting different channels or clearing the channel filter.`
+                                            : hotelSearchTerm ||
+                                              starRating.length > 0 ||
+                                              hotelType.length > 0
+                                            ? "No hotels match your current filters. Try adjusting your search criteria or clearing some filters."
+                                            : "Try adjusting your filters or search criteria."}
+                                        </p>
+                                        {(hotelSearchTerm ||
+                                          starRating.length > 0 ||
+                                          hotelType.length > 0 ||
+                                          channelType.length > 0) && (
+                                          <Button
+                                            variant="outline-primary"
+                                            size="sm"
+                                            onClick={() => {
+                                              setStarRating([]);
+                                              setHotelType([]);
+                                              setChannelType([]);
+                                              setSortBy("priceAsc");
+                                              setHotelSearchTerm("");
+                                            }}
+                                          >
+                                            Clear All Filters
+                                          </Button>
+                                        )}
+                                      </Card.Body>
+                                    </Card>
+                                  </Col>
+                                )}
+                              </Row>
                             )}
-                          </Card.Body>
-                        </Card>
-                      </Col>
-                    )}
-                  </Row>
-                )}
 
-                {hasSearched &&
-                  (() => {
-                    if (filteredResults.length === 0) {
-                      return null; // Don't show pagination when no results
-                    }
-                    
-                    const hasClientOnlyFilters =
-                      Boolean(hotelSearchTerm?.trim()) || hotelType.length > 0 || channelType.length > 0 || starRating.length > 0;
-                    const showingStart = hasClientOnlyFilters ? 1 : pageIndex * pageSize + 1;
-                    const showingEnd = hasClientOnlyFilters
-                      ? filteredResults.length
-                      : Math.min(
-                          pageIndex * pageSize + pageSize,
-                          totalElements
-                        );
-                    const totalCount = hasClientOnlyFilters
-                      ? filteredResults.length
-                      : totalElements;
-                    return (
-                      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
-                        <small className="text-muted fw-semibold">
-                          Showing {showingStart}-{showingEnd} of {totalCount}{" "}
-                          results{" "}
-                          {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
-                        </small>
-                        {!hasClientOnlyFilters && (
-                          <Pagination className="mb-0 pagination-modern">
-                            <Pagination.Prev
-                              disabled={pageIndex === 0}
-                              onClick={() => goToPage(pageIndex - 1)}
-                            />
-                                                         {pageNumbers.map((n) => (
-                               <Pagination.Item
-                                 key={n}
-                                 active={n === pageIndex + 1}
-                                 onClick={() => goToPage(n - 1)}
-                               >
-                                 {n}
-                               </Pagination.Item>
-                             ))}
-                            <Pagination.Next
-                              disabled={pageIndex >= effectiveTotalPages - 1}
-                              onClick={() => goToPage(pageIndex + 1)}
-                            />
-                          </Pagination>
-                        )}
-                      </div>
-                    );
-                  })()}
-              </div>
-            </div>
-          )}
+                            {hasSearched &&
+                              (() => {
+                                if (filteredResults.length === 0) {
+                                  return null; // Don't show pagination when no results
+                                }
 
-                        
-
-                    
+                                const hasClientOnlyFilters =
+                                  Boolean(hotelSearchTerm?.trim()) ||
+                                  hotelType.length > 0 ||
+                                  channelType.length > 0 ||
+                                  starRating.length > 0;
+                                const showingStart = hasClientOnlyFilters
+                                  ? 1
+                                  : pageIndex * pageSize + 1;
+                                const showingEnd = hasClientOnlyFilters
+                                  ? filteredResults.length
+                                  : Math.min(
+                                      pageIndex * pageSize + pageSize,
+                                      totalElements
+                                    );
+                                const totalCount = hasClientOnlyFilters
+                                  ? filteredResults.length
+                                  : totalElements;
+                                return (
+                                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
+                                    <small className="text-muted fw-semibold">
+                                      Showing {showingStart}-{showingEnd} of{" "}
+                                      {totalCount} results{" "}
+                                      {pollStatus === "IN_PROGRESS"
+                                        ? "(updating...)"
+                                        : ""}
+                                    </small>
+                                    {!hasClientOnlyFilters && (
+                                      <Pagination className="mb-0 pagination-modern">
+                                        <Pagination.Prev
+                                          disabled={pageIndex === 0}
+                                          onClick={() =>
+                                            goToPage(pageIndex - 1)
+                                          }
+                                        />
+                                        {pageNumbers.map((n) => (
+                                          <Pagination.Item
+                                            key={n}
+                                            active={n === pageIndex + 1}
+                                            onClick={() => goToPage(n - 1)}
+                                          >
+                                            {n}
+                                          </Pagination.Item>
+                                        ))}
+                                        <Pagination.Next
+                                          disabled={
+                                            pageIndex >= effectiveTotalPages - 1
+                                          }
+                                          onClick={() =>
+                                            goToPage(pageIndex + 1)
+                                          }
+                                        />
+                                      </Pagination>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                          </div>
+                        </div>
+                      )}
                     </Card.Body>
                   </Card>
                 </Tab>
 
-                                 {/* --------------- Transfer Tab ---------------- */}
-                 <Tab eventKey="transfer" title={<><FaCar className="me-2" /> Transfer</>}>
-                   <Card className="border-0 shadow-sm rounded-4">
-                     <Card.Body>
-                       <h5 className="fw-bold text-primary mb-3">Transfer Search</h5>
-                       <Form onSubmit={handleTransferSearchSubmit}>
-                         <Row className="g-3">
-                           <Col md={2}>
-                             <Form.Label>Pickup Date</Form.Label>
-                             <Form.Control 
-                               type="date" 
-                               value={transferPickupDate} 
-                               onChange={(e) => setTransferPickupDate(e.target.value)}
-                               min={new Date().toISOString().split("T")[0]}
-                             />
-                           </Col>
-                           <Col md={2}>
-                             <Form.Label>Dropoff Date</Form.Label>
-                             <Form.Control 
-                               type="date" 
-                               value={transferDropoffDate} 
-                               onChange={(e) => setTransferDropoffDate(e.target.value)}
-                               min={transferPickupDate || undefined}
-                             />
-                           </Col>
-                           <Col md={2}>
-                              <Form.Label>Adults</Form.Label>
-                              <Form.Select 
-                                value={transferAdults} 
-                                onChange={(e) => setTransferAdults(parseInt(e.target.value) || 1)}
-                              >
-                                {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                {/* --------------- Transfer Tab ---------------- */}
+                <Tab
+                  eventKey="transfer"
+                  title={
+                    <>
+                      <FaCar className="me-2" /> Transfer
+                    </>
+                  }
+                >
+                  <Card className="border-0 shadow-sm rounded-4">
+                    <Card.Body>
+                      <h5 className="fw-bold text-primary mb-3">
+                        Transfer Search
+                      </h5>
+                      <Form onSubmit={handleTransferSearchSubmit}>
+                        <Row className="g-3">
+                          <Col md={2}>
+                            <Form.Label>Pickup Date</Form.Label>
+                            <Form.Control
+                              type="date"
+                              value={transferPickupDate}
+                              onChange={(e) =>
+                                setTransferPickupDate(e.target.value)
+                              }
+                              min={new Date().toISOString().split("T")[0]}
+                            />
+                          </Col>
+                          <Col md={2}>
+                            <Form.Label>Dropoff Date</Form.Label>
+                            <Form.Control
+                              type="date"
+                              value={transferDropoffDate}
+                              onChange={(e) =>
+                                setTransferDropoffDate(e.target.value)
+                              }
+                              min={transferPickupDate || undefined}
+                            />
+                          </Col>
+                          <Col md={2}>
+                            <Form.Label>Adults</Form.Label>
+                            <Form.Select
+                              value={transferAdults}
+                              onChange={(e) =>
+                                setTransferAdults(parseInt(e.target.value) || 1)
+                              }
+                            >
+                              {Array.from({ length: 9 }, (_, i) => i + 1).map(
+                                (num) => (
                                   <option key={num} value={num}>
-                                    {num} 
+                                    {num}
                                   </option>
-                                ))}
-                              </Form.Select>
-                            </Col>
-                            <Col md={2}>
-                              <Form.Label>Children</Form.Label>
-                              <Form.Select 
-                                value={transferChildren} 
-                                onChange={(e) => setTransferChildren(parseInt(e.target.value) || 0)}
-                              >
-                                {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                                )
+                              )}
+                            </Form.Select>
+                          </Col>
+                          <Col md={2}>
+                            <Form.Label>Children</Form.Label>
+                            <Form.Select
+                              value={transferChildren}
+                              onChange={(e) =>
+                                setTransferChildren(
+                                  parseInt(e.target.value) || 0
+                                )
+                              }
+                            >
+                              {Array.from({ length: 6 }, (_, i) => i).map(
+                                (num) => (
                                   <option key={num} value={num}>
-                                    {num} 
+                                    {num}
                                   </option>
+                                )
+                              )}
+                            </Form.Select>
+                          </Col>
+                          {transferChildren > 0 && (
+                            <Col md={4}>
+                              <Form.Label className="mb-2">
+                                Child Ages
+                              </Form.Label>
+                              <Row className="g-2">
+                                {transferChildAges.map((age, index) => (
+                                  <Col key={index} md={3} sm={4} xs={6}>
+                                    <Form.Control
+                                      type="number"
+                                      min="0"
+                                      max="17"
+                                      placeholder={`Child ${index + 1} age`}
+                                      value={age}
+                                      onChange={(e) =>
+                                        handleTransferChildAgeChange(
+                                          index,
+                                          e.target.value
+                                        )
+                                      }
+                                    />
+                                  </Col>
                                 ))}
-                              </Form.Select>
+                              </Row>
                             </Col>
-                           {transferChildren > 0 && (
-                             <Col md={4}>
-                               <Form.Label className="mb-2">Child Ages</Form.Label>
-                               <Row className="g-2">
-                                 {transferChildAges.map((age, index) => (
-                                   <Col key={index} md={3} sm={4} xs={6}>
-                                     <Form.Control
-                                       type="number"
-                                       min="0"
-                                       max="17"
-                                       placeholder={`Child ${index + 1} age`}
-                                       value={age}
-                                       onChange={(e) => handleTransferChildAgeChange(index, e.target.value)}
-                                     />
-                                   </Col>
-                                 ))}
-                               </Row>
-                             </Col>
-                           )}
-                           <Col md={3} className="d-flex align-items-end cab-search">
-                             <Button 
-                               variant="warning" 
-                               className="w-100 py-2" 
-                               type="submit"
-                               disabled={transferLoading}
-                             >
-                               {transferLoading ? (
-                                 <>
-                                   <Spinner animation="border" size="sm" className="me-2" />
-                                   Searching...
-                                 </>
-                               ) : (
-                                 <>
-                                   <FaSearch className="me-2" /> Search
-                                 </>
-                               )}
-                             </Button>
-                           </Col>
-                         </Row>
-                       </Form>
+                          )}
+                          <Col
+                            md={3}
+                            className="d-flex align-items-end cab-search"
+                          >
+                            <Button
+                              variant="warning"
+                              className="w-100 py-2"
+                              type="submit"
+                              disabled={transferLoading}
+                            >
+                              {transferLoading ? (
+                                <>
+                                  <Spinner
+                                    animation="border"
+                                    size="sm"
+                                    className="me-2"
+                                  />
+                                  Searching...
+                                </>
+                              ) : (
+                                <>
+                                  <FaSearch className="me-2" /> Search
+                                </>
+                              )}
+                            </Button>
+                          </Col>
+                        </Row>
+                      </Form>
 
                       {/* Loading State */}
                       {transferLoading && (
@@ -1769,274 +2095,463 @@ export default function MakePkgCombineSearch() {
                       {!hasTransferSearched && !transferLoading && (
                         <div className="text-center text-muted mt-5">
                           <FaCar className="fs-1 mb-3 text-secondary" />
-                          <h6>No transfer results yet. Run a search to view available transfers.</h6>
+                          <h6>
+                            No transfer results yet. Run a search to view
+                            available transfers.
+                          </h6>
                         </div>
                       )}
 
                       {/* Results Display */}
-                      {hasTransferSearched && !transferLoading && transferResults.length > 0 && (
-                        <div className="mt-4">
-                          <h6 className="fw-bold mb-3">
-                            Transfer Results ({transferResults.length})
-                          </h6>
-                          <Row className="g-4">
-                            {transferResults.map((transfer) => (
-                              <Col key={transfer.id} md={6} lg={4}>
-                                <Card className="h-100 shadow-sm rounded-3 overflow-hidden">
-                                  <LazyImage 
-                                    src={transfer.image} 
-                                    alt={transfer.vehicleName}
-                                    className="card-img-top"
-                                  />
-                                  <Card.Body className="p-3">
-                                    <div className="d-flex justify-content-between align-items-start mb-2">
-                                      <h6 className="fw-bold mb-1">{transfer.vehicleName}</h6>
-                                      <Badge bg="primary">{transfer.vehicleType}</Badge>
-                                    </div>
-                                    
-                                    {transfer.description && (
-                                      <p className="text-muted small mb-2">{transfer.description}</p>
-                                    )}
-
-                                    <div className="mb-2">
-                                      {transfer.pickupLocation && (
-                                        <div className="d-flex align-items-center mb-1">
-                                          <FaMapMarkerAlt className="text-primary me-2" size={12} />
-                                          <small className="text-muted">
-                                            <strong>From:</strong> {transfer.pickupLocation}
-                                          </small>
-                                        </div>
-                                      )}
-                                      {transfer.dropoffLocation && (
-                                        <div className="d-flex align-items-center mb-1">
-                                          <FaMapMarkerAlt className="text-success me-2" size={12} />
-                                          <small className="text-muted">
-                                            <strong>To:</strong> {transfer.dropoffLocation}
-                                          </small>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="d-flex justify-content-between align-items-center mb-2">
-                                      {transfer.capacity > 0 && (
-                                        <small className="text-muted">
-                                          <FaUsers className="me-1" />
-                                          {transfer.capacity} passengers
-                                        </small>
-                                      )}
-                                      {transfer.duration && (
-                                        <small className="text-muted">
-                                          <FaCar className="me-1" />
-                                          {transfer.duration}
-                                        </small>
-                                      )}
-                                    </div>
-
-                                    {transfer.amenities && transfer.amenities.length > 0 && (
-                                      <div className="mb-2">
-                                        <small className="text-muted d-block mb-1">Amenities:</small>
-                                        <div className="d-flex flex-wrap gap-1">
-                                          {transfer.amenities.slice(0, 3).map((amenity, idx) => (
-                                            <Badge key={idx} bg="secondary" className="small">
-                                              {amenity}
-                                            </Badge>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    <div 
-                                      className="mt-3 pt-3"
-                                      style={{
-                                        borderTop: '1px solid #eee',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center'
-                                      }}
+                      {hasTransferSearched &&
+                        !transferLoading &&
+                        transferResults.length > 0 && (
+                          <div className="mt-4">
+                            <h6 className="fw-bold mb-3">
+                              Transfer Results ({transferResults.length})
+                            </h6>
+                            {transferResults.map((cab) => (
+                              <Card
+                                key={cab.cabid}
+                                className="mb-4 shadow-sm"
+                                style={{ borderRadius: "12px" }}
+                              >
+                                <Card.Body>
+                                  {/* Cab Header with Image and Name */}
+                                  <Row className="mb-3">
+                                    <Col
+                                      md={3}
+                                      sm={4}
+                                      xs={12}
+                                      className="mb-3 mb-md-0"
                                     >
-                                      <div style={{
-                                        fontSize: '1.5rem',
-                                        fontWeight: '600',
-                                        color: '#333'
-                                      }}>
-                                        {transfer.price ? `${transfer.currency} ${transfer.price.toLocaleString()}` : 'Price on request'}
-                                      </div>
-                                      <Button
-                                        variant="primary"
-                                        size="sm"
+                                      <div
+                                        style={{
+                                          width: "100%",
+                                          height: "200px",
+                                          borderRadius: "8px",
+                                          overflow: "hidden",
+                                          backgroundColor: "#f5f5f5",
+                                        }}
                                       >
-                                        Select Transfer
-                                      </Button>
-                                    </div>
-                                  </Card.Body>
-                                </Card>
-                              </Col>
+                                        <LazyImage
+                                          src={cab.cabpic}
+                                          alt={cab.cabname}
+                                        />
+                                      </div>
+                                    </Col>
+                                    <Col
+                                      md={9}
+                                      sm={8}
+                                      xs={12}
+                                      className="d-flex align-items-center"
+                                    >
+                                      <div>
+                                        <h5
+                                          className="fw-bold mb-2"
+                                          style={{
+                                            fontSize: "1.5rem",
+                                            color: "#333",
+                                          }}
+                                        >
+                                          {cab.cabname || "Transfer Vehicle"}
+                                        </h5>
+                                        {cab.cabdetails && (
+                                          <p
+                                            className="text-muted mb-0"
+                                            style={{ fontSize: "0.9rem" }}
+                                          >
+                                            {cab.cabdetails}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </Col>
+                                  </Row>
+
+                                  {/* Transfer Options Table */}
+                                  {cab.searchCabDetailsDTO &&
+                                    cab.searchCabDetailsDTO.length > 0 && (
+                                      <div className="table-responsive">
+                                        <Table
+                                          striped
+                                          bordered
+                                          hover
+                                          className="mb-0"
+                                        >
+                                          <thead
+                                            style={{
+                                              backgroundColor: "#f8f9fa",
+                                            }}
+                                          >
+                                            <tr>
+                                              <th
+                                                style={{
+                                                  fontWeight: "600",
+                                                  padding: "12px",
+                                                }}
+                                              >
+                                                Transfer Option
+                                              </th>
+                                              <th
+                                                style={{
+                                                  fontWeight: "600",
+                                                  padding: "12px",
+                                                }}
+                                              >
+                                                Share Type
+                                              </th>
+                                              <th
+                                                style={{
+                                                  fontWeight: "600",
+                                                  padding: "12px",
+                                                }}
+                                              >
+                                                Total Price
+                                              </th>
+                                              <th
+                                                style={{
+                                                  fontWeight: "600",
+                                                  padding: "12px",
+                                                  width: "150px",
+                                                }}
+                                              >
+                                                Action
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {cab.searchCabDetailsDTO.map(
+                                              (detail, idx) => {
+                                                const rate =
+                                                  detail.types === "SIC"
+                                                    ? detail.sicRate
+                                                    : detail.privateRate;
+                                                const totalRate =
+                                                  detail.totalRateWithoutMrk ||
+                                                  rate ||
+                                                  0;
+                                                const uniqueId = `${cab.cabid}-${detail.dropDetails}-${detail.paxDetails}-${detail.types}`;
+                                                const isAdding =
+                                                  addingTransferId === uniqueId;
+
+                                                return (
+                                                  <tr key={idx}>
+                                                    <td
+                                                      style={{
+                                                        padding: "12px",
+                                                        verticalAlign: "middle",
+                                                      }}
+                                                    >
+                                                      {detail.location || "N/A"}{" "}
+                                                      -{" "}
+                                                      {detail.dropOff || "N/A"}
+                                                    </td>
+                                                    <td
+                                                      style={{
+                                                        padding: "12px",
+                                                        verticalAlign: "middle",
+                                                      }}
+                                                    >
+                                                      <span
+                                                        style={{
+                                                          display:
+                                                            "inline-block",
+                                                          fontSize: "0.9rem",
+                                                          fontWeight: 600,
+                                                          color: "#333",
+                                                        }}
+                                                      >
+                                                        {detail.types}
+                                                      </span>
+                                                    </td>
+
+                                                    <td
+                                                      style={{
+                                                        padding: "12px",
+                                                        verticalAlign: "middle",
+                                                      }}
+                                                    >
+                                                      <span
+                                                        style={{
+                                                          fontSize: "1rem",
+                                                          fontWeight: "600",
+                                                          color: "#333",
+                                                        }}
+                                                      >
+                                                        AED{" "}
+                                                        {totalRate.toLocaleString()}
+                                                      </span>
+                                                    </td>
+                                                    <td
+                                                      style={{
+                                                        padding: "12px",
+                                                        verticalAlign: "middle",
+                                                        textAlign: "center",
+                                                      }}
+                                                    >
+                                                      <Button
+                                                        variant="success"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                          handleAddTransferToCart(
+                                                            cab,
+                                                            detail
+                                                          )
+                                                        }
+                                                        disabled={isAdding}
+                                                        style={{
+                                                          minWidth: "120px",
+                                                        }}
+                                                      >
+                                                        {isAdding ? (
+                                                          <>
+                                                            <Spinner
+                                                              size="sm"
+                                                              className="me-2"
+                                                            />
+                                                            Adding...
+                                                          </>
+                                                        ) : (
+                                                          <>
+                                                            <span className="me-1">
+                                                              👍
+                                                            </span>
+                                                            Add to cart
+                                                          </>
+                                                        )}
+                                                      </Button>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              }
+                                            )}
+                                          </tbody>
+                                        </Table>
+                                      </div>
+                                    )}
+                                </Card.Body>
+                              </Card>
                             ))}
-                          </Row>
-                        </div>
-                      )}
+                          </div>
+                        )}
 
                       {/* No Results State */}
-                      {hasTransferSearched && !transferLoading && transferResults.length === 0 && (
-                        <div className="text-center text-muted mt-5">
-                          <FaCar className="fs-1 mb-3 text-secondary" />
-                          <h6>No transfers found for the selected dates.</h6>
-                          <p className="small">Please try different dates or contact support.</p>
-                        </div>
-                      )}
+                      {hasTransferSearched &&
+                        !transferLoading &&
+                        transferResults.length === 0 && (
+                          <div className="text-center text-muted mt-5">
+                            <FaCar className="fs-1 mb-3 text-secondary" />
+                            <h6>No transfers found for the selected dates.</h6>
+                            <p className="small">
+                              Please try different dates or contact support.
+                            </p>
+                          </div>
+                        )}
                     </Card.Body>
                   </Card>
                 </Tab>
 
-                                                   {/* --------------- Tours Tab ---------------- */}
-                  <Tab eventKey="tours" title={<><FaTicketAlt className="me-2" /> Tours & Activities</>}>
-                    <Card className="border-0 shadow-sm rounded-4">
-                      <Card.Body>
-                        <h5 className="fw-bold text-primary mb-3">Activities Search</h5>
-                        <Form onSubmit={handleTourSearchSubmit}>
-                          <Row className="g-3">
-                            <Col md={2}>
-                              <Form.Label>Tour Date</Form.Label>
-                              <Form.Control 
-                                type="date" 
-                                value={tourDate} 
-                                onChange={(e) => setTourDate(e.target.value)}
-                                min={new Date().toISOString().split("T")[0]}
-                              />
-                            </Col>
-                            <Col md={2}>
-                              <Form.Label>Adults</Form.Label>
-                              <Form.Select 
-                                value={tourAdults} 
-                                onChange={(e) => setTourAdults(parseInt(e.target.value) || 1)}
-                              >
-                                {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                {/* --------------- Tours Tab ---------------- */}
+                <Tab
+                  eventKey="tours"
+                  title={
+                    <>
+                      <FaTicketAlt className="me-2" /> Tours & Activities
+                    </>
+                  }
+                >
+                  <Card className="border-0 shadow-sm rounded-4">
+                    <Card.Body>
+                      <h5 className="fw-bold text-primary mb-3">
+                        Activities Search
+                      </h5>
+                      <Form onSubmit={handleTourSearchSubmit}>
+                        <Row className="g-3">
+                          <Col md={2}>
+                            <Form.Label>Tour Date</Form.Label>
+                            <Form.Control
+                              type="date"
+                              value={tourDate}
+                              onChange={(e) => setTourDate(e.target.value)}
+                              min={new Date().toISOString().split("T")[0]}
+                            />
+                          </Col>
+                          <Col md={2}>
+                            <Form.Label>Adults</Form.Label>
+                            <Form.Select
+                              value={tourAdults}
+                              onChange={(e) =>
+                                setTourAdults(parseInt(e.target.value) || 1)
+                              }
+                            >
+                              {Array.from({ length: 9 }, (_, i) => i + 1).map(
+                                (num) => (
                                   <option key={num} value={num}>
-                                    {num} 
+                                    {num}
                                   </option>
-                                ))}
-                              </Form.Select>
-                            </Col>
-                            <Col md={2}>
-                              <Form.Label>Children</Form.Label>
-                              <Form.Select 
-                                value={tourChildren} 
-                                onChange={(e) => setTourChildren(parseInt(e.target.value) || 0)}
-                              >
-                                {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                                )
+                              )}
+                            </Form.Select>
+                          </Col>
+                          <Col md={2}>
+                            <Form.Label>Children</Form.Label>
+                            <Form.Select
+                              value={tourChildren}
+                              onChange={(e) =>
+                                setTourChildren(parseInt(e.target.value) || 0)
+                              }
+                            >
+                              {Array.from({ length: 6 }, (_, i) => i).map(
+                                (num) => (
                                   <option key={num} value={num}>
-                                    {num} 
+                                    {num}
                                   </option>
+                                )
+                              )}
+                            </Form.Select>
+                          </Col>
+                          {tourChildren > 0 && (
+                            <Col md={4}>
+                              <Form.Label className="mb-2">
+                                Child Ages
+                              </Form.Label>
+                              <Row className="g-2">
+                                {tourChildAges.map((age, index) => (
+                                  <Col key={index} md={3} sm={4} xs={6}>
+                                    <Form.Control
+                                      type="number"
+                                      min="0"
+                                      max="17"
+                                      placeholder={`Child ${index + 1} age`}
+                                      value={age}
+                                      onChange={(e) =>
+                                        handleTourChildAgeChange(
+                                          index,
+                                          e.target.value
+                                        )
+                                      }
+                                    />
+                                  </Col>
                                 ))}
-                              </Form.Select>
+                              </Row>
                             </Col>
-                            {tourChildren > 0 && (
-                              <Col md={4}>
-                                <Form.Label className="mb-2">Child Ages</Form.Label>
-                                <Row className="g-2">
-                                  {tourChildAges.map((age, index) => (
-                                    <Col key={index} md={3} sm={4} xs={6}>
-                                      <Form.Control
-                                        type="number"
-                                        min="0"
-                                        max="17"
-                                        placeholder={`Child ${index + 1} age`}
-                                        value={age}
-                                        onChange={(e) => handleTourChildAgeChange(index, e.target.value)}
-                                      />
-                                    </Col>
-                                  ))}
-                                </Row>
-                              </Col>
-                            )}
-                            <Col md={3} className="d-flex align-items-end activity-search">
-                              <Button 
-                                variant="warning" 
-                                className="w-100 py-2" 
-                                type="submit"
-                                disabled={tourLoading}
-                              >
-                                {tourLoading ? (
-                                  <>
-                                    <Spinner animation="border" size="sm" className="me-2" />
-                                    Searching...
-                                  </>
-                                ) : (
-                                  <>
-                                    <FaSearch className="me-2" /> Search
-                                  </>
-                                )}
-                              </Button>
-                            </Col>
-                          </Row>
-                        </Form>
+                          )}
+                          <Col
+                            md={3}
+                            className="d-flex align-items-end activity-search"
+                          >
+                            <Button
+                              variant="warning"
+                              className="w-100 py-2"
+                              type="submit"
+                              disabled={tourLoading}
+                            >
+                              {tourLoading ? (
+                                <>
+                                  <Spinner
+                                    animation="border"
+                                    size="sm"
+                                    className="me-2"
+                                  />
+                                  Searching...
+                                </>
+                              ) : (
+                                <>
+                                  <FaSearch className="me-2" /> Search
+                                </>
+                              )}
+                            </Button>
+                          </Col>
+                        </Row>
+                      </Form>
 
-                        {/* Loading State */}
-                        {tourLoading && (
-                          <Card className="shadow-sm rounded-xl mb-4 mt-4">
-                            <Card.Body className="text-center py-5">
-                              <div className="results-loader">
-                                <div className="loader-ring">
-                                  <span></span>
-                                  <span></span>
-                                  <span></span>
-                                  <span></span>
-                                </div>
-                                <h4 className="text-primary fw-bold mt-3 mb-1">
-                                  Searching Activities...
-                                </h4>
-                                <p className="text-muted small mb-0">
-                                  Finding available activity options
-                                </p>
+                      {/* Loading State */}
+                      {tourLoading && (
+                        <Card className="shadow-sm rounded-xl mb-4 mt-4">
+                          <Card.Body className="text-center py-5">
+                            <div className="results-loader">
+                              <div className="loader-ring">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                                <span></span>
                               </div>
-                            </Card.Body>
-                          </Card>
-                        )}
+                              <h4 className="text-primary fw-bold mt-3 mb-1">
+                                Searching Activities...
+                              </h4>
+                              <p className="text-muted small mb-0">
+                                Finding available activity options
+                              </p>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      )}
 
-                        {/* Empty State */}
-                        {!hasTourSearched && !tourLoading && (
-                          <div className="text-center text-muted mt-5">
-                            <FaTicketAlt className="fs-1 mb-3 text-secondary" />
-                            <h6>No activities yet. Run a search to view available activities.</h6>
-                          </div>
-                        )}
+                      {/* Empty State */}
+                      {!hasTourSearched && !tourLoading && (
+                        <div className="text-center text-muted mt-5">
+                          <FaTicketAlt className="fs-1 mb-3 text-secondary" />
+                          <h6>
+                            No activities yet. Run a search to view available
+                            activities.
+                          </h6>
+                        </div>
+                      )}
 
-                        {/* Results Display */}
-                        {hasTourSearched && !tourLoading && tourResults.length > 0 && (
+                      {/* Results Display */}
+                      {hasTourSearched &&
+                        !tourLoading &&
+                        tourResults.length > 0 && (
                           <div className="mt-4">
                             <h6 className="fw-bold mb-3">
                               Tour & Activity Results ({tourResults.length})
                             </h6>
-                            <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
+                            <Row
+                              xs={1}
+                              sm={2}
+                              md={3}
+                              lg={3}
+                              xl={3}
+                              className="g-4"
+                            >
                               {tourResults.map((activity) => (
                                 <Col key={activity.id}>
-                                  <div style={{
-                                    backgroundColor: 'white',
-                                    border: '1px solid #dee2e6',
-                                    borderRadius: '12px',
-                                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                                    marginBottom: '20px',
-                                    overflow: 'hidden'
-                                  }}>
-                                    <div style={{
-                                      position: 'relative',
-                                      height: '200px',
-                                      overflow: 'hidden'
-                                    }}>
-                                      <LazyImage src={activity.activityImage} alt={activity.activityName} />
-                                      <div style={{
-                                        position: 'absolute',
-                                        top: '10px',
-                                        right: '10px',
-                                        backgroundColor: 'rgba(0,0,0,0.7)',
-                                        color: 'white',
-                                        padding: '5px 10px',
-                                        borderRadius: '15px',
-                                        fontSize: '12px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '5px'
-                                      }}>
+                                  <div
+                                    style={{
+                                      backgroundColor: "white",
+                                      border: "1px solid #dee2e6",
+                                      borderRadius: "12px",
+                                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                                      marginBottom: "20px",
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        position: "relative",
+                                        height: "200px",
+                                        overflow: "hidden",
+                                      }}
+                                    >
+                                      <LazyImage
+                                        src={activity.activityImage}
+                                        alt={activity.activityName}
+                                      />
+                                      <div
+                                        style={{
+                                          position: "absolute",
+                                          top: "10px",
+                                          right: "10px",
+                                          backgroundColor: "rgba(0,0,0,0.7)",
+                                          color: "white",
+                                          padding: "5px 10px",
+                                          borderRadius: "15px",
+                                          fontSize: "12px",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "5px",
+                                        }}
+                                      >
                                         {activity.starRating > 0 && (
                                           <>
                                             <FaStar className="text-warning me-1" />
@@ -2044,27 +2559,39 @@ export default function MakePkgCombineSearch() {
                                           </>
                                         )}
                                         {activity.apiType && (
-                                          <span style={{marginLeft: '5px', backgroundColor: '#6c757d', padding: '2px 6px', borderRadius: '10px'}}>
+                                          <span
+                                            style={{
+                                              marginLeft: "5px",
+                                              backgroundColor: "#6c757d",
+                                              padding: "2px 6px",
+                                              borderRadius: "10px",
+                                            }}
+                                          >
                                             {activity.apiType.toUpperCase()}
                                           </span>
                                         )}
                                       </div>
                                     </div>
-                                    
-                                    <div style={{
-                                      padding: '16px',
-                                      backgroundColor: 'white'
-                                    }}>
-                                      <h6 style={{
-                                        fontSize: '1.3rem',
-                                        fontWeight: '600',
-                                        marginBottom: '8px',
-                                        color: '#333',
-                                        lineHeight: '1.3'
-                                      }}>
-                                        {activity.activityName || 'Activity Name Not Available'}
+
+                                    <div
+                                      style={{
+                                        padding: "16px",
+                                        backgroundColor: "white",
+                                      }}
+                                    >
+                                      <h6
+                                        style={{
+                                          fontSize: "1.3rem",
+                                          fontWeight: "600",
+                                          marginBottom: "8px",
+                                          color: "#333",
+                                          lineHeight: "1.3",
+                                        }}
+                                      >
+                                        {activity.activityName ||
+                                          "Activity Name Not Available"}
                                       </h6>
-                                      
+
                                       {/* {activity.activityDetails && (
                                         <p style={{
                                           fontSize: '0.875rem',
@@ -2076,12 +2603,14 @@ export default function MakePkgCombineSearch() {
                                         </p>
                                       )} */}
 
-                                      <div style={{
-                                        display: 'flex',
-                                        flexWrap: 'wrap',
-                                        gap: '8px',
-                                        marginBottom: '12px'
-                                      }}>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexWrap: "wrap",
+                                          gap: "8px",
+                                          marginBottom: "12px",
+                                        }}
+                                      >
                                         {/* {activity.minPaxsic > 0 && (
                                           <Badge bg="info" className="small">
                                             Min Pax: {activity.minPaxsic}
@@ -2100,45 +2629,60 @@ export default function MakePkgCombineSearch() {
                                       </div>
 
                                       {activity.duration && (
-                                        <div style={{
-                                          fontSize: '0.875rem',
-                                          color: '#666',
-                                          marginBottom: '12px'
-                                        }}>
+                                        <div
+                                          style={{
+                                            fontSize: "0.875rem",
+                                            color: "#666",
+                                            marginBottom: "12px",
+                                          }}
+                                        >
                                           <FaTicketAlt className="text-info me-2" />
                                           Duration: {activity.duration}
                                         </div>
                                       )}
-                                      
-                                      <div style={{
-                                        backgroundColor: activity.totalRate > 0 ? '#28a745' : '#6c757d',
-                                        color: 'white',
-                                        padding: '4px 8px',
-                                        borderRadius: '4px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: '500',
-                                        display: 'inline-block',
-                                        marginBottom: '12px'
-                                      }}>
-                                        {activity.totalRate > 0 ? 'Rate Available' : 'Rate on Request'}
+
+                                      <div
+                                        style={{
+                                          backgroundColor:
+                                            activity.totalRate > 0
+                                              ? "#28a745"
+                                              : "#6c757d",
+                                          color: "white",
+                                          padding: "4px 8px",
+                                          borderRadius: "4px",
+                                          fontSize: "0.75rem",
+                                          fontWeight: "500",
+                                          display: "inline-block",
+                                          marginBottom: "12px",
+                                        }}
+                                      >
+                                        {activity.totalRate > 0
+                                          ? "Rate Available"
+                                          : "Rate on Request"}
                                       </div>
-                                      
-                                      <div style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        marginTop: '12px',
-                                        paddingTop: '12px',
-                                        borderTop: '1px solid #eee'
-                                      }}>
-                                        <div style={{
-                                          fontSize: '1.5rem',
-                                          fontWeight: '600',
-                                          color: '#333'
-                                        }}>
-                                          {activity.totalRate > 0 
-                                            ? `${activity.currency} ${activity.totalRate.toLocaleString()}`
-                                            : '-'}
+
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "center",
+                                          marginTop: "12px",
+                                          paddingTop: "12px",
+                                          borderTop: "1px solid #eee",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            fontSize: "1.5rem",
+                                            fontWeight: "600",
+                                            color: "#333",
+                                          }}
+                                        >
+                                          {activity.totalRate > 0
+                                            ? `${
+                                                activity.currency
+                                              } ${activity.totalRate.toLocaleString()}`
+                                            : "-"}
                                         </div>
 
                                         <div className="d-flex gap-2 align-items-center">
@@ -2166,12 +2710,16 @@ export default function MakePkgCombineSearch() {
                                             className="activity-add-to-cart"
                                             disabled={
                                               addingActivityId ===
-                                              (activity.id || activity.activityId)
+                                              (activity.id ||
+                                                activity.activityId)
                                             }
-                                            onClick={() => handleAddActivityToCart(activity)}
+                                            onClick={() =>
+                                              handleAddActivityToCart(activity)
+                                            }
                                           >
                                             {addingActivityId ===
-                                            (activity.id || activity.activityId) ? (
+                                            (activity.id ||
+                                              activity.activityId) ? (
                                               <>
                                                 <Spinner
                                                   animation="border"
@@ -2194,17 +2742,21 @@ export default function MakePkgCombineSearch() {
                           </div>
                         )}
 
-                        {/* No Results State */}
-                        {hasTourSearched && !tourLoading && tourResults.length === 0 && (
+                      {/* No Results State */}
+                      {hasTourSearched &&
+                        !tourLoading &&
+                        tourResults.length === 0 && (
                           <div className="text-center text-muted mt-5">
                             <FaTicketAlt className="fs-1 mb-3 text-secondary" />
                             <h6>No activities found for the selected date.</h6>
-                            <p className="small">Please try different dates or contact support.</p>
+                            <p className="small">
+                              Please try different dates or contact support.
+                            </p>
                           </div>
                         )}
-                      </Card.Body>
-                    </Card>
-                  </Tab>
+                    </Card.Body>
+                  </Card>
+                </Tab>
               </Tabs>
             </Card.Body>
           </Card>
@@ -2236,13 +2788,16 @@ export default function MakePkgCombineSearch() {
                         borderRadius: "8px",
                       }}
                       onError={(e) => {
-                        e.target.src = "https://via.placeholder.com/800x300?text=Activity+Image";
+                        e.target.src =
+                          "https://via.placeholder.com/800x300?text=Activity+Image";
                       }}
                     />
                   </div>
 
                   <div className="mb-3">
-                    <h4 className="fw-bold">{selectedActivity.activityName || "Activity Name"}</h4>
+                    <h4 className="fw-bold">
+                      {selectedActivity.activityName || "Activity Name"}
+                    </h4>
                     {selectedActivity.starRating > 0 && (
                       <div className="d-flex align-items-center mb-2">
                         <FaStar className="text-warning me-1" />
@@ -2254,7 +2809,10 @@ export default function MakePkgCombineSearch() {
                   {selectedActivity.activityDetails && (
                     <div className="mb-3">
                       <h6 className="fw-semibold mb-2">Description</h6>
-                      <p className="text-muted" style={{ whiteSpace: "pre-wrap" }}>
+                      <p
+                        className="text-muted"
+                        style={{ whiteSpace: "pre-wrap" }}
+                      >
                         {selectedActivity.activityDetails}
                       </p>
                     </div>
@@ -2278,7 +2836,9 @@ export default function MakePkgCombineSearch() {
                     {selectedActivity.childMin > 0 && (
                       <Col md={6}>
                         <div>
-                          <strong>Child Age Range:</strong> {selectedActivity.childMin} - {selectedActivity.childMax} years
+                          <strong>Child Age Range:</strong>{" "}
+                          {selectedActivity.childMin} -{" "}
+                          {selectedActivity.childMax} years
                         </div>
                       </Col>
                     )}
@@ -2293,14 +2853,18 @@ export default function MakePkgCombineSearch() {
                     {selectedActivity.adultRate > 0 && (
                       <Col md={6}>
                         <div>
-                          <strong>Adult Rate:</strong> {selectedActivity.currency} {selectedActivity.adultRate.toLocaleString()}
+                          <strong>Adult Rate:</strong>{" "}
+                          {selectedActivity.currency}{" "}
+                          {selectedActivity.adultRate.toLocaleString()}
                         </div>
                       </Col>
                     )}
                     {selectedActivity.childRate > 0 && (
                       <Col md={6}>
                         <div>
-                          <strong>Child Rate:</strong> {selectedActivity.currency} {selectedActivity.childRate.toLocaleString()}
+                          <strong>Child Rate:</strong>{" "}
+                          {selectedActivity.currency}{" "}
+                          {selectedActivity.childRate.toLocaleString()}
                         </div>
                       </Col>
                     )}
@@ -2317,18 +2881,31 @@ export default function MakePkgCombineSearch() {
                     <div className="d-flex justify-content-between align-items-center">
                       <div>
                         <h5 className="mb-0">
-                          {selectedActivity.totalRate > 0 
-                            ? `${selectedActivity.currency} ${selectedActivity.totalRate.toLocaleString()}`
+                          {selectedActivity.totalRate > 0
+                            ? `${
+                                selectedActivity.currency
+                              } ${selectedActivity.totalRate.toLocaleString()}`
                             : "Price on request"}
                         </h5>
-                        {selectedActivity.totalRateWithoutMrk > 0 && selectedActivity.totalRateWithoutMrk !== selectedActivity.totalRate && (
-                          <small className="text-muted">
-                            Without markup: {selectedActivity.currency} {selectedActivity.totalRateWithoutMrk.toLocaleString()}
-                          </small>
-                        )}
+                        {selectedActivity.totalRateWithoutMrk > 0 &&
+                          selectedActivity.totalRateWithoutMrk !==
+                            selectedActivity.totalRate && (
+                            <small className="text-muted">
+                              Without markup: {selectedActivity.currency}{" "}
+                              {selectedActivity.totalRateWithoutMrk.toLocaleString()}
+                            </small>
+                          )}
                       </div>
-                      <Badge bg={selectedActivity.totalRate > 0 ? "success" : "secondary"}>
-                        {selectedActivity.totalRate > 0 ? "Rate Available" : "Rate on Request"}
+                      <Badge
+                        bg={
+                          selectedActivity.totalRate > 0
+                            ? "success"
+                            : "secondary"
+                        }
+                      >
+                        {selectedActivity.totalRate > 0
+                          ? "Rate Available"
+                          : "Rate on Request"}
                       </Badge>
                     </div>
                   </div>

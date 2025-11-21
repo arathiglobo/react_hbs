@@ -396,27 +396,35 @@ const CabRates = () => {
 
   // Fetch cab rates list
   const fetchCabRatesList = async (searchTerm = "") => {
-    if (!cabProviderId) {
-      setRates([]);
-      return;
-    }
-    try {
-      setIsLoading(true);
-      // Clear rates at the start to prevent showing stale data during loading
-      setRates([]);
-     const response = await axiosInstance.get(`/api/cabRates`);
+  if (!cabProviderId) {
+    setRates([]);
+    return;
+  }
 
-      setRates(response.data || []);
-      console.log("cab rates list ::", response.data);
-    } catch (error) {
-      
-      console.error("Error loading cab rates:", error);
-      // toast.error("Failed to load cab rates");
-      setRates([]); // Clear rates on error as well
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  try {
+    setIsLoading(true);
+    setRates([]);
+
+    const response = await axiosInstance.get(`/api/cabRates`, {
+      params: {
+        providerId: cabProviderId,
+        page: 0,
+        limit: 20,
+        search: searchTerm || ""
+      }
+    });
+
+    setRates(response.data || []);
+    console.log("cab rates list ::", response.data);
+
+  } catch (error) {
+    console.error("Error loading cab rates:", error);
+    setRates([]);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   
   //cab list 
