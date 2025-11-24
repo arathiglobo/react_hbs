@@ -194,7 +194,7 @@ const CustomBookingList = () => {
                 >
                   <FaArrowLeft size={20} />
                 </Button> */}
-                <h2 className="mb-0 fw-bold">Custom Booking</h2>
+                <h2 className="mb-0 fw-bold">Custom Booking</h2> 
               </div>
             </div>
 
