@@ -877,7 +877,7 @@ export default function MakePkgCombineSearch() {
       activityName: activity.activityName || "",
       agentId: agentValue,
       totalRate: activity.totalRate || 0,
-      totalRateWithoutMrk: activity.totalRateWithoutMrk || 0,
+      totalRateWithoutmrk: activity.totalRateWithoutMrk || 0,
     };
 
     if (!payload.activityId) {
@@ -981,6 +981,8 @@ export default function MakePkgCombineSearch() {
   const handleAddTransferToCart = async (cab, cabDetail) => {
     if (!cab || !cabDetail) return;
 
+    console.log("Adding transfer to cab:", cab);
+
     const agentValue = String(agentId || agent || 1);
     const pickupDateValue = formatDateToDDMMYYYY(
       transferPickupDate || travelDate || checkIn
@@ -999,35 +1001,51 @@ export default function MakePkgCombineSearch() {
       return;
     }
 
-    // Determine rate based on type (SIC or Private)
+    // Calculate rate based on transfer type (SIC or Private)
     const rate =
-      cabDetail.types === "SIC" ? cabDetail.sicRate : cabDetail.privateRate;
-    const totalRate = cabDetail.totalRateWithoutMrk || rate || 0;
+      cabDetail.types === "SIC"
+        ? cabDetail.sicRate || 0
+        : cabDetail.privateRate || 0;
+    
+    // Get totalRateWithoutMrk from cabDetail or fallback to calculated rate
+    const totalRateWithoutMrk =
+      cabDetail.totalRateWithoutMrk !== undefined &&
+      cabDetail.totalRateWithoutMrk !== null &&
+      cabDetail.totalRateWithoutMrk !== 0
+        ? cabDetail.totalRateWithoutMrk
+        : rate;
+    
+    // Get totalRate from cabDetail or use totalRateWithoutMrk as fallback
+    const totalRate =
+      cabDetail.totalRate !== undefined &&
+      cabDetail.totalRate !== null &&
+      cabDetail.totalRate !== 0
+        ? cabDetail.totalRate
+        : totalRateWithoutMrk;
 
+    // Prepare payload matching CartCabDTO structure
     const payload = {
-      cabId: String(cab.cabid || ""),
-      cabName: cab.cabname || "",
       pickupDate: pickupDateValue,
-      dropDate: dropoffDateValue || pickupDateValue,
-      travelType: String(cabDetail.travelType || "1"),
-      dropDetails: String(cabDetail.dropDetails || "1"),
-      paxDetails: String(cabDetail.paxDetails || "1"),
-      locationId: String(cabDetail.locationId || ""),
-      location: cabDetail.location || "",
-      types: cabDetail.types || "Private",
-      dropOff: cabDetail.dropOff || "",
-      adult: String(transferAdults || adults || 1),
-      child: String(transferChildren || children || 0),
+      dropoffDate: dropoffDateValue || pickupDateValue,
+      nativeCountryId: String(nationality.value),
       childAge:
         Array.isArray(transferChildAges) && transferChildAges.length > 0
-          ? transferChildAges.map((age) => String(age))
+          ? transferChildAges.map((age) => parseInt(age) || 0)
           : [],
-      nativeCountryId: String(nationality.value),
-      agentId: agentValue,
-      totalRate: totalRate,
-      totalRateWithoutmrk: totalRate,
-      minpax: String(cabDetail.minpax || 1),
-      maxpax: String(cabDetail.maxpax || 5),
+      adult: parseInt(transferAdults || adults || 1),
+      child: parseInt(transferChildren || children || 0),
+      cabId: String(cab.cabid || ""),
+      noOfCabs: parseInt(cab.noOfCabs || 1),
+      travelType: String(cabDetail.travelType || "1"),
+      timeDetails: cabDetail.hourDetails ? String(cabDetail.hourDetails) : "0",
+      dropDetails: String(cabDetail.dropDetails || "1"),
+      locationId: String(cabDetail.locationId || ""),
+      paxDetails: String(cabDetail.paxDetails || "1"),
+      luggage: cabDetail.luggage !== undefined ? String(cabDetail.luggage) : "true",
+      cabName: cab.cabname || "",
+      agentId: parseInt(agentValue) || 1,
+      totalRate: totalRate || 0,
+      totalRateWithoutmrk: totalRateWithoutMrk || 0,
     };
 
     if (!payload.cabId) {
@@ -2110,12 +2128,13 @@ export default function MakePkgCombineSearch() {
                             <h6 className="fw-bold mb-3">
                               Transfer Results ({transferResults.length})
                             </h6>
-                            {transferResults.map((cab) => (
-                              <Card
-                                key={cab.cabid}
-                                className="mb-4 shadow-sm"
-                                style={{ borderRadius: "12px" }}
-                              >
+                            <Row className="g-4">
+                              {transferResults.map((cab) => (
+                                <Col key={cab.cabid} lg={10} xl={9} className="mx-auto">
+                                  <Card
+                                    className="mb-4 shadow-sm"
+                                    style={{ borderRadius: "12px" }}
+                                  >
                                 <Card.Body>
                                   {/* Cab Header with Image and Name */}
                                   <Row className="mb-3">
@@ -2329,8 +2348,10 @@ export default function MakePkgCombineSearch() {
                                       </div>
                                     )}
                                 </Card.Body>
-                              </Card>
-                            ))}
+                                  </Card>
+                                </Col>
+                              ))}
+                            </Row>
                           </div>
                         )}
 

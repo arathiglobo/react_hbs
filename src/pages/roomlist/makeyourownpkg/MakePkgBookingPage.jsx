@@ -258,69 +258,34 @@ const MakePkgBookingPage = () => {
 
   // Calculate total and selling prices
   const calculatePrices = (cartItems) => {
-    let total = 0;
-    let selling = 0;
+    let total = 0; // Total Price (without markup) - sum of totalRateWithoutmrk
+    let selling = 0; // Selling Price (with markup) - sum of totalRate
 
     cartItems.forEach((item) => {
       if (item.hotel) {
         const hotel = item.hotel;
-        const details = hotel.details || {};
-        const price = parseFloat(
-          hotel.totalRate || 
-          hotel.totalPrice || 
-          details.totalRate || 
-          details.totalPrice || 
-          hotel.rate || 
-          0
-        );
-        const sellPrice = parseFloat(
-          hotel.sellingPrice || 
-          hotel.totalRate || 
-          details.sellingPrice || 
-          price || 
-          0
-        );
+        // Selling Price = totalRate (with markup)
+        const sellPrice = parseFloat(hotel.totalRate || 0);
+        // Total Price = totalRateWithoutmrk (without markup)
+        const price = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
         total += price;
-        selling += sellPrice || price;
+        selling += sellPrice;
       } else if (item.activity) {
         const activity = item.activity;
-        const details = activity.details || {};
-        const price = parseFloat(
-          activity.totalPrice || 
-          activity.price || 
-          details.totalPrice || 
-          details.price || 
-          0
-        );
-        const sellPrice = parseFloat(
-          activity.sellingPrice || 
-          activity.totalPrice || 
-          details.sellingPrice || 
-          price || 
-          0
-        );
+        // Selling Price = totalRate (with markup)
+        const sellPrice = parseFloat(activity.totalRate || 0);
+        // Total Price = totalRateWithoutmrk (without markup)
+        const price = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
         total += price;
-        selling += sellPrice || price;
+        selling += sellPrice;
       } else if (item.cab) {
         const cab = item.cab;
-        const details = cab.details || {};
-        const price = parseFloat(
-          cab.totalPrice || 
-          cab.totalRate || 
-          cab.price || 
-          details.totalPrice || 
-          details.totalRate || 
-          0
-        );
-        const sellPrice = parseFloat(
-          cab.totalRate || 
-          cab.totalPrice || 
-          details.totalRate || 
-          price || 
-          0
-        );
+        // Selling Price = totalRate (with markup)
+        const sellPrice = parseFloat(cab.totalRate || 0);
+        // Total Price = totalRateWithoutmrk (without markup)
+        const price = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
         total += price;
-        selling += sellPrice || price;
+        selling += sellPrice;
       }
     });
 
@@ -608,8 +573,10 @@ const MakePkgBookingPage = () => {
             const guests = roomGuests[guestKey] || [];
             
             // Get room rate from hotel data
-            const roomRate = parseFloat(firstHotel.totalRate || firstHotel.rate || 0);
-            const roomRateWithoutMarkup = parseFloat(firstHotel.totalPrice || firstHotel.rateWithoutMarkup || roomRate);
+            // Selling Price = totalRate (with markup)
+            const roomRate = parseFloat(firstHotel.totalRate || 0);
+            // Total Price = totalRateWithoutmrk (without markup)
+            const roomRateWithoutMarkup = parseFloat(firstHotel.totalRateWithoutmrk || firstHotel.totalRate || 0);
             
             return {
               roomNo: idx + 1,
@@ -642,8 +609,10 @@ const MakePkgBookingPage = () => {
         customBookingActivityDTO: activities.map((item) => {
           const activity = item.activity || {};
           const details = activity.details || {};
-          const activitySellingPrice = parseFloat(activity.totalRate || activity.sellingPrice || details.totalRate || 0);
-          const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalPrice || details.totalPrice || 0);
+          // Selling Price = totalRate (with markup)
+          const activitySellingPrice = parseFloat(activity.totalRate || 0);
+          // Total Price = totalRateWithoutmrk (without markup)
+          const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
           
           return {
             activityId: String(activity.activityId || ""),
@@ -674,8 +643,10 @@ const MakePkgBookingPage = () => {
           const transferDetail = transferDetails[actualIndex] || {};
           const cab = item.cab || {};
           const details = cab.details || {};
-          const cabTotalRate = parseFloat(cab.totalRate || cab.totalPrice || details.totalRate || 0);
-          const cabTotalRateWithoutMrk = parseFloat(cab.totalRateWithoutmrk || cab.totalPrice || details.totalRateWithoutmrk || 0);
+          // Selling Price = totalRate (with markup)
+          const cabTotalRate = parseFloat(cab.totalRate || 0);
+          // Total Price = totalRateWithoutmrk (without markup)
+          const cabTotalRateWithoutMrk = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
 
           return {
             cabId: String(cab.cabId || ""),
@@ -889,8 +860,10 @@ const MakePkgBookingPage = () => {
                           };
 
                           const dateRange = getDateRange(checkIn, checkOut);
-                          const hotelTotalPrice = parseFloat(hotel.totalPrice || hotel.totalRate || details.totalPrice || details.totalRate || 0);
-                          const hotelSellingPrice = parseFloat(hotel.sellingPrice || hotel.totalRate || details.sellingPrice || hotelTotalPrice || 0);
+                          // Total Price = totalRateWithoutmrk (without markup)
+                          const hotelTotalPrice = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
+                          // Selling Price = totalRate (with markup)
+                          const hotelSellingPrice = parseFloat(hotel.totalRate || 0);
                           const pricePerNight = dateRange.length > 0 ? hotelTotalPrice / dateRange.length : hotelTotalPrice;
 
                           return (
@@ -1282,8 +1255,10 @@ const MakePkgBookingPage = () => {
                             childAges = Array.isArray(activity.childAge) ? activity.childAge : [activity.childAge];
                           } 
 
+                          // Selling Price = totalRate (with markup)
                           const sellingPrice = parseFloat(activity.totalRate || 0);
-                          const totalPrice = parseFloat(activity.totalRateWithoutmrk || 0);
+                          // Total Price = totalRateWithoutmrk (without markup)
+                          const totalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
 
                           return (
                             <Card key={activityIndex} className="mb-3 activity-item-card">
@@ -1386,8 +1361,8 @@ const MakePkgBookingPage = () => {
                           const details = cab.details || {};
                           const vehicleName = cab.vehicleName || details.vehicleName || "Transfer";
                           const capacity = cab.capacity || details.capacity || "";
-                          const pickupDate = cab.pickupDate || details.pickupDate || "";
-                          const dropDate = cab.dropDate || details.dropDate || details.dropOffDate || "";
+                          const pickupDate = cab.pickupDate || "";
+                          const dropDate = cab.dropoffDate || "";
                           const adult = cab.adult || details.adult || cab.noOfAdult || "0";
                           const child = cab.child || details.child || cab.noOfChild || "0";
                           const travelType = cab.travelType || details.travelType || "1";
@@ -1408,8 +1383,10 @@ const MakePkgBookingPage = () => {
                           }
 
                           const transferDetail = transferDetails[transferIndex] || {};
-                          const sellingPrice = parseFloat(cab.totalRate || cab.totalPrice || details.totalRate || details.totalPrice || 0);
-                          const totalPrice = parseFloat(cab.totalRateWithoutmrk || cab.totalPrice || details.totalRateWithoutmrk || details.totalPrice || 0);
+                          // Selling Price = totalRate (with markup)
+                          const sellingPrice = parseFloat(cab.totalRate || 0);
+                          // Total Price = totalRateWithoutmrk (without markup)
+                          const totalPrice = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
 
                           // Get travel type label
                           const getTravelTypeLabel = (type) => {

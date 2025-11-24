@@ -238,6 +238,20 @@ export default function TopBar() {
 
   const renderCabItem = (item, key) => {
     const cab = item.cab || {};
+    const cabName = cab.cabName || cab.vehicleName || "Transfer";
+    const pickupDate = cab.pickupDate || "";
+    const dropoffDate = cab.dropoffDate || "";
+    const adult = cab.adult || "";
+    const child = cab.child || "";
+    
+    // Handle childAge - could be array or string
+    let childAges = [];
+    if (cab.childAge) {
+      childAges = Array.isArray(cab.childAge) ? cab.childAge : [cab.childAge];
+    } else if (cab.childAges) {
+      childAges = Array.isArray(cab.childAges) ? cab.childAges : [cab.childAges];
+    }
+    
     return (
       <Card key={key} className="shadow-sm">
         <Card.Body>
@@ -246,7 +260,7 @@ export default function TopBar() {
               <Badge bg="secondary" className="mb-2">
                 Transfer
               </Badge>
-              <h6 className="fw-bold mb-2">{cab.vehicleName || "Transfer"}</h6>
+              <h6 className="fw-bold mb-2">{cabName}</h6>
             </div>
             <Button
               variant="outline-danger"
@@ -266,6 +280,14 @@ export default function TopBar() {
                 </span>
               </Col>
             )}
+            {pickupDate && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaCalendarAlt className="me-2 text-primary" />
+                <span>
+                  <strong>Pickup Date:</strong> {pickupDate}
+                </span>
+              </Col>
+            )}
             {cab.dropoffLocation && (
               <Col sm={6} className="d-flex align-items-center">
                 <FaMapMarkerAlt className="me-2 text-success" />
@@ -274,15 +296,45 @@ export default function TopBar() {
                 </span>
               </Col>
             )}
+            {dropoffDate && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaCalendarAlt className="me-2 text-success" />
+                <span>
+                  <strong>Dropoff Date:</strong> {dropoffDate}
+                </span>
+              </Col>
+            )}
+            {adult && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaUsers className="me-2 text-success" />
+                <span>
+                  <strong>Adults:</strong> {adult}
+                </span>
+              </Col>
+            )}
+            {child && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaChild className="me-2 text-warning" />
+                <span>
+                  <strong>Children:</strong> {child}
+                </span>
+              </Col>
+            )}
             {cab.capacity && (
               <Col sm={6} className="d-flex align-items-center">
-                <FaUsers className="me-2 text-warning" />
+                <FaUsers className="me-2 text-info" />
                 <span>
                   <strong>Capacity:</strong> {cab.capacity}
                 </span>
               </Col>
             )}
           </Row>
+
+          {childAges.length > 0 && (
+            <div className="mt-2 small text-muted">
+              <strong>Child Ages:</strong> {childAges.join(", ")}
+            </div>
+          )}
         </Card.Body>
       </Card>
     );

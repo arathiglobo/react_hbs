@@ -144,6 +144,10 @@ const AccomodationRoomList = () => {
     const { payload, hotels } = roomData;
     const hotelsdetail = hotels[0];
 
+    console.log("hotelsdetail::", hotelsdetail);
+    console.log("rate::", rate);
+    console.log("roomData::", roomData);
+
     try {
       // Transform searchRoomDTOs to match CustomSearchRoomDTO structure
       const searchRoomDTOs = (payload.rooms || []).map((room) => ({
@@ -185,6 +189,8 @@ const AccomodationRoomList = () => {
         refundstatus: refundstatus,
         searchRoomDTOs: searchRoomDTOs,
         agentId: String(payload.agentId || ""),
+        totalRate: rate.rate,
+        totalRateWithoutmrk:  rate.rateBeforeTax,
       };
 
       // Call API to add to cart
