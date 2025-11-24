@@ -34,66 +34,95 @@ const CustomBookingList = () => {
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [timePeriod, setTimePeriod] = useState("currentMonth");
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalElements, setTotalElements] = useState(0);
+  const [allBookings, setAllBookings] = useState([]); // Store all bookings for client-side pagination
+
+  // Map status to type parameter
+  const getTypeParam = (status) => {
+    switch (status) {
+      case "upcoming":
+        return 1;
+      case "completed":
+        return 2;
+      case "cancelled":
+        return 3;
+      default:
+        return 1;
+    }
+  };
+
+  // Map time period to time parameter
+  const getTimeParam = (timePeriod) => {
+    switch (timePeriod) {
+      case "currentMonth":
+        return 1;
+      case "all":
+        return 2;
+      default:
+        return 1;
+    }
+  };
 
   // Fetch bookings from API
   const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {
-        page: page - 1,
-        size: perPage,
-        status: status,
-      };
-
-      // Add time period filter
-      if (timePeriod === "currentMonth") {
-        const now = new Date();
-        params.month = now.getMonth() + 1;
-        params.year = now.getFullYear();
-      }
+      const type = getTypeParam(status);
+      const time = getTimeParam(timePeriod);
 
       const response = await axiosInstance.get(
-        "/api/makeYourOwnPackage/getCustomBookingList",
-        { params }
+        `/api/makeYourOwnPackage/getBookedPackageList?type=${type}&time=${time}`
       );
 
-      if (response.data) {
-        setBookings(response.data.content || []);
-        setTotalPages(response.data.totalPages || 0);
-        setTotalElements(response.data.totalElements || 0);
+      if (Array.isArray(response.data)) {
+        setAllBookings(response.data || []);
+      } else {
+        setAllBookings([]);
       }
     } catch (error) {
       console.error("Error fetching custom bookings:", error);
       toast.error("Failed to load bookings");
-      setBookings([]);
+      setAllBookings([]);
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, status, timePeriod]);
+  }, [status, timePeriod]);
 
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or perPage change
   useEffect(() => {
     setPage(1);
   }, [status, timePeriod, perPage]);
 
-  // Filter bookings based on search term
+  // Filter and paginate bookings client-side
   const filteredBookings = useMemo(() => {
-    if (!search.trim()) {
-      return bookings;
+    let filtered = allBookings;
+
+    // Apply search filter
+    if (search.trim()) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter((booking) =>
+        String(booking.packageCode || "").toLowerCase().includes(searchLower) ||
+        String(booking.customerName || "").toLowerCase().includes(searchLower) ||
+        String(booking.agentName || "").toLowerCase().includes(searchLower)
+      );
     }
-    const searchLower = search.toLowerCase();
-    return bookings.filter((booking) =>
-      String(booking.packageCode || "").toLowerCase().includes(searchLower) ||
-      String(booking.customerName || "").toLowerCase().includes(searchLower) ||
-      String(booking.agentName || "").toLowerCase().includes(searchLower)
-    );
-  }, [bookings, search]);
+
+    return filtered;
+  }, [allBookings, search]);
+
+  // Paginate filtered bookings
+  const paginatedBookings = useMemo(() => {
+    const startIndex = (page - 1) * perPage;
+    const endIndex = startIndex + perPage;
+    return filteredBookings.slice(startIndex, endIndex);
+  }, [filteredBookings, page, perPage]);
+
+  // Calculate pagination totals
+  const totalElements = filteredBookings.length;
+  const totalPages = Math.max(1, Math.ceil(totalElements / perPage));
 
   const getStatusBadge = (s) => {
     switch (s?.toLowerCase()) {
@@ -114,7 +143,12 @@ const CustomBookingList = () => {
     if (!dateString) return "-";
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString("en-GB");
+      if (isNaN(date.getTime())) return dateString;
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
     } catch {
       return dateString;
     }
@@ -126,11 +160,12 @@ const CustomBookingList = () => {
     }
   };
 
-  const handleViewDetails = (bookingId) => {
-    navigate(`/booking-details/custom-booking/${bookingId}`);
+  const handleViewDetails = (packageCode) => {
+    // Navigate to booking details using packageCode
+    navigate(`/booking-details/custom-booking/${packageCode}`);
   };
 
-  const displayStart = filteredBookings.length > 0 ? (page - 1) * perPage + 1 : 0;
+  const displayStart = paginatedBookings.length > 0 ? (page - 1) * perPage + 1 : 0;
   const displayEnd = Math.min(page * perPage, totalElements);
 
   return (
@@ -294,28 +329,23 @@ const CustomBookingList = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredBookings.length > 0 ? (
-                            filteredBookings.map((booking, index) => (
-                              <tr key={booking.bookingId || index}>
+                          {paginatedBookings.length > 0 ? (
+                            paginatedBookings.map((booking, index) => (
+                              <tr key={booking.packageCode || index}>
                                 <td>{(page - 1) * perPage + index + 1}</td>
                                 <td>{booking.agentName || "-"}</td>
                                 <td>{booking.customerName || "-"}</td>
+                                <td> {booking.packageCode || "-"} </td>
+                                <td>{formatDate(booking.bookDate)}</td>
+                                <td>{formatDate(booking.travelDate)}</td>
                                 <td>
-                                  <Badge bg="info">
-                                    {booking.packageCode || booking.bookingId || "-"}
-                                  </Badge>
-                                </td>
-                                <td>{formatDate(booking.bookDate || booking.bookingDate)}</td>
-                                <td>{formatDate(booking.tourDate)}</td>
-                                <td>
-                                  <Button
-                                    variant="info"
-                                    size="sm"
-                                    onClick={() => handleViewDetails(booking.bookingId)}
+                                  <FaEye
+                                    className="text-primary"
+                                    style={{ cursor: "pointer" }}
+                                    onClick={() => handleViewDetails(booking.packageCode)}
                                     title="View Details"
-                                  >
-                                    <FaEye />
-                                  </Button>
+                                    size={18}
+                                  />
                                 </td>
                               </tr>
                             ))
