@@ -12,6 +12,7 @@ import {
   Badge,
   Alert,
   Spinner,
+  Modal,
 } from "react-bootstrap";
 import {
   FaHotel,
@@ -78,6 +79,10 @@ const MakePkgBookingPage = () => {
 
   // Validation errors state
   const [validationErrors, setValidationErrors] = useState({});
+
+  // Order summary modal state
+  const [showOrderSummaryModal, setShowOrderSummaryModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Initialize guest details for rooms
   const initializeRoomGuests = (cartItems) => {
@@ -244,6 +249,10 @@ const MakePkgBookingPage = () => {
       setLoadingItinerary(false);
     }
   };
+
+   useEffect(() => { 
+    fetchItineraryDetails();
+  }, []);
 
   // Handle itinerary selection
   const handleItineraryToggle = (itineraryId) => {
@@ -506,6 +515,13 @@ const MakePkgBookingPage = () => {
     // Clear validation errors before submission
     setValidationErrors({});
 
+    // Show order summary modal
+    setShowOrderSummaryModal(true);
+  };
+
+  // Confirm and submit booking
+  const confirmBooking = async () => {
+    setIsSubmitting(true);
     try {
       const hotels = getHotels();
       const activities = getActivities();
@@ -532,16 +548,28 @@ const MakePkgBookingPage = () => {
         customPackageId: "",
         sellingPrice: String(sellingPrice.toFixed(2)),
         totalPrice: String(totalPrice.toFixed(2)),
+        // customerDTO: {
+        //   customerId: "",
+        //   firstName: primaryGuest.firstName || "",
+        //   middleName: primaryGuest.middleName || "",
+        //   lastName: primaryGuest.lastName || "",
+        //   nativeCountry: primaryGuest.nativeCountry || "",
+        //   emailId: primaryGuest.emailId || "",
+        //   mobileNumber: primaryGuest.contactNumber || "",
+        //   passportNo: primaryGuest.passportNumber || "",
+        //   salutaion: primaryGuest.salutation || "",
+        //   agentlpo: primaryGuest.lpo || "",
+        // },
         tourDate: tourDate,
         visaStatus: visaRequired,
-        visaAdult: String(visaDetails.visaAdult || "0"),
-        visaAdultRate: String(visaDetails.visaAdultRate || "0"),
-        visaChild: String(visaDetails.visaChild || "0"),
-        visaChildRate: String(visaDetails.visaChildRate || "0"),
-        visaInfant: String(visaDetails.visaInfant || "0"),
-        visaInfantRate: String(visaDetails.visaInfantRate || "0"),
+        visaAdult: parseInt(visaDetails.visaAdult || "0") || 0,
+        visaAdultRate: parseFloat(visaDetails.visaAdultRate || "0") || 0,
+        visaChild: parseInt(visaDetails.visaChild || "0") || 0,
+        visaChildRate: parseFloat(visaDetails.visaChildRate || "0") || 0,
+        visaInfant: parseInt(visaDetails.visaInfant || "0") || 0,
+        visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
         hotelBookingRequest: hotels.length > 0 && firstHotel ? {
-          agentId: String(sessionStorage.getItem("makePkgAgentId") || "1"),
+          agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
           apiId: String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
           hotelId: String(firstHotel.hotelId || ""),
           hotelName: firstHotel.hotelName || "",
@@ -615,10 +643,10 @@ const MakePkgBookingPage = () => {
           const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
           
           return {
-            activityId: String(activity.activityId || ""),
+            activityId: parseInt(activity.activityId || "0") || 0,
             tourDate: formatDateToDDMMYYYY(activity.activityDate || ""),
-            noOfAdult: String(activity.adult || activity.noOfAdult || "1"),
-            noOfChild: String(activity.child || activity.noOfChild || "0"),
+            noOfAdult: parseInt(activity.adult || activity.noOfAdult || "1") || 1,
+            noOfChild: parseInt(activity.child || activity.noOfChild || "0") || 0,
             childAgeArray: Array.isArray(activity.childAge) 
               ? activity.childAge.map(age => String(age))
               : (activity.childAge ? [String(activity.childAge)] : []),
@@ -649,23 +677,23 @@ const MakePkgBookingPage = () => {
           const cabTotalRateWithoutMrk = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
 
           return {
-            cabId: String(cab.cabId || ""),
-            noOfCabs: "1",
+            cabId: parseInt(cab.cabId || "0") || 0,
+            noOfCabs: parseInt(cab.noOfCabs || "1") || 1,
             pickupDate: formatDateToDDMMYYYY(cab.pickupDate || ""),
             dropOffDate: formatDateToDDMMYYYY(cab.dropDate || cab.dropOffDate || ""),
-            travelType: String(cab.travelType || "1"),
-            hourDetails: "0",
-            dropDetails: "3",
-            paxDetails: "1",
-            luggage: true,
-            locationId: String(cab.locationId || ""),
-            noOfAdult: String(cab.adult || cab.noOfAdult || "1"),
-            noOfChild: String(cab.child || cab.noOfChild || "0"),
+            travelType: parseInt(cab.travelType || "1") || 1,
+            hourDetails: parseInt(cab.hourDetails || cab.timeDetails || "0") || 0,
+            dropDetails: parseInt(cab.dropDetails || "1") || 1,
+            paxDetails: parseInt(cab.paxDetails || "1") || 1,
+            luggage: cab.luggage === true || cab.luggage === "true" || String(cab.luggage).toLowerCase() === "true",
+            locationId: parseInt(cab.locationId || "0") || 0,
+            noOfAdult: parseInt(cab.adult || cab.noOfAdult || "1") || 1,
+            noOfChild: parseInt(cab.child || cab.noOfChild || "0") || 0,
             childAgeArray: Array.isArray(cab.childAge) 
-              ? cab.childAge.map(age => String(age))
-              : (cab.childAge ? [String(cab.childAge)] : []),
-            totalRate: String(cabTotalRate.toFixed(2)),
-            totalRateWithoutmrk: String(cabTotalRateWithoutMrk.toFixed(2)),
+              ? cab.childAge.map(age => parseInt(age) || 0)
+              : (cab.childAge ? [parseInt(cab.childAge) || 0] : []),
+            totalRate: cabTotalRate || 0,
+            totalRateWithoutmrk: cabTotalRateWithoutMrk || 0,
             transporter: transferDetail.transporterName || cab.transporter || "",
             contactNumber: transferDetail.contactNumber || cab.contactNumber || "",
             driverName: transferDetail.driverName || cab.driverName || "",
@@ -673,15 +701,15 @@ const MakePkgBookingPage = () => {
           };
         }),
         customBookingItinearyDTO: selectedItineraries.map((itineraryId) => ({
-          itinearyId: String(itineraryId),
+          itinearyId: parseInt(itineraryId) || 0,
           days: 1,
         })),
-        paymentApiId: "",
-        agentId: String(sessionStorage.getItem("makePkgAgentId") || "1"),
+        paymentApiId: null,
+        agentId: parseInt(sessionStorage.getItem("makePkgAgentId") || "0"),
         isCartBooking: true,
       };
 
-      console.log("Booking payload:", bookingPayload);
+      console.log("Makepkg Booking payload:", bookingPayload);
 
       const response = await axiosInstance.post(
         "/api/makeYourOwnPackage/saveMakeYourOwnPackageBooking",
@@ -695,6 +723,7 @@ const MakePkgBookingPage = () => {
         response.data.bookingId != 0 &&
         response.data.message === "Booking completed successfully"
       ) {
+        setShowOrderSummaryModal(false);
         toast.success(response.data.message || "Booking submitted successfully!");
         navigate("/booking-details/custom-booking-list");
       } else {
@@ -703,6 +732,8 @@ const MakePkgBookingPage = () => {
     } catch (err) {
       console.error("Error submitting booking:", err);
       toast.error("Failed to submit booking. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -783,7 +814,7 @@ const MakePkgBookingPage = () => {
                 <Accordion defaultActiveKey={["0", "5"]} alwaysOpen className="booking-accordion">
                   {/* Itinerary Option Section */}
                   <Accordion.Item eventKey="0" className="mb-2">
-                    <Accordion.Header onClick={fetchItineraryDetails}>
+                    <Accordion.Header>
                       <h5 className="mb-0 fw-bold">Itinerary option</h5>
                     </Accordion.Header>
                     <Accordion.Body>
@@ -1829,6 +1860,412 @@ const MakePkgBookingPage = () => {
           </Container>
         </main>
       </div>
+
+      {/* Order Summary Modal - Industry Standard Design */}
+      <Modal
+        show={showOrderSummaryModal}
+        onHide={() => !isSubmitting && setShowOrderSummaryModal(false)}
+        size="lg"
+        centered
+        backdrop="static"
+        keyboard={false}
+        className="order-summary-modal"
+      >
+        <Modal.Header 
+          closeButton={!isSubmitting}
+          style={{ 
+            borderBottom: "2px solid #e9ecef",
+            padding: "1.25rem 1.5rem"
+          }}
+        >
+          <Modal.Title className="d-flex align-items-center" style={{ fontSize: "1.5rem", fontWeight: "600" }}>
+            <div 
+              className="d-flex align-items-center justify-content-center me-3"
+              style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "12px",
+                backgroundColor: "#e7f5ff",
+                color: "#0d6efd"
+              }}
+            >
+              <FaCheckCircle size={24} />
+            </div>
+            <div>
+              <div style={{ fontSize: "1.5rem", fontWeight: "600", color: "#212529" }}>
+                Order Summary
+              </div>
+              <div style={{ fontSize: "0.875rem", color: "#6c757d", fontWeight: "400" }}>
+                Please review your booking details
+              </div>
+            </div>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto", padding: "1.5rem" }}>
+          <div className="order-summary">
+            {/* Guest Information Section */}
+            <div className="mb-4">
+              <div className="d-flex align-items-center mb-3">
+                <FaUsers className="me-2 text-primary" size={18} />
+                <h6 className="mb-0 fw-bold" style={{ fontSize: "1rem", color: "#212529" }}>
+                  Guest Information
+                </h6>
+              </div>
+              <div 
+                className="p-3 rounded"
+                style={{ 
+                  backgroundColor: "#f8f9fa",
+                  border: "1px solid #e9ecef"
+                }}
+              >
+                <Row className="g-3">
+                  <Col md={6}>
+                    <div className="mb-2">
+                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                        Full Name
+                      </small>
+                      <div style={{ fontSize: "0.9375rem", fontWeight: "500", color: "#212529" }}>
+                        {primaryGuest.salutation} {primaryGuest.firstName} {primaryGuest.lastName}
+                      </div>
+                    </div>
+                    <div className="mb-2">
+                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                        Email Address
+                      </small>
+                      <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
+                        {primaryGuest.emailId}
+                      </div>
+                    </div>
+                  </Col>
+                  <Col md={6}>
+                    <div className="mb-2">
+                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                        Contact Number
+                      </small>
+                      <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
+                        {primaryGuest.contactNumber}
+                      </div>
+                    </div>
+                    <div className="mb-2">
+                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                        LPO Number
+                      </small>
+                      <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
+                        {primaryGuest.lpo || "N/A"}
+                      </div>
+                    </div>
+                  </Col>
+                  {primaryGuest.passportNumber && (
+                    <Col md={12}>
+                      <div>
+                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                          Passport Number
+                        </small>
+                        <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
+                          {primaryGuest.passportNumber}
+                        </div>
+                      </div>
+                    </Col>
+                  )}
+                </Row>
+              </div>
+            </div>
+
+            {/* Booking Items Section */}
+            <div className="mb-4">
+              <h6 className="mb-3 fw-bold" style={{ fontSize: "1rem", color: "#212529" }}>
+                Booking Details
+              </h6>
+              
+              {/* Hotel Details */}
+              {hotels.length > 0 && (
+                <div 
+                  className="mb-3 p-3 rounded"
+                  style={{ 
+                    backgroundColor: "#fff",
+                    border: "1px solid #e9ecef",
+                    borderLeft: "4px solid #0dcaf0"
+                  }}
+                >
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <div className="d-flex align-items-center">
+                      <FaHotel className="me-2 text-info" size={18} />
+                      <strong style={{ fontSize: "0.9375rem" }}>Accommodation</strong>
+                    </div>
+                    <Badge bg="info">{hotels.length} {hotels.length === 1 ? 'Hotel' : 'Hotels'}</Badge>
+                  </div>
+                  {hotels.map((item, idx) => {
+                    const hotel = item.hotel || {};
+                    const checkIn = hotel.checkIn || hotel.checkInDate || "";
+                    const checkOut = hotel.checkOut || hotel.checkOutDate || "";
+                    const hotelSellingPrice = parseFloat(hotel.totalRate || 0);
+                    const hotelTotalPrice = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
+                    
+                    return (
+                      <div key={idx} className={idx > 0 ? "mt-3 pt-3 border-top" : ""}>
+                        <div className="mb-2">
+                          <strong style={{ fontSize: "0.9375rem", color: "#212529" }}>
+                            {hotel.hotelName || "Hotel"}
+                          </strong>
+                        </div>
+                        <div className="d-flex flex-wrap gap-3 mb-2" style={{ fontSize: "0.8125rem", color: "#6c757d" }}>
+                          <span>
+                            <FaCalendarAlt className="me-1" />
+                            Check-in: {formatDate(checkIn)}
+                          </span>
+                          <span>
+                            <FaCalendarAlt className="me-1" />
+                            Check-out: {formatDate(checkOut)}
+                          </span>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Selling Price</span>
+                          <strong style={{ fontSize: "0.9375rem", color: "#198754" }}>
+                            AED {hotelSellingPrice.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Total Price</span>
+                          <strong style={{ fontSize: "0.9375rem", color: "#0d6efd" }}>
+                            AED {hotelTotalPrice.toFixed(2)}
+                          </strong>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Activity Details */}
+              {activities.length > 0 && (
+                <div 
+                  className="mb-3 p-3 rounded"
+                  style={{ 
+                    backgroundColor: "#fff",
+                    border: "1px solid #e9ecef",
+                    borderLeft: "4px solid #198754"
+                  }}
+                >
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <div className="d-flex align-items-center">
+                      <FaTicketAlt className="me-2 text-success" size={18} />
+                      <strong style={{ fontSize: "0.9375rem" }}>Tours & Activities</strong>
+                    </div>
+                    <Badge bg="success">{activities.length} {activities.length === 1 ? 'Activity' : 'Activities'}</Badge>
+                  </div>
+                  {activities.map((item, idx) => {
+                    const activity = item.activity || {};
+                    const activitySellingPrice = parseFloat(activity.totalRate || 0);
+                    const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
+                    
+                    return (
+                      <div key={idx} className={idx > 0 ? "mt-3 pt-3 border-top" : ""}>
+                        <div className="mb-2">
+                          <strong style={{ fontSize: "0.9375rem", color: "#212529" }}>
+                            {activity.activityName || "Activity"}
+                          </strong>
+                        </div>
+                        <div className="d-flex flex-wrap gap-3 mb-2" style={{ fontSize: "0.8125rem", color: "#6c757d" }}>
+                          <span>
+                            <FaCalendarAlt className="me-1" />
+                            Date: {formatDate(activity.activityDate || "")}
+                          </span>
+                          <span>
+                            <FaUsers className="me-1" />
+                            Adults: {activity.adult || 0} | Children: {activity.child || 0}
+                          </span>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Selling Price</span>
+                          <strong style={{ fontSize: "0.9375rem", color: "#198754" }}>
+                            AED {activitySellingPrice.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Total Price</span>
+                          <strong style={{ fontSize: "0.9375rem", color: "#0d6efd" }}>
+                            AED {activityTotalPrice.toFixed(2)}
+                          </strong>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Transfer Details */}
+              {transfers.length > 0 && (
+                <div 
+                  className="mb-3 p-3 rounded"
+                  style={{ 
+                    backgroundColor: "#fff",
+                    border: "1px solid #e9ecef",
+                    borderLeft: "4px solid #ffc107"
+                  }}
+                >
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <div className="d-flex align-items-center">
+                      <FaCar className="me-2 text-warning" size={18} />
+                      <strong style={{ fontSize: "0.9375rem" }}>Transfers</strong>
+                    </div>
+                    <Badge bg="warning" text="dark">{transfers.length} {transfers.length === 1 ? 'Transfer' : 'Transfers'}</Badge>
+                  </div>
+                  {transfers.map((item, idx) => {
+                    const cab = item.cab || {};
+                    const cabSellingPrice = parseFloat(cab.totalRate || 0);
+                    const cabTotalPrice = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
+                    
+                    return (
+                      <div key={idx} className={idx > 0 ? "mt-3 pt-3 border-top" : ""}>
+                        <div className="mb-2">
+                          <strong style={{ fontSize: "0.9375rem", color: "#212529" }}>
+                            {cab.cabName || "Transfer"}
+                          </strong>
+                        </div>
+                        <div className="d-flex flex-wrap gap-3 mb-2" style={{ fontSize: "0.8125rem", color: "#6c757d" }}>
+                          <span>
+                            <FaCalendarAlt className="me-1" />
+                            Pickup: {formatDate(cab.pickupDate || "")}
+                          </span>
+                          <span>
+                            <FaCalendarAlt className="me-1" />
+                            Dropoff: {formatDate(cab.dropoffDate || "")}
+                          </span>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Selling Price</span>
+                          <strong style={{ fontSize: "0.9375rem", color: "#198754" }}>
+                            AED {cabSellingPrice.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Total Price</span>
+                          <strong style={{ fontSize: "0.9375rem", color: "#0d6efd" }}>
+                            AED {cabTotalPrice.toFixed(2)}
+                          </strong>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Price Summary Section */}
+            <div 
+              className="p-4 rounded"
+              style={{ 
+                backgroundColor: "#f8f9fa",
+                border: "2px solid #0d6efd"
+              }}
+            >
+              <h6 className="mb-3 fw-bold" style={{ fontSize: "1rem", color: "#212529" }}>
+                Price Summary
+              </h6>
+              
+              <div className="mb-3">
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <span style={{ fontSize: "0.9375rem", color: "#495057" }}>Subtotal (Selling Price)</span>
+                  <strong style={{ fontSize: "1.125rem", color: "#198754" }}>
+                    AED {sellingPrice.toFixed(2)}
+                  </strong>
+                </div>
+                <div className="d-flex justify-content-between align-items-center">
+                  <span style={{ fontSize: "0.9375rem", color: "#495057" }}>Subtotal (Without Markup)</span>
+                  <strong style={{ fontSize: "1.125rem", color: "#0d6efd" }}>
+                    AED {totalPrice.toFixed(2)}
+                  </strong>
+                </div>
+              </div>
+
+              {visaRequired && (
+                <div className="pt-3 mt-3 border-top">
+                  <h6 className="mb-2 fw-semibold" style={{ fontSize: "0.875rem", color: "#495057" }}>
+                    Visa Charges
+                  </h6>
+                  {parseInt(visaDetails.visaAdult || "0") > 0 && (
+                    <div className="d-flex justify-content-between mb-1" style={{ fontSize: "0.8125rem" }}>
+                      <span className="text-muted">Adults ({visaDetails.visaAdult})</span>
+                      <span>AED {parseFloat(visaDetails.visaAdultRate || "0").toFixed(2)}</span>
+                    </div>
+                  )}
+                  {parseInt(visaDetails.visaChild || "0") > 0 && (
+                    <div className="d-flex justify-content-between mb-1" style={{ fontSize: "0.8125rem" }}>
+                      <span className="text-muted">Children ({visaDetails.visaChild})</span>
+                      <span>AED {parseFloat(visaDetails.visaChildRate || "0").toFixed(2)}</span>
+                    </div>
+                  )}
+                  {parseInt(visaDetails.visaInfant || "0") > 0 && (
+                    <div className="d-flex justify-content-between" style={{ fontSize: "0.8125rem" }}>
+                      <span className="text-muted">Infants ({visaDetails.visaInfant})</span>
+                      <span>AED {parseFloat(visaDetails.visaInfantRate || "0").toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div 
+                className="mt-3 pt-3 border-top d-flex justify-content-between align-items-center"
+                style={{ borderColor: "#0d6efd !important" }}
+              >
+                <span className="fw-bold" style={{ fontSize: "1.125rem", color: "#212529" }}>
+                  Total Amount
+                </span>
+                <span 
+                  className="fw-bold"
+                  style={{ 
+                    fontSize: "1.5rem", 
+                    color: "#0d6efd"
+                  }}
+                >
+                  AED {sellingPrice.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer 
+          style={{ 
+            borderTop: "2px solid #e9ecef",
+            padding: "1.25rem 1.5rem",
+            justifyContent: "space-between"
+          }}
+        >
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowOrderSummaryModal(false)}
+            disabled={isSubmitting}
+            style={{ 
+              minWidth: "120px",
+              fontWeight: "500"
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={confirmBooking}
+            disabled={isSubmitting}
+            style={{ 
+              minWidth: "160px",
+              fontWeight: "600",
+              fontSize: "1rem"
+            }}
+          >
+            {isSubmitting ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <FaCheckCircle className="me-2" />
+                Confirm Booking
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

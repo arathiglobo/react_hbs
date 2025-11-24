@@ -18,6 +18,7 @@ import Designations from "./pages/master/Designation";
 import HotelSearch from "./pages/HotelSearch";
 import RoomList from "./pages/RoomList";
 import HotelBookingList from "./pages/list/HotelBookingList";
+import CustomBookingList from "./pages/list/CustomBookingList";
 import Bank from "./pages/master/Bank";
 import ContactType from "./pages/master/ContactType";
 import MarkupType from "./pages/master/MarkupType";
@@ -187,6 +188,7 @@ export default function App() {
         <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
+        <Route path="/booking-details/custom-booking-list" element={<PrivateRoute><CustomBookingList /> </PrivateRoute>}/>
         <Route path="/make-your-pkg-room-list" element={<PrivateRoute><AccomodationRoomList /> </PrivateRoute>}/>
        
         {/* Company Profile */}
