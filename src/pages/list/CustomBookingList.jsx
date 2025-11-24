@@ -187,13 +187,13 @@ const CustomBookingList = () => {
           >
             <div className="d-flex justify-content-between align-items-center mb-3">
               <div className="d-flex align-items-center gap-3">
-                <Button
+                {/* <Button
                   variant="link"
                   className="p-0 text-dark"
                   onClick={() => navigate(-1)}
                 >
                   <FaArrowLeft size={20} />
-                </Button>
+                </Button> */}
                 <h2 className="mb-0 fw-bold">Custom Booking</h2>
               </div>
             </div>
