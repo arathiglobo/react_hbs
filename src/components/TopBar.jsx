@@ -496,6 +496,35 @@ export default function TopBar() {
     setShowCartModal(true);
   };
 
+  const handleQuotationBooking = async () => {
+    try {
+      const agentId = getCartAgentId();
+      if (!agentId) {
+        toast.error("Select an agent before proceeding to checkout.");
+        return;
+      }
+
+      // Fetch latest cart data before navigating
+      const response = await axiosInstance.post(
+        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
+          agentId
+        )}`
+      );
+
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        // Store cart data in sessionStorage for the booking page
+        sessionStorage.setItem("makePkgCartData", JSON.stringify(response.data));
+        sessionStorage.setItem("makePkgAgentId", agentId);
+       window.open("/make-your-own-package/generate-quotation-booking");
+      } else {
+        toast.error("Your cart is empty. Please add items to cart first.");
+      }
+    } catch (err) {
+      console.error("Error fetching cart data:", err);
+      toast.error("Failed to load cart data. Please try again.");
+    }
+  };
+
   const handleContinueBooking = async () => {
     try {
       const agentId = getCartAgentId();
@@ -657,7 +686,7 @@ export default function TopBar() {
                {cartItems.length > 0 && (
                 <Button
                   variant="outline-primary generate-quotation"
-                  // onClick={handleQuotationBooking}
+                  onClick={handleQuotationBooking}
                 >
                   Generate Quotation
                 </Button>

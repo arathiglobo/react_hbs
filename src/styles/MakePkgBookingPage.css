@@ -91,6 +91,187 @@
   font-weight: 600;
 }
 
+/* Itinerary Days Container */
+.itinerary-days-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Itinerary Day Box - Simple Design Matching Screenshot */
+.itinerary-day-box {
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 0.875rem 1rem;
+  min-height: 48px;
+}
+
+.itinerary-day-box > div:first-child {
+  display: flex;
+  align-items: center;
+}
+
+.itinerary-day-box h6 {
+  color: #212529;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.itinerary-plus-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-width: 2px;
+  border-color: #dc3545;
+  color: #dc3545;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.itinerary-plus-btn:hover {
+  background-color: #dc3545;
+  color: white;
+  border-color: #dc3545;
+}
+
+.itinerary-plus-btn:active {
+  transform: scale(0.95);
+}
+
+.itinerary-plus-btn:focus {
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+  outline: none;
+}
+
+.itinerary-plus-btn svg {
+  font-size: 0.875rem;
+}
+
+/* Itinerary Preview Items */
+.itinerary-preview-item {
+  padding: 0.5rem 0.75rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+  transition: all 0.2s ease;
+}
+
+.itinerary-preview-item:hover {
+  background: #f8f9fa;
+  border-color: #dee2e6;
+}
+
+.itinerary-preview-item .small {
+  color: #495057;
+  font-size: 0.875rem;
+  word-break: break-word;
+}
+
+.itinerary-preview-item button {
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.itinerary-preview-item button:hover {
+  transform: scale(1.2);
+  color: #c82333 !important;
+}
+
+/* Itinerary Modal Styles */
+.itinerary-modal .modal-content {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.itinerary-modal-header {
+  border-bottom: none;
+}
+
+.itinerary-modal-header .btn-close {
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+.itinerary-modal-header .btn-close:hover {
+  opacity: 1;
+}
+
+.itinerary-search-input {
+  transition: all 0.3s ease;
+}
+
+.itinerary-search-input:focus {
+  border-color: #007bff !important;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15) !important;
+}
+
+.itinerary-modal-list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.itinerary-modal-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.itinerary-modal-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.itinerary-modal-list::-webkit-scrollbar-thumb {
+  background: #007bff;
+  border-radius: 4px;
+}
+
+.itinerary-modal-list::-webkit-scrollbar-thumb:hover {
+  background: #0056b3;
+}
+
+.itinerary-modal-item {
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.itinerary-modal-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.itinerary-modal-item-selected {
+  background: linear-gradient(135deg, #e7f3ff 0%, #f0f8ff 100%) !important;
+  border-color: #0d6efd !important;
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.2);
+}
+
+.itinerary-modal-item-selected:hover {
+  box-shadow: 0 4px 16px rgba(13, 110, 253, 0.3);
+}
+
+/* Empty State */
+.itinerary-empty-state {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px dashed #dee2e6;
+  text-align: center;
+}
+
 /* Hotel Item Card */
 .hotel-item-card {
   border: 1px solid #dee2e6;

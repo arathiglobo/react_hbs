@@ -38,7 +38,7 @@ import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 import "../../../styles/MakePkgBookingPage.css";
 
-const MakePkgBookingPage = () => {
+const GenerateQuotationBooking = () => {
   const navigate = useNavigate();
   const [cartData, setCartData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,10 +61,11 @@ const MakePkgBookingPage = () => {
     visaInfant: "0",
     visaInfantRate: "0",
   });
-  const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
-  const [remarks, setRemarks] = useState("");
-  const [specialRequest, setSpecialRequest] = useState("");
-  const [tourismDirhams, setTourismDirhams] = useState("0");
+  // Per-hotel state for Tourism Dirhams, Remarks, Special Request, and Booking Confirmation
+  const [hotelTourismDirhams, setHotelTourismDirhams] = useState({});
+  const [hotelRemarks, setHotelRemarks] = useState({});
+  const [hotelSpecialRequests, setHotelSpecialRequests] = useState({});
+  const [hotelBookingConfirmation, setHotelBookingConfirmation] = useState({});
   const [totalPrice, setTotalPrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
   
@@ -142,6 +143,28 @@ const MakePkgBookingPage = () => {
     setTransferDetails(details);
   };
 
+  // Initialize per-hotel state
+  const initializeHotelState = (cartItems) => {
+    const tourismDirhams = {};
+    const remarks = {};
+    const specialRequests = {};
+    const bookingConfirmation = {};
+    
+    cartItems.forEach((item, index) => {
+      if (item.hotel) {
+        tourismDirhams[index] = "0";
+        remarks[index] = "";
+        specialRequests[index] = "";
+        bookingConfirmation[index] = "Book & Voucher";
+      }
+    });
+    
+    setHotelTourismDirhams(tourismDirhams);
+    setHotelRemarks(remarks);
+    setHotelSpecialRequests(specialRequests);
+    setHotelBookingConfirmation(bookingConfirmation);
+  };
+
   // Load cart data on mount
   useEffect(() => {
     const loadCartData = () => {
@@ -154,6 +177,7 @@ const MakePkgBookingPage = () => {
           calculatePrices(parsed);
           initializeRoomGuests(parsed);
           initializeTransferDetails(parsed);
+          initializeHotelState(parsed);
         } else {
           toast.error("No cart data found. Please add items to cart first.");
           navigate("/new-booking/make-your-own-package");
@@ -575,6 +599,302 @@ const MakePkgBookingPage = () => {
     setShowOrderSummaryModal(true);
   };
 
+  // Format date to Date object for backend
+  const formatDateToDateObject = (dateString) => {
+    if (!dateString) return null;
+    try {
+      let date;
+      if (dateString.includes("/")) {
+        const [day, month, year] = dateString.split("/");
+        date = new Date(year, month - 1, day);
+      } else if (dateString.includes("-")) {
+        // Handle DD-MM-YYYY format
+        const [day, month, year] = dateString.split("-");
+        date = new Date(year, month - 1, day);
+      } else {
+        date = new Date(dateString);
+      }
+      if (isNaN(date.getTime())) return null;
+      return date;
+    } catch {
+      return null;
+    }
+  };
+
+  // Confirm and submit quotation
+  const confirmQuotation = async () => {
+    setIsSubmitting(true);
+    try {
+      const hotels = getHotels();
+      const activities = getActivities();
+      const transfers = getTransfers();
+      
+      // Find hotel index in cartData
+      const hotelIndexInCart = hotels.length > 0 
+        ? cartData.findIndex((item) => item.hotel)
+        : -1;
+
+      // Prepare quotation payload
+      const firstHotel = hotels.length > 0 ? hotels[0].hotel : null;
+      const checkIn = firstHotel?.checkIn || firstHotel?.checkInDate || "";
+      const checkOut = firstHotel?.checkOut || firstHotel?.checkOutDate || "";
+      const nights = calculateNights(checkIn, checkOut);
+      
+      // Get first activity date for tourDate
+      const firstActivity = activities.length > 0 ? activities[0].activity : null;
+      const tourDateObj = firstActivity?.activityDate 
+        ? formatDateToDateObject(firstActivity.activityDate) 
+        : (checkIn ? formatDateToDateObject(checkIn) : new Date());
+
+      // Get currency information
+      const currencyCode = firstHotel?.currency || firstActivity?.currency || "AED";
+      const currencyId = firstHotel?.currencyId || firstActivity?.currencyId || 1; // Default to 1 if not available
+      
+      // Calculate markup (sellingPrice - totalPrice)
+      const markup = sellingPrice - totalPrice;
+      const markupType = 1; // 1 for percentage, 2 for value - default to 1
+      const markupTypeName = markupType === 1 ? "Percent" : "Value";
+
+      // Get agent and employee info
+      const agentId = parseInt(sessionStorage.getItem("makePkgAgentId") || "0");
+      const employeeId = firstHotel?.employeeId || "1";
+      const agent = localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
+      const employee = ""; // Will be populated from backend if needed
+      const employeeMail = ""; // Will be populated from backend if needed
+
+      // Group itineraries by days
+      const quoteItineraryDTOList = [];
+      
+      // Day 1 itineraries
+      if (selectedItineraries.day1.length > 0) {
+        const day1Itineraries = selectedItineraries.day1.map((itineraryId) => {
+          const itinerary = itineraryList.find(item => item.itineraryId === itineraryId);
+          return {
+            itinearyId: parseInt(itineraryId) || 0,
+            heading: itinerary?.itineraryHeading || "",
+            description: itinerary?.itineraryDesc || "",
+            imagePath: itinerary?.itineraryImg || ""
+          };
+        });
+        quoteItineraryDTOList.push({
+          days: 1,
+          itineraryList: day1Itineraries
+        });
+      }
+
+      // Day 2 itineraries
+      if (selectedItineraries.day2.length > 0) {
+        const day2Itineraries = selectedItineraries.day2.map((itineraryId) => {
+          const itinerary = itineraryList.find(item => item.itineraryId === itineraryId);
+          return {
+            itinearyId: parseInt(itineraryId) || 0,
+            heading: itinerary?.itineraryHeading || "",
+            description: itinerary?.itineraryDesc || "",
+            imagePath: itinerary?.itineraryImg || ""
+          };
+        });
+        quoteItineraryDTOList.push({
+          days: 2,
+          itineraryList: day2Itineraries
+        });
+      }
+
+      // Map activities to QuoteActivityDTO
+      const quoteActivityDTOList = activities.map((item) => {
+        const activity = item.activity || {};
+        const activitySellingPrice = parseFloat(activity.totalRate || 0);
+        const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
+        const childAge = activity.childAge 
+          ? (Array.isArray(activity.childAge) ? activity.childAge[0] : activity.childAge)
+          : null;
+
+        return {
+          activityId: parseInt(activity.activityId || "0") || 0,
+          tourDate: formatDateToDateObject(activity.activityDate || ""),
+          nOfAdult: parseInt(activity.adult || activity.noOfAdult || "1") || 1,
+          noOfChild: parseInt(activity.child || activity.noOfChild || "0") || 0,
+          childAge: childAge ? parseInt(childAge) : null,
+          sellingPrice: activitySellingPrice,
+          totalPrice: activityTotalPrice
+        };
+      });
+
+      // Map transfers to QuoteCabDTO
+      const quoteCabDTOList = transfers.map((item, transferArrayIndex) => {
+        let transferIndexInCart = -1;
+        let cabCount = 0;
+        for (let i = 0; i < cartData.length; i++) {
+          if (cartData[i].cab) {
+            if (cabCount === transferArrayIndex) {
+              transferIndexInCart = i;
+              break;
+            }
+            cabCount++;
+          }
+        }
+        const actualIndex = transferIndexInCart >= 0 ? transferIndexInCart : 0;
+        const cab = item.cab || {};
+        const cabTotalRate = parseFloat(cab.totalRate || 0);
+        const cabTotalRateWithoutMrk = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
+        
+        // Handle childAge - could be array or single value
+        let childAgeStr = "";
+        if (cab.childAge) {
+          if (Array.isArray(cab.childAge)) {
+            childAgeStr = cab.childAge.join(",");
+          } else {
+            childAgeStr = String(cab.childAge);
+          }
+        }
+
+        return {
+          quoteCabId: null,
+          quoteId: null,
+          cabId: parseInt(cab.cabId || "0") || 0,
+          noOfCabs: parseInt(cab.noOfCabs || "1") || 1,
+          travelType: parseInt(cab.travelType || "1") || 1,
+          hourDetails: parseInt(cab.hourDetails || cab.timeDetails || "0") || 0,
+          locationId: parseInt(cab.locationId || "0") || 0,
+          dropDetails: parseInt(cab.dropDetails || "1") || 1,
+          paxDetails: parseInt(cab.paxDetails || "1") || 1,
+          pickupDate: formatDateToDateObject(cab.pickupDate || ""),
+          dropOffDate: formatDateToDateObject(cab.dropDate || cab.dropOffDate || ""),
+          sellingPrice: cabTotalRate,
+          totalPrice: cabTotalRateWithoutMrk,
+          luggage: cab.luggage === true || cab.luggage === "true" || String(cab.luggage).toLowerCase() === "true",
+          cabName: cab.cabName || cab.vehicleName || "",
+          noOfAdult: parseInt(cab.adult || cab.noOfAdult || "1") || 1,
+          noOfChild: parseInt(cab.child || cab.noOfChild || "0") || 0,
+          childAge: childAgeStr,
+          paxDetailsTerm: cab.paxDetailsTerm || "",
+          dropDetailsTerm: cab.dropDetailsTerm || "",
+          location: cab.location || cab.pickupLocation || ""
+        };
+      });
+
+      // Build hotel booking request
+      const hotelBookingRequest = hotels.length > 0 && firstHotel ? {
+        bookingId: "",
+        agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
+        apiId: String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
+        hotelId: String(firstHotel.hotelId || ""),
+        hotelName: firstHotel.hotelName || "",
+        address: firstHotel.hotelAddress || firstHotel.address || "",
+        starRating: parseInt(firstHotel.starRating || 0),
+        checkInDate: formatDateToYYYYMMDD(checkIn),
+        checkOutDate: formatDateToYYYYMMDD(checkOut),
+        nights: nights,
+        primaryGuest: {
+          firstName: primaryGuest.firstName || "",
+          middleName: primaryGuest.middleName || "",
+          lastName: primaryGuest.lastName || "",
+          nativeCountry: firstHotel.nativeContryId || "",
+          email: primaryGuest.emailId || "",
+          phone: primaryGuest.contactNumber || "",
+          passportNo: primaryGuest.passportNumber || "",
+          salutaion: primaryGuest.salutation || "",
+          agentlpo: primaryGuest.lpo || "",
+        },
+        rooms: firstHotel?.searchRoomDTOs?.map((room, idx) => {
+          const guestKey = `${hotelIndexInCart}-${idx}`;
+          const guests = roomGuests[guestKey] || [];
+          
+          const roomRate = parseFloat(firstHotel.totalRate || 0);
+          const roomRateWithoutMarkup = parseFloat(firstHotel.totalRateWithoutmrk || firstHotel.totalRate || 0);
+          
+          return {
+            roomNo: idx + 1,
+            roomCategory: firstHotel.roomCategory || "",
+            mealPlan: firstHotel.roomType || "",
+            nonRefundable: firstHotel.nonRefundable === true || firstHotel.nonRefundable === "true" || firstHotel.refundstatus === "N",
+            currency: firstHotel.currency || "AED",
+            rate: roomRate,
+            rateWithoutMarkup: roomRateWithoutMarkup,
+            adults: parseInt(room.adult || room.adults || 1),
+            children: parseInt(room.child || room.children || 0),
+            childAges: Array.isArray(room.childAge) 
+              ? room.childAge.map(age => parseInt(age) || 0)
+              : (room.childAge ? [parseInt(room.childAge) || 0] : []),
+            guests: guests.map((guest) => ({
+              salutation: guest.salutation || "",
+              firstName: guest.firstName || "",
+              middleName: guest.middleName || "",
+              lastName: guest.lastName || "",
+              gender: guest.gender || "",
+              isChild: guest.isChild || false,
+            })),
+          };
+        }) || [],
+        remarks: hotelRemarks[hotelIndexInCart] || "",
+        specialRequests: hotelSpecialRequests[hotelIndexInCart] || "",
+        source: "",
+        bookingDate: new Date().toISOString(),
+        createdByRole: localStorage.getItem("currentActiveRole") || "",
+        cancellationPolicy: Array.isArray(firstHotel.cancellationPolicy) 
+          ? firstHotel.cancellationPolicy 
+          : [],
+        deadlineDate: firstHotel.deadlineDate || "",
+        employeeId: employeeId,
+        isBookandVoucher: (hotelBookingConfirmation[hotelIndexInCart] || "Book & Voucher") === "Book & Voucher",
+        roomStatus: firstHotel.roomStatus || "Available",
+      } : null;
+
+      const quotationPayload = {
+        quoteId: null,
+        bookingDate: new Date(),
+        quoteCode: null,
+        tourDate: tourDateObj,
+        currencyId: currencyId,
+        markUp: Math.round(markup * 100) / 100, // Round to 2 decimal places
+        noOfNights: nights,
+        nativeCountry: primaryGuest.nativeCountry ? parseInt(primaryGuest.nativeCountry) : null,
+        markUpType: markupType,
+        markUpTypeName: markupTypeName,
+        agent: agent,
+        employee: employee,
+        employeeMail: employeeMail,
+        agentId: agentId,
+        employeeId: parseInt(employeeId) || 1,
+        sellingPrice: Math.round(sellingPrice * 100) / 100,
+        currencyCode: currencyCode,
+        totalPrice: Math.round(totalPrice * 100) / 100,
+        visaStatus: visaRequired,
+        visaAdult: parseInt(visaDetails.visaAdult || "0") || 0,
+        visaAdultRate: visaDetails.visaAdultRate || "0",
+        visaChild: parseInt(visaDetails.visaChild || "0") || 0,
+        visaChildRate: visaDetails.visaChildRate || "0",
+        visaInfant: parseInt(visaDetails.visaInfant || "0") || 0,
+        visaInfantRate: visaDetails.visaInfantRate || "0",
+        quoteCabDTOList: quoteCabDTOList,
+        quoteItineraryDTOList: quoteItineraryDTOList,
+        customPackageListItineraryDTOList: quoteItineraryDTOList, // Same as quoteItineraryDTOList
+        quoteActivityDTOList: quoteActivityDTOList,
+        hotelBookingRequest: hotelBookingRequest
+      };
+
+      console.log("Quotation payload:", quotationPayload);
+
+      const response = await axiosInstance.post(
+        "/api/makeYourOwnPackage/saveQuotations",
+        quotationPayload
+      );
+
+      // Check quotation response structure
+      if (response.data && response.data != null) {
+        setShowOrderSummaryModal(false);
+        toast.success("Quotation saved successfully!");
+        navigate("/booking-details/quotation-booking-list");
+      } else {
+        toast.error("Failed to save quotation.");
+      }
+    } catch (err) {
+      console.error("Error saving quotation:", err);
+      toast.error(err.response?.data?.message || "Failed to save quotation. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Confirm and submit booking
   const confirmBooking = async () => {
     setIsSubmitting(true);
@@ -640,12 +960,12 @@ const MakePkgBookingPage = () => {
             ? firstHotel.cancellationPolicy 
             : [],
           deadlineDate: firstHotel.deadlineDate || "",
-          isBookandVoucher: bookingConfirmation === "Book & Voucher",
+          isBookandVoucher: (hotelBookingConfirmation[hotelIndexInCart] || "Book & Voucher") === "Book & Voucher",
           primaryGuest: {
             firstName: primaryGuest.firstName || "",
             middleName: primaryGuest.middleName || "",
             lastName: primaryGuest.lastName || "",
-            nativeCountry: firstHotel.nativeContryId || "",
+            nativeCountry: primaryGuest.nativeCountry || "",
             email: primaryGuest.emailId || "",
             phone: primaryGuest.contactNumber || "",
             passportNo: primaryGuest.passportNumber || "",
@@ -685,10 +1005,10 @@ const MakePkgBookingPage = () => {
               })),
             };
           }) || [],
-          remarks: remarks || "",
-          specialRequests: specialRequest || "",
-          tourismDirhams: parseFloat(tourismDirhams) || 0,
-          bookingConfirmation: bookingConfirmation || "Book & Voucher",
+          remarks: hotelRemarks[hotelIndexInCart] || "",
+          specialRequests: hotelSpecialRequests[hotelIndexInCart] || "",
+          tourismDirhams: parseFloat(hotelTourismDirhams[hotelIndexInCart] || "0") || 0,
+          bookingConfirmation: hotelBookingConfirmation[hotelIndexInCart] || "Book & Voucher",
         } : null,
         customBookingActivityDTO: activities.map((item) => {
           const activity = item.activity || {};
@@ -856,7 +1176,7 @@ const MakePkgBookingPage = () => {
             <div className="booking-page-header mb-3">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <h2 className="mb-1">Confirm Booking</h2>
+                  <h2 className="mb-1">Confirm Quotation</h2>
                 </div>
                 <div className="d-flex align-items-center gap-4">
                   <div className="text-end">
@@ -1029,6 +1349,21 @@ const MakePkgBookingPage = () => {
                           const hotelSellingPrice = parseFloat(hotel.totalRate || 0);
                           const pricePerNight = dateRange.length > 0 ? hotelTotalPrice / dateRange.length : hotelTotalPrice;
 
+                          // Find hotel index in cartData to use for per-hotel state
+                          let hotelIndexInCart = -1;
+                          let hotelCount = 0;
+                          for (let i = 0; i < cartData.length; i++) {
+                            if (cartData[i].hotel) {
+                              if (hotelCount === hotelIndex) {
+                                hotelIndexInCart = i;
+                                break;
+                              }
+                              hotelCount++;
+                            }
+                          }
+                          // Fallback to hotelIndex if not found in cartData
+                          const actualHotelIndex = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
+
                           return (
                             <Card key={hotelIndex} className="mb-3 hotel-item-card">
                               <Card.Header className="hotel-section-header">
@@ -1112,22 +1447,8 @@ const MakePkgBookingPage = () => {
                                     const children = parseInt(room.child || room.children || 0);
                                     const totalGuests = adults + children;
                                     
-                                    // Find hotel index in cartData to match validation
-                                    let hotelIndexInCart = -1;
-                                    let hotelCount = 0;
-                                    for (let i = 0; i < cartData.length; i++) {
-                                      if (cartData[i].hotel) {
-                                        if (hotelCount === hotelIndex) {
-                                          hotelIndexInCart = i;
-                                          break;
-                                        }
-                                        hotelCount++;
-                                      }
-                                    }
-                                    
-                                    const guestKey = hotelIndexInCart >= 0 ? `${hotelIndexInCart}-${roomIndex}` : `${hotelIndex}-${roomIndex}`;
+                                    const guestKey = actualHotelIndex >= 0 ? `${actualHotelIndex}-${roomIndex}` : `${hotelIndex}-${roomIndex}`;
                                     const guests = roomGuests[guestKey] || [];
-                                    const actualHotelIndex = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
 
                                     if (totalGuests === 0) return null;
 
@@ -1328,8 +1649,11 @@ const MakePkgBookingPage = () => {
                                   <Form.Label>Tourism Dirhams (AED)</Form.Label>
                                   <Form.Control
                                     type="number"
-                                    value={tourismDirhams}
-                                    onChange={(e) => setTourismDirhams(e.target.value)}
+                                    value={hotelTourismDirhams[actualHotelIndex] || "0"}
+                                    onChange={(e) => setHotelTourismDirhams(prev => ({
+                                      ...prev,
+                                      [actualHotelIndex]: e.target.value
+                                    }))}
                                     min="0"
                                   />
                                 </Col>
@@ -1342,8 +1666,11 @@ const MakePkgBookingPage = () => {
                                   <Form.Control
                                     as="textarea"
                                     rows={3}
-                                    value={remarks}
-                                    onChange={(e) => setRemarks(e.target.value)}
+                                    value={hotelRemarks[actualHotelIndex] || ""}
+                                    onChange={(e) => setHotelRemarks(prev => ({
+                                      ...prev,
+                                      [actualHotelIndex]: e.target.value
+                                    }))}
                                     placeholder="Enter any remarks..."
                                   />
                                 </Col>
@@ -1356,8 +1683,11 @@ const MakePkgBookingPage = () => {
                                   <Form.Control
                                     as="textarea"
                                     rows={3}
-                                    value={specialRequest}
-                                    onChange={(e) => setSpecialRequest(e.target.value)}
+                                    value={hotelSpecialRequests[actualHotelIndex] || ""}
+                                    onChange={(e) => setHotelSpecialRequests(prev => ({
+                                      ...prev,
+                                      [actualHotelIndex]: e.target.value
+                                    }))}
                                     placeholder="Enter any special requests..."
                                   />
                                 </Col>
@@ -1372,20 +1702,26 @@ const MakePkgBookingPage = () => {
                                   <Form.Check
                                     type="radio"
                                     label="Book & Voucher"
-                                    name="bookingConfirmation"
+                                    name={`bookingConfirmation-${actualHotelIndex}`}
                                     value="Book & Voucher"
-                                    checked={bookingConfirmation === "Book & Voucher"}
-                                    onChange={(e) => setBookingConfirmation(e.target.value)}
+                                    checked={(hotelBookingConfirmation[actualHotelIndex] || "Book & Voucher") === "Book & Voucher"}
+                                    onChange={(e) => setHotelBookingConfirmation(prev => ({
+                                      ...prev,
+                                      [actualHotelIndex]: e.target.value
+                                    }))}
                                     inline
                                     className="me-3"
                                   />
                                   <Form.Check
                                     type="radio"
                                     label="Book Now & Voucher later"
-                                    name="bookingConfirmation"
+                                    name={`bookingConfirmation-${actualHotelIndex}`}
                                     value="Book Now & Voucher later"
-                                    checked={bookingConfirmation === "Book Now & Voucher later"}
-                                    onChange={(e) => setBookingConfirmation(e.target.value)}
+                                    checked={(hotelBookingConfirmation[actualHotelIndex] || "Book & Voucher") === "Book Now & Voucher later"}
+                                    onChange={(e) => setHotelBookingConfirmation(prev => ({
+                                      ...prev,
+                                      [actualHotelIndex]: e.target.value
+                                    }))}
                                     inline
                                   />
                                 </div>
@@ -2376,7 +2712,7 @@ const MakePkgBookingPage = () => {
           </Button>
           <Button
             variant="primary"
-            onClick={confirmBooking}
+            onClick={confirmQuotation}
             disabled={isSubmitting}
             style={{ 
               minWidth: "160px",
@@ -2392,7 +2728,7 @@ const MakePkgBookingPage = () => {
             ) : (
               <>
                 <FaCheckCircle className="me-2" />
-                Confirm Booking
+                Save Quotation
               </>
             )}
           </Button>
@@ -2577,4 +2913,4 @@ const MakePkgBookingPage = () => {
   );
 };
 
-export default MakePkgBookingPage;
+export default GenerateQuotationBooking;
