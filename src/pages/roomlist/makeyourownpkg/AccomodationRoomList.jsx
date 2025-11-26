@@ -171,6 +171,7 @@ const AccomodationRoomList = () => {
           : "Y";
 
       // Prepare cart item data matching CustomPackageHotelDTO
+      console.log("payload###" , payload)
       const cartItem = {
         hotelId: String(hotelsdetail.hotelId || ""),
         hotelName: hotelsdetail.hotelName || "",
@@ -184,7 +185,8 @@ const AccomodationRoomList = () => {
         destinationCountryId: String(payload.destinationCountryId || payload.countryId || ""),
         checkIn: payload.checkInDate || payload.checkIn || "",
         checkOut: payload.checkOutDate || payload.checkOut || "",
-        nativeContryId: String(payload.nationality || payload.nativeContryId || ""),
+        nativeContryId: hotelsdetail.nationalityId || "",
+        nationality : String(payload.nationality || ""),
         noOfRoom: String(hotelsdetail.numberOfRooms || payload.noOfRoom || "1"),
         refundstatus: refundstatus,
         searchRoomDTOs: searchRoomDTOs,
