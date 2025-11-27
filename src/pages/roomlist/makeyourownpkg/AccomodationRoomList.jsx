@@ -175,6 +175,8 @@ const AccomodationRoomList = () => {
       const cartItem = {
         hotelId: String(hotelsdetail.hotelId || ""),
         hotelName: hotelsdetail.hotelName || "",
+        address: hotelsdetail.address || "",
+        starRating: String(hotelsdetail.starRating || ""),
         roomtypeId: String(rate.roomTypeCode || rate.roomtypeId || ""),
         roomCategoryId: String(rate.roomCategoryId || rate.roomcategoryId || ""),
         roomCategory: rate.roomCategory || "",
@@ -193,6 +195,8 @@ const AccomodationRoomList = () => {
         agentId: String(payload.agentId || ""),
         totalRate: rate.rate,
         totalRateWithoutmrk:  rate.rateBeforeTax,
+        cancellationPolicy: hotelsdetail.cancellationPolicies,
+
       };
 
       // Call API to add to cart

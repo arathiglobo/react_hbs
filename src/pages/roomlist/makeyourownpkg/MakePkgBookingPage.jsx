@@ -593,6 +593,9 @@ const MakePkgBookingPage = () => {
       const checkIn = firstHotel?.checkIn || firstHotel?.checkInDate || "";
       const checkOut = firstHotel?.checkOut || firstHotel?.checkOutDate || "";
       const nights = calculateNights(checkIn, checkOut);
+
+      console.log("firstHotel:", firstHotel);
+ 
       
       // Get first activity date for tourDate
       const firstActivity = activities.length > 0 ? activities[0].activity : null;
@@ -626,7 +629,7 @@ const MakePkgBookingPage = () => {
         visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
         hotelBookingRequest: hotels.length > 0 && firstHotel ? {
           agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
-          apiId: String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
+          apiId:   String("INHOUSE"),   //String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
           hotelId: String(firstHotel.hotelId || ""),
           hotelName: firstHotel.hotelName || "",
           address: firstHotel.hotelAddress || firstHotel.address || "",
@@ -634,8 +637,8 @@ const MakePkgBookingPage = () => {
           checkInDate: formatDateToYYYYMMDD(checkIn),
           checkOutDate: formatDateToYYYYMMDD(checkOut),
           nights: nights,
-          employeeId: "1",
-          roomStatus: firstHotel.roomStatus || "Available",
+          employeeId: "1",        
+          roomStatus: firstHotel.available === false ? "On Request" : "Available",
           cancellationPolicy: Array.isArray(firstHotel.cancellationPolicy) 
             ? firstHotel.cancellationPolicy 
             : [],
@@ -645,7 +648,7 @@ const MakePkgBookingPage = () => {
             firstName: primaryGuest.firstName || "",
             middleName: primaryGuest.middleName || "",
             lastName: primaryGuest.lastName || "",
-            nativeCountry: firstHotel.nativeContryId || "",
+            nativeCountry: firstHotel.nationality || "",
             email: primaryGuest.emailId || "",
             phone: primaryGuest.contactNumber || "",
             passportNo: primaryGuest.passportNumber || "",
