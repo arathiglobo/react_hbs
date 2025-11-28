@@ -172,13 +172,21 @@ const AccomodationRoomList = () => {
 
       // Prepare cart item data matching CustomPackageHotelDTO
       console.log("payload###" , payload)
+      
+      // Convert cancellationPolicies from array of objects to array of strings
+      const cancellationPolicyList = Array.isArray(hotelsdetail.cancellationPolicies)
+        ? hotelsdetail.cancellationPolicies.map(policy => 
+            typeof policy === 'string' ? policy : (policy.policyText || policy.text || JSON.stringify(policy))
+          )
+        : [];
+      
       const cartItem = {
         hotelId: String(hotelsdetail.hotelId || ""),
         hotelName: hotelsdetail.hotelName || "",
-        address: hotelsdetail.address || "",
-        starRating: String(hotelsdetail.starRating || ""),
+        address: hotelsdetail.hotelAddress || "",
+        starRating: Number(hotelsdetail.starRating) || 0,
         roomtypeId: String(rate.roomTypeCode || rate.roomtypeId || ""),
-        roomCategoryId: String(rate.roomCategoryId || rate.roomcategoryId || ""),
+        roomcategory: rate.roomCategory || "",
         roomCategory: rate.roomCategory || "",
         roomType: rate.mealPlan || "",
         available: available,
@@ -187,16 +195,15 @@ const AccomodationRoomList = () => {
         destinationCountryId: String(payload.destinationCountryId || payload.countryId || ""),
         checkIn: payload.checkInDate || payload.checkIn || "",
         checkOut: payload.checkOutDate || payload.checkOut || "",
-        nativeContryId: hotelsdetail.nationalityId || "",
+        nativeContryId: Number(hotelsdetail.nationalityId) || null,
         nationality : String(payload.nationality || ""),
         noOfRoom: String(hotelsdetail.numberOfRooms || payload.noOfRoom || "1"),
         refundstatus: refundstatus,
         searchRoomDTOs: searchRoomDTOs,
         agentId: String(payload.agentId || ""),
-        totalRate: rate.rate,
-        totalRateWithoutmrk:  rate.rateBeforeTax,
-        cancellationPolicy: hotelsdetail.cancellationPolicies,
-
+        totalRate: Number(rate.totalRate) || 0,
+        totalRateWithoutmrk: Number(rate.rateBeforeTax || rate.totalRate) || 0,
+        cancellationPolicy: cancellationPolicyList,
       };
 
       // Call API to add to cart

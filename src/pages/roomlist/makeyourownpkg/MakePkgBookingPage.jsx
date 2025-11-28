@@ -639,10 +639,65 @@ const MakePkgBookingPage = () => {
           nights: nights,
           employeeId: "1",        
           roomStatus: firstHotel.available === false ? "On Request" : "Available",
-          cancellationPolicy: Array.isArray(firstHotel.cancellationPolicy) 
-            ? firstHotel.cancellationPolicy 
-            : [],
-          deadlineDate: firstHotel.deadlineDate || "",
+          cancellationPolicy: (() => {
+            const policies = firstHotel.cancellationPolicy || [];
+            if (Array.isArray(policies) && policies.length > 0) {
+              // If policies are objects, extract policyText; otherwise use as-is
+              return policies.map((p) => 
+                typeof p === 'string' ? p : (p.policyText || p.text || JSON.stringify(p))
+              );
+            }
+            return [];
+          })(),
+          // Calculate deadlineDate based on nonRefundable and cancellationPolicy
+          deadlineDate: (() => {
+            const nonRefundable = 
+              firstHotel.nonRefundable === true ||
+              firstHotel.nonRefundable === "true" ||
+              firstHotel.refundstatus === "N";
+            
+            if (nonRefundable === true) {
+              // 2 days before current date
+              const today = new Date();
+              const deadline = new Date(today);
+              deadline.setDate(today.getDate() - 2);
+              deadline.setHours(0, 0, 0, 0); // Set to midnight
+              const year = deadline.getFullYear();
+              const month = String(deadline.getMonth() + 1).padStart(2, "0");
+              const day = String(deadline.getDate()).padStart(2, "0");
+              return `${year}-${month}-${day}T00:00:00`;
+            } else {
+              // 2 days before earliest fromDate from cancellationPolicy
+              const policies = firstHotel.cancellationPolicy || [];
+              if (policies.length === 0) {
+                return null;
+              }
+              
+              // Find earliest fromDate
+              const dates = policies
+                .map(p => {
+                  // Handle both object and string formats
+                  if (typeof p === 'object' && p.fromDate) {
+                    return new Date(p.fromDate);
+                  }
+                  return null;
+                })
+                .filter(date => date !== null && !isNaN(date.getTime()));
+              
+              if (dates.length === 0) {
+                return null;
+              }
+              
+              const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
+              const deadline = new Date(earliestDate);
+              deadline.setDate(earliestDate.getDate() - 2);
+              deadline.setHours(0, 0, 0, 0); // Set to midnight
+              const year = deadline.getFullYear();
+              const month = String(deadline.getMonth() + 1).padStart(2, "0");
+              const day = String(deadline.getDate()).padStart(2, "0");
+              return `${year}-${month}-${day}T00:00:00`;
+            }
+          })(),
           isBookandVoucher: bookingConfirmation === "Book & Voucher",
           primaryGuest: {
             firstName: primaryGuest.firstName || "",
