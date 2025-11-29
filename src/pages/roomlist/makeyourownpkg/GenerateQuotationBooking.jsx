@@ -143,26 +143,28 @@ const GenerateQuotationBooking = () => {
     setTransferDetails(details);
   };
 
-  // Initialize per-hotel state
+  // Initialize hotel-specific fields (Tourism Dirhams, Remarks, Special Request, Booking Confirmation)
   const initializeHotelState = (cartItems) => {
     const tourismDirhams = {};
     const remarks = {};
     const specialRequests = {};
-    const bookingConfirmation = {};
+    const bookingConfirmations = {};
     
-    cartItems.forEach((item, index) => {
+    let hotelIndex = 0;
+    cartItems.forEach((item) => {
       if (item.hotel) {
-        tourismDirhams[index] = "0";
-        remarks[index] = "";
-        specialRequests[index] = "";
-        bookingConfirmation[index] = "Book & Voucher";
+        tourismDirhams[hotelIndex] = "0";
+        remarks[hotelIndex] = "";
+        specialRequests[hotelIndex] = "";
+        bookingConfirmations[hotelIndex] = "Book & Voucher";
+        hotelIndex++;
       }
     });
     
     setHotelTourismDirhams(tourismDirhams);
     setHotelRemarks(remarks);
     setHotelSpecialRequests(specialRequests);
-    setHotelBookingConfirmation(bookingConfirmation);
+    setHotelBookingConfirmation(bookingConfirmations);
   };
 
   // Load cart data on mount
@@ -636,6 +638,7 @@ const GenerateQuotationBooking = () => {
 
       // Prepare quotation payload
       const firstHotel = hotels.length > 0 ? hotels[0].hotel : null;
+      console.log("firstHotel:", firstHotel);
       const checkIn = firstHotel?.checkIn || firstHotel?.checkInDate || "";
       const checkOut = firstHotel?.checkOut || firstHotel?.checkOutDate || "";
       const nights = calculateNights(checkIn, checkOut);
@@ -774,9 +777,8 @@ const GenerateQuotationBooking = () => {
 
       // Build hotel booking request
       const hotelBookingRequest = hotels.length > 0 && firstHotel ? {
-        bookingId: "",
         agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
-        apiId: String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
+        apiId: String("INHOUSE"),   //String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
         hotelId: String(firstHotel.hotelId || ""),
         hotelName: firstHotel.hotelName || "",
         address: firstHotel.hotelAddress || firstHotel.address || "",
@@ -784,11 +786,70 @@ const GenerateQuotationBooking = () => {
         checkInDate: formatDateToYYYYMMDD(checkIn),
         checkOutDate: formatDateToYYYYMMDD(checkOut),
         nights: nights,
+        employeeId: "1",        
+        roomStatus: firstHotel.available === false ? "On Request" : "Available",
+        cancellationPolicy: (() => {
+          const policies = firstHotel.cancellationPolicy || [];
+          if (Array.isArray(policies) && policies.length > 0) {
+            // If policies are objects, extract policyText; otherwise use as-is
+            return policies.map((p) => 
+              typeof p === 'string' ? p : (p.policyText || p.text || JSON.stringify(p))
+            );
+          }
+          return [];
+        })(),
+        // Calculate deadlineDate based on nonRefundable and cancellationPolicy
+        deadlineDate: (() => {
+          const nonRefundable = firstHotel.refundstatus === "N";
+          console.log("nonRefundable:", nonRefundable);
+          if (nonRefundable === "false" || nonRefundable === false) {
+            // 2 days before current date
+            const today = new Date();
+            const deadline = new Date(today);
+            deadline.setDate(today.getDate() - 2);
+            deadline.setHours(0, 0, 0, 0); // Set to midnight
+            const year = deadline.getFullYear();
+            const month = String(deadline.getMonth() + 1).padStart(2, "0");
+            const day = String(deadline.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}T00:00:00`;
+          } else {
+            // 2 days before earliest fromDate from cancellationPolicy
+            const policies = firstHotel.cancellationPolicy || [];
+            if (policies.length === 0) {
+              return null;
+            }
+            
+            // Find earliest fromDate
+            const dates = policies
+              .map(p => {
+                // Handle both object and string formats
+                if (typeof p === 'object' && p.fromDate) {
+                  return new Date(p.fromDate);
+                }
+                return null;
+              })
+              .filter(date => date !== null && !isNaN(date.getTime()));
+            
+            if (dates.length === 0) {
+              return null;
+            }
+            
+            const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
+            const deadline = new Date(earliestDate);
+            deadline.setDate(earliestDate.getDate() - 2);
+            deadline.setHours(0, 0, 0, 0); // Set to midnight
+            const year = deadline.getFullYear();
+            const month = String(deadline.getMonth() + 1).padStart(2, "0");
+            const day = String(deadline.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}T00:00:00`;
+          }
+        })(),
+        isBookandVoucher: (hotelBookingConfirmation[0] || "Book & Voucher") === "Book & Voucher",
         primaryGuest: {
           firstName: primaryGuest.firstName || "",
           middleName: primaryGuest.middleName || "",
           lastName: primaryGuest.lastName || "",
-          nativeCountry: firstHotel.nativeContryId || "",
+          nativeCountry: firstHotel.nationality || "",
           email: primaryGuest.emailId || "",
           phone: primaryGuest.contactNumber || "",
           passportNo: primaryGuest.passportNumber || "",
@@ -799,7 +860,10 @@ const GenerateQuotationBooking = () => {
           const guestKey = `${hotelIndexInCart}-${idx}`;
           const guests = roomGuests[guestKey] || [];
           
+          // Get room rate from hotel data
+          // Selling Price = totalRate (with markup)
           const roomRate = parseFloat(firstHotel.totalRate || 0);
+          // Total Price = totalRateWithoutmrk (without markup)
           const roomRateWithoutMarkup = parseFloat(firstHotel.totalRateWithoutmrk || firstHotel.totalRate || 0);
           
           return {
@@ -825,18 +889,10 @@ const GenerateQuotationBooking = () => {
             })),
           };
         }) || [],
-        remarks: hotelRemarks[hotelIndexInCart] || "",
-        specialRequests: hotelSpecialRequests[hotelIndexInCart] || "",
-        source: "",
-        bookingDate: new Date().toISOString(),
-        createdByRole: localStorage.getItem("currentActiveRole") || "",
-        cancellationPolicy: Array.isArray(firstHotel.cancellationPolicy) 
-          ? firstHotel.cancellationPolicy 
-          : [],
-        deadlineDate: firstHotel.deadlineDate || "",
-        employeeId: employeeId,
-        isBookandVoucher: (hotelBookingConfirmation[hotelIndexInCart] || "Book & Voucher") === "Book & Voucher",
-        roomStatus: firstHotel.roomStatus || "Available",
+        remarks: hotelRemarks[0] || "",
+        specialRequests: hotelSpecialRequests[0] || "",
+        tourismDirhams: parseFloat(hotelTourismDirhams[0] || "0") || 0,
+        bookingConfirmation: hotelBookingConfirmation[0] || "Book & Voucher",
       } : null;
 
       const quotationPayload = {
@@ -847,7 +903,7 @@ const GenerateQuotationBooking = () => {
         currencyId: currencyId,
         markUp: Math.round(markup * 100) / 100, // Round to 2 decimal places
         noOfNights: nights,
-        nativeCountry: primaryGuest.nativeCountry ? parseInt(primaryGuest.nativeCountry) : null,
+        nativeCountry: firstHotel.nativeContryId ? parseInt(firstHotel.nativeContryId) : null,
         markUpType: markupType,
         markUpTypeName: markupTypeName,
         agent: agent,
@@ -869,7 +925,7 @@ const GenerateQuotationBooking = () => {
         quoteItineraryDTOList: quoteItineraryDTOList,
         customPackageListItineraryDTOList: quoteItineraryDTOList, // Same as quoteItineraryDTOList
         quoteActivityDTOList: quoteActivityDTOList,
-        hotelBookingRequest: hotelBookingRequest
+        quoteHotelDTOList: hotelBookingRequest
       };
 
       console.log("Quotation payload:", quotationPayload);
@@ -946,7 +1002,7 @@ const GenerateQuotationBooking = () => {
         visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
         hotelBookingRequest: hotels.length > 0 && firstHotel ? {
           agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
-          apiId: String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
+          apiId: String("INHOUSE"),   //String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
           hotelId: String(firstHotel.hotelId || ""),
           hotelName: firstHotel.hotelName || "",
           address: firstHotel.hotelAddress || firstHotel.address || "",
@@ -954,18 +1010,70 @@ const GenerateQuotationBooking = () => {
           checkInDate: formatDateToYYYYMMDD(checkIn),
           checkOutDate: formatDateToYYYYMMDD(checkOut),
           nights: nights,
-          employeeId: "1",
-          roomStatus: firstHotel.roomStatus || "Available",
-          cancellationPolicy: Array.isArray(firstHotel.cancellationPolicy) 
-            ? firstHotel.cancellationPolicy 
-            : [],
-          deadlineDate: firstHotel.deadlineDate || "",
-          isBookandVoucher: (hotelBookingConfirmation[hotelIndexInCart] || "Book & Voucher") === "Book & Voucher",
+          employeeId: "1",        
+          roomStatus: firstHotel.available === false ? "On Request" : "Available",
+          cancellationPolicy: (() => {
+            const policies = firstHotel.cancellationPolicy || [];
+            if (Array.isArray(policies) && policies.length > 0) {
+              // If policies are objects, extract policyText; otherwise use as-is
+              return policies.map((p) => 
+                typeof p === 'string' ? p : (p.policyText || p.text || JSON.stringify(p))
+              );
+            }
+            return [];
+          })(),
+          // Calculate deadlineDate based on nonRefundable and cancellationPolicy
+          deadlineDate: (() => {
+            const nonRefundable = firstHotel.refundstatus === "N";
+            console.log("nonRefundable:", nonRefundable);
+            if (nonRefundable === "false" || nonRefundable === false) {
+              // 2 days before current date
+              const today = new Date();
+              const deadline = new Date(today);
+              deadline.setDate(today.getDate() - 2);
+              deadline.setHours(0, 0, 0, 0); // Set to midnight
+              const year = deadline.getFullYear();
+              const month = String(deadline.getMonth() + 1).padStart(2, "0");
+              const day = String(deadline.getDate()).padStart(2, "0");
+              return `${year}-${month}-${day}T00:00:00`;
+            } else {
+              // 2 days before earliest fromDate from cancellationPolicy
+              const policies = firstHotel.cancellationPolicy || [];
+              if (policies.length === 0) {
+                return null;
+              }
+              
+              // Find earliest fromDate
+              const dates = policies
+                .map(p => {
+                  // Handle both object and string formats
+                  if (typeof p === 'object' && p.fromDate) {
+                    return new Date(p.fromDate);
+                  }
+                  return null;
+                })
+                .filter(date => date !== null && !isNaN(date.getTime()));
+              
+              if (dates.length === 0) {
+                return null;
+              }
+              
+              const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
+              const deadline = new Date(earliestDate);
+              deadline.setDate(earliestDate.getDate() - 2);
+              deadline.setHours(0, 0, 0, 0); // Set to midnight
+              const year = deadline.getFullYear();
+              const month = String(deadline.getMonth() + 1).padStart(2, "0");
+              const day = String(deadline.getDate()).padStart(2, "0");
+              return `${year}-${month}-${day}T00:00:00`;
+            }
+          })(),
+          isBookandVoucher: (hotelBookingConfirmation[0] || "Book & Voucher") === "Book & Voucher",
           primaryGuest: {
             firstName: primaryGuest.firstName || "",
             middleName: primaryGuest.middleName || "",
             lastName: primaryGuest.lastName || "",
-            nativeCountry: primaryGuest.nativeCountry || "",
+            nativeCountry: firstHotel.nationality || "",
             email: primaryGuest.emailId || "",
             phone: primaryGuest.contactNumber || "",
             passportNo: primaryGuest.passportNumber || "",
@@ -1005,10 +1113,10 @@ const GenerateQuotationBooking = () => {
               })),
             };
           }) || [],
-          remarks: hotelRemarks[hotelIndexInCart] || "",
-          specialRequests: hotelSpecialRequests[hotelIndexInCart] || "",
-          tourismDirhams: parseFloat(hotelTourismDirhams[hotelIndexInCart] || "0") || 0,
-          bookingConfirmation: hotelBookingConfirmation[hotelIndexInCart] || "Book & Voucher",
+          remarks: hotelRemarks[0] || "",
+          specialRequests: hotelSpecialRequests[0] || "",
+          tourismDirhams: parseFloat(hotelTourismDirhams[0] || "0") || 0,
+          bookingConfirmation: hotelBookingConfirmation[0] || "Book & Voucher",
         } : null,
         customBookingActivityDTO: activities.map((item) => {
           const activity = item.activity || {};
@@ -1649,11 +1757,11 @@ const GenerateQuotationBooking = () => {
                                   <Form.Label>Tourism Dirhams (AED)</Form.Label>
                                   <Form.Control
                                     type="number"
-                                    value={hotelTourismDirhams[actualHotelIndex] || "0"}
-                                    onChange={(e) => setHotelTourismDirhams(prev => ({
-                                      ...prev,
-                                      [actualHotelIndex]: e.target.value
-                                    }))}
+                                    value={hotelTourismDirhams[hotelIndex] || "0"}
+                                    onChange={(e) => setHotelTourismDirhams({
+                                      ...hotelTourismDirhams,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     min="0"
                                   />
                                 </Col>
@@ -1666,11 +1774,11 @@ const GenerateQuotationBooking = () => {
                                   <Form.Control
                                     as="textarea"
                                     rows={3}
-                                    value={hotelRemarks[actualHotelIndex] || ""}
-                                    onChange={(e) => setHotelRemarks(prev => ({
-                                      ...prev,
-                                      [actualHotelIndex]: e.target.value
-                                    }))}
+                                    value={hotelRemarks[hotelIndex] || ""}
+                                    onChange={(e) => setHotelRemarks({
+                                      ...hotelRemarks,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     placeholder="Enter any remarks..."
                                   />
                                 </Col>
@@ -1683,11 +1791,11 @@ const GenerateQuotationBooking = () => {
                                   <Form.Control
                                     as="textarea"
                                     rows={3}
-                                    value={hotelSpecialRequests[actualHotelIndex] || ""}
-                                    onChange={(e) => setHotelSpecialRequests(prev => ({
-                                      ...prev,
-                                      [actualHotelIndex]: e.target.value
-                                    }))}
+                                    value={hotelSpecialRequests[hotelIndex] || ""}
+                                    onChange={(e) => setHotelSpecialRequests({
+                                      ...hotelSpecialRequests,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     placeholder="Enter any special requests..."
                                   />
                                 </Col>
@@ -1702,26 +1810,26 @@ const GenerateQuotationBooking = () => {
                                   <Form.Check
                                     type="radio"
                                     label="Book & Voucher"
-                                    name={`bookingConfirmation-${actualHotelIndex}`}
+                                    name={`bookingConfirmation-${hotelIndex}`}
                                     value="Book & Voucher"
-                                    checked={(hotelBookingConfirmation[actualHotelIndex] || "Book & Voucher") === "Book & Voucher"}
-                                    onChange={(e) => setHotelBookingConfirmation(prev => ({
-                                      ...prev,
-                                      [actualHotelIndex]: e.target.value
-                                    }))}
+                                    checked={hotelBookingConfirmation[hotelIndex] === "Book & Voucher"}
+                                    onChange={(e) => setHotelBookingConfirmation({
+                                      ...hotelBookingConfirmation,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     inline
                                     className="me-3"
                                   />
                                   <Form.Check
                                     type="radio"
                                     label="Book Now & Voucher later"
-                                    name={`bookingConfirmation-${actualHotelIndex}`}
+                                    name={`bookingConfirmation-${hotelIndex}`}
                                     value="Book Now & Voucher later"
-                                    checked={(hotelBookingConfirmation[actualHotelIndex] || "Book & Voucher") === "Book Now & Voucher later"}
-                                    onChange={(e) => setHotelBookingConfirmation(prev => ({
-                                      ...prev,
-                                      [actualHotelIndex]: e.target.value
-                                    }))}
+                                    checked={hotelBookingConfirmation[hotelIndex] === "Book Now & Voucher later"}
+                                    onChange={(e) => setHotelBookingConfirmation({
+                                      ...hotelBookingConfirmation,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     inline
                                   />
                                 </div>

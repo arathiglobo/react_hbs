@@ -61,10 +61,11 @@ const MakePkgBookingPage = () => {
     visaInfant: "0",
     visaInfantRate: "0",
   });
-  const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
-  const [remarks, setRemarks] = useState("");
-  const [specialRequest, setSpecialRequest] = useState("");
-  const [tourismDirhams, setTourismDirhams] = useState("0");
+  // Per-hotel state for Tourism Dirhams, Remarks, Special Request, and Booking Confirmation
+  const [hotelTourismDirhams, setHotelTourismDirhams] = useState({});
+  const [hotelRemarks, setHotelRemarks] = useState({});
+  const [hotelSpecialRequests, setHotelSpecialRequests] = useState({});
+  const [hotelBookingConfirmation, setHotelBookingConfirmation] = useState({});
   const [totalPrice, setTotalPrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
   
@@ -142,6 +143,30 @@ const MakePkgBookingPage = () => {
     setTransferDetails(details);
   };
 
+  // Initialize hotel-specific fields (Tourism Dirhams, Remarks, Special Request, Booking Confirmation)
+  const initializeHotelFields = (cartItems) => {
+    const tourismDirhams = {};
+    const remarks = {};
+    const specialRequests = {};
+    const bookingConfirmations = {};
+    
+    let hotelIndex = 0;
+    cartItems.forEach((item) => {
+      if (item.hotel) {
+        tourismDirhams[hotelIndex] = "0";
+        remarks[hotelIndex] = "";
+        specialRequests[hotelIndex] = "";
+        bookingConfirmations[hotelIndex] = "Book & Voucher";
+        hotelIndex++;
+      }
+    });
+    
+    setHotelTourismDirhams(tourismDirhams);
+    setHotelRemarks(remarks);
+    setHotelSpecialRequests(specialRequests);
+    setHotelBookingConfirmation(bookingConfirmations);
+  };
+
   // Load cart data on mount
   useEffect(() => {
     const loadCartData = () => {
@@ -154,6 +179,7 @@ const MakePkgBookingPage = () => {
           calculatePrices(parsed);
           initializeRoomGuests(parsed);
           initializeTransferDetails(parsed);
+          initializeHotelFields(parsed);
         } else {
           toast.error("No cart data found. Please add items to cart first.");
           navigate("/new-booking/make-your-own-package");
@@ -651,12 +677,9 @@ const MakePkgBookingPage = () => {
           })(),
           // Calculate deadlineDate based on nonRefundable and cancellationPolicy
           deadlineDate: (() => {
-            const nonRefundable = 
-              firstHotel.nonRefundable === true ||
-              firstHotel.nonRefundable === "true" ||
-              firstHotel.refundstatus === "N";
-            
-            if (nonRefundable === true) {
+            const nonRefundable =  firstHotel.refundstatus === "N";
+            console.log("nonRefundable:", nonRefundable);
+            if (nonRefundable === "false" || nonRefundable === false) {
               // 2 days before current date
               const today = new Date();
               const deadline = new Date(today);
@@ -698,7 +721,7 @@ const MakePkgBookingPage = () => {
               return `${year}-${month}-${day}T00:00:00`;
             }
           })(),
-          isBookandVoucher: bookingConfirmation === "Book & Voucher",
+          isBookandVoucher: (hotelBookingConfirmation[0] || "Book & Voucher") === "Book & Voucher",
           primaryGuest: {
             firstName: primaryGuest.firstName || "",
             middleName: primaryGuest.middleName || "",
@@ -724,7 +747,7 @@ const MakePkgBookingPage = () => {
               roomNo: idx + 1,
               roomCategory: firstHotel.roomCategory || "",
               mealPlan: firstHotel.roomType || "",
-              nonRefundable: firstHotel.nonRefundable === true || firstHotel.nonRefundable === "true" || firstHotel.refundstatus === "N",
+              nonRefundable:  firstHotel.refundstatus === "N",
               currency: firstHotel.currency || "AED",
               rate: roomRate,
               rateWithoutMarkup: roomRateWithoutMarkup,
@@ -743,10 +766,10 @@ const MakePkgBookingPage = () => {
               })),
             };
           }) || [],
-          remarks: remarks || "",
-          specialRequests: specialRequest || "",
-          tourismDirhams: parseFloat(tourismDirhams) || 0,
-          bookingConfirmation: bookingConfirmation || "Book & Voucher",
+          remarks: hotelRemarks[0] || "",
+          specialRequests: hotelSpecialRequests[0] || "",
+          tourismDirhams: parseFloat(hotelTourismDirhams[0] || "0") || 0,
+          bookingConfirmation: hotelBookingConfirmation[0] || "Book & Voucher",
         } : null,
         customBookingActivityDTO: activities.map((item) => {
           const activity = item.activity || {};
@@ -1386,8 +1409,11 @@ const MakePkgBookingPage = () => {
                                   <Form.Label>Tourism Dirhams (AED)</Form.Label>
                                   <Form.Control
                                     type="number"
-                                    value={tourismDirhams}
-                                    onChange={(e) => setTourismDirhams(e.target.value)}
+                                    value={hotelTourismDirhams[hotelIndex] || "0"}
+                                    onChange={(e) => setHotelTourismDirhams({
+                                      ...hotelTourismDirhams,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     min="0"
                                   />
                                 </Col>
@@ -1400,8 +1426,11 @@ const MakePkgBookingPage = () => {
                                   <Form.Control
                                     as="textarea"
                                     rows={3}
-                                    value={remarks}
-                                    onChange={(e) => setRemarks(e.target.value)}
+                                    value={hotelRemarks[hotelIndex] || ""}
+                                    onChange={(e) => setHotelRemarks({
+                                      ...hotelRemarks,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     placeholder="Enter any remarks..."
                                   />
                                 </Col>
@@ -1414,8 +1443,11 @@ const MakePkgBookingPage = () => {
                                   <Form.Control
                                     as="textarea"
                                     rows={3}
-                                    value={specialRequest}
-                                    onChange={(e) => setSpecialRequest(e.target.value)}
+                                    value={hotelSpecialRequests[hotelIndex] || ""}
+                                    onChange={(e) => setHotelSpecialRequests({
+                                      ...hotelSpecialRequests,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     placeholder="Enter any special requests..."
                                   />
                                 </Col>
@@ -1430,20 +1462,26 @@ const MakePkgBookingPage = () => {
                                   <Form.Check
                                     type="radio"
                                     label="Book & Voucher"
-                                    name="bookingConfirmation"
+                                    name={`bookingConfirmation-${hotelIndex}`}
                                     value="Book & Voucher"
-                                    checked={bookingConfirmation === "Book & Voucher"}
-                                    onChange={(e) => setBookingConfirmation(e.target.value)}
+                                    checked={hotelBookingConfirmation[hotelIndex] === "Book & Voucher"}
+                                    onChange={(e) => setHotelBookingConfirmation({
+                                      ...hotelBookingConfirmation,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     inline
                                     className="me-3"
                                   />
                                   <Form.Check
                                     type="radio"
                                     label="Book Now & Voucher later"
-                                    name="bookingConfirmation"
+                                    name={`bookingConfirmation-${hotelIndex}`}
                                     value="Book Now & Voucher later"
-                                    checked={bookingConfirmation === "Book Now & Voucher later"}
-                                    onChange={(e) => setBookingConfirmation(e.target.value)}
+                                    checked={hotelBookingConfirmation[hotelIndex] === "Book Now & Voucher later"}
+                                    onChange={(e) => setHotelBookingConfirmation({
+                                      ...hotelBookingConfirmation,
+                                      [hotelIndex]: e.target.value
+                                    })}
                                     inline
                                   />
                                 </div>
