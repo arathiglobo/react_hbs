@@ -241,6 +241,13 @@ export default function MakePkgCombineSearch() {
     }
   }, [agentId]);
 
+  // Store travel date in sessionStorage for use in booking page
+  useEffect(() => {
+    if (travelDate) {
+      sessionStorage.setItem("makePkgTravelDate", travelDate);
+    }
+  }, [travelDate]);
+
   // Update transfer child ages when number of children changes
   useEffect(() => {
     if (transferChildren > 0) {

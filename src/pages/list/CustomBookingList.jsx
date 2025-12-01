@@ -12,11 +12,18 @@ import {
   InputGroup,
   Spinner,
   Pagination,
+  Modal,
 } from "react-bootstrap";
 import {
   FaSearch,
   FaEye,
   FaArrowLeft,
+  FaHotel,
+  FaTicketAlt,
+  FaCar,
+  FaUsers,
+  FaCalendarAlt,
+  FaMapMarkerAlt,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -35,6 +42,11 @@ const CustomBookingList = () => {
   const [page, setPage] = useState(1);
   const [timePeriod, setTimePeriod] = useState("currentMonth");
   const [allBookings, setAllBookings] = useState([]); // Store all bookings for client-side pagination
+  
+  // Modal state
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [bookingDetails, setBookingDetails] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Map status to type parameter
   const getTypeParam = (status) => {
@@ -160,9 +172,39 @@ const CustomBookingList = () => {
     }
   };
 
-  const handleViewDetails = (packageCode) => {
-    // Navigate to booking details using packageCode
-    navigate(`/booking-details/custom-booking/${packageCode}`);
+  // Fetch booking details and open modal
+  const handleViewDetails = async (booking) => {
+    try {
+      setLoadingDetails(true);
+      setShowDetailsModal(true);
+      setBookingDetails(null);
+      
+      // Get customBookingId from booking object
+      const customBookingId = booking.customBookingId || booking.bookingId || booking.id;
+      
+      if (!customBookingId) {
+        toast.error("Booking ID not found");
+        setShowDetailsModal(false);
+        return;
+      }
+
+      const response = await axiosInstance.get(
+        `/api/makeYourOwnPackage/getCustomBookingDetails/${customBookingId}`
+      );
+
+      if (response.data) {
+        setBookingDetails(response.data);
+      } else {
+        toast.error("Failed to load booking details");
+        setShowDetailsModal(false);
+      }
+    } catch (error) {
+      console.error("Error fetching booking details:", error);
+      toast.error(error.response?.data?.message || "Failed to load booking details");
+      setShowDetailsModal(false);
+    } finally {
+      setLoadingDetails(false);
+    }
   };
 
   const displayStart = paginatedBookings.length > 0 ? (page - 1) * perPage + 1 : 0;
@@ -342,7 +384,7 @@ const CustomBookingList = () => {
                                   <FaEye
                                     className="text-primary"
                                     style={{ cursor: "pointer" }}
-                                    onClick={() => handleViewDetails(booking.packageCode)}
+                                    onClick={() => handleViewDetails(booking)}
                                     title="View Details"
                                     size={18}
                                   />
@@ -406,6 +448,337 @@ const CustomBookingList = () => {
           </Container>
         </main>
       </div>
+
+      {/* Booking Details Modal */}
+      <Modal
+        show={showDetailsModal}
+        onHide={() => setShowDetailsModal(false)}
+        size="lg"
+        centered
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title className="d-flex align-items-center gap-2">
+            <FaEye className="text-primary" />
+            Booking Details
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {loadingDetails ? (
+            <div className="text-center py-5">
+              <Spinner animation="border" variant="primary" />
+              <p className="mt-3 text-muted">Loading booking details...</p>
+            </div>
+          ) : bookingDetails ? (
+            <div className="booking-details-content">
+              {/* Basic Information */}
+              <Card className="mb-3">
+                <Card.Header className="bg-primary text-white">
+                  <h6 className="mb-0 fw-bold">Basic Information</h6>
+                </Card.Header>
+                <Card.Body>
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <div>
+                        <small className="text-muted d-block mb-1">Package Code</small>
+                        <strong>{bookingDetails.packageCode || "-"}</strong>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div>
+                        <small className="text-muted d-block mb-1">Booking Date</small>
+                        <strong>{formatDate(bookingDetails.bookDate || bookingDetails.bookingDate)}</strong>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div>
+                        <small className="text-muted d-block mb-1">Tour Date</small>
+                        <strong>{formatDate(bookingDetails.tourDate || bookingDetails.travelDate)}</strong>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div>
+                        <small className="text-muted d-block mb-1">Status</small>
+                        <Badge bg={getStatusBadge(bookingDetails.status || bookingDetails.bookingStatus)}>
+                          {bookingDetails.status || bookingDetails.bookingStatus || "-"}
+                        </Badge>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div>
+                        <small className="text-muted d-block mb-1">Selling Price</small>
+                        <strong className="text-success">AED {parseFloat(bookingDetails.sellingPrice || 0).toFixed(2)}</strong>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div>
+                        <small className="text-muted d-block mb-1">Total Price</small>
+                        <strong className="text-primary">AED {parseFloat(bookingDetails.totalPrice || 0).toFixed(2)}</strong>
+                      </div>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
+
+              {/* Guest Information */}
+              {bookingDetails.primaryGuest || bookingDetails.customerDTO ? (
+                <Card className="mb-3">
+                  <Card.Header className="bg-info text-white">
+                    <h6 className="mb-0 fw-bold d-flex align-items-center gap-2">
+                      <FaUsers />
+                      Guest Information
+                    </h6>
+                  </Card.Header>
+                  <Card.Body>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <div>
+                          <small className="text-muted d-block mb-1">Name</small>
+                          <strong>
+                            {bookingDetails.primaryGuest?.salutation || bookingDetails.customerDTO?.salutaion || ""}{" "}
+                            {bookingDetails.primaryGuest?.firstName || bookingDetails.customerDTO?.firstName || ""}{" "}
+                            {bookingDetails.primaryGuest?.lastName || bookingDetails.customerDTO?.lastName || ""}
+                          </strong>
+                        </div>
+                      </Col>
+                      <Col md={6}>
+                        <div>
+                          <small className="text-muted d-block mb-1">Email</small>
+                          <strong>{bookingDetails.primaryGuest?.email || bookingDetails.customerDTO?.emailId || "-"}</strong>
+                        </div>
+                      </Col>
+                      <Col md={6}>
+                        <div>
+                          <small className="text-muted d-block mb-1">Phone</small>
+                          <strong>{bookingDetails.primaryGuest?.phone || bookingDetails.customerDTO?.mobileNumber || "-"}</strong>
+                        </div>
+                      </Col>
+                      <Col md={6}>
+                        <div>
+                          <small className="text-muted d-block mb-1">Passport Number</small>
+                          <strong>{bookingDetails.primaryGuest?.passportNo || bookingDetails.customerDTO?.passportNo || "-"}</strong>
+                        </div>
+                      </Col>
+                      <Col md={6}>
+                        <div>
+                          <small className="text-muted d-block mb-1">LPO</small>
+                          <strong>{bookingDetails.primaryGuest?.agentlpo || bookingDetails.customerDTO?.agentlpo || "-"}</strong>
+                        </div>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              ) : null}
+
+              {/* Hotel Details */}
+              {bookingDetails.hotelBookingRequest || bookingDetails.hotelDetails ? (
+                <Card className="mb-3">
+                  <Card.Header className="bg-warning text-dark">
+                    <h6 className="mb-0 fw-bold d-flex align-items-center gap-2">
+                      <FaHotel />
+                      Hotel Details
+                    </h6>
+                  </Card.Header>
+                  <Card.Body>
+                    {(() => {
+                      const hotel = bookingDetails.hotelBookingRequest || bookingDetails.hotelDetails || {};
+                      return (
+                        <Row className="g-3">
+                          <Col md={12}>
+                            <div>
+                              <small className="text-muted d-block mb-1">Hotel Name</small>
+                              <strong>{hotel.hotelName || "-"}</strong>
+                            </div>
+                          </Col>
+                          <Col md={6}>
+                            <div>
+                              <small className="text-muted d-block mb-1">Check-in Date</small>
+                              <strong>{formatDate(hotel.checkInDate || hotel.checkIn)}</strong>
+                            </div>
+                          </Col>
+                          <Col md={6}>
+                            <div>
+                              <small className="text-muted d-block mb-1">Check-out Date</small>
+                              <strong>{formatDate(hotel.checkOutDate || hotel.checkOut)}</strong>
+                            </div>
+                          </Col>
+                          <Col md={6}>
+                            <div>
+                              <small className="text-muted d-block mb-1">Nights</small>
+                              <strong>{hotel.nights || "-"}</strong>
+                            </div>
+                          </Col>
+                          <Col md={6}>
+                            <div>
+                              <small className="text-muted d-block mb-1">Room Status</small>
+                              <Badge bg={hotel.roomStatus === "Available" ? "success" : "warning"}>
+                                {hotel.roomStatus || "-"}
+                              </Badge>
+                            </div>
+                          </Col>
+                          {hotel.rooms && Array.isArray(hotel.rooms) && hotel.rooms.length > 0 && (
+                            <Col md={12}>
+                              <div>
+                                <small className="text-muted d-block mb-2">Rooms</small>
+                                <Table striped bordered size="sm">
+                                  <thead>
+                                    <tr>
+                                      <th>Room No</th>
+                                      <th>Category</th>
+                                      <th>Meal Plan</th>
+                                      <th>Adults</th>
+                                      <th>Children</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {hotel.rooms.map((room, idx) => (
+                                      <tr key={idx}>
+                                        <td>{room.roomNo || idx + 1}</td>
+                                        <td>{room.roomCategory || "-"}</td>
+                                        <td>{room.mealPlan || "-"}</td>
+                                        <td>{room.adults || 0}</td>
+                                        <td>{room.children || 0}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </Table>
+                              </div>
+                            </Col>
+                          )}
+                        </Row>
+                      );
+                    })()}
+                  </Card.Body>
+                </Card>
+              ) : null}
+
+              {/* Activity Details */}
+              {bookingDetails.customBookingActivityDTO && Array.isArray(bookingDetails.customBookingActivityDTO) && bookingDetails.customBookingActivityDTO.length > 0 && (
+                <Card className="mb-3">
+                  <Card.Header className="bg-success text-white">
+                    <h6 className="mb-0 fw-bold d-flex align-items-center gap-2">
+                      <FaTicketAlt />
+                      Activity Details
+                    </h6>
+                  </Card.Header>
+                  <Card.Body>
+                    <Table striped bordered size="sm">
+                      <thead>
+                        <tr>
+                          <th>Activity</th>
+                          <th>Tour Date</th>
+                          <th>Adults</th>
+                          <th>Children</th>
+                          <th>Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bookingDetails.customBookingActivityDTO.map((activity, idx) => (
+                          <tr key={idx}>
+                            <td>{activity.activityName || `Activity ${idx + 1}`}</td>
+                            <td>{formatDate(activity.tourDate)}</td>
+                            <td>{activity.noOfAdult || 0}</td>
+                            <td>{activity.noOfChild || 0}</td>
+                            <td>AED {parseFloat(activity.sellingPrice || 0).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </Card.Body>
+                </Card>
+              )}
+
+              {/* Transfer Details */}
+              {bookingDetails.customBookingCabDTO && Array.isArray(bookingDetails.customBookingCabDTO) && bookingDetails.customBookingCabDTO.length > 0 && (
+                <Card className="mb-3">
+                  <Card.Header className="bg-secondary text-white">
+                    <h6 className="mb-0 fw-bold d-flex align-items-center gap-2">
+                      <FaCar />
+                      Transfer Details
+                    </h6>
+                  </Card.Header>
+                  <Card.Body>
+                    <Table striped bordered size="sm">
+                      <thead>
+                        <tr>
+                          <th>Pickup Date</th>
+                          <th>Drop Date</th>
+                          <th>Adults</th>
+                          <th>Children</th>
+                          <th>Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bookingDetails.customBookingCabDTO.map((cab, idx) => (
+                          <tr key={idx}>
+                            <td>{formatDate(cab.pickupDate)}</td>
+                            <td>{formatDate(cab.dropOffDate)}</td>
+                            <td>{cab.noOfAdult || 0}</td>
+                            <td>{cab.noOfChild || 0}</td>
+                            <td>AED {parseFloat(cab.totalRate || 0).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </Card.Body>
+                </Card>
+              )}
+
+              {/* Visa Information */}
+              {bookingDetails.visaStatus && (
+                <Card className="mb-3">
+                  <Card.Header className="bg-danger text-white">
+                    <h6 className="mb-0 fw-bold">Visa Information</h6>
+                  </Card.Header>
+                  <Card.Body>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <div>
+                          <small className="text-muted d-block mb-1">Visa Required</small>
+                          <Badge bg={bookingDetails.visaStatus ? "success" : "secondary"}>
+                            {bookingDetails.visaStatus ? "Yes" : "No"}
+                          </Badge>
+                        </div>
+                      </Col>
+                      {bookingDetails.visaStatus && (
+                        <>
+                          <Col md={6}>
+                            <div>
+                              <small className="text-muted d-block mb-1">Visa Adults</small>
+                              <strong>{bookingDetails.visaAdult || 0}</strong>
+                            </div>
+                          </Col>
+                          <Col md={6}>
+                            <div>
+                              <small className="text-muted d-block mb-1">Visa Children</small>
+                              <strong>{bookingDetails.visaChild || 0}</strong>
+                            </div>
+                          </Col>
+                          <Col md={6}>
+                            <div>
+                              <small className="text-muted d-block mb-1">Visa Infants</small>
+                              <strong>{bookingDetails.visaInfant || 0}</strong>
+                            </div>
+                          </Col>
+                        </>
+                      )}
+                    </Row>
+                  </Card.Body>
+                </Card>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-muted">No booking details available</p>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowDetailsModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

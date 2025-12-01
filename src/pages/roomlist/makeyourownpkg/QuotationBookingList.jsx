@@ -231,6 +231,10 @@ const QuotationBookingList = () => {
         // Step 4: Store cart data in sessionStorage for the booking page (same as TopBar)
         sessionStorage.setItem("makePkgCartData", JSON.stringify(response.data));
         sessionStorage.setItem("makePkgAgentId", agentId);
+        // Store quoteId for booking payload if converting from quotation
+        if (quotation.quoteId) {
+          sessionStorage.setItem("makePkgQuoteId", String(quotation.quoteId));
+        }
         
         // Step 5: Navigate to booking page (same as TopBar handleContinueBooking)
         window.open("/new-booking/make-your-own-package/booking-page");
@@ -260,6 +264,10 @@ const QuotationBookingList = () => {
             if (response.data.cartItems && Array.isArray(response.data.cartItems)) {
               sessionStorage.setItem("makePkgCartData", JSON.stringify(response.data.cartItems));
               sessionStorage.setItem("makePkgAgentId", agentId);
+              // Store quoteId for booking payload
+              if (quotation.quoteId) {
+                sessionStorage.setItem("makePkgQuoteId", String(quotation.quoteId));
+              }
               window.open("/new-booking/make-your-own-package/booking-page");
             } else {
               toast.error("Quotation data format not supported for conversion");

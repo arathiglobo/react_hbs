@@ -206,6 +206,11 @@ export default function MakeUrOwnPackage() {
     localStorage.setItem("makeYourOwnPackageAgentId", agent);
   }
 
+  // Store travel date in sessionStorage for use in booking page
+  if (travelDate) {
+    sessionStorage.setItem("makePkgTravelDate", travelDate);
+  }
+
   // Navigate to new Package Generation page
  navigate("/new-booking/make-your-own-package/search", {
   state: {

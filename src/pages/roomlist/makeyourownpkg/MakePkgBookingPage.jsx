@@ -623,14 +623,29 @@ const MakePkgBookingPage = () => {
       console.log("firstHotel:", firstHotel);
  
       
-      // Get first activity date for tourDate
+      // Get travel date from sessionStorage (selected in search page)
+      // Priority: sessionStorage travelDate > first activity date > hotel checkIn date
+      const storedTravelDate = sessionStorage.getItem("makePkgTravelDate");
       const firstActivity = activities.length > 0 ? activities[0].activity : null;
-      const tourDate = firstActivity?.activityDate 
-        ? formatDateToDDMMYYYY(firstActivity.activityDate) 
-        : (activities.length > 0 ? formatDateToDDMMYYYY(checkIn) : "");
+      
+      let tourDate = "";
+      if (storedTravelDate) {
+        // Use the travel date from sessionStorage (selected in search page)
+        tourDate = formatDateToDDMMYYYY(storedTravelDate);
+      } else if (firstActivity?.activityDate) {
+        // Fallback to first activity date
+        tourDate = formatDateToDDMMYYYY(firstActivity.activityDate);
+      } else if (checkIn) {
+        // Fallback to hotel checkIn date
+        tourDate = formatDateToDDMMYYYY(checkIn);
+      }
+
+      // Get quoteId if booking is from converted quotation
+      const quoteId = sessionStorage.getItem("makePkgQuoteId");
 
       const bookingPayload = {
         customPackageId: "",
+        quoteId: quoteId ? parseInt(quoteId) : null, // Include quoteId if booking is from quotation
         sellingPrice: String(sellingPrice.toFixed(2)),
         totalPrice: String(totalPrice.toFixed(2)),
         // customerDTO: {
@@ -664,7 +679,9 @@ const MakePkgBookingPage = () => {
           checkOutDate: formatDateToYYYYMMDD(checkOut),
           nights: nights,
           employeeId: "1",        
-          roomStatus: firstHotel.available === false ? "On Request" : "Available",
+          roomStatus: (firstHotel.available === false || 
+                      firstHotel.available === "False" || 
+                      firstHotel.available === "false") ? "On Request" : "Available",
           cancellationPolicy: (() => {
             const policies = firstHotel.cancellationPolicy || [];
             if (Array.isArray(policies) && policies.length > 0) {
@@ -677,10 +694,13 @@ const MakePkgBookingPage = () => {
           })(),
           // Calculate deadlineDate based on nonRefundable and cancellationPolicy
           deadlineDate: (() => {
-            const nonRefundable =  firstHotel.refundstatus === "N";
+            const nonRefundable = firstHotel.refundstatus === "N" || 
+                                 firstHotel.nonRefundable === true || 
+                                 firstHotel.nonRefundable === "true";
             console.log("nonRefundable:", nonRefundable);
-            if (nonRefundable === "false" || nonRefundable === false) {
-              // 2 days before current date
+            
+            if (nonRefundable === true || nonRefundable === "true") {
+              // Non-refundable: 2 days before current date
               const today = new Date();
               const deadline = new Date(today);
               deadline.setDate(today.getDate() - 2);
@@ -690,7 +710,7 @@ const MakePkgBookingPage = () => {
               const day = String(deadline.getDate()).padStart(2, "0");
               return `${year}-${month}-${day}T00:00:00`;
             } else {
-              // 2 days before earliest fromDate from cancellationPolicy
+              // Refundable: 2 days before earliest fromDate from cancellationPolicy
               const policies = firstHotel.cancellationPolicy || [];
               if (policies.length === 0) {
                 return null;
@@ -866,6 +886,10 @@ const MakePkgBookingPage = () => {
         response.data.bookingId != 0 &&
         response.data.message === "Booking completed successfully"
       ) {
+        // Clear quoteId from sessionStorage after successful booking
+        if (quoteId) {
+          sessionStorage.removeItem("makePkgQuoteId");
+        }
         setShowOrderSummaryModal(false);
         toast.success(response.data.message || "Booking submitted successfully!");
         navigate("/booking-details/custom-booking-list");

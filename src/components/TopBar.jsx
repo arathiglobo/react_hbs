@@ -132,19 +132,46 @@ export default function TopBar() {
     const checkOut = hotel.checkOut || details.checkOutDate || details.checkOut || "";
     const roomCategory = hotel.roomCategory || details.roomCategory || "";
     const roomType = hotel.roomType || details.mealPlan || "";
-    const adult = hotel.adult || details.adult || "";
-    const child = hotel.child || details.child || "";
+    const totalRate = hotel.totalRate || "";
     
-    // Handle childAges - could be array or string
+    // Calculate adult and child counts from searchRoomDTOs
+    const searchRoomDTOs = hotel.searchRoomDTOs || details.searchRoomDTOs || [];
+    let totalAdults = 0;
+    let totalChildren = 0;
     let childAges = [];
-    if (hotel.childAge) {
-      childAges = Array.isArray(hotel.childAge) ? hotel.childAge : [hotel.childAge];
-    } else if (hotel.childAges) {
-      childAges = Array.isArray(hotel.childAges) ? hotel.childAges : [hotel.childAges];
-    } else if (details.childAge) {
-      childAges = Array.isArray(details.childAge) ? details.childAge : [details.childAge];
-    } else if (details.childAges) {
-      childAges = Array.isArray(details.childAges) ? details.childAges : [details.childAges];
+    
+    if (searchRoomDTOs.length > 0) {
+      // Sum up adults and children from all rooms
+      searchRoomDTOs.forEach((room) => {
+        const adults = parseInt(room.adult || room.adults || 0);
+        const children = parseInt(room.child || room.children || 0);
+        totalAdults += adults;
+        totalChildren += children;
+        
+        // Collect child ages
+        if (room.childAge) {
+          if (Array.isArray(room.childAge)) {
+            childAges.push(...room.childAge);
+          } else {
+            childAges.push(room.childAge);
+          }
+        }
+      });
+    } else {
+      // Fallback to hotel-level properties if searchRoomDTOs is not available
+      totalAdults = parseInt(hotel.adult || details.adult || 0);
+      totalChildren = parseInt(hotel.child || details.child || 0);
+      
+      // Handle childAges from hotel level
+      if (hotel.childAge) {
+        childAges = Array.isArray(hotel.childAge) ? hotel.childAge : [hotel.childAge];
+      } else if (hotel.childAges) {
+        childAges = Array.isArray(hotel.childAges) ? hotel.childAges : [hotel.childAges];
+      } else if (details.childAge) {
+        childAges = Array.isArray(details.childAge) ? details.childAge : [details.childAge];
+      } else if (details.childAges) {
+        childAges = Array.isArray(details.childAges) ? details.childAges : [details.childAges];
+      }
     }
 
     return (
@@ -208,19 +235,26 @@ export default function TopBar() {
                 </span>
               </Col>
             )}
-            {adult && (
+             {totalRate && (
               <Col sm={6} className="d-flex align-items-center">
-                <FaUsers className="me-2 text-success" />
                 <span>
-                  <strong>Adults:</strong> {adult}
+                  <strong>Total Rate:</strong>  AED  {totalRate}
                 </span>
               </Col>
             )}
-            {child && (
+            {totalAdults > 0 && (
+              <Col sm={6} className="d-flex align-items-center">
+                <FaUsers className="me-2 text-success" />
+                <span>
+                  <strong>Adults:</strong> {totalAdults}
+                </span>
+              </Col>
+            )}
+            {totalChildren > 0 && (
               <Col sm={6} className="d-flex align-items-center">
                 <FaChild className="me-2 text-warning" />
                 <span>
-                  <strong>Children:</strong> {child}
+                  <strong>Children:</strong> {totalChildren}
                 </span>
               </Col>
             )}
