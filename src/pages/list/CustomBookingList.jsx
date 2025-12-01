@@ -24,6 +24,8 @@ import {
   FaUsers,
   FaCalendarAlt,
   FaMapMarkerAlt,
+  FaExclamationTriangle,
+  FaCheckCircle,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -47,6 +49,12 @@ const CustomBookingList = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [bookingDetails, setBookingDetails] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  
+  // Verification modal state
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verificationDetails, setVerificationDetails] = useState(null);
+  const [loadingVerification, setLoadingVerification] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Map status to type parameter
   const getTypeParam = (status) => {
@@ -82,7 +90,7 @@ const CustomBookingList = () => {
       const time = getTimeParam(timePeriod);
 
       const response = await axiosInstance.get(
-        `/api/makeYourOwnPackage/getBookedPackageList?type=${type}&time=${time}`
+        `/api/makeYourOwnPackage/getCustomBookingList?type=${type}&time=${time}`
       );
 
       if (Array.isArray(response.data)) {
@@ -182,6 +190,9 @@ const CustomBookingList = () => {
       // Get customBookingId from booking object
       const customBookingId = booking.customBookingId || booking.bookingId || booking.id;
       
+      console.log("Booking object:", booking);
+      console.log("Using customBookingId:", customBookingId);
+      
       if (!customBookingId) {
         toast.error("Booking ID not found");
         setShowDetailsModal(false);
@@ -191,6 +202,8 @@ const CustomBookingList = () => {
       const response = await axiosInstance.get(
         `/api/makeYourOwnPackage/getCustomBookingDetails/${customBookingId}`
       );
+
+      console.log("Booking Details API Response:", response.data);
 
       if (response.data) {
         setBookingDetails(response.data);
@@ -204,6 +217,78 @@ const CustomBookingList = () => {
       setShowDetailsModal(false);
     } finally {
       setLoadingDetails(false);
+    }
+  };
+
+  // Handle verification icon click
+  const handleVerificationClick = async (booking) => {
+    try {
+      setLoadingVerification(true);
+      setShowVerificationModal(true);
+      setVerificationDetails(null);
+      
+      // Get customBookingId from booking object
+      const customBookingId = booking.customBookingId || booking.bookingId || booking.id;
+      
+      if (!customBookingId) {
+        toast.error("Booking ID not found");
+        setShowVerificationModal(false);
+        return;
+      }
+
+      const response = await axiosInstance.get(
+        `/api/makeYourOwnPackage/getCustomBookingDetails/${customBookingId}`
+      );
+
+      if (response.data) {
+        setVerificationDetails(response.data);
+      } else {
+        toast.error("Failed to load booking details");
+        setShowVerificationModal(false);
+      }
+    } catch (error) {
+      console.error("Error fetching booking details for verification:", error);
+      toast.error(error.response?.data?.message || "Failed to load booking details");
+      setShowVerificationModal(false);
+    } finally {
+      setLoadingVerification(false);
+    }
+  };
+
+  // Handle set verified
+  const handleSetVerified = async () => {
+    if (!verificationDetails) return;
+
+    try {
+      setIsVerifying(true);
+      const customBookingId = verificationDetails.customBookingId || 
+                               verificationDetails.bookingId || 
+                               verificationDetails.id;
+
+      if (!customBookingId) {
+        toast.error("Booking ID not found");
+        return;
+      }
+
+      // Call verification endpoint
+      const response = await axiosInstance.put(
+        `/api/makeYourOwnPackage/setVerified/${customBookingId}`
+      );
+
+      if (response.data && (response.data.success || response.data.message)) {
+        toast.success(response.data.message || "Booking verified successfully!");
+        setShowVerificationModal(false);
+        setVerificationDetails(null);
+        // Refresh bookings list
+        fetchBookings();
+      } else {
+        toast.error(response.data?.message || "Failed to verify booking");
+      }
+    } catch (error) {
+      console.error("Error verifying booking:", error);
+      toast.error(error.response?.data?.message || "Failed to verify booking. Please try again.");
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -367,7 +452,7 @@ const CustomBookingList = () => {
                             <th>Package Code</th>
                             <th>Book Date</th>
                             <th>Tour Date</th>
-                            <th style={{ width: "100px" }}>Action</th>
+                            <th style={{ width: "120px" }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -381,13 +466,22 @@ const CustomBookingList = () => {
                                 <td>{formatDate(booking.bookDate)}</td>
                                 <td>{formatDate(booking.travelDate)}</td>
                                 <td>
-                                  <FaEye
-                                    className="text-primary"
-                                    style={{ cursor: "pointer" }}
-                                    onClick={() => handleViewDetails(booking)}
-                                    title="View Details"
-                                    size={18}
-                                  />
+                                  <div className="d-flex gap-2 align-items-center">
+                                    <FaEye
+                                      className="text-primary"
+                                      style={{ cursor: "pointer" }}
+                                      onClick={() => handleViewDetails(booking)}
+                                      title="View Details"
+                                      size={18}
+                                    />
+                                    <FaExclamationTriangle
+                                      className="text-warning"
+                                      style={{ cursor: "pointer" }}
+                                      onClick={() => handleVerificationClick(booking)}
+                                      title="Verify Booking"
+                                      size={18}
+                                    />
+                                  </div>
                                 </td>
                               </tr>
                             ))
@@ -776,6 +870,252 @@ const CustomBookingList = () => {
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowDetailsModal(false)}>
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Verification Modal */}
+      <Modal
+        show={showVerificationModal}
+        onHide={() => setShowVerificationModal(false)}
+        size="xl"
+        centered
+        scrollable
+      >
+        <Modal.Header closeButton className="bg-primary text-white">
+          <Modal.Title className="fw-bold">Package</Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
+          {loadingVerification ? (
+            <div className="text-center py-5">
+              <Spinner animation="border" variant="primary" />
+              <p className="mt-3 text-muted">Loading booking details...</p>
+            </div>
+          ) : verificationDetails ? (
+            <div>
+              {/* Hotel Section */}
+              {verificationDetails.hotelBookingRequest || verificationDetails.hotelDetails ? (
+                <div className="mb-4">
+                  <div className="d-flex align-items-center gap-2 mb-3">
+                    <Badge bg="success" className="px-3 py-2">
+                      <FaHotel className="me-1" />
+                      Hotel
+                    </Badge>
+                  </div>
+                  {(() => {
+                    const hotel = verificationDetails.hotelBookingRequest || verificationDetails.hotelDetails || {};
+                    const checkIn = formatDate(hotel.checkInDate || hotel.checkIn);
+                    const checkOut = formatDate(hotel.checkOutDate || hotel.checkOut);
+                    return (
+                      <div className="border rounded p-3 mb-3 bg-light">
+                        <div className="fw-bold mb-2">
+                          {hotel.hotelName || "Hotel"} ({checkIn} - {checkOut})
+                        </div>
+                        <Table bordered size="sm" className="mb-0">
+                          <tbody>
+                            <tr>
+                              <td className="fw-semibold" style={{ width: "200px" }}>Booking Code:</td>
+                              <td>{hotel.bookingCode || "-"}</td>
+                            </tr>
+                            <tr>
+                              <td className="fw-semibold">Booking Status:</td>
+                              <td>
+                                <Badge bg={hotel.bookingStatus === "CONFIRMED" ? "success" : "warning"}>
+                                  {hotel.bookingStatus || "-"}
+                                </Badge>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="fw-semibold">Confirmation Reference:</td>
+                              <td>{hotel.confirmationReference || "-"}</td>
+                            </tr>
+                            <tr>
+                              <td className="fw-semibold">Price Reference:</td>
+                              <td>{hotel.priceReference || "-"}</td>
+                            </tr>
+                            <tr>
+                              <td className="fw-semibold">Supplier Reference:</td>
+                              <td>{hotel.supplierReference || "-"}</td>
+                            </tr>
+                          </tbody>
+                        </Table>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : null}
+
+              {/* Activities organized by Day */}
+              {verificationDetails.customBookingActivityDTO && 
+               Array.isArray(verificationDetails.customBookingActivityDTO) && 
+               verificationDetails.customBookingActivityDTO.length > 0 && (
+                <div className="mb-4">
+                  <div className="d-flex align-items-center gap-2 mb-3">
+                    <Badge bg="success" className="px-3 py-2">
+                      <FaTicketAlt className="me-1" />
+                      Activity
+                    </Badge>
+                  </div>
+                  {(() => {
+                    // Group activities by day based on itinerary
+                    const activities = verificationDetails.customBookingActivityDTO || [];
+                    const itinerary = verificationDetails.customBookingItinearyDTO || [];
+                    
+                    // Create a map of activities by day
+                    const activitiesByDay = {};
+                    
+                    // First, try to map activities to days using itinerary
+                    activities.forEach((activity, idx) => {
+                      // Find which day this activity belongs to based on itinerary
+                      // Check if itinerary has activityId or itinearyId matching
+                      const activityItinerary = itinerary.find(
+                        item => item.activityId === activity.activityId || 
+                                item.itinearyId === activity.activityId
+                      );
+                      const day = activityItinerary?.days || (idx === 0 ? 1 : (idx === 1 ? 2 : 3));
+                      
+                      if (!activitiesByDay[day]) {
+                        activitiesByDay[day] = [];
+                      }
+                      activitiesByDay[day].push(activity);
+                    });
+
+                    // If no activities were mapped, distribute them sequentially
+                    if (Object.keys(activitiesByDay).length === 0) {
+                      activities.forEach((activity, idx) => {
+                        const day = idx + 1; // Day 1, 2, 3, etc.
+                        if (!activitiesByDay[day]) {
+                          activitiesByDay[day] = [];
+                        }
+                        activitiesByDay[day].push(activity);
+                      });
+                    }
+
+                    return Object.keys(activitiesByDay)
+                      .sort((a, b) => {
+                        // Sort days numerically if possible
+                        const dayA = parseInt(a);
+                        const dayB = parseInt(b);
+                        if (!isNaN(dayA) && !isNaN(dayB)) {
+                          return dayA - dayB;
+                        }
+                        return a.localeCompare(b);
+                      })
+                      .map((dayKey, dayIdx) => {
+                        const dayActivities = activitiesByDay[dayKey];
+                        const dayNumber = parseInt(dayKey) || dayIdx + 1;
+                        
+                        return (
+                          <div key={dayKey} className="mb-4">
+                            <h6 className="text-danger fw-bold mb-3">Day {dayNumber}:</h6>
+                            {dayActivities.map((activity, actIdx) => (
+                              <div key={actIdx} className="border rounded p-3 mb-3 bg-light">
+                                <div className="d-flex align-items-center gap-2 mb-2">
+                                  <FaCheckCircle className="text-success" />
+                                  <span className="fw-bold">
+                                    {activity.activityName || `Activity ${actIdx + 1}`} - {formatDate(activity.tourDate)}
+                                  </span>
+                                </div>
+                                <Table bordered size="sm" className="mb-2">
+                                  <tbody>
+                                    <tr>
+                                      <td className="fw-semibold" style={{ width: "200px" }}>Confirmation Reference:</td>
+                                      <td>{activity.confirmationReference || "-"}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="fw-semibold">Booking Code:</td>
+                                      <td>{activity.bookingCode || "-"}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="fw-semibold">Supplier Reference:</td>
+                                      <td>{activity.supplierReference || "-"}</td>
+                                    </tr>
+                                  </tbody>
+                                </Table>
+                                {activity.description && (
+                                  <div className="mt-2">
+                                    <small className="text-muted">{activity.description}</small>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      });
+                  })()}
+                </div>
+              )}
+
+              {/* Transfer Section */}
+              {verificationDetails.customBookingCabDTO && 
+               Array.isArray(verificationDetails.customBookingCabDTO) && 
+               verificationDetails.customBookingCabDTO.length > 0 && (
+                <div className="mb-4">
+                  <div className="d-flex align-items-center gap-2 mb-3">
+                    <Badge bg="success" className="px-3 py-2">
+                      <FaCar className="me-1" />
+                      Transfer
+                    </Badge>
+                  </div>
+                  {verificationDetails.customBookingCabDTO.map((cab, idx) => {
+                    const pickupDate = formatDate(cab.pickupDate);
+                    const dropDate = formatDate(cab.dropOffDate);
+                    return (
+                      <div key={idx} className="border rounded p-3 mb-3 bg-light">
+                        <div className="fw-bold mb-2">
+                          {cab.cabName || `${cab.noOfCabs || 1} Seater`} ({pickupDate} - {dropDate})
+                        </div>
+                        <Table bordered size="sm" className="mb-0">
+                          <tbody>
+                            <tr>
+                              <td className="fw-semibold" style={{ width: "200px" }}>Confirmation Reference:</td>
+                              <td>{cab.confirmationReference || "-"}</td>
+                            </tr>
+                            <tr>
+                              <td className="fw-semibold">Booking Code:</td>
+                              <td>{cab.bookingCode || "-"}</td>
+                            </tr>
+                            <tr>
+                              <td className="fw-semibold">Supplier Reference:</td>
+                              <td>{cab.supplierReference || "-"}</td>
+                            </tr>
+                          </tbody>
+                        </Table>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-muted">No booking details available</p>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button 
+            variant="danger" 
+            onClick={() => setShowVerificationModal(false)}
+            disabled={isVerifying}
+          >
+            Cancel
+          </Button>
+          <Button 
+            variant="success" 
+            onClick={handleSetVerified}
+            disabled={isVerifying || !verificationDetails}
+          >
+            {isVerifying ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Verifying...
+              </>
+            ) : (
+              <>
+                Set Verified <FaCheckCircle className="ms-2" />
+              </>
+            )}
           </Button>
         </Modal.Footer>
       </Modal>

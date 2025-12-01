@@ -844,7 +844,10 @@ const GenerateQuotationBooking = () => {
             return `${year}-${month}-${day}T00:00:00`;
           }
         })(),
-        isBookandVoucher: (hotelBookingConfirmation[0] || "Book & Voucher") === "Book & Voucher",
+        isBookandVoucher: (() => {
+          const confirmation = hotelBookingConfirmation[0] || "Book & Voucher";
+          return confirmation === "Book & Voucher";
+        })(),
         primaryGuest: {
           firstName: primaryGuest.firstName || "",
           middleName: primaryGuest.middleName || "",
@@ -1068,7 +1071,10 @@ const GenerateQuotationBooking = () => {
               return `${year}-${month}-${day}T00:00:00`;
             }
           })(),
-          isBookandVoucher: (hotelBookingConfirmation[0] || "Book & Voucher") === "Book & Voucher",
+          isBookandVoucher: (() => {
+            const confirmation = hotelBookingConfirmation[0] || "Book & Voucher";
+            return confirmation === "Book & Voucher";
+          })(),
           primaryGuest: {
             firstName: primaryGuest.firstName || "",
             middleName: primaryGuest.middleName || "",
