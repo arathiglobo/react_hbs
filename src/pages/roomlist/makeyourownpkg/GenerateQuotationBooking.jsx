@@ -756,7 +756,7 @@ const GenerateQuotationBooking = () => {
           dropDetails: parseInt(cab.dropDetails || "1") || 1,
           paxDetails: parseInt(cab.paxDetails || "1") || 1,
           pickupDate: formatDateToDateObject(cab.pickupDate || ""),
-          dropOffDate: formatDateToDateObject(cab.dropDate || cab.dropOffDate || ""),
+          dropOffDate: formatDateToDateObject(cab.dropDate || cab.dropOffDate || cab.dropoffDate || ""),
           sellingPrice: cabTotalRate,
           totalPrice: cabTotalRateWithoutMrk,
           luggage: cab.luggage === true || cab.luggage === "true" || String(cab.luggage).toLowerCase() === "true",
@@ -875,7 +875,7 @@ const GenerateQuotationBooking = () => {
             phone: primaryGuest.contactNumber || "",
             passportNo: primaryGuest.passportNumber || "",
             salutaion: primaryGuest.salutation || "",
-            agentlpo: primaryGuest.lpo || "",
+            agentLpo: primaryGuest.lpo || "",
           },
           rooms: hotel?.searchRoomDTOs?.map((room, idx) => {
             const guestKey = `${actualHotelIndexInCart}-${idx}`;
@@ -2081,7 +2081,7 @@ const GenerateQuotationBooking = () => {
                               </Table>
 
                               {/* Transporter and Driver Details */}
-                              <div className="mb-3 p-3 bg-light rounded">
+                              {/* <div className="mb-3 p-3 bg-light rounded">
                                 <h6 className="mb-3 fw-bold text-primary">Transporter & Driver Details</h6>
                                 <Row className="g-3">
                                 <Col md={6}>
@@ -2153,7 +2153,7 @@ const GenerateQuotationBooking = () => {
                                   />
                                 </Col>
                                 </Row>
-                              </div>
+                              </div> */}
 
                               {/* Selling Price and Total Price */}
                               <Row className="g-3">

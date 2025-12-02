@@ -598,50 +598,63 @@ const CustomBookingList = () => {
                 </Row>
               </div>
 
-              {/* Guest Information */}
-              {bookingDetails.primaryGuest || bookingDetails.customerDTO ? (
+              {/* Guest Information - from first hotel or customerDTO */}
+              {(bookingDetails.hotelBookingRequest && Array.isArray(bookingDetails.hotelBookingRequest) && bookingDetails.hotelBookingRequest.length > 0 && bookingDetails.hotelBookingRequest[0].primaryGuest) || bookingDetails.customerDTO ? (
                 <div className="mb-3">
-                  <h6 className="fw-bold mb-2">Guest Information</h6>
-                  <Row className="g-2">
-                    <Col xs={12}>
-                      <small className="text-muted d-block">Name</small>
-                      <strong className="small">
-                        {bookingDetails.primaryGuest?.salutation || bookingDetails.customerDTO?.salutaion || ""}{" "}
-                        {bookingDetails.primaryGuest?.firstName || bookingDetails.customerDTO?.firstName || ""}{" "}
-                        {bookingDetails.primaryGuest?.lastName || bookingDetails.customerDTO?.lastName || ""}
-                      </strong>
-                    </Col>
-                    <Col xs={12}>
-                      <small className="text-muted d-block">Email</small>
-                      <strong className="small">{bookingDetails.primaryGuest?.email || bookingDetails.customerDTO?.emailId || "-"}</strong>
-                    </Col>
-                    <Col xs={6}>
-                      <small className="text-muted d-block">Phone</small>
-                      <strong className="small">{bookingDetails.primaryGuest?.phone || bookingDetails.customerDTO?.mobileNumber || "-"}</strong>
-                    </Col>
-                    <Col xs={6}>
-                      <small className="text-muted d-block">Passport</small>
-                      <strong className="small">{bookingDetails.primaryGuest?.passportNo || bookingDetails.customerDTO?.passportNo || "-"}</strong>
-                    </Col>
-                    <Col xs={6}>
-                      <small className="text-muted d-block">LPO</small>
-                      <strong className="small">{bookingDetails.primaryGuest?.agentlpo || bookingDetails.customerDTO?.agentlpo || "-"}</strong>
-                    </Col>
-                  </Row>
-                </div>
-              ) : null}
-
-              {/* Hotel Details */}
-              {bookingDetails.hotelBookingRequest || bookingDetails.hotelDetails ? (
-                <div className="mb-3">
-                  <h6 className="fw-bold mb-2">Hotel Details</h6>
+                  <h6 className="fw-bold mb-2">Primary Guest Information</h6>
                   {(() => {
-                    const hotel = bookingDetails.hotelBookingRequest || bookingDetails.hotelDetails || {};
+                    const primaryGuest = bookingDetails.hotelBookingRequest?.[0]?.primaryGuest || bookingDetails.customerDTO || {};
                     return (
                       <Row className="g-2">
                         <Col xs={12}>
-                          <small className="text-muted d-block">Hotel Name</small>
-                          <strong className="small">{hotel.hotelName || "-"}</strong>
+                          <small className="text-muted d-block">Name</small>
+                          <strong className="small">
+                            {primaryGuest.salutation || ""}{" "}
+                            {primaryGuest.firstName || ""}{" "}
+                            {primaryGuest.middleName || ""}{" "}
+                            {primaryGuest.lastName || ""}
+                          </strong>
+                        </Col>
+                        <Col xs={12}>
+                          <small className="text-muted d-block">Email</small>
+                          <strong className="small">{primaryGuest.email || primaryGuest.emailId || "-"}</strong>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Phone</small>
+                          <strong className="small">{primaryGuest.phone || primaryGuest.mobileNumber || "-"}</strong>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Passport</small>
+                          <strong className="small">{primaryGuest.passportNo || "-"}</strong>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Nationality</small>
+                          <strong className="small">{primaryGuest.nativeCountry || "-"}</strong>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted d-block">LPO</small>
+                          <strong className="small">{primaryGuest.agentLpo || primaryGuest.agentlpo || "-"}</strong>
+                        </Col>
+                      </Row>
+                    );
+                  })()}
+                </div>
+              ) : null}
+
+              {/* Hotel Details - Handle array of hotels */}
+              {bookingDetails.hotelBookingRequest && Array.isArray(bookingDetails.hotelBookingRequest) && bookingDetails.hotelBookingRequest.length > 0 ? (
+                <div className="mb-3">
+                  <h6 className="fw-bold mb-2">Hotel Details ({bookingDetails.hotelBookingRequest.length})</h6>
+                  {bookingDetails.hotelBookingRequest.map((hotel, hotelIdx) => (
+                    <div key={hotelIdx} className="mb-3 p-2 border rounded">
+                      <h6 className="fw-bold small mb-2">
+                        {bookingDetails.hotelBookingRequest.length > 1 ? `Hotel ${hotelIdx + 1}: ` : ""}
+                        {hotel.hotelName || "-"}
+                      </h6>
+                      <Row className="g-2">
+                        <Col xs={12}>
+                          <small className="text-muted d-block">Address</small>
+                          <strong className="small">{hotel.address || "-"}</strong>
                         </Col>
                         <Col xs={6}>
                           <small className="text-muted d-block">Check-in</small>
@@ -651,16 +664,32 @@ const CustomBookingList = () => {
                           <small className="text-muted d-block">Check-out</small>
                           <strong className="small">{formatDate(hotel.checkOutDate || hotel.checkOut)}</strong>
                         </Col>
-                        <Col xs={6}>
+                        <Col xs={4}>
                           <small className="text-muted d-block">Nights</small>
                           <strong className="small">{hotel.nights || "-"}</strong>
                         </Col>
-                        <Col xs={6}>
+                        <Col xs={4}>
+                          <small className="text-muted d-block">Star Rating</small>
+                          <strong className="small">{hotel.starRating || "-"}</strong>
+                        </Col>
+                        <Col xs={4}>
                           <small className="text-muted d-block">Status</small>
-                          <Badge bg={hotel.roomStatus === "Available" ? "success" : "warning"} className="small">
+                          <Badge bg={hotel.roomStatus === "Available" || hotel.roomStatus === "Confirmed" ? "success" : hotel.roomStatus === "Not Confirmed" ? "warning" : "secondary"} className="small">
                             {hotel.roomStatus || "-"}
                           </Badge>
                         </Col>
+                        {hotel.primaryGuest && (
+                          <Col xs={12}>
+                            <small className="text-muted d-block">Primary Guest</small>
+                            <strong className="small">
+                              {hotel.primaryGuest.salutation || ""} {hotel.primaryGuest.firstName || ""} {hotel.primaryGuest.lastName || ""}
+                            </strong>
+                            <div className="small text-muted">
+                              {hotel.primaryGuest.email && `Email: ${hotel.primaryGuest.email}`}
+                              {hotel.primaryGuest.phone && ` | Phone: ${hotel.primaryGuest.phone}`}
+                            </div>
+                          </Col>
+                        )}
                         {hotel.rooms && Array.isArray(hotel.rooms) && hotel.rooms.length > 0 && (
                           <Col xs={12}>
                             <small className="text-muted d-block mb-1">Rooms</small>
@@ -669,8 +698,11 @@ const CustomBookingList = () => {
                                 <tr>
                                   <th>Room</th>
                                   <th>Category</th>
+                                  <th>Meal Plan</th>
                                   <th>Adults</th>
                                   <th>Children</th>
+                                  <th>Rate</th>
+                                  <th>Non-Refundable</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -678,17 +710,81 @@ const CustomBookingList = () => {
                                   <tr key={idx}>
                                     <td>{room.roomNo || idx + 1}</td>
                                     <td>{room.roomCategory || "-"}</td>
+                                    <td>{room.mealPlan || "-"}</td>
                                     <td>{room.adults || 0}</td>
                                     <td>{room.children || 0}</td>
+                                    <td>{room.currency || "AED"} {room.rate || room.rateWithoutMarkup || 0}</td>
+                                    <td>
+                                      <Badge bg={room.nonRefundable ? "danger" : "success"} className="small">
+                                        {room.nonRefundable ? "Yes" : "No"}
+                                      </Badge>
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
                             </Table>
+                            {hotel.rooms.some(room => room.guests && room.guests.length > 0) && (
+                              <div className="mt-2">
+                                <small className="text-muted d-block mb-1">Room Guests</small>
+                                {hotel.rooms.map((room, roomIdx) => (
+                                  room.guests && room.guests.length > 0 && (
+                                    <div key={roomIdx} className="mb-1 small">
+                                      <strong>Room {room.roomNo || roomIdx + 1}:</strong>{" "}
+                                      {room.guests.map((guest, guestIdx) => (
+                                        <span key={guestIdx}>
+                                          {guest.salutation || ""} {guest.firstName || ""} {guest.lastName || ""}
+                                          {guest.isChild && " (Child)"}
+                                          {guestIdx < room.guests.length - 1 && ", "}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )
+                                ))}
+                              </div>
+                            )}
+                          </Col>
+                        )}
+                        {hotel.remarks && (
+                          <Col xs={12}>
+                            <small className="text-muted d-block">Remarks</small>
+                            <strong className="small">{hotel.remarks}</strong>
+                          </Col>
+                        )}
+                        {hotel.specialRequests && (
+                          <Col xs={12}>
+                            <small className="text-muted d-block">Special Requests</small>
+                            <strong className="small">{hotel.specialRequests}</strong>
+                          </Col>
+                        )}
+                        {hotel.cancellationPolicy && Array.isArray(hotel.cancellationPolicy) && hotel.cancellationPolicy.length > 0 && (
+                          <Col xs={12}>
+                            <small className="text-muted d-block">Cancellation Policy</small>
+                            <ul className="small mb-0">
+                              {hotel.cancellationPolicy.map((policy, policyIdx) => (
+                                <li key={policyIdx}>{typeof policy === 'string' ? policy : policy.policyText || JSON.stringify(policy)}</li>
+                              ))}
+                            </ul>
+                          </Col>
+                        )}
+                        {hotel.deadlineDate && (
+                          <Col xs={12}>
+                            <small className="text-muted d-block">Deadline Date</small>
+                            <strong className="small">{formatDate(hotel.deadlineDate)}</strong>
                           </Col>
                         )}
                       </Row>
-                    );
-                  })()}
+                    </div>
+                  ))}
+                </div>
+              ) : bookingDetails.hotelDetails ? (
+                <div className="mb-3">
+                  <h6 className="fw-bold mb-2">Hotel Details</h6>
+                  <Row className="g-2">
+                    <Col xs={12}>
+                      <small className="text-muted d-block">Hotel Name</small>
+                      <strong className="small">{bookingDetails.hotelDetails.hotelName || "-"}</strong>
+                    </Col>
+                  </Row>
                 </div>
               ) : null}
 
@@ -699,19 +795,23 @@ const CustomBookingList = () => {
                   <Table striped bordered size="sm" className="small">
                     <thead>
                       <tr>
-                        <th>Activity</th>
+                        <th>Activity ID</th>
                         <th>Date</th>
                         <th>Adults</th>
                         <th>Children</th>
+                        <th>Selling Price</th>
+                        <th>Total Price</th>
                       </tr>
                     </thead>
                     <tbody>
                       {bookingDetails.customBookingActivityDTO.map((activity, idx) => (
                         <tr key={idx}>
-                          <td>{activity.activityName || `Activity ${idx + 1}`}</td>
+                          <td>{activity.activityId || activity.activityName || `Activity ${idx + 1}`}</td>
                           <td>{formatDate(activity.tourDate)}</td>
                           <td>{activity.noOfAdult || 0}</td>
                           <td>{activity.noOfChild || 0}</td>
+                          <td>AED {parseFloat(activity.sellingPrice || 0).toFixed(2)}</td>
+                          <td>AED {parseFloat(activity.totalPrice || 0).toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -723,57 +823,143 @@ const CustomBookingList = () => {
               {bookingDetails.customBookingCabDTO && Array.isArray(bookingDetails.customBookingCabDTO) && bookingDetails.customBookingCabDTO.length > 0 && (
                 <div className="mb-3">
                   <h6 className="fw-bold mb-2">Transfers ({bookingDetails.customBookingCabDTO.length})</h6>
-                  <Table striped bordered size="sm" className="small">
-                    <thead>
-                      <tr>
-                        <th>Pickup</th>
-                        <th>Drop</th>
-                        <th>Adults</th>
-                        <th>Children</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bookingDetails.customBookingCabDTO.map((cab, idx) => (
-                        <tr key={idx}>
-                          <td>{formatDate(cab.pickupDate)}</td>
-                          <td>{formatDate(cab.dropOffDate)}</td>
-                          <td>{cab.noOfAdult || 0}</td>
-                          <td>{cab.noOfChild || 0}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
+                  {bookingDetails.customBookingCabDTO.map((cab, idx) => (
+                    <div key={idx} className="mb-3 p-2 border rounded">
+                      <h6 className="fw-bold small mb-2">
+                        {bookingDetails.customBookingCabDTO.length > 1 ? `Transfer ${idx + 1}` : "Transfer Details"}
+                      </h6>
+                      <Row className="g-2">
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Pickup Date</small>
+                          <strong className="small">{formatDate(cab.pickupDate)}</strong>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Drop-off Date</small>
+                          <strong className="small">{formatDate(cab.dropOffDate)}</strong>
+                        </Col>
+                        <Col xs={4}>
+                          <small className="text-muted d-block">Adults</small>
+                          <strong className="small">{cab.noOfAdult || 0}</strong>
+                        </Col>
+                        <Col xs={4}>
+                          <small className="text-muted d-block">Children</small>
+                          <strong className="small">{cab.noOfChild || 0}</strong>
+                        </Col>
+                        <Col xs={4}>
+                          <small className="text-muted d-block">No. of Cabs</small>
+                          <strong className="small">{cab.noOfCabs || 1}</strong>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Travel Type</small>
+                          <strong className="small">
+                            {cab.travelType === 1 ? "Arrival & Departure" : cab.travelType === 2 ? "Arrival" : cab.travelType === 3 ? "Departure" : cab.travelType}
+                          </strong>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Luggage</small>
+                          <Badge bg={cab.luggage ? "success" : "secondary"} className="small">
+                            {cab.luggage ? "Yes" : "No"}
+                          </Badge>
+                        </Col>
+                        {cab.transporter && (
+                          <Col xs={6}>
+                            <small className="text-muted d-block">Transporter Name</small>
+                            <strong className="small">{cab.transporter}</strong>
+                          </Col>
+                        )}
+                        {cab.contactNumber && (
+                          <Col xs={6}>
+                            <small className="text-muted d-block">Contact Number</small>
+                            <strong className="small">{cab.contactNumber}</strong>
+                          </Col>
+                        )}
+                        {cab.driverName && (
+                          <Col xs={6}>
+                            <small className="text-muted d-block">Driver Name</small>
+                            <strong className="small">{cab.driverName}</strong>
+                          </Col>
+                        )}
+                        {cab.driverContact && (
+                          <Col xs={6}>
+                            <small className="text-muted d-block">Driver Contact</small>
+                            <strong className="small">{cab.driverContact}</strong>
+                          </Col>
+                        )}
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Total Rate</small>
+                          <strong className="small">AED {parseFloat(cab.totalRate || 0).toFixed(2)}</strong>
+                        </Col>
+                        <Col xs={6}>
+                          <small className="text-muted d-block">Rate Without Markup</small>
+                          <strong className="small">AED {parseFloat(cab.totalRateWithoutmrk || 0).toFixed(2)}</strong>
+                        </Col>
+                      </Row>
+                    </div>
+                  ))}
                 </div>
               )}
 
               {/* Visa Information */}
-              {bookingDetails.visaStatus && (
+              <div className="mb-3">
+                <h6 className="fw-bold mb-2">Visa Information</h6>
+                <Row className="g-2">
+                  <Col xs={6}>
+                    <small className="text-muted d-block">Visa Required</small>
+                    <Badge bg={bookingDetails.visaStatus ? "success" : "secondary"} className="small">
+                      {bookingDetails.visaStatus ? "Yes" : "No"}
+                    </Badge>
+                  </Col>
+                  {bookingDetails.visaStatus && (
+                    <>
+                      <Col xs={6}>
+                        <small className="text-muted d-block">Adults</small>
+                        <strong className="small">{bookingDetails.visaAdult || 0}</strong>
+                      </Col>
+                      <Col xs={6}>
+                        <small className="text-muted d-block">Adult Rate</small>
+                        <strong className="small">AED {parseFloat(bookingDetails.visaAdultRate || 0).toFixed(2)}</strong>
+                      </Col>
+                      <Col xs={6}>
+                        <small className="text-muted d-block">Children</small>
+                        <strong className="small">{bookingDetails.visaChild || 0}</strong>
+                      </Col>
+                      <Col xs={6}>
+                        <small className="text-muted d-block">Child Rate</small>
+                        <strong className="small">AED {parseFloat(bookingDetails.visaChildRate || 0).toFixed(2)}</strong>
+                      </Col>
+                      <Col xs={6}>
+                        <small className="text-muted d-block">Infants</small>
+                        <strong className="small">{bookingDetails.visaInfant || 0}</strong>
+                      </Col>
+                      <Col xs={6}>
+                        <small className="text-muted d-block">Infant Rate</small>
+                        <strong className="small">AED {parseFloat(bookingDetails.visaInfantRate || 0).toFixed(2)}</strong>
+                      </Col>
+                    </>
+                  )}
+                </Row>
+              </div>
+
+              {/* Itinerary Details */}
+              {bookingDetails.customBookingItinearyDTO && Array.isArray(bookingDetails.customBookingItinearyDTO) && bookingDetails.customBookingItinearyDTO.length > 0 && (
                 <div className="mb-3">
-                  <h6 className="fw-bold mb-2">Visa Information</h6>
-                  <Row className="g-2">
-                    <Col xs={6}>
-                      <small className="text-muted d-block">Visa Required</small>
-                      <Badge bg={bookingDetails.visaStatus ? "success" : "secondary"} className="small">
-                        {bookingDetails.visaStatus ? "Yes" : "No"}
-                      </Badge>
-                    </Col>
-                    {bookingDetails.visaStatus && (
-                      <>
-                        <Col xs={6}>
-                          <small className="text-muted d-block">Adults</small>
-                          <strong className="small">{bookingDetails.visaAdult || 0}</strong>
-                        </Col>
-                        <Col xs={6}>
-                          <small className="text-muted d-block">Children</small>
-                          <strong className="small">{bookingDetails.visaChild || 0}</strong>
-                        </Col>
-                        <Col xs={6}>
-                          <small className="text-muted d-block">Infants</small>
-                          <strong className="small">{bookingDetails.visaInfant || 0}</strong>
-                        </Col>
-                      </>
-                    )}
-                  </Row>
+                  <h6 className="fw-bold mb-2">Itineraries ({bookingDetails.customBookingItinearyDTO.length})</h6>
+                  <Table striped bordered size="sm" className="small">
+                    <thead>
+                      <tr>
+                        <th>Itinerary ID</th>
+                        <th>Day</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bookingDetails.customBookingItinearyDTO.map((itinerary, idx) => (
+                        <tr key={idx}>
+                          <td>{itinerary.itinearyId || "-"}</td>
+                          <td>Day {itinerary.days || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
                 </div>
               )}
             </div>

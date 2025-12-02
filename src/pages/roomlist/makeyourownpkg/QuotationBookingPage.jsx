@@ -1080,7 +1080,7 @@ const QuotationBookingPage = () => {
             phone: hotelPrimaryGuest.phone || primaryGuest.contactNumber || "",
             passportNo: hotelPrimaryGuest.passportNo || primaryGuest.passportNumber || "",
             salutaion: hotelPrimaryGuest.salutation || primaryGuest.salutation || "",
-            agentlpo: hotelPrimaryGuest.agentLpo || primaryGuest.lpo || "",
+            agentLpo: hotelPrimaryGuest.agentLpo || primaryGuest.lpo || "",
           },
           rooms: hotel?.searchRoomDTOs?.map((room, idx) => {
             const guestKey = `${actualHotelIndexInCart}-${idx}`;
@@ -1138,7 +1138,7 @@ const QuotationBookingPage = () => {
         visaChildRate: parseFloat(visaDetails.visaChildRate || "0") || 0,
         visaInfant: parseInt(visaDetails.visaInfant || "0") || 0,
         visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
-        hotelBookingRequest: hotelBookingRequests.length > 0 ? hotelBookingRequests[0] : null,
+        hotelBookingRequest: hotelBookingRequests.length > 0 ? hotelBookingRequests : [],
         customBookingActivityDTO: activities.map((item) => {
           const activity = item.activity || {};
           const details = activity.details || {};
@@ -2030,7 +2030,21 @@ const QuotationBookingPage = () => {
                         <h5 className="mb-0 fw-bold">Transfer option</h5>
                       </Accordion.Header>
                       <Accordion.Body>
-                        {transfers.map((item, transferIndex) => {
+                        {transfers.map((item, transferArrayIndex) => {
+                          // Find the actual index in cartData for this transfer
+                          let transferIndexInCart = -1;
+                          let cabCount = 0;
+                          for (let i = 0; i < cartData.length; i++) {
+                            if (cartData[i].cab) {
+                              if (cabCount === transferArrayIndex) {
+                                transferIndexInCart = i;
+                                break;
+                              }
+                              cabCount++;
+                            }
+                          }
+                          const transferIndex = transferIndexInCart >= 0 ? transferIndexInCart : transferArrayIndex;
+                          
                           const cab = item.cab || {};
                           const details = cab.details || {};
                           const vehicleName = cab.vehicleName || details.vehicleName || "Transfer";
@@ -2071,12 +2085,12 @@ const QuotationBookingPage = () => {
                           };
 
                           return (
-                            <Card key={transferIndex} className="mb-3 transfer-item-card">
+                            <Card key={transferArrayIndex} className="mb-3 transfer-item-card">
                               <Card.Header className="transfer-header">
                                 <div className="d-flex align-items-center gap-2">
                                   <FaCar className="text-primary" size={20} />
                                   <h6 className="mb-0 fw-bold">
-                                    {transfers.length > 1 ? `Transfer ${transferIndex + 1}: ` : ""}
+                                    {transfers.length > 1 ? `Transfer ${transferArrayIndex + 1}: ` : ""}
                                     {capacity ? `${capacity} Seater` : vehicleName}
                                   </h6>
                                 </div>
