@@ -184,7 +184,7 @@ export default function Sidebar() {
         },
         {
           label: "Quotation List",
-          to: "/booking-details/quotation-list-list",
+          to: "/booking-details/quotation-booking-list",
         },
         {
           label: "Offline Booking List",

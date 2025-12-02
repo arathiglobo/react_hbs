@@ -38,10 +38,9 @@ import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 import "../../../styles/MakePkgBookingPage.css";
 
-const GenerateQuotationBooking = () => {
+const QuotationBookingPage = () => {
   const navigate = useNavigate();
   const [cartData, setCartData] = useState([]);
-  console.log("Cart Data:", cartData);
   const [loading, setLoading] = useState(true);
   const [primaryGuest, setPrimaryGuest] = useState({
     salutation: "Mr",
@@ -91,6 +90,9 @@ const GenerateQuotationBooking = () => {
 
   // Transfer/Cab details state
   const [transferDetails, setTransferDetails] = useState({});
+
+  // Hotel-specific primary guest data
+  const [hotelPrimaryGuests, setHotelPrimaryGuests] = useState({});
 
   // Validation errors state
   const [validationErrors, setValidationErrors] = useState({});
@@ -145,7 +147,7 @@ const GenerateQuotationBooking = () => {
   };
 
   // Initialize hotel-specific fields (Tourism Dirhams, Remarks, Special Request, Booking Confirmation)
-  const initializeHotelState = (cartItems) => {
+  const initializeHotelFields = (cartItems) => {
     const tourismDirhams = {};
     const remarks = {};
     const specialRequests = {};
@@ -168,33 +170,360 @@ const GenerateQuotationBooking = () => {
     setHotelBookingConfirmation(bookingConfirmations);
   };
 
-  // Load cart data on mount
+  // Load quotation data from API on mount
   useEffect(() => {
-    const loadCartData = () => {
+    const loadQuotationData = async () => {
       try {
-        const stored = sessionStorage.getItem("makePkgCartData");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          console.log("Cart data loaded:", parsed);
-          setCartData(parsed);
-          calculatePrices(parsed);
-          initializeRoomGuests(parsed);
-          initializeTransferDetails(parsed);
-          initializeHotelState(parsed);
-        } else {
-          toast.error("No cart data found. Please add items to cart first.");
-          navigate("/new-booking/make-your-own-package");
+        setLoading(true);
+        
+        // Get quoteId from sessionStorage
+        const quoteId = sessionStorage.getItem("makePkgQuoteId");
+        
+        if (!quoteId) {
+          toast.error("No quotation ID found. Please select a quotation first.");
+          navigate("/booking-details/quotation-booking-list");
+          return;
         }
+
+        // Fetch quotation data from API
+        const response = await axiosInstance.get(
+          `/api/makeYourOwnPackage/getQuatation/${quoteId}`
+        );
+
+        console.log("Quotation API Response:", response.data);
+
+        if (!response.data) {
+          toast.error("Failed to load quotation data.");
+          navigate("/booking-details/quotation-booking-list");
+          return;
+        }
+
+        const quotationData = response.data;
+
+        // Helper function to format date from API response
+        const formatDateFromAPI = (dateValue) => {
+          if (!dateValue) return "";
+          try {
+            // If it's already a string in DD/MM/YYYY format, return as is
+            if (typeof dateValue === 'string' && dateValue.includes("/")) {
+              return dateValue;
+            }
+            // Handle ISO date strings (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)
+            let date;
+            if (typeof dateValue === 'string') {
+              // Extract date part if it's an ISO datetime string
+              const datePart = dateValue.split('T')[0];
+              if (datePart.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                const [year, month, day] = datePart.split('-');
+                return `${day}/${month}/${year}`;
+              }
+              date = new Date(dateValue);
+            } else {
+              date = new Date(dateValue);
+            }
+            if (isNaN(date.getTime())) return "";
+            const day = String(date.getDate()).padStart(2, "0");
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+          } catch {
+            return String(dateValue || "");
+          }
+        };
+
+        // Set prices
+        if (quotationData.sellingPrice !== undefined) {
+          setSellingPrice(parseFloat(quotationData.sellingPrice) || 0);
+        }
+        if (quotationData.totalPrice !== undefined) {
+          setTotalPrice(parseFloat(quotationData.totalPrice) || 0);
+        }
+
+        // Set visa details
+        if (quotationData.visaStatus !== undefined) {
+          setVisaRequired(quotationData.visaStatus === true || quotationData.visaStatus === "true");
+        }
+        if (quotationData.visaAdult !== undefined) {
+          setVisaDetails(prev => ({
+            ...prev,
+            visaAdult: String(quotationData.visaAdult || "0"),
+            visaAdultRate: String(quotationData.visaAdultRate || "0"),
+            visaChild: String(quotationData.visaChild || "0"),
+            visaChildRate: String(quotationData.visaChildRate || "0"),
+            visaInfant: String(quotationData.visaInfant || "0"),
+            visaInfantRate: String(quotationData.visaInfantRate || "0"),
+          }));
+        }
+
+        // Build cartData structure from quotation data
+        const newCartData = [];
+
+        // Add hotels
+        if (quotationData.quoteHotelDTOList && Array.isArray(quotationData.quoteHotelDTOList)) {
+          quotationData.quoteHotelDTOList.forEach((hotelRequest) => {
+            const checkInDate = formatDateFromAPI(hotelRequest.checkInDate);
+            const checkOutDate = formatDateFromAPI(hotelRequest.checkOutDate);
+            
+            // Calculate total rate from all rooms
+            const totalRate = hotelRequest.rooms?.reduce((sum, room) => sum + (parseFloat(room.rate) || 0), 0) || 0;
+            const totalRateWithoutmrk = hotelRequest.rooms?.reduce((sum, room) => sum + (parseFloat(room.rateWithoutMarkup) || 0), 0) || 0;
+            
+            const hotel = {
+              hotelId: String(hotelRequest.hotelId || ""),
+              hotelName: hotelRequest.hotelName || "",
+              address: hotelRequest.address || "",
+              starRating: parseInt(hotelRequest.starRating || 0),
+              roomCategory: hotelRequest.rooms?.[0]?.roomCategory || "",
+              roomType: hotelRequest.rooms?.[0]?.mealPlan || "",
+              available: hotelRequest.roomStatus === "Available" ? true : "False",
+              checkIn: checkInDate,
+              checkOut: checkOutDate,
+              checkInDate: checkInDate,
+              checkOutDate: checkOutDate,
+              nativeContryId: quotationData.nativeCountry || null,
+              nationality: hotelRequest.primaryGuest?.nativeCountry || "",
+              refundstatus: hotelRequest.rooms?.[0]?.nonRefundable ? "N" : "Y",
+              nonRefundable: hotelRequest.rooms?.[0]?.nonRefundable || false,
+              cancellationPolicy: hotelRequest.cancellationPolicy || [],
+              searchRoomDTOs: hotelRequest.rooms?.map((room, idx) => ({
+                roomCount: 1,
+                adult: String(room.adults || 1),
+                child: String(room.children || 0),
+                childAge: room.childAges || [],
+                adults: room.adults || 1,
+                children: room.children || 0,
+              })) || [],
+              totalRate: totalRate,
+              totalRateWithoutmrk: totalRateWithoutmrk,
+              currency: hotelRequest.rooms?.[0]?.currency || "AED",
+            };
+
+            newCartData.push({ hotel, activity: null, cab: null });
+          });
+        }
+
+        // Add activities
+        if (quotationData.quoteActivityDTOList && Array.isArray(quotationData.quoteActivityDTOList)) {
+          quotationData.quoteActivityDTOList.forEach((activityDTO) => {
+            const activity = {
+              activityId: String(activityDTO.activityId || ""),
+              activityName: activityDTO.activityName || `Activity ${activityDTO.activityId || ""}`,
+              activityDate: formatDateFromAPI(activityDTO.tourDate),
+              adult: activityDTO.nOfAdult || activityDTO.noOfAdult || 1,
+              noOfAdult: activityDTO.nOfAdult || activityDTO.noOfAdult || 1,
+              child: activityDTO.noOfChild || 0,
+              noOfChild: activityDTO.noOfChild || 0,
+              childAge: activityDTO.childAge ? (Array.isArray(activityDTO.childAge) ? activityDTO.childAge : [activityDTO.childAge]) : [],
+              totalRate: parseFloat(activityDTO.sellingPrice || 0),
+              totalRateWithoutmrk: parseFloat(activityDTO.totalPrice || 0),
+              currency: quotationData.currencyCode || "AED",
+            };
+
+            newCartData.push({ hotel: null, activity, cab: null });
+          });
+        }
+
+        // Add transfers
+        if (quotationData.quoteCabDTOList && Array.isArray(quotationData.quoteCabDTOList)) {
+          quotationData.quoteCabDTOList.forEach((cabDTO) => {
+            const cab = {
+              cabId: String(cabDTO.cabId || ""),
+              cabName: cabDTO.cabName || cabDTO.location || `Transfer ${cabDTO.cabId || ""}`,
+              pickupDate: formatDateFromAPI(cabDTO.pickupDate),
+              dropoffDate: formatDateFromAPI(cabDTO.dropOffDate),
+              dropDate: formatDateFromAPI(cabDTO.dropOffDate),
+              adult: cabDTO.noOfAdult || 1,
+              noOfAdult: cabDTO.noOfAdult || 1,
+              child: cabDTO.noOfChild || 0,
+              noOfChild: cabDTO.noOfChild || 0,
+              childAge: cabDTO.childAge ? (typeof cabDTO.childAge === 'string' && cabDTO.childAge.trim() !== "" ? cabDTO.childAge.split(',').map(Number) : (Array.isArray(cabDTO.childAge) ? cabDTO.childAge : [cabDTO.childAge])) : [],
+              travelType: String(cabDTO.travelType || "1"),
+              hourDetails: String(cabDTO.hourDetails || "0"),
+              timeDetails: String(cabDTO.hourDetails || "0"),
+              dropDetails: String(cabDTO.dropDetails || "1"),
+              paxDetails: String(cabDTO.paxDetails || "1"),
+              locationId: String(cabDTO.locationId || "0"),
+              luggage: cabDTO.luggage === true || cabDTO.luggage === "true",
+              noOfCabs: cabDTO.noOfCabs || 1,
+              totalRate: parseFloat(cabDTO.sellingPrice || 0),
+              totalRateWithoutmrk: parseFloat(cabDTO.totalPrice || 0),
+            };
+
+            newCartData.push({ hotel: null, activity: null, cab });
+          });
+        }
+
+        console.log("Mapped Cart Data:", newCartData);
+        setCartData(newCartData);
+        calculatePrices(newCartData);
+
+        // Initialize room guests from hotel booking requests
+        if (quotationData.quoteHotelDTOList && Array.isArray(quotationData.quoteHotelDTOList)) {
+          const guests = {};
+          
+          quotationData.quoteHotelDTOList.forEach((hotelRequest, hotelIndex) => {
+            // Find the hotel in newCartData - use hotelIndex to match the order
+            let hotelIndexInCart = -1;
+            let hotelCount = 0;
+            for (let i = 0; i < newCartData.length; i++) {
+              if (newCartData[i].hotel) {
+                if (hotelCount === hotelIndex) {
+                  hotelIndexInCart = i;
+                  break;
+                }
+                hotelCount++;
+              }
+            }
+
+            if (hotelIndexInCart >= 0 && hotelRequest.rooms && Array.isArray(hotelRequest.rooms)) {
+              hotelRequest.rooms.forEach((room, roomIndex) => {
+                const guestKey = `${hotelIndexInCart}-${roomIndex}`;
+                // Map guests from room.guests array
+                if (room.guests && Array.isArray(room.guests)) {
+                  guests[guestKey] = room.guests.map((guest, guestIdx) => ({
+                    salutation: guest.salutation || "",
+                    firstName: guest.firstName || "",
+                    middleName: guest.middleName || "",
+                    lastName: guest.lastName || "",
+                    gender: guest.gender || "",
+                    isChild: guest.isChild || false,
+                    age: guest.isChild ? (room.childAges?.[guestIdx] || "") : "",
+                  }));
+                } else {
+                  // If no guests array, create empty guests based on adults and children
+                  const adults = room.adults || 1;
+                  const children = room.children || 0;
+                  const totalGuests = adults + children;
+                  guests[guestKey] = Array.from({ length: totalGuests }, (_, guestIndex) => ({
+                    salutation: "",
+                    firstName: "",
+                    middleName: "",
+                    lastName: "",
+                    gender: "",
+                    isChild: guestIndex >= adults,
+                    age: guestIndex >= adults ? (room.childAges?.[guestIndex - adults] || "") : "",
+                  }));
+                }
+              });
+            }
+          });
+          setRoomGuests(guests);
+        }
+
+        // Initialize transfer details from cab DTOs
+        if (quotationData.quoteCabDTOList && Array.isArray(quotationData.quoteCabDTOList)) {
+          const details = {};
+          let transferIndex = 0;
+          
+          quotationData.quoteCabDTOList.forEach((cabDTO) => {
+            // Find the transfer in newCartData
+            const cartTransferIndex = newCartData.findIndex(item => item.cab && item.cab.cabId === String(cabDTO.cabId));
+            if (cartTransferIndex >= 0) {
+              transferIndex = cartTransferIndex;
+            }
+
+            details[transferIndex] = {
+              transporterName: cabDTO.transporterName || "",
+              contactNumber: cabDTO.contactNumber || "",
+              driverName: cabDTO.driverName || "",
+              driverContact: cabDTO.driverContact || "",
+            };
+          });
+          setTransferDetails(details);
+        }
+
+        // Initialize hotel-specific fields from hotel booking requests
+        if (quotationData.quoteHotelDTOList && Array.isArray(quotationData.quoteHotelDTOList)) {
+          const tourismDirhams = {};
+          const remarks = {};
+          const specialRequests = {};
+          const bookingConfirmations = {};
+          const hotelGuests = {};
+
+          quotationData.quoteHotelDTOList.forEach((hotelRequest, hotelIndex) => {
+            tourismDirhams[hotelIndex] = String(hotelRequest.tourismDirhams || "0");
+            remarks[hotelIndex] = hotelRequest.remarks || "";
+            specialRequests[hotelIndex] = hotelRequest.specialRequests || "";
+            bookingConfirmations[hotelIndex] = hotelRequest.bookingConfirmation || "Book & Voucher";
+            
+            // Store primary guest data for each hotel
+            if (hotelRequest.primaryGuest) {
+              hotelGuests[hotelIndex] = {
+                salutation: hotelRequest.primaryGuest.salutation || "",
+                firstName: hotelRequest.primaryGuest.firstName || "",
+                middleName: hotelRequest.primaryGuest.middleName || "",
+                lastName: hotelRequest.primaryGuest.lastName || "",
+                email: hotelRequest.primaryGuest.email || "",
+                phone: hotelRequest.primaryGuest.phone || "",
+                passportNo: hotelRequest.primaryGuest.passportNo || "",
+                agentLpo: hotelRequest.primaryGuest.agentLpo || "",
+                nativeCountry: hotelRequest.primaryGuest.nativeCountry || "",
+              };
+            }
+          });
+
+          setHotelTourismDirhams(tourismDirhams);
+          setHotelRemarks(remarks);
+          setHotelSpecialRequests(specialRequests);
+          setHotelBookingConfirmation(bookingConfirmations);
+          setHotelPrimaryGuests(hotelGuests);
+        }
+
+        // Set primary guest from first hotel's primary guest (for the form display)
+        // Note: Each hotel has its own primary guest, but we use the first one for the form
+        if (quotationData.quoteHotelDTOList && quotationData.quoteHotelDTOList.length > 0) {
+          const firstHotelGuest = quotationData.quoteHotelDTOList[0].primaryGuest;
+          if (firstHotelGuest) {
+            setPrimaryGuest({
+              salutation: firstHotelGuest.salutation || firstHotelGuest.salutaion || "Mr",
+              firstName: firstHotelGuest.firstName || "",
+              middleName: firstHotelGuest.middleName || "",
+              lastName: firstHotelGuest.lastName || "",
+              contactNumber: firstHotelGuest.phone || "",
+              emailId: firstHotelGuest.email || "",
+              passportNumber: firstHotelGuest.passportNo || "",
+              lpo: firstHotelGuest.agentLpo || firstHotelGuest.agentlpo || "",
+            });
+          }
+        }
+
+        // Set selected itineraries
+        if (quotationData.quoteItineraryDTOList && Array.isArray(quotationData.quoteItineraryDTOList)) {
+          const day1Itineraries = [];
+          const day2Itineraries = [];
+
+          quotationData.quoteItineraryDTOList.forEach((itineraryGroup) => {
+            if (itineraryGroup.days === 1 && itineraryGroup.itineraryList) {
+              itineraryGroup.itineraryList.forEach((itinerary) => {
+                if (itinerary.itinearyId) {
+                  day1Itineraries.push(itinerary.itinearyId);
+                }
+              });
+            } else if (itineraryGroup.days === 2 && itineraryGroup.itineraryList) {
+              itineraryGroup.itineraryList.forEach((itinerary) => {
+                if (itinerary.itinearyId) {
+                  day2Itineraries.push(itinerary.itinearyId);
+                }
+              });
+            }
+          });
+
+          setSelectedItineraries({
+            day1: day1Itineraries,
+            day2: day2Itineraries,
+          });
+        }
+
       } catch (err) {
-        console.error("Error loading cart data:", err);
-        toast.error("Failed to load cart data.");
-        navigate("/new-booking/make-your-own-package");
+        console.error("Error loading quotation data:", err);
+        toast.error(err.response?.data?.message || "Failed to load quotation data.");
+        navigate("/booking-details/quotation-booking-list");
       } finally {
         setLoading(false);
       }
     };
 
-    loadCartData();
+    loadQuotationData();
   }, [navigate]);
 
   // Handle guest detail change
@@ -602,177 +931,54 @@ const GenerateQuotationBooking = () => {
     setShowOrderSummaryModal(true);
   };
 
-  // Format date to Date object for backend
-  const formatDateToDateObject = (dateString) => {
-    if (!dateString) return null;
-    try {
-      let date;
-      if (dateString.includes("/")) {
-        const [day, month, year] = dateString.split("/");
-        date = new Date(year, month - 1, day);
-      } else if (dateString.includes("-")) {
-        // Handle DD-MM-YYYY format
-        const [day, month, year] = dateString.split("-");
-        date = new Date(year, month - 1, day);
-      } else {
-        date = new Date(dateString);
-      }
-      if (isNaN(date.getTime())) return null;
-      return date;
-    } catch {
-      return null;
-    }
-  };
-
-  // Confirm and submit quotation
-  const confirmQuotation = async () => {
+  // Confirm and submit booking
+  const confirmBooking = async () => {
     setIsSubmitting(true);
     try {
       const hotels = getHotels();
       const activities = getActivities();
       const transfers = getTransfers();
       
-      // Prepare quotation payload
+      // Find hotel index in cartData
+      const hotelIndexInCart = hotels.length > 0 
+        ? cartData.findIndex((item) => item.hotel)
+        : -1;
+
+      // Prepare booking payload
       const firstHotel = hotels.length > 0 ? hotels[0].hotel : null;
       const checkIn = firstHotel?.checkIn || firstHotel?.checkInDate || "";
       const checkOut = firstHotel?.checkOut || firstHotel?.checkOutDate || "";
       const nights = calculateNights(checkIn, checkOut);
+
+      console.log("firstHotel:", firstHotel);
+ 
       
-      // Get first activity date for tourDate
+      // Get travel date from sessionStorage (selected in search page)
+      // Priority: sessionStorage travelDate > first activity date > hotel checkIn date
+      const storedTravelDate = sessionStorage.getItem("makePkgTravelDate");
       const firstActivity = activities.length > 0 ? activities[0].activity : null;
-      const tourDateObj = firstActivity?.activityDate 
-        ? formatDateToDateObject(firstActivity.activityDate) 
-        : (checkIn ? formatDateToDateObject(checkIn) : new Date());
-
-      // Get currency information
-      const currencyCode = firstHotel?.currency || firstActivity?.currency || "AED";
-      const currencyId = firstHotel?.currencyId || firstActivity?.currencyId || 1; // Default to 1 if not available
       
-      // Calculate markup (sellingPrice - totalPrice)
-      const markup = sellingPrice - totalPrice;
-      const markupType = 1; // 1 for percentage, 2 for value - default to 1
-      const markupTypeName = markupType === 1 ? "Percent" : "Value";
-
-      // Get agent and employee info
-      const agentId = parseInt(sessionStorage.getItem("makePkgAgentId") || "0");
-      const employeeId = firstHotel?.employeeId || "1";
-      const agent = localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
-      const employee = ""; // Will be populated from backend if needed
-      const employeeMail = ""; // Will be populated from backend if needed
-
-      // Group itineraries by days
-      const quoteItineraryDTOList = [];
-      
-      // Day 1 itineraries
-      if (selectedItineraries.day1.length > 0) {
-        const day1Itineraries = selectedItineraries.day1.map((itineraryId) => {
-          const itinerary = itineraryList.find(item => item.itineraryId === itineraryId);
-          return {
-            itinearyId: parseInt(itineraryId) || 0,
-            heading: itinerary?.itineraryHeading || "",
-            description: itinerary?.itineraryDesc || "",
-            imagePath: itinerary?.itineraryImg || ""
-          };
-        });
-        quoteItineraryDTOList.push({
-          days: 1,
-          itineraryList: day1Itineraries
-        });
+      let tourDate = "";
+      if (storedTravelDate) {
+        // Use the travel date from sessionStorage (selected in search page)
+        tourDate = formatDateToDDMMYYYY(storedTravelDate);
+      } else if (firstActivity?.activityDate) {
+        // Fallback to first activity date
+        tourDate = formatDateToDDMMYYYY(firstActivity.activityDate);
+      } else if (checkIn) {
+        // Fallback to hotel checkIn date
+        tourDate = formatDateToDDMMYYYY(checkIn);
       }
 
-      // Day 2 itineraries
-      if (selectedItineraries.day2.length > 0) {
-        const day2Itineraries = selectedItineraries.day2.map((itineraryId) => {
-          const itinerary = itineraryList.find(item => item.itineraryId === itineraryId);
-          return {
-            itinearyId: parseInt(itineraryId) || 0,
-            heading: itinerary?.itineraryHeading || "",
-            description: itinerary?.itineraryDesc || "",
-            imagePath: itinerary?.itineraryImg || ""
-          };
-        });
-        quoteItineraryDTOList.push({
-          days: 2,
-          itineraryList: day2Itineraries
-        });
-      }
-
-      // Map activities to QuoteActivityDTO
-      const quoteActivityDTOList = activities.map((item) => {
-        const activity = item.activity || {};
-        const activitySellingPrice = parseFloat(activity.totalRate || 0);
-        const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
-        const childAge = activity.childAge 
-          ? (Array.isArray(activity.childAge) ? activity.childAge[0] : activity.childAge)
-          : null;
-
-        return {
-          activityId: parseInt(activity.activityId || "0") || 0,
-          tourDate: formatDateToDateObject(activity.activityDate || ""),
-          nOfAdult: parseInt(activity.adult || activity.noOfAdult || "1") || 1,
-          noOfChild: parseInt(activity.child || activity.noOfChild || "0") || 0,
-          childAge: childAge ? parseInt(childAge) : null,
-          sellingPrice: activitySellingPrice,
-          totalPrice: activityTotalPrice
-        };
-      });
-
-      // Map transfers to QuoteCabDTO
-      const quoteCabDTOList = transfers.map((item, transferArrayIndex) => {
-        let transferIndexInCart = -1;
-        let cabCount = 0;
-        for (let i = 0; i < cartData.length; i++) {
-          if (cartData[i].cab) {
-            if (cabCount === transferArrayIndex) {
-              transferIndexInCart = i;
-              break;
-            }
-            cabCount++;
-          }
-        }
-        const actualIndex = transferIndexInCart >= 0 ? transferIndexInCart : 0;
-        const cab = item.cab || {};
-        const cabTotalRate = parseFloat(cab.totalRate || 0);
-        const cabTotalRateWithoutMrk = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
-        
-        // Handle childAge - could be array or single value
-        let childAgeStr = "";
-        if (cab.childAge) {
-          if (Array.isArray(cab.childAge)) {
-            childAgeStr = cab.childAge.join(",");
-          } else {
-            childAgeStr = String(cab.childAge);
-          }
-        }
-
-        return {
-          quoteCabId: null,
-          quoteId: null,
-          cabId: parseInt(cab.cabId || "0") || 0,
-          noOfCabs: parseInt(cab.noOfCabs || "1") || 1,
-          travelType: parseInt(cab.travelType || "1") || 1,
-          hourDetails: parseInt(cab.hourDetails || cab.timeDetails || "0") || 0,
-          locationId: parseInt(cab.locationId || "0") || 0,
-          dropDetails: parseInt(cab.dropDetails || "1") || 1,
-          paxDetails: parseInt(cab.paxDetails || "1") || 1,
-          pickupDate: formatDateToDateObject(cab.pickupDate || ""),
-          dropOffDate: formatDateToDateObject(cab.dropDate || cab.dropOffDate || ""),
-          sellingPrice: cabTotalRate,
-          totalPrice: cabTotalRateWithoutMrk,
-          luggage: cab.luggage === true || cab.luggage === "true" || String(cab.luggage).toLowerCase() === "true",
-          cabName: cab.cabName || cab.vehicleName || "",
-          noOfAdult: parseInt(cab.adult || cab.noOfAdult || "1") || 1,
-          noOfChild: parseInt(cab.child || cab.noOfChild || "0") || 0,
-          childAge: childAgeStr,
-          paxDetailsTerm: cab.paxDetailsTerm || "",
-          dropDetailsTerm: cab.dropDetailsTerm || "",
-          location: cab.location || cab.pickupLocation || ""
-        };
-      });
+      // Get quoteId if booking is from converted quotation
+      const quoteId = sessionStorage.getItem("makePkgQuoteId");
 
       // Build hotel booking requests for all hotels
-      const quoteHotelDTOList = hotels.map((item, hotelIndex) => {
+      const hotelBookingRequests = hotels.map((item, hotelIndex) => {
         const hotel = item.hotel || {};
+        const checkIn = hotel.checkIn || hotel.checkInDate || "";
+        const checkOut = hotel.checkOut || hotel.checkOutDate || "";
+        const nights = calculateNights(checkIn, checkOut);
         
         // Find hotel index in cartData to use for per-hotel state and room guests
         let hotelIndexInCart = -1;
@@ -789,9 +995,8 @@ const GenerateQuotationBooking = () => {
         // Fallback to hotelIndex if not found in cartData
         const actualHotelIndexInCart = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
         
-        const checkIn = hotel.checkIn || hotel.checkInDate || "";
-        const checkOut = hotel.checkOut || hotel.checkOutDate || "";
-        const nights = calculateNights(checkIn, checkOut);
+        // Get hotel-specific primary guest data
+        const hotelPrimaryGuest = hotelPrimaryGuests[hotelIndex] || {};
         
         return {
           agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
@@ -804,7 +1009,9 @@ const GenerateQuotationBooking = () => {
           checkOutDate: formatDateToYYYYMMDD(checkOut),
           nights: nights,
           employeeId: "1",        
-          roomStatus: hotel.available === false || hotel.available === "False" ? "On Request" : "Available",
+          roomStatus: (hotel.available === false || 
+                      hotel.available === "False" || 
+                      hotel.available === "false") ? "On Request" : "Available",
           cancellationPolicy: (() => {
             const policies = hotel.cancellationPolicy || [];
             if (Array.isArray(policies) && policies.length > 0) {
@@ -818,8 +1025,9 @@ const GenerateQuotationBooking = () => {
           // Calculate deadlineDate based on nonRefundable and cancellationPolicy
           deadlineDate: (() => {
             const nonRefundable = hotel.refundstatus === "N" || 
-                                  hotel.nonRefundable === true || 
-                                  hotel.nonRefundable === "true";
+                                 hotel.nonRefundable === true || 
+                                 hotel.nonRefundable === "true";
+            
             if (nonRefundable === true || nonRefundable === "true") {
               // Non-refundable: 2 days before current date
               const today = new Date();
@@ -862,36 +1070,36 @@ const GenerateQuotationBooking = () => {
               return `${year}-${month}-${day}T00:00:00`;
             }
           })(),
-          isBookandVoucher: (() => {
-            const confirmation = hotelBookingConfirmation[hotelIndex] || "Book & Voucher";
-            return confirmation === "Book & Voucher";
-          })(),
+          isBookandVoucher: (hotelBookingConfirmation[hotelIndex] || "Book & Voucher") === "Book & Voucher",
           primaryGuest: {
-            firstName: primaryGuest.firstName || "",
-            middleName: primaryGuest.middleName || "",
-            lastName: primaryGuest.lastName || "",
-            nativeCountry: hotel.nationality || "",
-            email: primaryGuest.emailId || "",
-            phone: primaryGuest.contactNumber || "",
-            passportNo: primaryGuest.passportNumber || "",
-            salutaion: primaryGuest.salutation || "",
-            agentlpo: primaryGuest.lpo || "",
+            firstName: hotelPrimaryGuest.firstName || primaryGuest.firstName || "",
+            middleName: hotelPrimaryGuest.middleName || primaryGuest.middleName || "",
+            lastName: hotelPrimaryGuest.lastName || primaryGuest.lastName || "",
+            nativeCountry: hotelPrimaryGuest.nativeCountry || hotel.nationality || "",
+            email: hotelPrimaryGuest.email || primaryGuest.emailId || "",
+            phone: hotelPrimaryGuest.phone || primaryGuest.contactNumber || "",
+            passportNo: hotelPrimaryGuest.passportNo || primaryGuest.passportNumber || "",
+            salutaion: hotelPrimaryGuest.salutation || primaryGuest.salutation || "",
+            agentlpo: hotelPrimaryGuest.agentLpo || primaryGuest.lpo || "",
           },
           rooms: hotel?.searchRoomDTOs?.map((room, idx) => {
             const guestKey = `${actualHotelIndexInCart}-${idx}`;
             const guests = roomGuests[guestKey] || [];
             
-            // Get room rate from hotel data
+            // Calculate room rate - divide total hotel rate by number of rooms
+            const totalRooms = hotel.searchRoomDTOs?.length || 1;
             // Selling Price = totalRate (with markup)
-            const roomRate = parseFloat(hotel.totalRate || 0);
+            const hotelTotalRate = parseFloat(hotel.totalRate || 0);
+            const roomRate = totalRooms > 0 ? hotelTotalRate / totalRooms : hotelTotalRate;
             // Total Price = totalRateWithoutmrk (without markup)
-            const roomRateWithoutMarkup = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
+            const hotelTotalRateWithoutMarkup = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
+            const roomRateWithoutMarkup = totalRooms > 0 ? hotelTotalRateWithoutMarkup / totalRooms : hotelTotalRateWithoutMarkup;
             
             return {
               roomNo: idx + 1,
               roomCategory: hotel.roomCategory || "",
               mealPlan: hotel.roomType || "",
-              nonRefundable: hotel.nonRefundable === true || hotel.nonRefundable === "true" || hotel.refundstatus === "N",
+              nonRefundable: hotel.refundstatus === "N" || hotel.nonRefundable === true || hotel.nonRefundable === "true",
               currency: hotel.currency || "AED",
               rate: roomRate,
               rateWithoutMarkup: roomRateWithoutMarkup,
@@ -917,103 +1125,11 @@ const GenerateQuotationBooking = () => {
         };
       });
 
-      const quotationPayload = {
-        quoteId: null,
-        bookingDate: new Date(),
-        quoteCode: null,
-        tourDate: tourDateObj,
-        currencyId: currencyId,
-        markUp: Math.round(markup * 100) / 100, // Round to 2 decimal places
-        noOfNights: nights,
-        nativeCountry: firstHotel.nativeContryId ? parseInt(firstHotel.nativeContryId) : null,
-        markUpType: markupType,
-        markUpTypeName: markupTypeName,
-        agent: agent,
-        employee: employee,
-        employeeMail: employeeMail,
-        agentId: agentId,
-        employeeId: parseInt(employeeId) || 1,
-        sellingPrice: Math.round(sellingPrice * 100) / 100,
-        currencyCode: currencyCode,
-        totalPrice: Math.round(totalPrice * 100) / 100,
-        visaStatus: visaRequired,
-        visaAdult: parseInt(visaDetails.visaAdult || "0") || 0,
-        visaAdultRate: visaDetails.visaAdultRate || "0",
-        visaChild: parseInt(visaDetails.visaChild || "0") || 0,
-        visaChildRate: visaDetails.visaChildRate || "0",
-        visaInfant: parseInt(visaDetails.visaInfant || "0") || 0,
-        visaInfantRate: visaDetails.visaInfantRate || "0",
-        quoteCabDTOList: quoteCabDTOList,
-        quoteItineraryDTOList: quoteItineraryDTOList,
-        customPackageListItineraryDTOList: quoteItineraryDTOList, // Same as quoteItineraryDTOList
-        quoteActivityDTOList: quoteActivityDTOList,
-        quoteHotelDTOList: quoteHotelDTOList
-      };
-
-      console.log("Quotation payload:", quotationPayload);
-
-      const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/saveQuotations",
-        quotationPayload
-      );
-
-      // Check quotation response structure
-      if (response.data && response.data != null) {
-        setShowOrderSummaryModal(false);
-        toast.success("Quotation saved successfully!");
-        navigate("/booking-details/quotation-booking-list");
-      } else {
-        toast.error("Failed to save quotation.");
-      }
-    } catch (err) {
-      console.error("Error saving quotation:", err);
-      toast.error(err.response?.data?.message || "Failed to save quotation. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Confirm and submit booking
-  const confirmBooking = async () => {
-    setIsSubmitting(true);
-    try {
-      const hotels = getHotels();
-      const activities = getActivities();
-      const transfers = getTransfers();
-      
-      // Find hotel index in cartData
-      const hotelIndexInCart = hotels.length > 0 
-        ? cartData.findIndex((item) => item.hotel)
-        : -1;
-
-      // Prepare booking payload
-      const firstHotel = hotels.length > 0 ? hotels[0].hotel : null;
-      const checkIn = firstHotel?.checkIn || firstHotel?.checkInDate || "";
-      const checkOut = firstHotel?.checkOut || firstHotel?.checkOutDate || "";
-      const nights = calculateNights(checkIn, checkOut);
-      
-      // Get first activity date for tourDate
-      const firstActivity = activities.length > 0 ? activities[0].activity : null;
-      const tourDate = firstActivity?.activityDate 
-        ? formatDateToDDMMYYYY(firstActivity.activityDate) 
-        : (activities.length > 0 ? formatDateToDDMMYYYY(checkIn) : "");
-
       const bookingPayload = {
         customPackageId: "",
+        quoteId: quoteId ? parseInt(quoteId) : null, // Include quoteId if booking is from quotation
         sellingPrice: String(sellingPrice.toFixed(2)),
         totalPrice: String(totalPrice.toFixed(2)),
-        // customerDTO: {
-        //   customerId: "",
-        //   firstName: primaryGuest.firstName || "",
-        //   middleName: primaryGuest.middleName || "",
-        //   lastName: primaryGuest.lastName || "",
-        //   nativeCountry: primaryGuest.nativeCountry || "",
-        //   emailId: primaryGuest.emailId || "",
-        //   mobileNumber: primaryGuest.contactNumber || "",
-        //   passportNo: primaryGuest.passportNumber || "",
-        //   salutaion: primaryGuest.salutation || "",
-        //   agentlpo: primaryGuest.lpo || "",
-        // },
         tourDate: tourDate,
         visaStatus: visaRequired,
         visaAdult: parseInt(visaDetails.visaAdult || "0") || 0,
@@ -1022,127 +1138,7 @@ const GenerateQuotationBooking = () => {
         visaChildRate: parseFloat(visaDetails.visaChildRate || "0") || 0,
         visaInfant: parseInt(visaDetails.visaInfant || "0") || 0,
         visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
-        hotelBookingRequest: hotels.length > 0 && firstHotel ? {
-          agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
-          apiId: String("INHOUSE"),   //String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
-          hotelId: String(firstHotel.hotelId || ""),
-          hotelName: firstHotel.hotelName || "",
-          address: firstHotel.hotelAddress || firstHotel.address || "",
-          starRating: parseInt(firstHotel.starRating || 0),
-          checkInDate: formatDateToYYYYMMDD(checkIn),
-          checkOutDate: formatDateToYYYYMMDD(checkOut),
-          nights: nights,
-          employeeId: "1",        
-          roomStatus: firstHotel.available === false ? "On Request" : "Available",
-          cancellationPolicy: (() => {
-            const policies = firstHotel.cancellationPolicy || [];
-            if (Array.isArray(policies) && policies.length > 0) {
-              // If policies are objects, extract policyText; otherwise use as-is
-              return policies.map((p) => 
-                typeof p === 'string' ? p : (p.policyText || p.text || JSON.stringify(p))
-              );
-            }
-            return [];
-          })(),
-          // Calculate deadlineDate based on nonRefundable and cancellationPolicy
-          deadlineDate: (() => {
-            const nonRefundable = firstHotel.refundstatus === "N";
-            console.log("nonRefundable:", nonRefundable);
-            if (nonRefundable === "false" || nonRefundable === false) {
-              // 2 days before current date
-              const today = new Date();
-              const deadline = new Date(today);
-              deadline.setDate(today.getDate() - 2);
-              deadline.setHours(0, 0, 0, 0); // Set to midnight
-              const year = deadline.getFullYear();
-              const month = String(deadline.getMonth() + 1).padStart(2, "0");
-              const day = String(deadline.getDate()).padStart(2, "0");
-              return `${year}-${month}-${day}T00:00:00`;
-            } else {
-              // 2 days before earliest fromDate from cancellationPolicy
-              const policies = firstHotel.cancellationPolicy || [];
-              if (policies.length === 0) {
-                return null;
-              }
-              
-              // Find earliest fromDate
-              const dates = policies
-                .map(p => {
-                  // Handle both object and string formats
-                  if (typeof p === 'object' && p.fromDate) {
-                    return new Date(p.fromDate);
-                  }
-                  return null;
-                })
-                .filter(date => date !== null && !isNaN(date.getTime()));
-              
-              if (dates.length === 0) {
-                return null;
-              }
-              
-              const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
-              const deadline = new Date(earliestDate);
-              deadline.setDate(earliestDate.getDate() - 2);
-              deadline.setHours(0, 0, 0, 0); // Set to midnight
-              const year = deadline.getFullYear();
-              const month = String(deadline.getMonth() + 1).padStart(2, "0");
-              const day = String(deadline.getDate()).padStart(2, "0");
-              return `${year}-${month}-${day}T00:00:00`;
-            }
-          })(),
-          isBookandVoucher: (() => {
-            const confirmation = hotelBookingConfirmation[0] || "Book & Voucher";
-            return confirmation === "Book & Voucher";
-          })(),
-          primaryGuest: {
-            firstName: primaryGuest.firstName || "",
-            middleName: primaryGuest.middleName || "",
-            lastName: primaryGuest.lastName || "",
-            nativeCountry: firstHotel.nationality || "",
-            email: primaryGuest.emailId || "",
-            phone: primaryGuest.contactNumber || "",
-            passportNo: primaryGuest.passportNumber || "",
-            salutaion: primaryGuest.salutation || "",
-            agentlpo: primaryGuest.lpo || "",
-          },
-          rooms: firstHotel?.searchRoomDTOs?.map((room, idx) => {
-            const guestKey = `${hotelIndexInCart}-${idx}`;
-            const guests = roomGuests[guestKey] || [];
-            
-            // Get room rate from hotel data
-            // Selling Price = totalRate (with markup)
-            const roomRate = parseFloat(firstHotel.totalRate || 0);
-            // Total Price = totalRateWithoutmrk (without markup)
-            const roomRateWithoutMarkup = parseFloat(firstHotel.totalRateWithoutmrk || firstHotel.totalRate || 0);
-            
-            return {
-              roomNo: idx + 1,
-              roomCategory: firstHotel.roomCategory || "",
-              mealPlan: firstHotel.roomType || "",
-              nonRefundable: firstHotel.nonRefundable === true || firstHotel.nonRefundable === "true" || firstHotel.refundstatus === "N",
-              currency: firstHotel.currency || "AED",
-              rate: roomRate,
-              rateWithoutMarkup: roomRateWithoutMarkup,
-              adults: parseInt(room.adult || room.adults || 1),
-              children: parseInt(room.child || room.children || 0),
-              childAges: Array.isArray(room.childAge) 
-                ? room.childAge.map(age => parseInt(age) || 0)
-                : (room.childAge ? [parseInt(room.childAge) || 0] : []),
-              guests: guests.map((guest) => ({
-                salutation: guest.salutation || "",
-                firstName: guest.firstName || "",
-                middleName: guest.middleName || "",
-                lastName: guest.lastName || "",
-                gender: guest.gender || "",
-                isChild: guest.isChild || false,
-              })),
-            };
-          }) || [],
-          remarks: hotelRemarks[0] || "",
-          specialRequests: hotelSpecialRequests[0] || "",
-          tourismDirhams: parseFloat(hotelTourismDirhams[0] || "0") || 0,
-          bookingConfirmation: hotelBookingConfirmation[0] || "Book & Voucher",
-        } : null,
+        hotelBookingRequest: hotelBookingRequests.length > 0 ? hotelBookingRequests[0] : null,
         customBookingActivityDTO: activities.map((item) => {
           const activity = item.activity || {};
           const details = activity.details || {};
@@ -1238,6 +1234,10 @@ const GenerateQuotationBooking = () => {
         response.data.bookingId != 0 &&
         response.data.message === "Booking completed successfully"
       ) {
+        // Clear quoteId from sessionStorage after successful booking
+        if (quoteId) {
+          sessionStorage.removeItem("makePkgQuoteId");
+        }
         setShowOrderSummaryModal(false);
         toast.success(response.data.message || "Booking submitted successfully!");
         navigate("/booking-details/custom-booking-list");
@@ -1309,7 +1309,7 @@ const GenerateQuotationBooking = () => {
             <div className="booking-page-header mb-3">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <h2 className="mb-1">Confirm Quotation</h2>
+                  <h2 className="mb-1">Confirm Quotation Booking</h2>
                 </div>
                 <div className="d-flex align-items-center gap-4">
                   <div className="text-end">
@@ -1482,21 +1482,6 @@ const GenerateQuotationBooking = () => {
                           const hotelSellingPrice = parseFloat(hotel.totalRate || 0);
                           const pricePerNight = dateRange.length > 0 ? hotelTotalPrice / dateRange.length : hotelTotalPrice;
 
-                          // Find hotel index in cartData to use for per-hotel state
-                          let hotelIndexInCart = -1;
-                          let hotelCount = 0;
-                          for (let i = 0; i < cartData.length; i++) {
-                            if (cartData[i].hotel) {
-                              if (hotelCount === hotelIndex) {
-                                hotelIndexInCart = i;
-                                break;
-                              }
-                              hotelCount++;
-                            }
-                          }
-                          // Fallback to hotelIndex if not found in cartData
-                          const actualHotelIndex = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
-
                           return (
                             <Card key={hotelIndex} className="mb-3 hotel-item-card">
                               <Card.Header className="hotel-section-header">
@@ -1514,6 +1499,49 @@ const GenerateQuotationBooking = () => {
                                 <FaCalendarAlt className="text-primary me-2" />
                                 <strong>Checkin :</strong> {formatDate(checkIn)} <strong className="ms-3">Checkout :</strong> {formatDate(checkOut)}
                               </div>
+
+                              {/* Display Primary Guest Information for this hotel */}
+                              {/* {hotelPrimaryGuests[hotelIndex] && (
+                                <div className="mb-3 p-3 rounded" style={{ backgroundColor: "#f8f9fa", border: "1px solid #e9ecef" }}>
+                                  <div className="d-flex align-items-center mb-2">
+                                    <FaUsers className="me-2 text-primary" size={16} />
+                                    <h6 className="mb-0 fw-bold" style={{ fontSize: "0.9rem" }}>Primary Guest Information</h6>
+                                  </div>
+                                  <Row className="g-2">
+                                    <Col md={6}>
+                                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem" }}>Full Name</small>
+                                      <div style={{ fontSize: "0.875rem", fontWeight: "500" }}>
+                                        {hotelPrimaryGuests[hotelIndex].salutation && `${hotelPrimaryGuests[hotelIndex].salutation} `}
+                                        {hotelPrimaryGuests[hotelIndex].firstName} {hotelPrimaryGuests[hotelIndex].middleName} {hotelPrimaryGuests[hotelIndex].lastName}
+                                      </div>
+                                    </Col>
+                                    <Col md={6}>
+                                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem" }}>Email</small>
+                                      <div style={{ fontSize: "0.875rem" }}>{hotelPrimaryGuests[hotelIndex].email || "N/A"}</div>
+                                    </Col>
+                                    <Col md={6}>
+                                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem" }}>Contact Number</small>
+                                      <div style={{ fontSize: "0.875rem" }}>{hotelPrimaryGuests[hotelIndex].phone || "N/A"}</div>
+                                    </Col>
+                                    <Col md={6}>
+                                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem" }}>Passport Number</small>
+                                      <div style={{ fontSize: "0.875rem" }}>{hotelPrimaryGuests[hotelIndex].passportNo || "N/A"}</div>
+                                    </Col>
+                                    {hotelPrimaryGuests[hotelIndex].agentLpo && (
+                                      <Col md={6}>
+                                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem" }}>LPO Number</small>
+                                        <div style={{ fontSize: "0.875rem" }}>{hotelPrimaryGuests[hotelIndex].agentLpo}</div>
+                                      </Col>
+                                    )}
+                                    {hotelPrimaryGuests[hotelIndex].nativeCountry && (
+                                      <Col md={6}>
+                                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem" }}>Nationality</small>
+                                        <div style={{ fontSize: "0.875rem" }}>{hotelPrimaryGuests[hotelIndex].nativeCountry}</div>
+                                      </Col>
+                                    )}
+                                  </Row>
+                                </div>
+                              )} */}
 
                               {searchRoomDTOs.length > 0 && (
                                 <>
@@ -1580,8 +1608,22 @@ const GenerateQuotationBooking = () => {
                                     const children = parseInt(room.child || room.children || 0);
                                     const totalGuests = adults + children;
                                     
-                                    const guestKey = actualHotelIndex >= 0 ? `${actualHotelIndex}-${roomIndex}` : `${hotelIndex}-${roomIndex}`;
+                                    // Find hotel index in cartData to match validation
+                                    let hotelIndexInCart = -1;
+                                    let hotelCount = 0;
+                                    for (let i = 0; i < cartData.length; i++) {
+                                      if (cartData[i].hotel) {
+                                        if (hotelCount === hotelIndex) {
+                                          hotelIndexInCart = i;
+                                          break;
+                                        }
+                                        hotelCount++;
+                                      }
+                                    }
+                                    
+                                    const guestKey = hotelIndexInCart >= 0 ? `${hotelIndexInCart}-${roomIndex}` : `${hotelIndex}-${roomIndex}`;
                                     const guests = roomGuests[guestKey] || [];
+                                    const actualHotelIndex = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
 
                                     if (totalGuests === 0) return null;
 
@@ -2845,7 +2887,7 @@ const GenerateQuotationBooking = () => {
           </Button>
           <Button
             variant="primary"
-            onClick={confirmQuotation}
+            onClick={confirmBooking}
             disabled={isSubmitting}
             style={{ 
               minWidth: "160px",
@@ -2861,7 +2903,7 @@ const GenerateQuotationBooking = () => {
             ) : (
               <>
                 <FaCheckCircle className="me-2" />
-                Save Quotation
+                Confirm Booking
               </>
             )}
           </Button>
@@ -3046,4 +3088,4 @@ const GenerateQuotationBooking = () => {
   );
 };
 
-export default GenerateQuotationBooking;
+export default QuotationBookingPage;

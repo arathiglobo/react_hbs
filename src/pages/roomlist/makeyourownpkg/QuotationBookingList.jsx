@@ -198,21 +198,10 @@ const QuotationBookingList = () => {
 
   // Handle convert icon click - convert quotation to booking (same procedure as TopBar handleCartClick -> handleContinueBooking)
   const handleConvertClick = async (quotation) => {
+   
     try {
-      // Step 1: Convert quotation to cart format and save to Redis
-      // const convertResponse = await axiosInstance.post(
-      //   `/api/makeYourOwnPackage/convertQuotationToCart`,
-      //   {
-      //     quoteId: quotation.quoteId
-      //   }
-      // );
-
-      // if (!convertResponse.data) {
-      //   toast.error("Failed to convert quotation to cart");
-      //   return;
-      // }
-
-        console.log("quotation::" , quotation);
+      console.log("quotation::" , quotation);
+      
       // Step 2: Get agent ID (same as TopBar handleContinueBooking)
       const agentId =  getCartAgentId();
       console.log("agentId::" , agentId);
@@ -222,66 +211,15 @@ const QuotationBookingList = () => {
         return;
       }
 
-      // Step 3: Fetch latest cart data from Redis (same as TopBar handleContinueBooking)
-      const response = await axiosInstance.post(
-        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(agentId)}`
-      );
-
-      if (Array.isArray(response.data) && response.data.length > 0) {
-        // Step 4: Store cart data in sessionStorage for the booking page (same as TopBar)
-        sessionStorage.setItem("makePkgCartData", JSON.stringify(response.data));
-        sessionStorage.setItem("makePkgAgentId", agentId);
-        // Store quoteId for booking payload if converting from quotation
-        if (quotation.quoteId) {
+       if (quotation.quoteId) {
           sessionStorage.setItem("makePkgQuoteId", String(quotation.quoteId));
+          window.open("/make-your-own-package/confirm-quotation-bookingpage");
         }
-        
-        // Step 5: Navigate to booking page (same as TopBar handleContinueBooking)
-        window.open("/new-booking/make-your-own-package/booking-page");
-      } else {
-        toast.error("Your cart is empty. Please add items to cart first.");
-      }
+
+     
     } catch (error) {
       console.error("Error converting quotation:", error);
-      
-      // If convertQuotationToCart doesn't exist, try alternative approach
-      if (error.response?.status === 404 || error.response?.status === 400) {
-        // Alternative: Try to get quotation details and add to cart manually
-        try {
-          const response = await axiosInstance.get(
-            `/api/makeYourOwnPackage/getQuotationById?quoteId=${quotation.quoteId}`
-          );
-
-          if (response.data) {
-            const agentId = quotation.agentId || response.data.agentId || getCartAgentId();
-
-            if (!agentId) {
-              toast.error("Select an agent before proceeding to checkout.");
-              return;
-            }
-
-            // If quotation has cart items, use them directly
-            if (response.data.cartItems && Array.isArray(response.data.cartItems)) {
-              sessionStorage.setItem("makePkgCartData", JSON.stringify(response.data.cartItems));
-              sessionStorage.setItem("makePkgAgentId", agentId);
-              // Store quoteId for booking payload
-              if (quotation.quoteId) {
-                sessionStorage.setItem("makePkgQuoteId", String(quotation.quoteId));
-              }
-              window.open("/new-booking/make-your-own-package/booking-page");
-            } else {
-              toast.error("Quotation data format not supported for conversion");
-            }
-          } else {
-            toast.error("Failed to load quotation details");
-          }
-        } catch (altError) {
-          console.error("Alternative conversion error:", altError);
-          toast.error(altError.response?.data?.message || "Failed to convert quotation to booking");
-        }
-      } else {
-        toast.error(error.response?.data?.message || "Failed to convert quotation to booking. Please try again.");
-      }
+           
     }
   };
 

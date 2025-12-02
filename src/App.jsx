@@ -93,6 +93,7 @@ import Invoice from "./pages/Invoice";
 import MakePkgBookingPage from "./pages/roomlist/makeyourownpkg/MakePkgBookingPage";
 import GenerateQuotationBooking from "./pages/roomlist/makeyourownpkg/GenerateQuotationBooking";
 import QuotationBookingList from "./pages/roomlist/makeyourownpkg/QuotationBookingList";
+import QuotationBookingPage from "./pages/roomlist/makeyourownpkg/QuotationBookingPage";
 
 
 export default function App() {
@@ -193,6 +194,7 @@ export default function App() {
         <Route path="/booking-details/custom-booking-list" element={<PrivateRoute><CustomBookingList /> </PrivateRoute>}/>
         <Route path="/make-your-pkg-room-list" element={<PrivateRoute><AccomodationRoomList /> </PrivateRoute>}/>
         <Route path="/make-your-own-package/generate-quotation-booking" element={<PrivateRoute><GenerateQuotationBooking /> </PrivateRoute>}/>
+        <Route path="/make-your-own-package/confirm-quotation-bookingpage" element={<PrivateRoute><QuotationBookingPage /> </PrivateRoute>}/>
          <Route path="/booking-details/quotation-booking-list" element={<PrivateRoute><QuotationBookingList /> </PrivateRoute>}/>
        
         {/* Company Profile */}
