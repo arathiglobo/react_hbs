@@ -643,47 +643,44 @@ const MakePkgBookingPage = () => {
       // Get quoteId if booking is from converted quotation
       const quoteId = sessionStorage.getItem("makePkgQuoteId");
 
-      const bookingPayload = {
-        customPackageId: "",
-        quoteId: quoteId ? parseInt(quoteId) : null, // Include quoteId if booking is from quotation
-        sellingPrice: String(sellingPrice.toFixed(2)),
-        totalPrice: String(totalPrice.toFixed(2)),
-        // customerDTO: {
-        //   customerId: "",
-        //   firstName: primaryGuest.firstName || "",
-        //   middleName: primaryGuest.middleName || "",
-        //   lastName: primaryGuest.lastName || "",
-        //   nativeCountry: primaryGuest.nativeCountry || "",
-        //   emailId: primaryGuest.emailId || "",
-        //   mobileNumber: primaryGuest.contactNumber || "",
-        //   passportNo: primaryGuest.passportNumber || "",
-        //   salutaion: primaryGuest.salutation || "",
-        //   agentlpo: primaryGuest.lpo || "",
-        // },
-        tourDate: tourDate,
-        visaStatus: visaRequired,
-        visaAdult: parseInt(visaDetails.visaAdult || "0") || 0,
-        visaAdultRate: parseFloat(visaDetails.visaAdultRate || "0") || 0,
-        visaChild: parseInt(visaDetails.visaChild || "0") || 0,
-        visaChildRate: parseFloat(visaDetails.visaChildRate || "0") || 0,
-        visaInfant: parseInt(visaDetails.visaInfant || "0") || 0,
-        visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
-        hotelBookingRequest: hotels.length > 0 && firstHotel ? {
+      // Build hotel booking requests for all hotels
+      const hotelBookingRequests = hotels.map((item, hotelIndex) => {
+        const hotel = item.hotel || {};
+        const checkIn = hotel.checkIn || hotel.checkInDate || "";
+        const checkOut = hotel.checkOut || hotel.checkOutDate || "";
+        const nights = calculateNights(checkIn, checkOut);
+        
+        // Find hotel index in cartData to use for per-hotel state and room guests
+        let hotelIndexInCart = -1;
+        let hotelCount = 0;
+        for (let i = 0; i < cartData.length; i++) {
+          if (cartData[i].hotel) {
+            if (hotelCount === hotelIndex) {
+              hotelIndexInCart = i;
+              break;
+            }
+            hotelCount++;
+          }
+        }
+        // Fallback to hotelIndex if not found in cartData
+        const actualHotelIndexInCart = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
+        
+        return {
           agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
-          apiId:   String("INHOUSE"),   //String(firstHotel.api || firstHotel.apiId || "INHOUSE"),
-          hotelId: String(firstHotel.hotelId || ""),
-          hotelName: firstHotel.hotelName || "",
-          address: firstHotel.hotelAddress || firstHotel.address || "",
-          starRating: parseInt(firstHotel.starRating || 0),
+          apiId: String("INHOUSE"),
+          hotelId: String(hotel.hotelId || ""),
+          hotelName: hotel.hotelName || "",
+          address: hotel.hotelAddress || hotel.address || "",
+          starRating: parseInt(hotel.starRating || 0),
           checkInDate: formatDateToYYYYMMDD(checkIn),
           checkOutDate: formatDateToYYYYMMDD(checkOut),
           nights: nights,
           employeeId: "1",        
-          roomStatus: (firstHotel.available === false || 
-                      firstHotel.available === "False" || 
-                      firstHotel.available === "false") ? "On Request" : "Available",
+          roomStatus: (hotel.available === false || 
+                      hotel.available === "False" || 
+                      hotel.available === "false") ? "On Request" : "Available",
           cancellationPolicy: (() => {
-            const policies = firstHotel.cancellationPolicy || [];
+            const policies = hotel.cancellationPolicy || [];
             if (Array.isArray(policies) && policies.length > 0) {
               // If policies are objects, extract policyText; otherwise use as-is
               return policies.map((p) => 
@@ -694,10 +691,9 @@ const MakePkgBookingPage = () => {
           })(),
           // Calculate deadlineDate based on nonRefundable and cancellationPolicy
           deadlineDate: (() => {
-            const nonRefundable = firstHotel.refundstatus === "N" || 
-                                 firstHotel.nonRefundable === true || 
-                                 firstHotel.nonRefundable === "true";
-            console.log("nonRefundable:", nonRefundable);
+            const nonRefundable = hotel.refundstatus === "N" || 
+                                 hotel.nonRefundable === true || 
+                                 hotel.nonRefundable === "true";
             
             if (nonRefundable === true || nonRefundable === "true") {
               // Non-refundable: 2 days before current date
@@ -711,7 +707,7 @@ const MakePkgBookingPage = () => {
               return `${year}-${month}-${day}T00:00:00`;
             } else {
               // Refundable: 2 days before earliest fromDate from cancellationPolicy
-              const policies = firstHotel.cancellationPolicy || [];
+              const policies = hotel.cancellationPolicy || [];
               if (policies.length === 0) {
                 return null;
               }
@@ -741,34 +737,37 @@ const MakePkgBookingPage = () => {
               return `${year}-${month}-${day}T00:00:00`;
             }
           })(),
-          isBookandVoucher: (hotelBookingConfirmation[0] || "Book & Voucher") === "Book & Voucher",
+          isBookandVoucher: (hotelBookingConfirmation[hotelIndex] || "Book & Voucher") === "Book & Voucher",
           primaryGuest: {
             firstName: primaryGuest.firstName || "",
             middleName: primaryGuest.middleName || "",
             lastName: primaryGuest.lastName || "",
-            nativeCountry: firstHotel.nationality || "",
+            nativeCountry: hotel.nationality || "",
             email: primaryGuest.emailId || "",
             phone: primaryGuest.contactNumber || "",
             passportNo: primaryGuest.passportNumber || "",
             salutaion: primaryGuest.salutation || "",
             agentlpo: primaryGuest.lpo || "",
           },
-          rooms: firstHotel?.searchRoomDTOs?.map((room, idx) => {
-            const guestKey = `${hotelIndexInCart}-${idx}`;
+          rooms: hotel?.searchRoomDTOs?.map((room, idx) => {
+            const guestKey = `${actualHotelIndexInCart}-${idx}`;
             const guests = roomGuests[guestKey] || [];
             
-            // Get room rate from hotel data
+            // Calculate room rate - divide total hotel rate by number of rooms
+            const totalRooms = hotel.searchRoomDTOs?.length || 1;
             // Selling Price = totalRate (with markup)
-            const roomRate = parseFloat(firstHotel.totalRate || 0);
+            const hotelTotalRate = parseFloat(hotel.totalRate || 0);
+            const roomRate = totalRooms > 0 ? hotelTotalRate / totalRooms : hotelTotalRate;
             // Total Price = totalRateWithoutmrk (without markup)
-            const roomRateWithoutMarkup = parseFloat(firstHotel.totalRateWithoutmrk || firstHotel.totalRate || 0);
+            const hotelTotalRateWithoutMarkup = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
+            const roomRateWithoutMarkup = totalRooms > 0 ? hotelTotalRateWithoutMarkup / totalRooms : hotelTotalRateWithoutMarkup;
             
             return {
               roomNo: idx + 1,
-              roomCategory: firstHotel.roomCategory || "",
-              mealPlan: firstHotel.roomType || "",
-              nonRefundable:  firstHotel.refundstatus === "N",
-              currency: firstHotel.currency || "AED",
+              roomCategory: hotel.roomCategory || "",
+              mealPlan: hotel.roomType || "",
+              nonRefundable: hotel.refundstatus === "N" || hotel.nonRefundable === true || hotel.nonRefundable === "true",
+              currency: hotel.currency || "AED",
               rate: roomRate,
               rateWithoutMarkup: roomRateWithoutMarkup,
               adults: parseInt(room.adult || room.adults || 1),
@@ -786,11 +785,27 @@ const MakePkgBookingPage = () => {
               })),
             };
           }) || [],
-          remarks: hotelRemarks[0] || "",
-          specialRequests: hotelSpecialRequests[0] || "",
-          tourismDirhams: parseFloat(hotelTourismDirhams[0] || "0") || 0,
-          bookingConfirmation: hotelBookingConfirmation[0] || "Book & Voucher",
-        } : null,
+          remarks: hotelRemarks[hotelIndex] || "",
+          specialRequests: hotelSpecialRequests[hotelIndex] || "",
+          tourismDirhams: parseFloat(hotelTourismDirhams[hotelIndex] || "0") || 0,
+          bookingConfirmation: hotelBookingConfirmation[hotelIndex] || "Book & Voucher",
+        };
+      });
+
+      const bookingPayload = {
+        customPackageId: "",
+        quoteId: quoteId ? parseInt(quoteId) : null, // Include quoteId if booking is from quotation
+        sellingPrice: String(sellingPrice.toFixed(2)),
+        totalPrice: String(totalPrice.toFixed(2)),
+        tourDate: tourDate,
+        visaStatus: visaRequired,
+        visaAdult: parseInt(visaDetails.visaAdult || "0") || 0,
+        visaAdultRate: parseFloat(visaDetails.visaAdultRate || "0") || 0,
+        visaChild: parseInt(visaDetails.visaChild || "0") || 0,
+        visaChildRate: parseFloat(visaDetails.visaChildRate || "0") || 0,
+        visaInfant: parseInt(visaDetails.visaInfant || "0") || 0,
+        visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
+        hotelBookingRequest: hotelBookingRequests.length > 0 ? hotelBookingRequests : [],
         customBookingActivityDTO: activities.map((item) => {
           const activity = item.activity || {};
           const details = activity.details || {};
