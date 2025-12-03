@@ -96,6 +96,10 @@ const HotelBookingList = () => {
   const [bookingToCancel, setBookingToCancel] = useState(null);
   const [cancellingBooking, setCancellingBooking] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [voucherDetails, setVoucherDetails] = useState(null);
+  const [loadingVoucherDetails, setLoadingVoucherDetails] = useState(false);
   const hasTimeFilter = Boolean(selectedMonth) && Boolean(selectedYear);
   const statusOptions = useMemo(
     () => [
@@ -218,6 +222,64 @@ const HotelBookingList = () => {
       );
     } finally {
       setConfirmingBooking(false);
+    }
+  };
+
+  // Fetch voucher details
+  const fetchVoucherDetails = async (bookingId) => {
+    try {
+      setLoadingVoucherDetails(true);
+      setVoucherDetails(null);
+      const response = await axiosInstance.get(
+        `/api/hotel-booking/confirmation-voucher/${bookingId}`
+      );
+
+      if (response.data && response.data.success) {
+        setVoucherDetails(response.data.voucherDetails);
+        toast.success(
+          response.data.message || "Voucher details loaded successfully!"
+        );
+      } else {
+        toast.error(
+          response.data?.message || "Failed to load voucher details."
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching voucher details:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to load voucher details. Please try again."
+      );
+    } finally {
+      setLoadingVoucherDetails(false);
+    }
+  };
+
+  // Generate confirmation PDF
+  const generateConfirmationPdf = async () => {
+    if (!selectedBooking || selectedVoucherType !== "Confirmation") return;
+
+    try {
+      setGeneratingPdf(true);
+      setPdfUrl(null);
+      const response = await axiosInstance.post(
+        `/api/booking-confirmation/generate/${selectedBooking.bookingId}`
+      );
+
+      if (response.data && response.data.status === "SUCCESS") {
+        setPdfUrl(response.data.pdfUrl);
+        toast.success(response.data.message || "PDF generated successfully!");
+      } else {
+        toast.error(response.data?.message || "Failed to generate PDF.");
+      }
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to generate PDF. Please try again."
+      );
+    } finally {
+      setGeneratingPdf(false);
     }
   };
 
@@ -1061,10 +1123,11 @@ const HotelBookingList = () => {
                                         transition: "all 0.2s ease",
                                       }}
                                       title="Send request or confirmation"
-                                      onClick={() => {
+                                      onClick={async () => {
                                         setSelectedBooking(b);
                                         setShowVoucherModal(true);
                                         setSelectedVoucherType("Request");
+                                        await fetchVoucherDetails(b.bookingId);
                                       }}
                                       onMouseEnter={(e) => {
                                         e.currentTarget.style.color = "#388e3c";
@@ -1715,6 +1778,8 @@ const HotelBookingList = () => {
                 setShowVoucherModal(false);
                 setSelectedBooking(null);
                 setSelectedVoucherType("Request");
+                setPdfUrl(null);
+                setVoucherDetails(null);
               }}
               size="xl"
               centered
@@ -1740,7 +1805,10 @@ const HotelBookingList = () => {
                         name="voucherType"
                         label="Request"
                         checked={selectedVoucherType === "Request"}
-                        onChange={() => setSelectedVoucherType("Request")}
+                        onChange={() => {
+                          setSelectedVoucherType("Request");
+                          setPdfUrl(null);
+                        }}
                         className="fw-semibold"
                       />
                       <Form.Check
@@ -1749,7 +1817,10 @@ const HotelBookingList = () => {
                         name="voucherType"
                         label="Confirmation"
                         checked={selectedVoucherType === "Confirmation"}
-                        onChange={() => setSelectedVoucherType("Confirmation")}
+                        onChange={() => {
+                          setSelectedVoucherType("Confirmation");
+                          setPdfUrl(null);
+                        }}
                         className="fw-semibold"
                       />
                       <Form.Check
@@ -1758,10 +1829,54 @@ const HotelBookingList = () => {
                         name="voucherType"
                         label="Voucher"
                         checked={selectedVoucherType === "Voucher"}
-                        onChange={() => setSelectedVoucherType("Voucher")}
+                        onChange={() => {
+                          setSelectedVoucherType("Voucher");
+                          setPdfUrl(null);
+                        }}
                         className="fw-semibold"
                       />
                     </div>
+
+                    {/* PDF URL Display */}
+                    {pdfUrl && selectedVoucherType === "Confirmation" && (
+                      <div
+                        className="mb-3 p-3"
+                        style={{
+                          backgroundColor: "#e7f3ff",
+                          borderRadius: "8px",
+                          border: "1px solid #b3d9ff",
+                        }}
+                      >
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div>
+                            <strong style={{ color: "#0066cc" }}>
+                              PDF Generated Successfully:
+                            </strong>
+                            <div className="mt-2">
+                              <a
+                                href={pdfUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: "#0066cc",
+                                  textDecoration: "underline",
+                                  wordBreak: "break-all",
+                                }}
+                              >
+                                {pdfUrl}
+                              </a>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={() => window.open(pdfUrl, "_blank")}
+                          >
+                            Open PDF
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Table */}
                     <div className="table-responsive">
@@ -1891,170 +2006,236 @@ const HotelBookingList = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          <tr>
-                            <td
-                              style={{
-                                padding: "0.75rem",
-                                verticalAlign: "middle",
-                              }}
-                            >
-                              {selectedBooking.hotelName || "-"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "0.75rem",
-                                verticalAlign: "middle",
-                              }}
-                            >
-                              <span
+                          {loadingVoucherDetails ? (
+                            <tr>
+                              <td
+                                colSpan={
+                                  selectedVoucherType === "Request"
+                                    ? 8
+                                    : selectedVoucherType === "Confirmation"
+                                    ? 7
+                                    : 7
+                                }
                                 style={{
-                                  fontSize: "0.75rem",
-                                  padding: "0.4rem 0.6rem",
-                                  fontWeight: "500",
-                                  color:
-                                    selectedBooking.bookingId !== 0 &&
-                                    selectedBooking.bookingCode != null
-                                      ? "#28a745" // Bootstrap success green
-                                      : "#dc3545", // Bootstrap danger red
-                                  backgroundColor:
-                                    selectedBooking.bookingId !== 0 &&
-                                    selectedBooking.bookingCode != null
-                                      ? "#d4edda" // Light green background
-                                      : "#f8d7da", // Light red background
-                                  borderRadius: "0.375rem",
-                                  display: "inline-block",
+                                  padding: "2rem",
+                                  textAlign: "center",
                                 }}
                               >
-                                {selectedBooking.bookingId !== 0 &&
-                                selectedBooking.bookingCode != null
-                                  ? "CONFIRMED"
-                                  : "NOT CONFIRMED"}
-                              </span>
-                            </td>
-                            {selectedVoucherType === "Request" && (
-                              <>
-                                <td
-                                  style={{
-                                    padding: "0.75rem",
-                                    verticalAlign: "middle",
-                                  }}
-                                >
-                                  {selectedBooking.bookingCode || "-"}
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "0.75rem",
-                                    verticalAlign: "middle",
-                                  }}
-                                >
-                                  {selectedBooking.referenceNumber || "null"}
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "0.75rem",
-                                    verticalAlign: "middle",
-                                  }}
-                                >
-                                  null
-                                </td>
-                              </>
-                            )}
-                            {selectedVoucherType === "Confirmation" && (
-                              <>
-                                <td
-                                  style={{
-                                    padding: "0.75rem",
-                                    verticalAlign: "middle",
-                                  }}
-                                >
-                                  {selectedBooking.referenceNumber || "null"}
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "0.75rem",
-                                    verticalAlign: "middle",
-                                  }}
-                                >
-                                  0
-                                </td>
-                              </>
-                            )}
-                            {selectedVoucherType === "Voucher" && (
-                              <>
-                                <td
-                                  style={{
-                                    padding: "0.75rem",
-                                    verticalAlign: "middle",
-                                  }}
-                                >
-                                  {selectedBooking.referenceNumber || "null"}
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "0.75rem",
-                                    verticalAlign: "middle",
-                                  }}
-                                >
-                                  0
-                                </td>
-                              </>
-                            )}
-                            <td
-                              style={{
-                                padding: "0.75rem",
-                                verticalAlign: "middle",
-                              }}
-                            >
-                              {selectedBooking.checkInDate
-                                ? new Date(
-                                    selectedBooking.checkInDate
-                                  ).toLocaleDateString("en-GB", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    year: "numeric",
-                                  })
-                                : "-"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "0.75rem",
-                                verticalAlign: "middle",
-                              }}
-                            >
-                              {selectedBooking.checkOutDate
-                                ? new Date(
-                                    selectedBooking.checkOutDate
-                                  ).toLocaleDateString("en-GB", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    year: "numeric",
-                                  })
-                                : "-"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "0.75rem",
-                                verticalAlign: "middle",
-                                textAlign: "center",
-                              }}
-                            >
-                              <Button
-                                variant="primary"
-                                size="sm"
+                                <Spinner animation="border" size="sm" /> Loading
+                                voucher details...
+                              </td>
+                            </tr>
+                          ) : (
+                            <tr>
+                              <td
                                 style={{
-                                  width: "32px",
-                                  height: "32px",
-                                  padding: 0,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
                                 }}
-                                title="Send"
                               >
-                                <FaPaperPlane style={{ fontSize: "14px" }} />
-                              </Button>
-                            </td>
-                          </tr>
+                                {voucherDetails?.hotelName ||
+                                  selectedBooking?.hotelName ||
+                                  "-"}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    padding: "0.4rem 0.6rem",
+                                    fontWeight: "500",
+                                    color:
+                                      voucherDetails?.confirmationStatus ===
+                                      "Confirmed"
+                                        ? "#28a745" // success green
+                                        : "#dc3545", // danger red
+                                    backgroundColor:
+                                      voucherDetails?.confirmationStatus ===
+                                      "Confirmed"
+                                        ? "#d4edda" // Light green
+                                        : "#f8d7da", // Light red
+                                    borderRadius: "0.375rem",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  {voucherDetails?.confirmationStatus ===
+                                  "Confirmed"
+                                    ? "CONFIRMED"
+                                    : "NOT CONFIRMED"}
+                                </span>
+                              </td>
+
+                              {selectedVoucherType === "Request" && (
+                                <>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.bookingCode ||
+                                      selectedBooking?.bookingCode ||
+                                      "-"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.confirmationReference ||
+                                      selectedBooking?.referenceNumber ||
+                                      "null"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.priceReference || "null"}
+                                  </td>
+                                </>
+                              )}
+                              {selectedVoucherType === "Confirmation" && (
+                                <>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.confirmationReference ||
+                                      selectedBooking?.referenceNumber ||
+                                      "null"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    0
+                                  </td>
+                                </>
+                              )}
+                              {selectedVoucherType === "Voucher" && (
+                                <>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.confirmationReference ||
+                                      selectedBooking?.referenceNumber ||
+                                      "null"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    0
+                                  </td>
+                                </>
+                              )}
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {voucherDetails?.checkIn
+                                  ? new Date(
+                                      voucherDetails.checkIn
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                  : selectedBooking?.checkInDate
+                                  ? new Date(
+                                      selectedBooking.checkInDate
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                  : "-"}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {voucherDetails?.checkout
+                                  ? new Date(
+                                      voucherDetails.checkout
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                  : selectedBooking?.checkOutDate
+                                  ? new Date(
+                                      selectedBooking.checkOutDate
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                  : "-"}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                  textAlign: "center",
+                                }}
+                              >
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  style={{
+                                    width: "32px",
+                                    height: "32px",
+                                    padding: 0,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                  title="Send"
+                                  onClick={() => {
+                                    if (
+                                      selectedVoucherType === "Confirmation"
+                                    ) {
+                                      generateConfirmationPdf();
+                                    }
+                                  }}
+                                  disabled={generatingPdf}
+                                >
+                                  {generatingPdf ? (
+                                    <Spinner
+                                      animation="border"
+                                      size="sm"
+                                      style={{ width: "14px", height: "14px" }}
+                                    />
+                                  ) : (
+                                    <FaPaperPlane
+                                      style={{ fontSize: "14px" }}
+                                    />
+                                  )}
+                                </Button>
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </Table>
                     </div>
@@ -2073,6 +2254,8 @@ const HotelBookingList = () => {
                     setShowVoucherModal(false);
                     setSelectedBooking(null);
                     setSelectedVoucherType("Request");
+                    setPdfUrl(null);
+                    setVoucherDetails(null);
                   }}
                 >
                   <i className="bi bi-check-circle me-1"></i> Close
