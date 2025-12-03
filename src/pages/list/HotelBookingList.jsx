@@ -100,6 +100,9 @@ const HotelBookingList = () => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [voucherDetails, setVoucherDetails] = useState(null);
   const [loadingVoucherDetails, setLoadingVoucherDetails] = useState(false);
+  const [updatingConfirmationStatus, setUpdatingConfirmationStatus] = useState(null);
+  const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
+  const [bookingToUpdateStatus, setBookingToUpdateStatus] = useState(null);
   const hasTimeFilter = Boolean(selectedMonth) && Boolean(selectedYear);
   const statusOptions = useMemo(
     () => [
@@ -193,6 +196,50 @@ const HotelBookingList = () => {
   const handleConfirmBookingClick = (booking) => {
     setBookingToConfirm(booking);
     setShowConfirmModal(true);
+  };
+
+  // Handle confirm status click - open modal
+  const handleConfirmStatusClick = (booking) => {
+    setBookingToUpdateStatus(booking);
+    setShowConfirmStatusModal(true);
+  };
+
+  // Update confirmation status
+  const updateConfirmationStatus = async () => {
+    if (!bookingToUpdateStatus) return;
+
+    try {
+      setUpdatingConfirmationStatus(bookingToUpdateStatus.bookingId);
+      const response = await axiosInstance.patch(
+        `/api/booking-confirmation/${bookingToUpdateStatus.bookingId}/confirmation-status`,
+        {
+          confirmStatus: true
+        }
+      );
+
+      console.log("Confirmation Status Response:", response.data);
+      if (response.data && response.data.success) {
+        // Refresh bookings list to show updated status
+        await fetchBookings();
+        setShowConfirmStatusModal(false);
+        setBookingToUpdateStatus(null);
+        toast.success(
+          response.data.message || "Confirmation status updated successfully!"
+        );
+      } else {
+        toast.error(
+          response.data?.message || "Failed to update confirmation status."
+        );
+      }
+    } catch (error) {
+      console.error("Error updating confirmation status:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to update confirmation status. Please try again."
+      );
+    } finally {
+      setUpdatingConfirmationStatus(null);
+    }
   };
 
   // Confirm booking API call
@@ -1026,11 +1073,12 @@ const HotelBookingList = () => {
                                     const label = isNotConfirmed
                                       ? "Not Confirmed"
                                       : b.confirmationStatus || "-";
+                                    const isUpdating = updatingConfirmationStatus === b.bookingId;
 
                                     return (
                                       <div
-                                        className="d-inline-flex align-items-center justify-content-center gap-2"
-                                        title="Non-refundable booking. Click to confirm."
+                                        className="d-inline-flex align-items-center justify-content-center gap-2 setConfirmed "
+                                        title="Click to confirm the booking."
                                         style={{
                                           padding: "0.32rem 0.6rem",
                                           borderRadius: "0.375rem",
@@ -1040,35 +1088,54 @@ const HotelBookingList = () => {
                                             : "#6c757d",
                                           fontSize: "0.72rem",
                                           fontWeight: "600",
-                                          cursor: "pointer",
+                                          cursor: isUpdating ? "not-allowed" : "pointer",
                                           transition: "all 0.2s ease",
+                                          opacity: isUpdating ? 0.6 : 1,
                                         }}
-                                        onClick={() =>
-                                          handleConfirmBookingClick(b)
-                                        }
+                                        onClick={() => {
+                                          if (isNotConfirmed && !isUpdating) {
+                                            handleConfirmStatusClick(b);
+                                          } else if (!isUpdating) {
+                                            handleConfirmBookingClick(b);
+                                          }
+                                        }}
                                       >
-                                        <span>{label}</span>
-                                        {showConfirmIcon && (
-                                          <FaExclamationCircle
+                                        {isUpdating ? (
+                                          <Spinner
+                                            animation="border"
+                                            size="sm"
                                             style={{
-                                              fontSize: "15px",
-                                              color: "#ff9800",
-                                              transition: "all 0.2s ease",
-                                            }}
-                                            title="Non-refundable booking. Click to confirm."
-                                            onMouseEnter={(e) => {
-                                              e.currentTarget.style.color =
-                                                "#f57c00";
-                                              e.currentTarget.style.transform =
-                                                "scale(1.15)";
-                                            }}
-                                            onMouseLeave={(e) => {
-                                              e.currentTarget.style.color =
-                                                "#ff9800";
-                                              e.currentTarget.style.transform =
-                                                "scale(1)";
+                                              width: "12px",
+                                              height: "12px",
+                                              borderWidth: "2px",
                                             }}
                                           />
+                                        ) : (
+                                          <>
+                                            <span>{label}</span>
+                                            {showConfirmIcon && (
+                                              <FaExclamationCircle
+                                                style={{
+                                                  fontSize: "15px",
+                                                  color: "#ff9800",
+                                                  transition: "all 0.2s ease",
+                                                }}
+                                                title="Non-refundable booking. Click to confirm."
+                                                onMouseEnter={(e) => {
+                                                  e.currentTarget.style.color =
+                                                    "#f57c00";
+                                                  e.currentTarget.style.transform =
+                                                    "scale(1.15)";
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                  e.currentTarget.style.color =
+                                                    "#ff9800";
+                                                  e.currentTarget.style.transform =
+                                                    "scale(1)";
+                                                }}
+                                              />
+                                            )}
+                                          </>
                                         )}
                                       </div>
                                     );
@@ -2334,6 +2401,89 @@ const HotelBookingList = () => {
                   disabled={confirmingBooking}
                 >
                   {confirmingBooking ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Confirming...
+                    </>
+                  ) : (
+                    "OK"
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Confirm Status Modal */}
+            <Modal
+              show={showConfirmStatusModal}
+              onHide={() => {
+                if (!updatingConfirmationStatus) {
+                  setShowConfirmStatusModal(false);
+                  setBookingToUpdateStatus(null);
+                }
+              }}
+              centered
+              backdrop="static"
+              keyboard={false}
+              size="sm"
+            >
+              <Modal.Header
+                closeButton={!updatingConfirmationStatus}
+                style={{
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #e9ecef",
+                }}
+              >
+                <Modal.Title className="fw-bold d-flex align-items-center">
+                  <FaExclamationCircle className="me-2 text-warning" />
+                  <span>Confirm Booking Status</span>
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: "1.5rem" }}>
+                <div className="text-center">
+                  <p className="fs-6 mb-3">
+                    Are you sure you want to confirm this booking?
+                  </p>
+                  {bookingToUpdateStatus && (
+                    <div className="text-muted small mb-3">
+                      <div>
+                        <strong>Booking Code:</strong>{" "}
+                        {bookingToUpdateStatus.bookingCode || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Customer:</strong>{" "}
+                        {bookingToUpdateStatus.primaryGuestName || "N/A"}
+                      </div>
+                      {bookingToUpdateStatus.hotelName && (
+                        <div>
+                          <strong>Hotel:</strong> {bookingToUpdateStatus.hotelName}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowConfirmStatusModal(false);
+                    setBookingToUpdateStatus(null);
+                  }}
+                  disabled={updatingConfirmationStatus}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={updateConfirmationStatus}
+                  disabled={updatingConfirmationStatus}
+                >
+                  {updatingConfirmationStatus ? (
                     <>
                       <Spinner animation="border" size="sm" className="me-2" />
                       Confirming...
