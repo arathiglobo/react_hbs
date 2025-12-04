@@ -283,9 +283,7 @@ const HotelBookingList = () => {
 
       if (response.data && response.data.success) {
         setVoucherDetails(response.data.voucherDetails);
-        toast.success(
-          response.data.message || "Voucher details loaded successfully!"
-        );
+      
       } else {
         toast.error(
           response.data?.message || "Failed to load voucher details."
@@ -2280,6 +2278,14 @@ const HotelBookingList = () => {
                                   }}
                                   title="Send"
                                   onClick={() => {
+                                    // Check if booking is confirmed
+                                    const isConfirmed = voucherDetails?.confirmationStatus === "Confirmed";
+                                    
+                                    if (!isConfirmed) {
+                                      toast.error("Confirm the booking then only Confirmation or voucherDetails can be get");
+                                      return;
+                                    }
+                                    
                                     if (
                                       selectedVoucherType === "Confirmation"
                                     ) {

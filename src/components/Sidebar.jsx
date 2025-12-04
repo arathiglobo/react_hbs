@@ -71,17 +71,17 @@ export default function Sidebar() {
           children: [
             { label: "Country", to: "/masters/country-mapping" },
             { label: "City", to: "/masters/city-mapping" },
-            { label: "Hotel", to: "/masters/hotel-mapping" },
+            // { label: "Hotel", to: "/masters/hotel-mapping" },
           ],
         },
-        {
-          label: "UnMapping settings",
-          children: [
-            { label: "Country", to: "/masters/country-unmapping" },
-            { label: "City", to: "/masters/city-unmapping" },
-            { label: "Hotel", to: "/masters/hotel-unmapping" },
-          ],
-        },
+        // {
+        //   label: "UnMapping settings",
+        //   children: [
+        //     { label: "Country", to: "/masters/country-unmapping" },
+        //     { label: "City", to: "/masters/city-unmapping" },
+        //     { label: "Hotel", to: "/masters/hotel-unmapping" },
+        //   ],
+        // },
         {
           label: "Hotel settings",
           children: [
@@ -155,11 +155,11 @@ export default function Sidebar() {
           label: "Make Your Own Package",
           to: "/new-booking/make-your-own-package",
         },
-        { label: "Package Booking", to: "/new-booking/package" },
-        {
-          label: "Tours and Activity",
-          to: "/new-booking/tours-and-activities",
-        },
+        // { label: "Package Booking", to: "/new-booking/package" },
+        // {
+        //   label: "Tours and Activity",
+        //   to: "/new-booking/tours-and-activities",
+        // },
       ],
     },
     {
@@ -174,22 +174,22 @@ export default function Sidebar() {
           label: "Custom Booking",
           to: "/booking-details/custom-booking-list",
         },
-        {
-          label: "Package Booking",
-          to: "/booking-details/package-booking-list",
-        },
-        {
-          label: "Complete Booking",
-          to: "/booking-details/complete-booking-list",
-        },
+        // {
+        //   label: "Package Booking",
+        //   to: "/booking-details/package-booking-list",
+        // },
+        // {
+        //   label: "Complete Booking",
+        //   to: "/booking-details/complete-booking-list",
+        // },
         {
           label: "Quotation List",
           to: "/booking-details/quotation-booking-list",
         },
-        {
-          label: "Offline Booking List",
-          to: "/booking-details/offline-booking-list",
-        },
+        // {
+        //   label: "Offline Booking List",
+        //   to: "/booking-details/offline-booking-list",
+        // },
       ],
     },
     {
