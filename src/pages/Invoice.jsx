@@ -1,389 +1,157 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   Card,
   Button,
   Table,
-  Modal,
   Form,
-  Pagination,
   Row,
   Col,
+  Modal,
 } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
-import Swal from "sweetalert2";
 import {
-  FaEdit,
-  FaTrash,
   FaCalendarAlt,
-  FaImage,
-  FaTimes,
-  FaCheck,
-  FaUndo,
   FaPrint,
   FaFileExcel,
-  FaFileInvoiceDollar,
-  FaFileInvoice,
-  FaPlus,
   FaHotel,
+  FaUser,
+  FaBuilding,
+  FaTag,
+  FaMoneyBillWave,
+  FaSearch,
+  FaPlus,
+  FaFileInvoice,
+  FaFileInvoiceDollar,
+  FaInbox,
 } from "react-icons/fa";
 
-// Dummy invoice data for testing
-const dummyInvoiceData = [
-  {
-    id: 1,
-    customerName: "John Smith",
-    agent: "ABC Travel Agency",
-    bookingCode: "BK001234",
-    bookingDate: "2024-01-15",
-    rate: 1250.00,
-    hotelName: "Grand Plaza Hotel",
-    confirmationCode: "CONF123456",
-  },
-  {
-    id: 2,
-    customerName: "Sarah Johnson",
-    agent: "XYZ Tours",
-    bookingCode: "BK001235",
-    bookingDate: "2024-01-16",
-    rate: 890.50,
-    hotelName: "Oceanview Resort",
-    confirmationCode: "CONF123457",
-  },
- 
-];
-
 export default function Invoice() {
-  const [items, setItems] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState(null);
+  const [invoiceList, setInvoiceList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
   const [error, setError] = useState("");
-  const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [search, setSearch] = useState("");
-  const [searchTimeout, setSearchTimeout] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [agent, setAgent] = useState("");
   const [agents, setAgents] = useState([]);
-
-  // Form fields
-  const [title, setTitle] = useState("");
-  const [bannerImage, setBannerImage] = useState(null);
-  const [existingImageUrl, setExistingImageUrl] = useState(null); // Track existing image URL for preview
-  const [description, setDescription] = useState("");
-  const [validityFrom, setValidityFrom] = useState("");
-  const [validityTo, setValidityTo] = useState("");
-
-  const nextId = useMemo(
-    () => Math.max(0, ...items.map((i) => i.id)) + 1,
-    [items]
-  );
-
-  const openCreate = () => {
-    setEditing(null);
-    setTitle("");
-    setBannerImage(null);
-    setExistingImageUrl(null);
-    setDescription("");
-    setValidityFrom("");
-    setValidityTo("");
-    setError("");
-    setShowModal(true);
-  };
-
-  const openEdit = (item) => {
-    console.log("open edit item::", item);
-    setEditing(item);
-    setTitle(item.title || "");
-    setBannerImage(null); // Reset file input for edit
-    setExistingImageUrl(item.bannerImagePah || null); // Set existing image URL for preview
-    setDescription(item.description || "");
-    
-    // Convert LocalDateTime to date string for date inputs
-    let fromDate = "";
-    let toDate = "";
-    
-    if (item.validityFrom) {
-      // If it's already a date string, use it; otherwise parse LocalDateTime
-      if (typeof item.validityFrom === 'string' && item.validityFrom.includes('T')) {
-        fromDate = item.validityFrom.split('T')[0];
-      } else if (typeof item.validityFrom === 'string') {
-        fromDate = item.validityFrom;
-      }
-    }
-    
-    if (item.validityTo) {
-      // If it's already a date string, use it; otherwise parse LocalDateTime
-      if (typeof item.validityTo === 'string' && item.validityTo.includes('T')) {
-        toDate = item.validityTo.split('T')[0];
-      } else if (typeof item.validityTo === 'string') {
-        toDate = item.validityTo;
-      }
-    }
-    
-    setValidityFrom(fromDate);
-    setValidityTo(toDate);
-    setError("");
-    setShowModal(true);
-  };
-
-  const handleEdit = async () => {
-    if (!editing) return;
-
-    // Validation
-    if (!title.trim()) {
-      setError("Title is required");
-      return;
-    }
-    if (!description.trim()) {
-      setError("Description is required");
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError("");
-      const formData = new FormData();
-      formData.append("title", title);
-      formData.append("description", description);
-      
-      // Convert date strings to LocalDateTime format (YYYY-MM-DDTHH:mm:ss)
-      if (validityFrom) {
-        formData.append("validityFrom", validityFrom + "T00:00:00");
-      }
-      if (validityTo) {
-        formData.append("validityTo", validityTo + "T23:59:59");
-      }
-
-      if (bannerImage) {
-        formData.append("bannerImage", bannerImage);
-      }
-
-      const editRes = await axiosInstance.put(
-        `/api/offerDetails/${editing.offerId}`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
-
-      if (editRes.data) {
-        toast.success("Offer Updated Successfully!");
-        await fetchInvoiceList(page, search);
-        closeModal();
-      }
-    } catch (error) {
-      setError("Failed to update offer");
-      toast.error("Failed to update offer");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-    setEditing(null);
-    setTitle("");
-    setBannerImage(null);
-    setExistingImageUrl(null);
-    setDescription("");
-    setValidityFrom("");
-    setValidityTo("");
-    setError("");
-  };
-
-  const fetchInvoiceList = async (pageNum = 0, searchTerm = search) => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: pageNum.toString(),
-        limit: "10",
-      });
-
-      if (searchTerm && searchTerm.trim()) {
-        params.append("search", searchTerm.trim());
-      }
-
-      // const res = await axiosInstance.get(
-      //   `/api/invoiceList?${params.toString()}`
-      // );
-
-      // if (res.data && Array.isArray(res.data)) {
-      //   setItems(res.data);
-      //   if (res.data.length < 10) {
-      //     setTotalPages(pageNum + 1);
-      //   } else {
-      //     setTotalPages(Math.max(totalPages, pageNum + 2));
-      //   }
-      //   setPage(pageNum);
-      // } else {
-      //   setItems([]);
-      //   setTotalPages(0);
-      //   setPage(0);
-      // }
-
-       setItems(dummyInvoiceData);
-    } catch (err) {
-      toast.error("Failed to load offers");
-      setItems([]);
-      setTotalPages(0);
-      setPage(0);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const saveOffer = async () => {
-    // Validation
-    if (!title.trim()) {
-      setError("Title is required");
-      return;
-    }
-    if (!description.trim()) {
-      setError("Description is required");
-      return;
-    }
-    if (!bannerImage) {
-      setError("Banner image is required");
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError("");
-      const formData = new FormData();
-      formData.append("title", title);
-      formData.append("description", description);
-      
-      // Convert date strings to LocalDateTime format (YYYY-MM-DDTHH:mm:ss)
-      if (validityFrom) {
-        formData.append("validityFrom", validityFrom + "T00:00:00");
-      }
-      if (validityTo) {
-        formData.append("validityTo", validityTo + "T23:59:59");
-      }
-
-      if (bannerImage) {
-        formData.append("bannerImage", bannerImage);
-      }
-
-      const saveRes = await axiosInstance.post(
-        "/api/offerDetails/save",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
-
-      if (saveRes.data !== 0) {
-        toast.success("Offer added Successfully!");
-        await fetchInvoiceList(page, search);
-        closeModal();
-      }
-    } catch (error) {
-      setError("Sorry! Data not saved to db..");
-      toast.error("Failed to save offer data");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const resetForm = () => {
-    setTitle("");
-    setBannerImage(null);
-    setExistingImageUrl(null);
-    setDescription("");
-    setValidityFrom("");
-    setValidityTo("");
-    setError("");
-  };
+  const [agentsLoaded, setAgentsLoaded] = useState(false);
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const agentList = async () => {
+    if (agentsLoaded) return; // Don't fetch if already loaded
+    
     try {
       const response = await axiosInstance.get("/api/agent");
       setAgents(response.data || []);
+      setAgentsLoaded(true);
     } catch (error) {
       console.log("error for agent axios list:", error);
       setAgents([]);
     }
   };
 
-  useEffect(() => {
-    // Uncomment the line below when API is ready
-    // fetchInvoiceList();
-    // For now, use dummy data
-    setItems(dummyInvoiceData);
-    setTotalPages(Math.ceil(dummyInvoiceData.length / 10));
+  const handleAgentDropdownClick = () => {
     agentList();
-  }, []);
-
-  // Debounced search effect
-  useEffect(() => {
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
-
-    if (search !== "") {
-      const timeout = setTimeout(() => {
-        fetchInvoiceList(0, search);
-      }, 500);
-      setSearchTimeout(timeout);
-    } else if (search === "") {
-      fetchInvoiceList(0, "");
-    }
-
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-    };
-  }, [search]);
-
-  const handleDelete = (item) => {
-    Swal.fire({
-      title: `Are you sure? You want to delete ${item.title}`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#3085d6",
-      confirmButtonText: "Yes, delete it!",
-      customClass: {
-        popup: "swal-small",
-        title: "swal-small-title",
-        htmlContainer: "swal-small-text",
-      },
-    }).then((result) => {
-      if (result.isConfirmed) {
-        axiosInstance
-          .delete(`/api/offerDetails/${item.offerId}`)
-          .then(() => {
-            toast.success("Offer deleted successfully");
-            fetchInvoiceList(page, search);
-          })
-          .catch(() => {
-            toast.error("Sorry!! Offer not deleted");
-          });
-      }
-    });
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setBannerImage(file);
-      setExistingImageUrl(null); // Clear existing image URL when new file is selected
+  const fetchInvoiceData = async () => {
+    if (!agent) {
+      setError("Please select an agent");
+      toast.error("Please select an agent");
+      return;
     }
+
+    setIsLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (fromDate) {
+        params.append("fromDate", fromDate);
+      }
+      if (toDate) {
+        params.append("toDate", toDate);
+      }
+      
+      const queryString = params.toString();
+      const url = `/api/invoice-generation/data/${agent}${queryString ? `?${queryString}` : ""}`;
+      
+      const response = await axiosInstance.get(url);
+      setInvoiceList(Array.isArray(response.data) ? response.data : []);
+      if (response.data && Array.isArray(response.data) && response.data.length === 0) {
+        toast.success("No invoices found for the selected criteria");
+      }
+    } catch (err) {
+     
+      setError(err.response.data.message);
+      
+      setInvoiceList([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    fetchInvoiceData();
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "-";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatDateTime = (dateTimeString) => {
+    if (!dateTimeString) return "-";
+    try {
+      const date = new Date(dateTimeString);
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }) + " " + date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return dateTimeString;
+    }
+  };
+
+  const formatDateShort = (dateString) => {
+    if (!dateString) return "-";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatCurrency = (amount) => {
+    if (amount === null || amount === undefined) return "-";
+    return `AED ${parseFloat(amount).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   };
 
   const handlePrint = () => {
@@ -397,28 +165,81 @@ export default function Invoice() {
     });
   };
 
-  const handleTaxClick = (item) => {
-    // TODO: Implement tax functionality
-    toast(`Tax action for ${item.customerName}`, {
-      icon: "ℹ️",
+  const handlePlusClick = (index) => {
+    setExpandedRows((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
     });
   };
 
-  const handleInvoiceClick = (item) => {
-    // TODO: Implement invoice functionality
-    toast(`Invoice action for ${item.customerName}`, {
-      icon: "ℹ️",
-    });
+  const handleInvoiceVoucherClick = async (invoice) => {
+    try {
+      // Assuming the ID is hotelId or bookingId - adjust based on your data structure
+      const invoiceId = invoice.bookingId || invoice.hotelId || invoice.id;
+      
+      if (!invoiceId) {
+        toast.error("Invoice ID not found");
+        return;
+      }
+
+      setPdfLoading(true);
+      const response = await axiosInstance.post(
+        `/api/invoice-generation/generate/${invoiceId}?invoiceType=PROFORMA`
+      );
+
+      if (response.data && response.data.status === "SUCCESS") {
+        setPdfUrl(response.data.pdfUrl);
+        setShowPdfModal(true);
+        toast.success(response.data.message || "Invoice generated successfully");
+      } else {
+        toast.error(response.data?.message || "Failed to generate invoice");
+      }
+    } catch (err) {
+      console.error("Error generating invoice:", err);
+      toast.error(err.response?.data?.message || "Failed to generate invoice");
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
-  const handlePlusClick = (item) => {
-    setSelectedItem(item);
-    setShowDetailsModal(true);
+  const handleTaxVoucherClick = async (invoice) => {
+    try {
+      // Assuming the ID is hotelId or bookingId - adjust based on your data structure
+      const invoiceId = invoice.bookingId || invoice.hotelId || invoice.id;
+      
+      if (!invoiceId) {
+        toast.error("Invoice ID not found");
+        return;
+      }
+
+      setPdfLoading(true);
+      const response = await axiosInstance.post(
+        `/api/invoice-generation/generate/${invoiceId}?invoiceType=TAX`
+      );
+
+      if (response.data && response.data.status === "SUCCESS") {
+        setPdfUrl(response.data.pdfUrl);
+        setShowPdfModal(true);
+        toast.success(response.data.message || "Tax invoice generated successfully");
+      } else {
+        toast.error(response.data?.message || "Failed to generate tax invoice");
+      }
+    } catch (err) {
+      console.error("Error generating tax invoice:", err);
+      toast.error(err.response?.data?.message || "Failed to generate tax invoice");
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
-  const closeDetailsModal = () => {
-    setShowDetailsModal(false);
-    setSelectedItem(null);
+  const handleClosePdfModal = () => {
+    setShowPdfModal(false);
+    setPdfUrl("");
   };
 
   return (
@@ -427,19 +248,40 @@ export default function Invoice() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl mb-4">
-            <Card.Header>
-              <div className="d-flex align-items-center mb-3">
-                <Button variant="link" className="p-0 me-3" onClick={() => window.history.back()}>
+          <Card className="shadow-sm rounded-xl">
+            <Card.Header className="d-flex justify-content-between align-items-center">
+              <div className="d-flex align-items-center">
+                <Button
+                  variant="link"
+                  className="p-0 me-3"
+                  onClick={() => window.history.back()}
+                >
                   &lt;&lt; Back
                 </Button>
-                <h4 className="fw-bold text-primary mb-0">TAX INVOICE</h4>
+                <h4 className="fw-bold text-primary mb-0">TAX INVOICE LIST</h4>
+                {invoiceList.length > 0 && (
+                  <span className="ms-3 text-muted">
+                    ({invoiceList.length} {invoiceList.length === 1 ? "invoice" : "invoices"})
+                  </span>
+                )}
+              </div>
+              <div className="d-flex gap-2">
+                <Button variant="secondary" onClick={handlePrint}>
+                  <FaPrint className="me-2" />
+                  Print
+                </Button>
+                <Button variant="secondary" onClick={handleExcel}>
+                  <FaFileExcel className="me-2" />
+                  Excel
+                </Button>
               </div>
             </Card.Header>
-            <Card.Body>
+            <Card.Body className="p-3">
               {/* Search Criteria Section */}
-              <div className="mb-4">
+              <Card className="mb-3 border-0 bg-light">
+                <Card.Body className="p-3">
                 <h6 className="fw-semibold mb-3">Search Criteria</h6>
+                  <Form onSubmit={handleSearch}>
                 <Row className="g-3 align-items-end">
                   <Col md={3}>
                     <Form.Group>
@@ -494,6 +336,8 @@ export default function Invoice() {
                       <Form.Select
                         value={agent}
                         onChange={(e) => setAgent(e.target.value)}
+                            onClick={handleAgentDropdownClick}
+                            required
                       >
                         <option value="">Select Agent</option>
                         {agents.map((agentItem) => (
@@ -504,381 +348,505 @@ export default function Invoice() {
                       </Form.Select>
                     </Form.Group>
                   </Col>
-                  <Col md={3} className="d-flex gap-2">
+                      <Col md={3}>
                     <Button
-                      variant="secondary"
-                      onClick={handlePrint}
-                      className="flex-grow-1"
-                    >
-                      <FaPrint className="me-2" />
-                      Print
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={handleExcel}
-                      className="flex-grow-1"
-                    >
-                      <FaFileExcel className="me-2" />
-                      Excel
+                          type="submit"
+                          variant="primary"
+                          className="w-100"
+                          disabled={isLoading}
+                        >
+                          <FaSearch className="me-2" />
+                          {isLoading ? "Searching..." : "Search"}
                     </Button>
                   </Col>
                 </Row>
-              </div>
+                  </Form>
             </Card.Body>
           </Card>
 
-          <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <span className="fw-semibold">Invoice List</span>
-              {/* Search Bar */}
-              <Form.Group className="hotel-search-bar">
-                <Form.Control
-                  type="text"
-                  placeholder="Search invoices..."
-                  className="form-control-modern-sm"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSearchTerm(value);
-                    fetchInvoiceList(0, value);
-                  }}
-                />
-              </Form.Group>
-             </Card.Header>
-             <Card.Body className="p-0">
-              <div className="table-responsive">
-                <Table className="table-hover mb-0">
-                  <thead className="table-light">
-                    <tr>
-                      <th className="border-0">S.N</th>
-                      <th className="border-0">Customer Name</th>
-                      <th className="border-0">Agent</th>
-                      <th className="border-0">Booking Code</th>
-                      <th className="border-0">Booking Date</th>
-                      <th className="border-0">Rate</th>
-                      <th className="border-0">Actions</th>
+              {isLoading ? (
+                <div className="text-center py-5">
+                  <div
+                    className="spinner-border text-primary"
+                    role="status"
+                    style={{ width: "3rem", height: "3rem" }}
+                  >
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <p className="mt-3 text-muted">Loading invoice data...</p>
+                </div>
+              ) : error ? (
+                <div className="alert alert-danger" role="alert">
+                  {error}
+                </div>
+              ) : invoiceList.length > 0 ? (
+                <Card className="shadow-sm border-0" style={{ borderRadius: "8px", overflow: "hidden" }}>
+                  <Card.Body className="p-0">
+                    <div style={{ overflowX: "auto" }}>
+                      <Table
+                        hover
+                        size="sm"
+                        className="mb-0 align-middle table-bordered"
+                        style={{
+                          tableLayout: "auto",
+                          width: "100%",
+                          fontSize: "0.82rem",
+                          borderCollapse: "separate",
+                          borderSpacing: 0,
+                        }}
+                      >
+                        <thead
+                          style={{
+                            backgroundColor: "#f8f9fa",
+                            borderBottom: "2px solid #dee2e6",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                            fontSize: "0.68rem",
+                            letterSpacing: "0.04em",
+                          }}
+                        >
+                          <tr>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                textAlign: "center",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "64px",
+                              }}
+                            >
+                              S.N
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "130px",
+                              }}
+                            >
+                              Customer
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                textAlign: "center",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "50px",
+                                width: "50px",
+                              }}
+                            >
+                              
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "100px",
+                              }}
+                            >
+                              Agent
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "100px",
+                              }}
+                            >
+                              Booking Code
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "140px",
+                              }}
+                            >
+                              Booking Date
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "120px",
+                              }}
+                            >
+                              Hotel Name
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "110px",
+                              }}
+                            >
+                              Check-In
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "110px",
+                              }}
+                            >
+                              Check-Out
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                textAlign: "right",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "120px",
+                              }}
+                            >
+                              Total Amount
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "180px",
+                              }}
+                            >
+                              Reference Number
+                            </th>
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                textAlign: "center",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: "120px",
+                              }}
+                            >
+                              Action
+                            </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {isLoading ? (
-                      <tr>
-                        <td colSpan="7" className="text-center py-4">
-                          <div className="d-flex justify-content-center align-items-center">
-                            <div
-                              className="spinner-border text-primary me-2"
-                              role="status"
-                            >
-                              <span className="visually-hidden">
-                                Loading...
+                          {invoiceList.map((invoice, index) => {
+                            const baseCellStyle = {
+                              padding: "0.45rem 0.6rem",
+                              fontSize: "0.82rem",
+                              border: "1px solid #dee2e6",
+                              verticalAlign: "middle",
+                              whiteSpace: "normal",
+                              wordBreak: "break-word",
+                              lineHeight: 1.35,
+                            };
+
+                            return (
+                              <>
+                                <tr
+                                  key={index}
+                                  style={{
+                                    backgroundColor: index % 2 === 0 ? "#ffffff" : "#f8f9fa",
+                                    transition: "background-color 0.2s ease",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = "#e7f3ff";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor =
+                                      index % 2 === 0 ? "#ffffff" : "#f8f9fa";
+                                  }}
+                                >
+                                  <td
+                                    className="text-muted fw-semibold"
+                                    style={{
+                                      ...baseCellStyle,
+                                      textAlign: "center",
+                                      color: "#6c757d",
+                                    }}
+                                  >
+                                    {index + 1}
+                                  </td>
+                                <td style={baseCellStyle}>
+                                  <span className="fw-medium text-dark">
+                                    {invoice.customerName || "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  <FaPlus
+                                    style={{
+                                      color: "#28a745",
+                                      cursor: "pointer",
+                                      fontSize: "0.9rem",
+                                    }}
+                                    onClick={() => handlePlusClick(index)}
+                                  />
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <span className="fw-medium text-dark">
+                                    {invoice.agentName || "-"}
+                                  </span>
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <span className="fw-bold text-primary">
+                                    {invoice.bookingCode || "-"}
+                                  </span>
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <span className="text-dark">
+                                    {formatDateTime(invoice.bookingDate)}
+                                  </span>
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <span className="fw-medium text-dark">
+                                    {invoice.hotelName || "-"}
+                                  </span>
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <span className="text-dark">
+                                    {formatDateShort(invoice.checkInDate)}
+                                  </span>
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <span className="text-dark">
+                                    {formatDateShort(invoice.checkOutDate)}
                               </span>
-                 </div>
-                            Loading invoices...
-               </div>
                         </td>
-                      </tr>
-                    ) : items.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="text-center py-4 text-muted">
-                          No invoices found
+                                <td style={{ ...baseCellStyle, textAlign: "right" }}>
+                                  <span className="fw-bold text-dark">
+                                    {formatCurrency(invoice.totalAmount)}
+                                  </span>
                         </td>
-                      </tr>
-                    ) : (
-                      items.map((item, index) => (
-                        <tr key={item.id}>
-                          <td>{page * 10 + index + 1}</td>
-                          <td>{item.customerName || "-"}</td>
-                          <td>{item.agent || "-"}</td>
-                          <td>{item.bookingCode || "-"}</td>
-                          <td>{item.bookingDate || "-"}</td>
-                          <td>
-                            {item.rate
-                              ? `$${item.rate.toLocaleString("en-US", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}`
-                              : "-"}
+                                <td style={baseCellStyle}>
+                                  <code
+                                    className="bg-light px-2 py-1 rounded"
+                                    style={{
+                                      fontSize: "0.75rem",
+                                      color: "#495057",
+                                    }}
+                                  >
+                                    {invoice.referenceNumber || "-"}
+                                  </code>
                           </td>
-                          <td>
-                            <div className="d-flex gap-2 align-items-center">
-                              <FaFileInvoiceDollar
-                                className="text-warning"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
-                                onClick={() => handleTaxClick(item)}
-                                title="Tax"
-                              />
+                                <td style={{ ...baseCellStyle, textAlign: "center" }}>
+                                  <div className="d-flex gap-2 justify-content-center align-items-center">
                               <FaFileInvoice
-                                className="text-info"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
-                                onClick={() => handleInvoiceClick(item)}
-                                title="Invoice"
-                              />
-                              <FaPlus
-                                className="text-success"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
-                                onClick={() => handlePlusClick(item)}
-                                title="View Details"
+                                      style={{
+                                        color: "#0d6efd",
+                                        cursor: "pointer",
+                                        fontSize: "1.1rem",
+                                      }}
+                                      onClick={() => handleInvoiceVoucherClick(invoice)}
+                                      title="Invoice Voucher"
+                                    />
+                                    <FaFileInvoiceDollar
+                                      style={{
+                                        color: "#ffc107",
+                                        cursor: "pointer",
+                                        fontSize: "1.1rem",
+                                      }}
+                                      onClick={() => handleTaxVoucherClick(invoice)}
+                                      title="Tax Voucher"
                               />
                             </div>
                           </td>
                         </tr>
-                      ))
-                    )}
+                              {expandedRows.has(index) && (
+                                <tr
+                                  style={{
+                                    backgroundColor: index % 2 === 0 ? "#f0f8ff" : "#e8f4f8",
+                                  }}
+                                >
+                                  <td
+                                    colSpan={12}
+                                    style={{
+                                      ...baseCellStyle,
+                                      padding: "0.75rem 1rem",
+                                      backgroundColor: "#f8f9fa",
+                                    }}
+                                  >
+                                    <div className="ms-4">
+                                      <div className="mb-2">
+                                        <strong>Hotel name:</strong>{" "}
+                                        <span>{invoice.hotelName || "-"}</span>
+                                      </div>
+                                      <div className="mb-2">
+                                        <strong>Date:</strong>{" "}
+                                        <span>
+                                          {formatDateShort(invoice.checkInDate) || "-"} to{" "}
+                                          {formatDateShort(invoice.checkOutDate) || "-"}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <strong>Confirmation code:</strong>{" "}
+                                        <code
+                                          className="bg-white px-2 py-1 rounded"
+                                          style={{
+                                            fontSize: "0.75rem",
+                                            color: "#495057",
+                                          }}
+                                        >
+                                          {invoice.referenceNumber || "-"}
+                                        </code>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                            );
+                          })}
                   </tbody>
                 </Table>
                  </div>
-              {totalPages > 1 && (
-                <div className="d-flex justify-content-end p-3">
-                  <Pagination>
-                    <Pagination.Prev
-                      disabled={page === 0}
-                      onClick={() => fetchInvoiceList(page - 1, search)}
-                    />
-                    {Array.from({ length: totalPages }, (_, i) => (
-                      <Pagination.Item
-                        key={i}
-                        active={i === page}
-                        onClick={() => fetchInvoiceList(i, search)}
-                      >
-                        {i + 1}
-                      </Pagination.Item>
-                    ))}
-                    <Pagination.Next
-                      disabled={page === totalPages - 1}
-                      onClick={() => fetchInvoiceList(page + 1, search)}
-                    />
-                  </Pagination>
-                             </div>
-                         )}
              </Card.Body>
            </Card>
-
-          {/* Create/Edit Offers Modal */}
-          <Modal show={showModal} onHide={closeModal} centered size="lg">
-            <Modal.Header
-              closeButton={!isLoading}
-              className="bg-primary text-white"
-            >
-               <Modal.Title>
-                {editing ? "Update Offers" : "Create Offers"}
-               </Modal.Title>
-             </Modal.Header>
-             <Modal.Body>
-              <Form>
-                <Row>
-                  <Col md={12}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        <span className="text-danger">*</span> Title
-                      </Form.Label>
-                      <Form.Control
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Enter offer title"
-                        autoFocus
-                        isInvalid={!!error}
-                      />
-                      {error && (
-                        <Form.Control.Feedback type="invalid">
-                          {error}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                     </Col>
-                   </Row>
-
-                <Row>
-                  <Col md={12}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        <span className="text-danger">*</span> Banner Image
-                      </Form.Label>
-                      <div className="d-flex align-items-center">
-                        <Form.Control
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageChange}
-                          className="me-2"
-                          isInvalid={!!error && !bannerImage && !editing}
-                        />
-                        <span className="text-muted">
-                          {bannerImage ? bannerImage.name : "No file chosen"}
-                        </span>
-                       </div>
-                      {error && !bannerImage && !editing && (
-                        <Form.Control.Feedback type="invalid">
-                          {error}
-                        </Form.Control.Feedback>
-                      )}
-                      
-                      {/* Image Preview */}
-                      {(bannerImage || existingImageUrl) && (
-                        <div className="mt-3">
-                          <div className="d-flex align-items-center mb-2">
-                            <FaImage className="me-2 text-primary" />
-                            <span className="fw-semibold">Image Preview:</span>
-                          </div>
-                          <div className="border rounded p-2" style={{ maxWidth: '300px' }}>
-                            <img
-                              src={bannerImage ? URL.createObjectURL(bannerImage) : existingImageUrl}
-                              alt="Banner preview"
-                              className="img-fluid rounded"
-                              style={{ maxHeight: '200px', width: '100%', objectFit: 'cover' }}
-                            />
-                          </div>
-                          {existingImageUrl && !bannerImage && (
-                            <small className="text-muted mt-1 d-block">
-                              Current image (select a new file to replace)
-                            </small>
-                          )}
-                        </div>
-                      )}
-                    </Form.Group>
-                     </Col>
-                   </Row>
-
-                <Row>
-                     <Col md={12}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        <span className="text-danger">*</span> Description
-                      </Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={4}
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Enter offer description"
-                        isInvalid={!!error}
-                      />
-                      {error && (
-                        <Form.Control.Feedback type="invalid">
-                          {error}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                     </Col>
-                   </Row>
-
-                <Row>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Validity From</Form.Label>
-                      <Form.Control
-                        type="date"
-                        value={validityFrom}
-                        onChange={(e) => {
-                          setValidityFrom(e.target.value);
-                          // If validity to is before the new from date, clear it
-                          if (validityTo && e.target.value && validityTo < e.target.value) {
-                            setValidityTo("");
-                          }
+              ) : invoiceList.length === 0 && !error ? (
+                <Card className="shadow-sm border-0" style={{ borderRadius: "8px" }}>
+                  <Card.Body>
+                    <div className="text-center py-5 text-muted">
+                      <FaInbox
+                        style={{
+                          fontSize: "2.5rem",
+                          marginBottom: "10px",
+                          color: "#adb5bd",
                         }}
-                        min={new Date().toISOString().split('T')[0]} // Prevent selecting past dates
                       />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Validity To</Form.Label>
-                      <Form.Control
-                        type="date"
-                        value={validityTo}
-                        onChange={(e) => setValidityTo(e.target.value)}
-                        min={validityFrom || new Date().toISOString().split('T')[0]} // Only allow dates after validity from
+                      <p className="mt-2 mb-0 fs-5">
+                        Please select an agent and click Search to view invoices
+                      </p>
+                       </div>
+                  </Card.Body>
+                </Card>
+              ) : (
+                <Card className="shadow-sm border-0" style={{ borderRadius: "8px" }}>
+                  <Card.Body>
+                    <div className="text-center py-5 text-muted">
+                      <FaInbox
+                        style={{
+                          fontSize: "2.5rem",
+                          marginBottom: "10px",
+                          color: "#adb5bd",
+                        }}
                       />
-                    </Form.Group>
-                       </Col>
-                     </Row>
-              </Form>
-             </Modal.Body>
-             <Modal.Footer>
-              <Button
-                variant="danger"
-                onClick={closeModal}
-                disabled={isLoading}
-                className="d-flex align-items-center"
-              >
-                <FaTimes className="me-2" />
-                Cancel
-              </Button>
-              <Button
-                className="btn-success d-flex align-items-center"
-                onClick={editing ? handleEdit : saveOffer}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <span
-                      className="spinner-border spinner-border-sm me-2"
-                      role="status"
-                      aria-hidden="true"
-                    ></span>
-                    {editing ? "Updating..." : "Creating..."}
-                  </>
-                ) : (
-                  <>
-                    <FaCheck className="me-2" />
-                    {editing ? "Update" : "Create"}
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="info"
-                onClick={resetForm}
-                disabled={isLoading}
-                className="d-flex align-items-center"
-              >
-                <FaUndo className="me-2" />
-                Reset
-               </Button>
-             </Modal.Footer>
-                       </Modal>
+                      <p className="mt-2 mb-0 fs-5">No invoice data available</p>
+                    </div>
+                  </Card.Body>
+                </Card>
+              )}
+            </Card.Body>
+          </Card>
 
-          {/* Details Modal */}
-          <Modal show={showDetailsModal} onHide={closeDetailsModal} centered>
-            <Modal.Header
-              closeButton
-              className="bg-primary text-white"
-            >
-              <Modal.Title>Booking Details</Modal.Title>
+          {/* PDF Modal */}
+          <Modal
+            show={showPdfModal}
+            onHide={handleClosePdfModal}
+            size="xl"
+            centered
+            fullscreen="lg-down"
+          >
+            <Modal.Header closeButton>
+              <Modal.Title>Invoice PDF</Modal.Title>
             </Modal.Header>
-            <Modal.Body>
-              {selectedItem && (
-                <div>
-                  <div className="mb-3">
-                    <div className="d-flex align-items-center mb-2">
-                      <FaHotel className="text-primary me-2" />
-                      <strong>Hotel Name:</strong>
+            <Modal.Body style={{ padding: 0, height: "80vh" }}>
+              {pdfLoading ? (
+                <div className="d-flex justify-content-center align-items-center" style={{ height: "80vh" }}>
+                  <div className="text-center">
+                    <div
+                      className="spinner-border text-primary"
+                      role="status"
+                      style={{ width: "3rem", height: "3rem" }}
+                    >
+                      <span className="visually-hidden">Loading...</span>
                     </div>
-                    <p className="ms-4 mb-0">{selectedItem.hotelName || "-"}</p>
+                    <p className="mt-3 text-muted">Loading PDF...</p>
                   </div>
-                  
-                  <div className="mb-3">
-                    <div className="d-flex align-items-center mb-2">
-                      <FaCalendarAlt className="text-primary me-2" />
-                      <strong>Booking Date:</strong>
-                    </div>
-                    <p className="ms-4 mb-0">{selectedItem.bookingDate || "-"}</p>
-                  </div>
-                  
-                  <div className="mb-3">
-                    <div className="d-flex align-items-center mb-2">
-                      <FaFileInvoice className="text-primary me-2" />
-                      <strong>Confirmation Code:</strong>
-                    </div>
-                    <p className="ms-4 mb-0">
-                      <code className="bg-light p-2 rounded">
-                        {selectedItem.confirmationCode || "-"}
-                      </code>
-                    </p>
-                  </div>
+                </div>
+              ) : pdfUrl ? (
+                <iframe
+                  src={pdfUrl}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    border: "none",
+                    minHeight: "80vh",
+                  }}
+                  title="Invoice PDF"
+                />
+              ) : (
+                <div className="d-flex justify-content-center align-items-center" style={{ height: "80vh" }}>
+                  <p className="text-muted">No PDF available</p>
                 </div>
               )}
             </Modal.Body>
             <Modal.Footer>
-              <Button variant="secondary" onClick={closeDetailsModal}>
+              <Button variant="secondary" onClick={handleClosePdfModal}>
                 Close
               </Button>
+              {pdfUrl && (
+                <Button
+                  variant="primary"
+                  onClick={() => window.open(pdfUrl, "_blank")}
+                >
+                  Open in New Tab
+                </Button>
+              )}
             </Modal.Footer>
           </Modal>
         </main>
