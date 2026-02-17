@@ -40,12 +40,10 @@ export default function EditContractRate() {
   const [seasonTypes, setSeasonTypes] = useState([]);
   const [fetchingData, setFetchingData] = useState(true);
 
-  // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 minute)
   const getMinValidityToDate = (fromDate) => {
     if (!fromDate) return "";
-    const date = new Date(fromDate);
-    date.setDate(date.getDate() + 1);
-    return date.toISOString().split("T")[0];
+    return fromDate; // Allow same day, just ensure it's validated to be after
   };
 
   // ✅ Fetch dropdowns
@@ -59,12 +57,12 @@ export default function EditContractRate() {
           axiosInstance.get("/api/seasonType"),
         ]);
 
-          // Add "All" option with value -1 at the beginning
+        // Add "All" option with value -1 at the beginning
         const marketsWithAll = [
           { marketTypeId: 100, name: "All" },
           ...(marketRes.data || [])
-        ]; 
-        
+        ];
+
         setMarkets(marketsWithAll);
         setCountries(countryRes.data || []);
         setFilteredCountries(countryRes.data || []);
@@ -85,12 +83,12 @@ export default function EditContractRate() {
       try {
         setFetchingData(true);
         const res = await axiosInstance.get(`/api/hotelContractRate/${contractRateId}`);
-        
+
         console.log("🔍 API Response for Contract Rate:", res.data);
-        
+
         if (res.data) {
           const data = res.data;
-          
+
           // Map market types - handle both array of IDs and array of objects
           const selectedMarkets = data.markeType?.map(apiMarket => {
             // If apiMarket is just an ID (number), find the market by ID
@@ -102,7 +100,7 @@ export default function EditContractRate() {
               };
             }
             // If apiMarket is an object, use existing logic
-            const matchingMarket = markets.find(m => 
+            const matchingMarket = markets.find(m =>
               m.marketTypeId === apiMarket.marketTypeId || m.marketTypeId === apiMarket.id
             );
             return {
@@ -132,8 +130,8 @@ export default function EditContractRate() {
 
           // Map validity periods
           const validityList = data.contractRateValidityDTO?.map(validity => ({
-            validityFrom: validity.validityFrom,
-            validityTo: validity.validityTo
+            validityFrom: validity.validityFrom ? validity.validityFrom.substring(0, 16) : "",
+            validityTo: validity.validityTo ? validity.validityTo.substring(0, 16) : ""
           })) || [{ validityFrom: "", validityTo: "" }];
 
           // Map room rates
@@ -164,7 +162,7 @@ export default function EditContractRate() {
           // Update filtered countries based on selected markets
           if (selectedMarkets.length > 0) {
             const selectedMarketIds = selectedMarkets.map(m => m.value);
-            const filtered = countries.filter(c => 
+            const filtered = countries.filter(c =>
               selectedMarketIds.includes(c.marketTypeId)
             );
             setFilteredCountries(filtered);
@@ -349,7 +347,7 @@ export default function EditContractRate() {
 
       // Set day values based on radio button selection
       let allDays = 0, weekDay = 0, weekEndDay = 0;
-      
+
       switch (formData.daySelection) {
         case "allDays":
           allDays = 1;
@@ -376,8 +374,8 @@ export default function EditContractRate() {
         allDays: allDays,
         contractRateValidityDTO: formData.validityList.map((v) => ({
           contractValidityId: "",
-          validityFrom: v.validityFrom,
-          validityTo: v.validityTo,
+          validityFrom: v.validityFrom ? `${v.validityFrom}:00` : v.validityFrom,
+          validityTo: v.validityTo ? `${v.validityTo}:00` : v.validityTo,
         })),
         contractRateRoomDTO: formData.roomRates.map((r) => ({
           hotelRoomcategoryId: String(r.hotelRoomcategoryId),
@@ -411,8 +409,7 @@ export default function EditContractRate() {
     } catch (err) {
       console.error("❌ Update Error:", err);
       toast.error(
-        `Failed to update contract rate: ${
-          err.response?.data?.message || err.message
+        `Failed to update contract rate: ${err.response?.data?.message || err.message
         }`
       );
     }
@@ -614,18 +611,18 @@ export default function EditContractRate() {
                       <Row key={index} className="align-items-end mb-2">
                         <Col md={4}>
                           <Form.Control
-                            type="date"
+                            type="datetime-local"
                             value={v.validityFrom}
                             onChange={(e) => {
                               const updated = [...formData.validityList];
                               updated[index].validityFrom = e.target.value;
-                              
+
                               // Clear Validity To if it becomes invalid (before or equal to From date)
                               const currentToDate = formData.validityList[index].validityTo;
                               if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
                                 updated[index].validityTo = "";
                               }
-                              
+
                               setFormData({
                                 ...formData,
                                 validityList: updated,
@@ -635,7 +632,7 @@ export default function EditContractRate() {
                         </Col>
                         <Col md={4}>
                           <Form.Control
-                            type="date"
+                            type="datetime-local"
                             value={v.validityTo}
                             min={getMinValidityToDate(v.validityFrom)}
                             onChange={(e) => {
@@ -710,43 +707,43 @@ export default function EditContractRate() {
                               {room.occupancyDetailsDTOs.length > 0 && room.roomTypeDetailsDTOs.length > 0 ? (
                                 room.occupancyDetailsDTOs.map((occ) =>
                                   room.roomTypeDetailsDTOs.map((roomType) => (
-                                  <tr key={`${occ.id}-${roomType.roomTypeId}`}>
-                                    <td>{occ.occupanyType}</td>
-                                    <td>{roomType.roomTypeName}</td>
-                                    {["rate", "adultRate", "childRate"].map(
-                                      (field) => (
-                                        <td key={field}>
-                                          <Form.Control
-                                            type="number"
-                                            min="0"
-                                            value={
-                                              formData.roomRates.find(
-                                                (r) =>
-                                                  r.hotelRoomcategoryId ===
+                                    <tr key={`${occ.id}-${roomType.roomTypeId}`}>
+                                      <td>{occ.occupanyType}</td>
+                                      <td>{roomType.roomTypeName}</td>
+                                      {["rate", "adultRate", "childRate"].map(
+                                        (field) => (
+                                          <td key={field}>
+                                            <Form.Control
+                                              type="number"
+                                              min="0"
+                                              value={
+                                                formData.roomRates.find(
+                                                  (r) =>
+                                                    r.hotelRoomcategoryId ===
                                                     String(
                                                       room.hotelRoomcategoryId
                                                     ) &&
-                                                  r.ocuppancytypeId ===
+                                                    r.ocuppancytypeId ===
                                                     String(occ.id) &&
-                                                  r.hotelRoomtypeId ===
+                                                    r.hotelRoomtypeId ===
                                                     String(roomType.roomTypeId)
-                                              )?.[field] || ""
-                                            }
-                                            onChange={(e) =>
-                                              handleRateChange(
-                                                room.hotelRoomcategoryId,
-                                                occ.id,
-                                                roomType.roomTypeId,
-                                                roomType.roomTypeName,
-                                                field,
-                                                e.target.value
-                                              )
-                                            }
-                                          />
-                                        </td>
-                                      )
-                                    )}
-                                  </tr>
+                                                )?.[field] || ""
+                                              }
+                                              onChange={(e) =>
+                                                handleRateChange(
+                                                  room.hotelRoomcategoryId,
+                                                  occ.id,
+                                                  roomType.roomTypeId,
+                                                  roomType.roomTypeName,
+                                                  field,
+                                                  e.target.value
+                                                )
+                                              }
+                                            />
+                                          </td>
+                                        )
+                                      )}
+                                    </tr>
                                   ))
                                 )
                               ) : (

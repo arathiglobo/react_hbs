@@ -62,9 +62,12 @@ export default function EditDiscountPromotion() {
     return today.toISOString().split("T")[0];
   };
 
-  // Helper function to convert dd-mm-yyyy to YYYY-MM-DD
+  // Helper function to convert dd-mm-yyyy or ISO to YYYY-MM-DDTHH:MM
   const convertToDateInput = (dateString) => {
     if (!dateString) return "";
+    if (dateString.includes("T")) {
+      return dateString.substring(0, 16);
+    }
     const parts = dateString.split("-");
     if (parts.length === 3) {
       const day = parts[0];
@@ -116,37 +119,37 @@ export default function EditDiscountPromotion() {
           to: convertToDateInput(item.validityTo),
         })) || [{ from: "", to: "" }];
 
-        // Store roomDTO data for discount details
-        console.log('Setting discount room data:', data.roomDTO);
-        console.log('Available hotel rooms data:', hotelRoomsData);
-        setDiscountRoomData(data.roomDTO || []);
+      // Store roomDTO data for discount details
+      console.log('Setting discount room data:', data.roomDTO);
+      console.log('Available hotel rooms data:', hotelRoomsData);
+      setDiscountRoomData(data.roomDTO || []);
 
-        setFormData({
-          season: data.seasonId?.toString() || "",
-          rateCode: data.rateCode || "",
-          marketType:
-            data.marketype?.map((id) => ({
-              value: id,
-              label:
-                markets.find((m) => m.marketTypeId === id)?.name ||
-                `Market ${id}`,
-            })) || [],
-          excludeNationality:
-            data.excludeCountry?.map((id) => ({
-              value: id,
-              label: countries.find((c) => c.id === id)?.name || `Country ${id}`,
-            })) || [],
-          isRefundable: data.refund || false,
-          weekType: data.allDays ? "all" : data.weekDay ? "weekdays" : "weekends",
-          discountForRooms: true,
-          discountForExtraBed: data.extraBed || false,
-          bookByDate: convertToDateInput(data.bookDate),
-          bookByPriorDays: data.bookDay?.toString() || "",
-          validityList: validityList,
-          blackoutDates: blackoutDates,
-          discounts: [],
-          remarks: data.remark || "",
-        });
+      setFormData({
+        season: data.seasonId?.toString() || "",
+        rateCode: data.rateCode || "",
+        marketType:
+          data.marketype?.map((id) => ({
+            value: id,
+            label:
+              markets.find((m) => m.marketTypeId === id)?.name ||
+              `Market ${id}`,
+          })) || [],
+        excludeNationality:
+          data.excludeCountry?.map((id) => ({
+            value: id,
+            label: countries.find((c) => c.id === id)?.name || `Country ${id}`,
+          })) || [],
+        isRefundable: data.refund || false,
+        weekType: data.allDays ? "all" : data.weekDay ? "weekdays" : "weekends",
+        discountForRooms: true,
+        discountForExtraBed: data.extraBed || false,
+        bookByDate: convertToDateInput(data.bookDate),
+        bookByPriorDays: data.bookDay?.toString() || "",
+        validityList: validityList,
+        blackoutDates: blackoutDates,
+        discounts: [],
+        remarks: data.remark || "",
+      });
     } catch (error) {
       console.error("Error loading discount data:", error);
       toast.error("Failed to load discount data");
@@ -192,11 +195,11 @@ export default function EditDiscountPromotion() {
         axiosInstance.get("/api/marketType"),
         axiosInstance.get("/api/country"),
       ]);
-        // Add "All" option with value -1 at the beginning
-        const marketsWithAll = [
-          { marketTypeId: 100, name: "All" },
-          ...(marketRes.data || [])
-        ];
+      // Add "All" option with value -1 at the beginning
+      const marketsWithAll = [
+        { marketTypeId: 100, name: "All" },
+        ...(marketRes.data || [])
+      ];
       setMarkets(marketsWithAll);
       setCountries(countryRes.data || []);
       setFilteredCountries(countryRes.data || []);
@@ -250,6 +253,17 @@ export default function EditDiscountPromotion() {
     setFormData({ ...formData, [field]: updated });
   };
 
+  // ✅ Helper function to get minimum validity to date (From date + 1 minute)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    // Add 1 minute to the from date to ensure validityTo is after validityFrom
+    date.setMinutes(date.getMinutes() + 1);
+    // Format to YYYY-MM-DDTHH:MM for datetime-local input
+    const pad = (num) => num.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
   const handleDateChange = (field, index, key, value) => {
     const updated = [...formData[field]];
     updated[index][key] = value;
@@ -282,11 +296,7 @@ export default function EditDiscountPromotion() {
     try {
       const formatDate = (date) => {
         if (!date) return "";
-        // Convert YYYY-MM-DD to dd-mm-yyyy for API
-        const d = new Date(date);
-        return `${String(d.getDate()).padStart(2, "0")}-${String(
-          d.getMonth() + 1
-        ).padStart(2, "0")}-${d.getFullYear()}`;
+        return `${date}:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? true : false;
@@ -345,7 +355,7 @@ export default function EditDiscountPromotion() {
       );
 
       if (response.data) {
-      toast.success("Discount Promotion Updated Successfully!");
+        toast.success("Discount Promotion Updated Successfully!");
         navigate(`/hotel-actions/${id}/promotions`);
       }
     } catch (error) {
@@ -637,35 +647,40 @@ export default function EditDiscountPromotion() {
                         </div>
                         {formData.validityList.map((v, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={v.from}
-                                min={getCurrentDate()}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "validityList",
-                                    i,
-                                    "from",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>From</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={v.from}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "validityList",
+                                      i,
+                                      "from",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={v.to}
-                                min={v.from || getCurrentDate()}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "validityList",
-                                    i,
-                                    "to",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>To</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={v.to}
+                                  min={getMinValidityToDate(v.from)}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "validityList",
+                                      i,
+                                      "to",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
                             <Col xs="auto">
                               {i > 0 && (
@@ -699,35 +714,40 @@ export default function EditDiscountPromotion() {
                         </div>
                         {formData.blackoutDates.map((b, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={b.from}
-                                min={getCurrentDate()}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "blackoutDates",
-                                    i,
-                                    "from",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>From</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={b.from}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "blackoutDates",
+                                      i,
+                                      "from",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={b.to}
-                                min={b.from || getCurrentDate()}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "blackoutDates",
-                                    i,
-                                    "to",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>To</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={b.to}
+                                  min={getMinValidityToDate(b.from)}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "blackoutDates",
+                                      i,
+                                      "to",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
                             <Col xs="auto">
                               {i > 0 && (
@@ -774,7 +794,7 @@ export default function EditDiscountPromotion() {
                               <tr className="bg-light fw-bold text-primary">
                                 <td colSpan={7}>{roomCategory.roomCategory}</td>
                               </tr>
-                              
+
                               {/* Room Types and Occupancies */}
                               {roomCategory.roomTypeDetailsDTOs?.map((roomType, typeIndex) => (
                                 <React.Fragment key={roomType.roomTypeId}>
@@ -784,26 +804,26 @@ export default function EditDiscountPromotion() {
                                     <td className="fw-semibold">{roomType.roomTypeName}</td>
                                     <td colSpan={5}></td>
                                   </tr>
-                                  
+
                                   {/* Occupancy Rows */}
                                   {roomCategory.occupancyDetailsDTOs?.map((occupancy, occIndex) => {
                                     // Find existing discount data for this combination
                                     // First try exact match by hotelRoomcategoryId, hotelRoomtypeId, and roomId
-                                    let existingDiscount = discountRoomData.find(d => 
+                                    let existingDiscount = discountRoomData.find(d =>
                                       d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
                                       d.hotelRoomtypeId == roomType.roomTypeId &&
                                       d.roomId == occupancy.id
                                     );
-                                    
+
                                     // If no exact match, try to find by category and type only
                                     // This handles cases where roomId doesn't match occupancy.id
                                     if (!existingDiscount) {
-                                      existingDiscount = discountRoomData.find(d => 
+                                      existingDiscount = discountRoomData.find(d =>
                                         d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
                                         d.hotelRoomtypeId == roomType.roomTypeId
                                       );
                                     }
-                                    
+
                                     console.log('Looking for discount data:', {
                                       roomCategory: roomCategory.rommCategoryId,
                                       roomType: roomType.roomTypeId,
@@ -812,45 +832,45 @@ export default function EditDiscountPromotion() {
                                       availableDiscounts: discountRoomData,
                                       found: existingDiscount
                                     });
-                                    
+
                                     // Debug: Show all occupancy IDs for this room category
-                                    console.log('All occupancies for this category:', 
+                                    console.log('All occupancies for this category:',
                                       roomCategory.occupancyDetailsDTOs?.map(occ => ({
                                         id: occ.id,
                                         type: occ.occupanyType
                                       }))
                                     );
-                            
-                            return (
+
+                                    return (
                                       <tr key={`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`}>
                                         <td></td>
                                         <td></td>
                                         <td>{occupancy.occupanyType}</td>
-                                <td>
-                                  <Form.Control
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    placeholder="0"
+                                        <td>
+                                          <Form.Control
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            placeholder="0"
                                             value={existingDiscount?.discountPercent || "0"}
-                                    size="sm"
+                                            size="sm"
                                             onChange={(e) => {
                                               const updated = [...discountRoomData];
                                               // Try exact match first
-                                              let existingIndex = updated.findIndex(d => 
+                                              let existingIndex = updated.findIndex(d =>
                                                 d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
                                                 d.hotelRoomtypeId == roomType.roomTypeId &&
                                                 d.roomId == occupancy.id
                                               );
-                                              
+
                                               // If no exact match, try category and type only
                                               if (existingIndex === -1) {
-                                                existingIndex = updated.findIndex(d => 
+                                                existingIndex = updated.findIndex(d =>
                                                   d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
                                                   d.hotelRoomtypeId == roomType.roomTypeId
                                                 );
                                               }
-                                              
+
                                               if (existingIndex !== -1) {
                                                 updated[existingIndex].discountPercent = e.target.value;
                                               } else {
@@ -865,32 +885,32 @@ export default function EditDiscountPromotion() {
                                               }
                                               setDiscountRoomData(updated);
                                             }}
-                                  />
-                                </td>
-                                <td>
-                                  <Form.Control
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
+                                          />
+                                        </td>
+                                        <td>
+                                          <Form.Control
+                                            type="number"
+                                            min="0"
+                                            placeholder="0"
                                             value={existingDiscount?.discountValue || "0"}
-                                    size="sm"
+                                            size="sm"
                                             onChange={(e) => {
                                               const updated = [...discountRoomData];
                                               // Try exact match first
-                                              let existingIndex = updated.findIndex(d => 
+                                              let existingIndex = updated.findIndex(d =>
                                                 d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
                                                 d.hotelRoomtypeId == roomType.roomTypeId &&
                                                 d.roomId == occupancy.id
                                               );
-                                              
+
                                               // If no exact match, try category and type only
                                               if (existingIndex === -1) {
-                                                existingIndex = updated.findIndex(d => 
+                                                existingIndex = updated.findIndex(d =>
                                                   d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
                                                   d.hotelRoomtypeId == roomType.roomTypeId
                                                 );
                                               }
-                                              
+
                                               if (existingIndex !== -1) {
                                                 updated[existingIndex].discountValue = e.target.value;
                                               } else {
@@ -905,32 +925,32 @@ export default function EditDiscountPromotion() {
                                               }
                                               setDiscountRoomData(updated);
                                             }}
-                                  />
-                                </td>
-                                <td>
-                                  <Form.Control
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
+                                          />
+                                        </td>
+                                        <td>
+                                          <Form.Control
+                                            type="number"
+                                            min="0"
+                                            placeholder="0"
                                             value={existingDiscount?.lengthRestriction === "null" ? "0" : existingDiscount?.lengthRestriction || "0"}
-                                    size="sm"
+                                            size="sm"
                                             onChange={(e) => {
                                               const updated = [...discountRoomData];
                                               // Try exact match first
-                                              let existingIndex = updated.findIndex(d => 
+                                              let existingIndex = updated.findIndex(d =>
                                                 d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
                                                 d.hotelRoomtypeId == roomType.roomTypeId &&
                                                 d.roomId == occupancy.id
                                               );
-                                              
+
                                               // If no exact match, try category and type only
                                               if (existingIndex === -1) {
-                                                existingIndex = updated.findIndex(d => 
+                                                existingIndex = updated.findIndex(d =>
                                                   d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
                                                   d.hotelRoomtypeId == roomType.roomTypeId
                                                 );
                                               }
-                                              
+
                                               if (existingIndex !== -1) {
                                                 updated[existingIndex].lengthRestriction = e.target.value;
                                               } else {
@@ -945,25 +965,25 @@ export default function EditDiscountPromotion() {
                                               }
                                               setDiscountRoomData(updated);
                                             }}
-                                  />
-                                </td>
-                                <td>
-                                  <Form.Control
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
-                                    defaultValue="25"
-                                    size="sm"
-                                  />
-                                </td>
-                              </tr>
-                            );
-                          })}
+                                          />
+                                        </td>
+                                        <td>
+                                          <Form.Control
+                                            type="number"
+                                            min="0"
+                                            placeholder="0"
+                                            defaultValue="25"
+                                            size="sm"
+                                          />
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                                 </React.Fragment>
                               ))}
                             </React.Fragment>
                           ))}
-                          
+
                           {/* Show message if no hotel rooms data */}
                           {hotelRoomsData.length === 0 && (
                             <tr>

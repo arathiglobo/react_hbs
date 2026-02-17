@@ -54,10 +54,14 @@ export default function DiscountPromotion() {
     return Object.keys(errors).length === 0;
   };
 
-  // Helper function to get current date in YYYY-MM-DD format for date inputs
+  // Helper function to get current date in YYYY-MM-DDTHH:MM format for date inputs
   const getCurrentDate = () => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    // Offset for local timezone if needed, but for now simple ISO substring
+    // To get local ISO string:
+    const tzOffset = today.getTimezoneOffset() * 60000; // offset in milliseconds
+    const localISOTime = (new Date(today - tzOffset)).toISOString().slice(0, 16);
+    return localISOTime;
   };
 
   const [formData, setFormData] = useState({
@@ -78,31 +82,31 @@ export default function DiscountPromotion() {
   });
 
   // ✅ Fetch rooms
- const fetchRooms = async () => {
-  try {
-    setLoading(true);
-    const res = await axiosInstance.get(`/api/hotel/${id}/room-meal-data`);
-    const roomData = res.data || [];
+  const fetchRooms = async () => {
+    try {
+      setLoading(true);
+      const res = await axiosInstance.get(`/api/hotel/${id}/room-meal-data`);
+      const roomData = res.data || [];
 
-    const formatted = roomData.map((room) => ({
-      roomId: room.roomId,
-      roomName: room.roomName,
-      mealPlans: room.mealPlans.map((meal) => ({
-        mealPlanId: meal.mealPlanId,
-        mealName: meal.mealName,
-        discountPercent: 0,
-        discountValue: 0,
-        minStay: 0,
-      })),
-    }));
+      const formatted = roomData.map((room) => ({
+        roomId: room.roomId,
+        roomName: room.roomName,
+        mealPlans: room.mealPlans.map((meal) => ({
+          mealPlanId: meal.mealPlanId,
+          mealName: meal.mealName,
+          discountPercent: 0,
+          discountValue: 0,
+          minStay: 0,
+        })),
+      }));
 
-    setRooms(formatted);
-  } catch {
-    toast.error("Failed to load rooms");
-  } finally {
-    setLoading(false);
-  }
-};
+      setRooms(formatted);
+    } catch {
+      toast.error("Failed to load rooms");
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   // ✅ Load hotel room data dynamically
@@ -142,11 +146,11 @@ export default function DiscountPromotion() {
         axiosInstance.get("/api/country"),
       ]);
 
-        // Add "All" option with value -1 at the beginning
-        const marketsWithAll = [
-          { marketTypeId: 100, name: "All" },
-          ...(marketRes.data || [])
-        ];
+      // Add "All" option with value -1 at the beginning
+      const marketsWithAll = [
+        { marketTypeId: 100, name: "All" },
+        ...(marketRes.data || [])
+      ];
       setMarkets(marketsWithAll);
       setCountries(countryRes.data || []);
       setFilteredCountries(countryRes.data || []);
@@ -155,39 +159,39 @@ export default function DiscountPromotion() {
     }
   };
 
-useEffect(() => {
-  fetchRooms();
-  fetchDropdowns();
-  fetchRoomDetails();
-  loadHotelRoomDatas();
-  seasonList();
-}, [id]);
+  useEffect(() => {
+    fetchRooms();
+    fetchDropdowns();
+    fetchRoomDetails();
+    loadHotelRoomDatas();
+    seasonList();
+  }, [id]);
 
 
   // ✅ Fetch Contract Rate Details
-const fetchRoomDetails = async () => {
-  try {
-    const res = await axiosInstance.get(`/api/hotelRoomDetailsController/${id}`);
-    const data = res.data || [];
+  const fetchRoomDetails = async () => {
+    try {
+      const res = await axiosInstance.get(`/api/hotelRoomDetailsController/${id}`);
+      const data = res.data || [];
 
-    const formatted = data.map((room) => ({
-      id: room.id,
-      roomCategory: room.roomCategory,
-      occupancies: room.occupancyDetailsDTOs.map((occ) => ({
-        id: occ.id,
-        occupancyType: occ.occupanyType,
-        rateSingle: 0,
-        rateDouble: 0,
-        rateExtraAdult: 0,
-        rateExtraChild: 0,
-      })),
-    }));
+      const formatted = data.map((room) => ({
+        id: room.id,
+        roomCategory: room.roomCategory,
+        occupancies: room.occupancyDetailsDTOs.map((occ) => ({
+          id: occ.id,
+          occupancyType: occ.occupanyType,
+          rateSingle: 0,
+          rateDouble: 0,
+          rateExtraAdult: 0,
+          rateExtraChild: 0,
+        })),
+      }));
 
-    setRoomDetails(formatted);
-  } catch (error) {
-    toast.error("Failed to fetch room contract details");
-  }
-};
+      setRoomDetails(formatted);
+    } catch (error) {
+      toast.error("Failed to fetch room contract details");
+    }
+  };
 
 
   // ✅ Filter countries based on selected markets
@@ -217,6 +221,17 @@ const fetchRoomDetails = async () => {
     setFormData({ ...formData, [field]: updated });
   };
 
+  // ✅ Helper function to get minimum validity to date (From date + 1 minute)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    // Add 1 minute to the from date to ensure validityTo is after validityFrom
+    date.setMinutes(date.getMinutes() + 1);
+    // Format to YYYY-MM-DDTHH:MM for datetime-local input
+    const pad = (num) => num.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
   const handleDateChange = (field, index, key, value) => {
     const updated = [...formData[field]];
     updated[index][key] = value;
@@ -231,30 +246,26 @@ const fetchRoomDetails = async () => {
   };
 
   // ✅ Handle contract rate input change
-const handleContractRateChange = (roomIndex, occIndex, field, value) => {
-  const updated = [...roomDetails];
-  updated[roomIndex].occupancies[occIndex][field] = value;
-  setRoomDetails(updated);
-};
+  const handleContractRateChange = (roomIndex, occIndex, field, value) => {
+    const updated = [...roomDetails];
+    updated[roomIndex].occupancies[occIndex][field] = value;
+    setRoomDetails(updated);
+  };
 
   // ✅ Submit
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validate form before submission
     if (!validateForm()) {
-     
+
       return;
     }
-    
+
     try {
       const formatDate = (date) => {
         if (!date) return "";
-        // Convert YYYY-MM-DD to dd-mm-yyyy for API
-        const d = new Date(date);
-        return `${String(d.getDate()).padStart(2, "0")}-${String(
-          d.getMonth() + 1
-        ).padStart(2, "0")}-${d.getFullYear()}`;
+        return `${date}:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? true : false;
@@ -310,7 +321,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
       console.log("Discount payload:", payload);
 
       const response = await axiosInstance.post("/api/discount/save", payload);
-      
+
       if (response.data) {
         toast.success("Discount Promotion Saved Successfully!");
         navigate(`/hotel-actions/${id}/promotions`);
@@ -365,7 +376,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                             });
                             // Clear validation error when user selects
                             if (validationErrors.season) {
-                              setValidationErrors({...validationErrors, season: ""});
+                              setValidationErrors({ ...validationErrors, season: "" });
                             }
                           }}
                           className="rounded-pill"
@@ -399,7 +410,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                             });
                             // Clear validation error when user types
                             if (validationErrors.rateCode) {
-                              setValidationErrors({...validationErrors, rateCode: ""});
+                              setValidationErrors({ ...validationErrors, rateCode: "" });
                             }
                           }}
                           placeholder="Enter rate code"
@@ -428,7 +439,7 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                             setFormData({ ...formData, marketType: selected });
                             // Clear validation error when user selects
                             if (validationErrors.marketType) {
-                              setValidationErrors({...validationErrors, marketType: ""});
+                              setValidationErrors({ ...validationErrors, marketType: "" });
                             }
                           }}
                           classNamePrefix="react-select"
@@ -587,35 +598,40 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                         </div>
                         {formData.validityList.map((v, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={v.from}
-                                min={getCurrentDate()}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "validityList",
-                                    i,
-                                    "from",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>From</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={v.from}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "validityList",
+                                      i,
+                                      "from",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={v.to}
-                                min={v.from || getCurrentDate()}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "validityList",
-                                    i,
-                                    "to",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>To</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={v.to}
+                                  min={getMinValidityToDate(v.from)}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "validityList",
+                                      i,
+                                      "to",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
                             <Col xs="auto">
                               {i > 0 && (
@@ -649,35 +665,40 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                         </div>
                         {formData.blackoutDates.map((b, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={b.from}
-                                min={getCurrentDate()}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "blackoutDates",
-                                    i,
-                                    "from",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>From</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={b.from}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "blackoutDates",
+                                      i,
+                                      "from",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={b.to}
-                                min={b.from || getCurrentDate()}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "blackoutDates",
-                                    i,
-                                    "to",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>To</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={b.to}
+                                  min={getMinValidityToDate(b.from)}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "blackoutDates",
+                                      i,
+                                      "to",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
                             <Col xs="auto">
                               {i > 0 && (
@@ -699,94 +720,94 @@ const handleContractRateChange = (roomIndex, occIndex, field, value) => {
                   </Row>
 
                   {/* ================= DISCOUNT TABLE ================= */}
-                 {/* ================= DISCOUNT DETAILS ================= */}
-<Card className="p-3 border-0 mb-4">
-  <h6 className="fw-bold mb-3 text-primary">DISCOUNT DETAILS</h6>
+                  {/* ================= DISCOUNT DETAILS ================= */}
+                  <Card className="p-3 border-0 mb-4">
+                    <h6 className="fw-bold mb-3 text-primary">DISCOUNT DETAILS</h6>
 
-  <div className="table-responsive">
-    <Table bordered hover size="sm">
-      <thead className="table-light text-center align-middle">
-        <tr>
-          <th>Room Category</th>
-          <th>Room Type</th>
-          <th>Occupancy</th>
-          <th>Discount (%)</th>
-          <th>Discount (Value)</th>
-          <th>Minlength & Stay Restriction</th>
-          <th>Maxlength & Stay Restriction</th>
-        </tr>
-      </thead>
-      <tbody>
-        {hotelRoomsData.map((roomCategory, categoryIndex) => (
-          <React.Fragment key={roomCategory.id}>
-            {/* Room Category Header Row */}
-            <tr className="bg-light fw-bold text-primary">
-              <td colSpan={6}>{roomCategory.roomCategory}</td>
-            </tr>
-            
-            {/* Room Types and Occupancies */}
-            {roomCategory.roomTypeDetailsDTOs?.map((roomType, typeIndex) => (
-              <React.Fragment key={roomType.roomTypeId}>
-                {/* Room Type Header Row */}
-                <tr className="bg-light">
-                  <td></td>
-                  <td className="fw-semibold">{roomType.roomTypeName}</td>
-                  <td colSpan={5}></td>
-                </tr>
-                
-                {/* Occupancy Rows */}
-                {roomCategory.occupancyDetailsDTOs?.map((occupancy, occIndex) => (
-                  <tr key={`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`}>
-                    <td></td>
-                    <td></td>
-                    <td>{occupancy.occupanyType}</td>
-                    <td>
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        max="100"
-                        placeholder="0"
-                        defaultValue="0"
-                        size="sm"
-                      />
-                    </td>
-                    <td>
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        defaultValue="0"
-                        size="sm"
-                      />
-                    </td>
-                    <td>
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        defaultValue="0"
-                        size="sm"
-                      />
-                    </td>
-                    <td>
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        defaultValue="25"
-                        size="sm"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </React.Fragment>
-            ))}
-          </React.Fragment>
-        ))}
-      </tbody>
-    </Table>
-  </div>
-</Card>
+                    <div className="table-responsive">
+                      <Table bordered hover size="sm">
+                        <thead className="table-light text-center align-middle">
+                          <tr>
+                            <th>Room Category</th>
+                            <th>Room Type</th>
+                            <th>Occupancy</th>
+                            <th>Discount (%)</th>
+                            <th>Discount (Value)</th>
+                            <th>Minlength & Stay Restriction</th>
+                            <th>Maxlength & Stay Restriction</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {hotelRoomsData.map((roomCategory, categoryIndex) => (
+                            <React.Fragment key={roomCategory.id}>
+                              {/* Room Category Header Row */}
+                              <tr className="bg-light fw-bold text-primary">
+                                <td colSpan={6}>{roomCategory.roomCategory}</td>
+                              </tr>
+
+                              {/* Room Types and Occupancies */}
+                              {roomCategory.roomTypeDetailsDTOs?.map((roomType, typeIndex) => (
+                                <React.Fragment key={roomType.roomTypeId}>
+                                  {/* Room Type Header Row */}
+                                  <tr className="bg-light">
+                                    <td></td>
+                                    <td className="fw-semibold">{roomType.roomTypeName}</td>
+                                    <td colSpan={5}></td>
+                                  </tr>
+
+                                  {/* Occupancy Rows */}
+                                  {roomCategory.occupancyDetailsDTOs?.map((occupancy, occIndex) => (
+                                    <tr key={`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`}>
+                                      <td></td>
+                                      <td></td>
+                                      <td>{occupancy.occupanyType}</td>
+                                      <td>
+                                        <Form.Control
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          placeholder="0"
+                                          defaultValue="0"
+                                          size="sm"
+                                        />
+                                      </td>
+                                      <td>
+                                        <Form.Control
+                                          type="number"
+                                          min="0"
+                                          placeholder="0"
+                                          defaultValue="0"
+                                          size="sm"
+                                        />
+                                      </td>
+                                      <td>
+                                        <Form.Control
+                                          type="number"
+                                          min="0"
+                                          placeholder="0"
+                                          defaultValue="0"
+                                          size="sm"
+                                        />
+                                      </td>
+                                      <td>
+                                        <Form.Control
+                                          type="number"
+                                          min="0"
+                                          placeholder="0"
+                                          defaultValue="25"
+                                          size="sm"
+                                        />
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </React.Fragment>
+                              ))}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+                  </Card>
 
 
                   {/* ================= REMARKS + BUTTONS ================= */}

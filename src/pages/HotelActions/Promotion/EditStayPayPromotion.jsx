@@ -32,12 +32,15 @@ export default function EditStayPayPromotion() {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
 
-  // ✅ Helper function to get minimum validity to date (next day from from date)
+  // ✅ Helper function to get minimum validity to date (From date + 1 minute)
   const getMinValidityToDate = (fromDate) => {
     if (!fromDate) return "";
     const date = new Date(fromDate);
-    date.setDate(date.getDate() + 1);
-    return date.toISOString().split("T")[0];
+    // Add 1 minute to the from date to ensure validityTo is after validityFrom
+    date.setMinutes(date.getMinutes() + 1);
+    // Format to YYYY-MM-DDTHH:MM for datetime-local input
+    const pad = (num) => num.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
   // ✅ Validation function - Only basic required fields
@@ -86,14 +89,14 @@ export default function EditStayPayPromotion() {
         axiosInstance.get("/api/country"),
         axiosInstance.get("/api/seasonType"),
       ]);
-       
+
       // Add "All" option with value -1 at the beginning
-        const marketsWithAll = [
-          { marketTypeId: 100, name: "All" },
-          ...(marketRes.data || [])
-        ]; 
-        
-    setMarkets(marketsWithAll);
+      const marketsWithAll = [
+        { marketTypeId: 100, name: "All" },
+        ...(marketRes.data || [])
+      ];
+
+      setMarkets(marketsWithAll);
       setCountries(countryRes.data || []);
       setFilteredCountries(countryRes.data || []);
       setSeasonData(seasonRes.data || []);
@@ -129,9 +132,12 @@ export default function EditStayPayPromotion() {
       const data = res.data;
       console.log("Promotion data received:", data);
 
-      // Convert date format from DD-MM-YYYY to YYYY-MM-DD for date inputs
+      // Convert date format for input (YYYY-MM-DDTHH:MM)
       const convertDateForInput = (dateStr) => {
         if (!dateStr) return "";
+        if (dateStr.includes("T")) {
+          return dateStr.substring(0, 16);
+        }
         const parts = dateStr.split("-");
         if (parts.length === 3) {
           return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
@@ -156,7 +162,7 @@ export default function EditStayPayPromotion() {
       console.log("Populating room rates from promotion data");
       console.log("Hotel rooms data:", hotelRoomsData);
       console.log("Promotion room DTO:", data.promotionRoomDTO);
-      
+
       const initialRoomRates = {};
       data.promotionRoomDTO?.forEach(promoRoom => {
         initialRoomRates[`${promoRoom.hotelRoomcategoryId}_${promoRoom.hotelRoomtypeId}_stay`] = promoRoom.noOfstay;
@@ -199,7 +205,7 @@ export default function EditStayPayPromotion() {
           console.log("- Raw data.excludeCountry:", data.excludeCountry);
           console.log("- Split result:", data.excludeCountry ? data.excludeCountry.split(",") : []);
           console.log("- Countries available for mapping:", countries.length);
-          
+
           const result = (data.excludeCountry ? data.excludeCountry.split(",") : []).map((n) => {
             const country = countries.find((c) => c.id === n);
             console.log(`- Mapping country ID ${n}:`, country);
@@ -208,11 +214,11 @@ export default function EditStayPayPromotion() {
               label: country?.name || `Country ${n}`,
             };
           });
-          
+
           console.log("- Final exclude nationality result:", result);
           return result;
         })(),
-        
+
         // ========================================
         // EXCLUDE NATIONALITY - FUTURE FORMAT (ARRAY) - COMMENTED OUT
         // ========================================
@@ -226,8 +232,8 @@ export default function EditStayPayPromotion() {
           data.allDays === 1
             ? "all"
             : data.weekDay === 1
-            ? "weekdays"
-            : "weekends",
+              ? "weekdays"
+              : "weekends",
         bookByDate: convertDateForInput(data.bookDate) || "",
         bookByPriorDays: data.bookDay || "",
         validityList,
@@ -302,9 +308,9 @@ export default function EditStayPayPromotion() {
             label: markets.find((x) => x.marketTypeId === m)?.name || `Market ${m}`,
           })),
           // ========================================
-        // EXCLUDE NATIONALITY - CURRENT FORMAT (STRING)
-        // ========================================
-        excludeNationality: (data.excludeCountry ? data.excludeCountry.split(",") : []).map((n) => ({
+          // EXCLUDE NATIONALITY - CURRENT FORMAT (STRING)
+          // ========================================
+          excludeNationality: (data.excludeCountry ? data.excludeCountry.split(",") : []).map((n) => ({
             value: n,
             label: countries.find((c) => c.id === n)?.name || `Country ${n}`,
           })),
@@ -314,19 +320,19 @@ export default function EditStayPayPromotion() {
             data.allDays === 1
               ? "all"
               : data.weekDay === 1
-              ? "weekdays"
-              : "weekends",
+                ? "weekdays"
+                : "weekends",
           bookByDate: convertDateForInput(data.bookDate) || "",
           bookByPriorDays: data.bookDay || "",
           validityList,
           blackoutDates,
           remarks: data.remark || "",
-      });
+        });
 
-      console.log("Form data re-populated successfully");
-      console.log("Final isRefundable value:", data.refund === 1);
-      console.log("Final isRefundable type:", typeof (data.refund === 1));
-      console.log("Final isRefundable with Boolean wrapper:", Boolean(data.refund === 1 || data.refund === "1" || data.refund === true));
+        console.log("Form data re-populated successfully");
+        console.log("Final isRefundable value:", data.refund === 1);
+        console.log("Final isRefundable type:", typeof (data.refund === 1));
+        console.log("Final isRefundable with Boolean wrapper:", Boolean(data.refund === 1 || data.refund === "1" || data.refund === true));
       } catch (err) {
         console.error("Error re-populating form data:", err);
       }
@@ -370,7 +376,7 @@ export default function EditStayPayPromotion() {
         }));
 
         console.log("Re-populated room data:", formatted);
-        
+
         // Check for duplicate keys
         const allKeys = [];
         formatted.forEach((roomCategory, categoryIndex) => {
@@ -382,7 +388,7 @@ export default function EditStayPayPromotion() {
             allKeys.push(key);
           });
         });
-        
+
         setRooms(formatted);
       } catch (err) {
         console.error("Error re-populating room data:", err);
@@ -427,7 +433,7 @@ export default function EditStayPayPromotion() {
   // ✅ Handle Stay/Pay table changes with auto-calculation and validation
   const handleStayPayChange = (roomCategory, roomType, field, value) => {
     const baseKey = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}`;
-    
+
     if (field === "stay") {
       // When Stay changes, just update Stay (no auto-calculation of Free)
       setRoomRates(prev => ({
@@ -439,14 +445,14 @@ export default function EditStayPayPromotion() {
       const currentRates = roomRates;
       const stayValue = currentRates[`${baseKey}_stay`] || 0;
       let payValue = value;
-      
+
       // Validation: Pay cannot exceed Stay - 1
       if (stayValue > 0) {
         payValue = Math.min(payValue, stayValue - 1);
       }
-      
+
       const freeValue = Math.max(0, stayValue - payValue);
-      
+
       setRoomRates(prev => ({
         ...prev,
         [`${baseKey}_pay`]: payValue,
@@ -464,19 +470,16 @@ export default function EditStayPayPromotion() {
   // ✅ Submit update
   const handleUpdate = async (e) => {
     e.preventDefault();
-    
+
     // Validate form before submission
     if (!validateForm()) {
       return;
     }
-    
+
     try {
       const formatDate = (date) => {
         if (!date) return "";
-        const d = new Date(date);
-        return `${String(d.getDate()).padStart(2, "0")}-${String(
-          d.getMonth() + 1
-        ).padStart(2, "0")}-${d.getFullYear()}`;
+        return `${date}:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? 1 : 0;
@@ -511,7 +514,7 @@ export default function EditStayPayPromotion() {
         // EXCLUDE NATIONALITY - CURRENT FORMAT (STRING)
         // ========================================
         excludeCountry: formData.excludeNationality.map((n) => n.value).join(","),
-        
+
         // ========================================
         // EXCLUDE NATIONALITY - FUTURE FORMAT (ARRAY) - COMMENTED OUT
         // ========================================
@@ -540,9 +543,9 @@ export default function EditStayPayPromotion() {
       console.log("Stay Pay update payload:", payload);
 
       const response = await axiosInstance.put(`/api/hotelStaypay/${editId}`, payload);
-      
+
       if (response.data) {
-      toast.success("Stay & Pay Promotion Updated Successfully!");
+        toast.success("Stay & Pay Promotion Updated Successfully!");
         navigate(`/hotel-actions/${id}/promotions`);
       }
     } catch (error) {
@@ -589,7 +592,7 @@ export default function EditStayPayPromotion() {
                             setFormData({ ...formData, season: e.target.value });
                             // Clear validation error when user selects
                             if (validationErrors.season) {
-                              setValidationErrors({...validationErrors, season: ""});
+                              setValidationErrors({ ...validationErrors, season: "" });
                             }
                           }}
                           isInvalid={!!validationErrors.season}
@@ -621,7 +624,7 @@ export default function EditStayPayPromotion() {
                             });
                             // Clear validation error when user types
                             if (validationErrors.rateCode) {
-                              setValidationErrors({...validationErrors, rateCode: ""});
+                              setValidationErrors({ ...validationErrors, rateCode: "" });
                             }
                           }}
                           placeholder="Enter Rate Code"
@@ -649,7 +652,7 @@ export default function EditStayPayPromotion() {
                             setFormData({ ...formData, marketType: selected });
                             // Clear validation error when user selects
                             if (validationErrors.marketType) {
-                              setValidationErrors({...validationErrors, marketType: ""});
+                              setValidationErrors({ ...validationErrors, marketType: "" });
                             }
                           }}
                           className={validationErrors.marketType ? 'is-invalid' : ''}
@@ -815,39 +818,45 @@ export default function EditStayPayPromotion() {
                         </div>
                         {formData.validityList.map((v, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={v.from}
-                                onChange={(e) => {
-                                  const updated = [...formData.validityList];
-                                  updated[i].from = e.target.value;
-                                  // Clear Validity To if it becomes invalid (before or equal to From date)
-                                  const currentToDate = formData.validityList[i].to;
-                                  if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
-                                    updated[i].to = "";
-                                  }
-                                  setFormData({
-                                    ...formData,
-                                    validityList: updated,
-                                  });
-                                }}
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>From</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={v.from}
+                                  onChange={(e) => {
+                                    const updated = [...formData.validityList];
+                                    updated[i].from = e.target.value;
+                                    // Clear Validity To if it becomes invalid (before or equal to From date)
+                                    const currentToDate = formData.validityList[i].to;
+                                    if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                      updated[i].to = "";
+                                    }
+                                    setFormData({
+                                      ...formData,
+                                      validityList: updated,
+                                    });
+                                  }}
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={v.to}
-                                min={getMinValidityToDate(v.from)}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "validityList",
-                                    i,
-                                    "to",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>To</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={v.to}
+                                  min={getMinValidityToDate(v.from)}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "validityList",
+                                      i,
+                                      "to",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
                             <Col xs="auto">
                               {i > 0 && (
@@ -881,39 +890,45 @@ export default function EditStayPayPromotion() {
                         </div>
                         {formData.blackoutDates.map((b, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={b.from}
-                                onChange={(e) => {
-                                  const updated = [...formData.blackoutDates];
-                                  updated[i].from = e.target.value;
-                                  // Clear Blackout To if it becomes invalid (before or equal to From date)
-                                  const currentToDate = formData.blackoutDates[i].to;
-                                  if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
-                                    updated[i].to = "";
-                                  }
-                                  setFormData({
-                                    ...formData,
-                                    blackoutDates: updated,
-                                  });
-                                }}
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>From</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={b.from}
+                                  onChange={(e) => {
+                                    const updated = [...formData.blackoutDates];
+                                    updated[i].from = e.target.value;
+                                    // Clear Blackout To if it becomes invalid (before or equal to From date)
+                                    const currentToDate = formData.blackoutDates[i].to;
+                                    if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                      updated[i].to = "";
+                                    }
+                                    setFormData({
+                                      ...formData,
+                                      blackoutDates: updated,
+                                    });
+                                  }}
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col>
-                              <Form.Control
-                                type="date"
-                                value={b.to}
-                                min={getMinValidityToDate(b.from)}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "blackoutDates",
-                                    i,
-                                    "to",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                            <Col md={i > 0 ? 5 : 6}>
+                              <Form.Group>
+                                <Form.Label>To</Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={b.to}
+                                  min={getMinValidityToDate(b.from)}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "blackoutDates",
+                                      i,
+                                      "to",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
                             <Col xs="auto">
                               {i > 0 && (
@@ -958,7 +973,7 @@ export default function EditStayPayPromotion() {
                                   Loading rooms...
                                 </div>
                               </td>
-                              </tr>
+                            </tr>
                           ) : hotelRoomsData && hotelRoomsData.length > 0 ? (
                             hotelRoomsData.flatMap((roomCategory, categoryIndex) => {
                               return roomCategory.roomTypeDetailsDTOs?.map((roomType, roomTypeIndex) => (

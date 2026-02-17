@@ -13,6 +13,7 @@ import {
   Pagination,
   Badge,
   Modal,
+  Accordion,
   Table,
 } from "react-bootstrap";
 import Select from "react-select";
@@ -28,12 +29,22 @@ import {
   FaSort,
   FaUsers,
   FaEye,
+  FaBed,
+  FaUtensils,
+  FaInfoCircle,
+  FaShieldAlt,
+  FaPhone,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaChevronDown,
+  FaChevronUp,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import "../../styles/RoomList.css";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -83,9 +94,8 @@ function LazyImage({ src, alt, className }) {
   return (
     <div
       ref={containerRef}
-      className={`ratio ratio-16x9 rounded-top overflow-hidden ${
-        className || ""
-      }`}
+      className={`ratio ratio-16x9 rounded-top overflow-hidden ${className || ""
+        }`}
       style={{ height: "100%" }}
     >
       {!loaded && <div className="skeleton w-100 h-100" />}
@@ -163,6 +173,12 @@ export default function MakePkgCombineSearch() {
   const [errors, setErrors] = useState({});
   const [clickedHotelIds, setClickedHotelIds] = useState([]);
   const [view, setView] = useState("card");
+
+  // Inline Room View State
+  const [hotelRooms, setHotelRooms] = useState({});
+  const [expandedHotels, setExpandedHotels] = useState({});
+  const [loadingRooms, setLoadingRooms] = useState({});
+  const navigate = useNavigate();
 
   // Transfer search state
   const [transferResults, setTransferResults] = useState([]);
@@ -337,8 +353,8 @@ export default function MakePkgCombineSearch() {
           sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
         sortOrder:
           sortBy === "priceAsc" ||
-          sortBy === "ratingAsc" ||
-          sortBy === "nameAsc"
+            sortBy === "ratingAsc" ||
+            sortBy === "nameAsc"
             ? "asc"
             : "desc",
         starRating: starRating.map((s) => s.value).join(",") || undefined,
@@ -352,25 +368,25 @@ export default function MakePkgCombineSearch() {
 
       const mappedResults = Array.isArray(res.data.result)
         ? res.data.result.map((hotel, index) => ({
-            id: hotel.hotelCode
-              ? `${searchId}-${hotel.hotelCode}`
-              : `${searchId}-h${index + 1}`,
-            searchId,
-            hotelCode: hotel.hotelCode || null,
-            name: hotel.hotelName || "Unknown Hotel",
-            address: hotel.hotelAddress || "",
-            city: hotel.hotelAddress
-              ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-              : "Unknown City",
-            price: hotel.baseRate || null,
-            badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-            image:
-              hotel.hotelImage ||
-              "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-            rating: hotel.starRating || 0,
-            hotelType: "hotel",
-            channelType: hotel.apiType?.toLowerCase() || "inhouse",
-          }))
+          id: hotel.hotelCode
+            ? `${searchId}-${hotel.hotelCode}`
+            : `${searchId}-h${index + 1}`,
+          searchId,
+          hotelCode: hotel.hotelCode || null,
+          name: hotel.hotelName || "Unknown Hotel",
+          address: hotel.hotelAddress || "",
+          city: hotel.hotelAddress
+            ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+            : "Unknown City",
+          price: hotel.baseRate || null,
+          badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+          image:
+            hotel.hotelImage ||
+            "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+          rating: hotel.starRating || 0,
+          hotelType: "hotel",
+          channelType: hotel.apiType?.toLowerCase() || "inhouse",
+        }))
         : [];
 
       // Clear previous results and set new results for the current page
@@ -563,8 +579,8 @@ export default function MakePkgCombineSearch() {
           room.childAges && room.childAges.length > 0
             ? room.childAges.map((age) => parseInt(age) || 0)
             : room.children > 0
-            ? Array(room.children).fill(0)
-            : [0],
+              ? Array(room.children).fill(0)
+              : [0],
         adultAges: room.adultAges?.length ? room.adultAges : [25],
       }));
 
@@ -801,8 +817,8 @@ export default function MakePkgCombineSearch() {
           tourChildAges && tourChildAges.length > 0
             ? tourChildAges.map((age) => String(parseInt(age) || 0))
             : tourChildren > 0
-            ? Array(tourChildren).fill("0")
-            : [],
+              ? Array(tourChildren).fill("0")
+              : [],
         adult: String(tourAdults || adults || 1),
         child: String(tourChildren || children || 0),
       };
@@ -815,32 +831,32 @@ export default function MakePkgCombineSearch() {
       // Map API response to activity results format
       const mappedResults = Array.isArray(response.data)
         ? response.data.map((activity, index) => ({
-            id: activity.activityId || `activity-${index}`,
-            activityName: activity.activityname || "",
-            activityDetails: activity.activityDetails || "",
-            starRating: activity.starRating || 0,
-            totalRate: activity.totalRate || activity.activityRate || 0,
-            totalRateWithoutMrk:
-              activity.totalRateWithoutmrk || activity.activityRate || 0,
-            activityImage:
-              activity.activityImage ||
-              "https://via.placeholder.com/400x225?text=Activity",
-            childMax: activity.childMax || 0,
-            childMin: activity.childMin || 0,
-            adultRate: activity.adultRate || 0,
-            childRate: activity.childRate || 0,
-            activityType: activity.activityType || 1,
-            maxPax: activity.maxPax || 0,
-            minPaxsic: activity.minPaxsic || 0,
-            currency: activity.currencyCode || "AED",
-            duration:
-              activity.viatorActivityDurationFrom &&
+          id: activity.activityId || `activity-${index}`,
+          activityName: activity.activityname || "",
+          activityDetails: activity.activityDetails || "",
+          starRating: activity.starRating || 0,
+          totalRate: activity.totalRate || activity.activityRate || 0,
+          totalRateWithoutMrk:
+            activity.totalRateWithoutmrk || activity.activityRate || 0,
+          activityImage:
+            activity.activityImage ||
+            "https://via.placeholder.com/400x225?text=Activity",
+          childMax: activity.childMax || 0,
+          childMin: activity.childMin || 0,
+          adultRate: activity.adultRate || 0,
+          childRate: activity.childRate || 0,
+          activityType: activity.activityType || 1,
+          maxPax: activity.maxPax || 0,
+          minPaxsic: activity.minPaxsic || 0,
+          currency: activity.currencyCode || "AED",
+          duration:
+            activity.viatorActivityDurationFrom &&
               activity.viatorActivityDurationTo
-                ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
-                : null,
-            apiType: activity.apiType || null,
-            viatorProductCode: activity.viatorProductCode || null,
-          }))
+              ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
+              : null,
+          apiType: activity.apiType || null,
+          viatorProductCode: activity.viatorProductCode || null,
+        }))
         : [];
 
       setTourResults(mappedResults);
@@ -850,6 +866,201 @@ export default function MakePkgCombineSearch() {
     } finally {
       setTourLoading(false);
     }
+  };
+
+  const handleViewRooms = async (hotel) => {
+    // Toggle expansion
+    setExpandedHotels((prev) => ({
+      ...prev,
+      [hotel.id]: !prev[hotel.id],
+    }));
+
+    // If closing, return
+    if (expandedHotels[hotel.id]) return;
+
+    // If already loaded, return
+    if (hotelRooms[hotel.id]) return;
+
+    setLoadingRooms((prev) => ({ ...prev, [hotel.id]: true }));
+
+    const nationalityCode = (nationality?.code || "").length === 2 ? nationality.code : " ";
+    const agentIdToUse = agentId || agent || 1;
+
+    const roomsPayload = rooms.map((r) => ({
+      adults: r.adults || 1,
+      children: r.children || 0,
+      childAges: r.childAges || [],
+      adultAges: Array.from({ length: r.adults || 1 }, () => 30),
+    }));
+
+    const apiIdMapping = {
+      jumeirah: 10,
+      iwtx: 12,
+      x3: 15,
+      inhouse: 1,
+      ratehawk: 14,
+      darina: 16,
+    };
+
+    const apiId = apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
+
+    const payload = {
+      checkInDate: checkIn,
+      checkOutDate: checkOut,
+      hotelCode: hotel.hotelCode || hotel.id?.split("-").slice(1).join("-") || "",
+      nationality: nationalityCode,
+      agentId: String(agentIdToUse),
+      apiId: apiId,
+      rooms: roomsPayload,
+    };
+
+    const meta = {
+      hotelName: hotel.name,
+      address: hotel.address || hotel.city,
+      starRating: hotel.rating || 0,
+      phone: "",
+      hotelImage: hotel.image,
+    };
+
+    try {
+      const res = await axiosInstance.post("/api/hotel-rooms/search", payload);
+
+      if (!res.data || res.data.success === false) {
+        toast.error(res.data?.message || "Failed to fetch rooms.");
+        setLoadingRooms((prev) => ({ ...prev, [hotel.id]: false }));
+        return;
+      }
+
+      const enriched = {
+        ...res.data,
+        hotels: (res.data.hotels || []).map((h) => ({
+          ...h,
+          roomCategories: (h.roomCategories || []).map((c) => ({
+            ...c,
+            availableRates: (c.availableRates || [])
+              .slice()
+              .sort((a, b) => (a.totalRate || 0) - (b.totalRate || 0)),
+          })),
+        })),
+        meta: meta || {},
+        payload,
+      };
+
+      setHotelRooms((prev) => ({ ...prev, [hotel.id]: enriched }));
+    } catch (err) {
+      console.error("Room search failed:", err);
+      toast.error("Failed to fetch rooms. Please try again.");
+    } finally {
+      setLoadingRooms((prev) => ({ ...prev, [hotel.id]: false }));
+    }
+  };
+
+  const handleAddToCart = async (hotelId, rate) => {
+    const roomData = hotelRooms[hotelId];
+    if (!roomData) return;
+
+    const { payload, hotels } = roomData;
+    const hotelsdetail = hotels[0];
+
+    try {
+      const searchRoomDTOs = (payload.rooms || []).map((room) => ({
+        roomCount: 1,
+        adult: String(room.adults || room.adult || 1),
+        child: String(room.children || room.child || 0),
+        childAge: Array.isArray(room.childAges)
+          ? room.childAges.map(age => Number(age))
+          : (Array.isArray(room.childAge) ? room.childAge.map(age => Number(age)) : [])
+      }));
+
+      const available = rate.roomStatus === "Available" ? "True" : "False";
+
+      const refundstatus =
+        rate.nonRefundable === true ||
+          rate.nonRefundable === "true" ||
+          String(rate.nonRefundable).toLowerCase() === "true"
+          ? "N"
+          : "Y";
+
+      const cancellationPolicyList = Array.isArray(hotelsdetail.cancellationPolicies)
+        ? hotelsdetail.cancellationPolicies.map(policy =>
+          typeof policy === 'string' ? policy : (policy.policyText || policy.text || JSON.stringify(policy))
+        )
+        : [];
+
+      const cartItem = {
+        hotelId: String(hotelsdetail.hotelId || ""),
+        hotelName: hotelsdetail.hotelName || "",
+        address: hotelsdetail.hotelAddress || "",
+        starRating: Number(hotelsdetail.starRating) || 0,
+        roomtypeId: String(rate.roomTypeCode || rate.roomtypeId || ""),
+        roomcategory: rate.roomCategory || "",
+        roomCategory: rate.roomCategory || "",
+        roomType: rate.mealPlan || "",
+        available: available,
+        api: Number(payload.apiId || payload.api || 0),
+        destinationCityId: String(payload.destinationCityId || payload.cityId || ""),
+        destinationCountryId: String(payload.destinationCountryId || payload.countryId || ""),
+        checkIn: payload.checkInDate || payload.checkIn || "",
+        checkOut: payload.checkOutDate || payload.checkOut || "",
+        nativeContryId: Number(hotelsdetail.nationalityId) || null,
+        nationality: String(payload.nationality || ""),
+        noOfRoom: String(hotelsdetail.numberOfRooms || payload.noOfRoom || "1"),
+        refundstatus: refundstatus,
+        searchRoomDTOs: searchRoomDTOs,
+        agentId: String(payload.agentId || ""),
+        totalRate: Number(rate.totalRate) || 0,
+        totalRateWithoutmrk: Number(rate.rateBeforeTax || rate.totalRate) || 0,
+        cancellationPolicy: cancellationPolicyList,
+      };
+
+      const response = await axiosInstance.post("/api/makeYourOwnPackageHotel/saveHotelDetailsToCart", cartItem);
+      if (response.data && response.data.success !== false) {
+        toast.success("Room added to cart successfully!");
+        window.dispatchEvent(new CustomEvent('cartUpdated'));
+      } else {
+        toast.error(response.data?.message || "Failed to add item to cart");
+      }
+    } catch (err) {
+      console.error("Error adding to cart:", err);
+      toast.error("Failed to add item to cart. Please try again.");
+    }
+  };
+
+  const getMealPlanIcon = (mealPlan) => {
+    if (!mealPlan) return <FaUtensils className="text-primary" />;
+    switch (mealPlan.toLowerCase()) {
+      case "room only": return <FaBed className="text-muted" />;
+      case "breakfast": return <FaUtensils className="text-warning" />;
+      case "full board": return <FaUtensils className="text-success" />;
+      default: return <FaUtensils className="text-primary" />;
+    }
+  };
+
+  const getRefundStatusBadge = (nonRefundable) => {
+    const value = String(nonRefundable).toLowerCase();
+    switch (value) {
+      case "false": return <Badge bg="success">Flexible</Badge>;
+      case "true": return <Badge bg="danger">Non-Refundable</Badge>;
+      default: return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
+    }
+  };
+
+  const getRoomStatusBadge = (roomStatus) => {
+    switch (roomStatus) {
+      case "On Request":
+        return <small>This room can be booked <span className="bg-warning text-dark px-2 py-0 rounded">On Request</span></small>;
+      case "Available":
+        return <small>This room is <span className="bg-success text-white px-3 py-0 rounded">Available</span></small>;
+      default:
+        return <Badge bg="secondary">{roomStatus}</Badge>;
+    }
+  };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat("en-AE", {
+      style: "currency",
+      currency: "AED",
+    }).format(price);
   };
 
   const handleAddActivityToCart = async (activity) => {
@@ -914,6 +1125,12 @@ export default function MakePkgCombineSearch() {
     }
   };
 
+  const renderStars = (rating) => {
+    return Array.from({ length: Math.floor(rating || 0) }, (_, i) => (
+      <FaStar key={i} className="text-warning" size={14} />
+    ));
+  };
+
   const handleTransferSearchSubmit = async (e) => {
     e.preventDefault();
     setTransferLoading(true);
@@ -935,8 +1152,8 @@ export default function MakePkgCombineSearch() {
           transferChildAges && transferChildAges.length > 0
             ? transferChildAges.map((age) => parseInt(age) || 0)
             : transferChildren > 0
-            ? Array(transferChildren).fill(0)
-            : [],
+              ? Array(transferChildren).fill(0)
+              : [],
         adult: transferAdults || adults || 1,
         child: transferChildren || children || 0,
       };
@@ -965,15 +1182,15 @@ export default function MakePkgCombineSearch() {
 
       const mappedResults = Array.isArray(response.data)
         ? response.data.map((cab, index) => ({
-            cabid: cab.cabid || cab.cabId || `cab-${index}`,
-            cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
-            cabdetails: cab.cabdetails || "",
-            cabpic: ensureHttpImage(cab.cabpic || cab.cabPic),
-            noOfCabs: cab.noOfCabs || 1,
-            searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
-              ? cab.searchCabDetailsDTO
-              : [],
-          }))
+          cabid: cab.cabid || cab.cabId || `cab-${index}`,
+          cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
+          cabdetails: cab.cabdetails || "",
+          cabpic: ensureHttpImage(cab.cabpic || cab.cabPic),
+          noOfCabs: cab.noOfCabs || 1,
+          searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
+            ? cab.searchCabDetailsDTO
+            : [],
+        }))
         : [];
 
       setTransferResults(mappedResults);
@@ -1013,20 +1230,20 @@ export default function MakePkgCombineSearch() {
       cabDetail.types === "SIC"
         ? cabDetail.sicRate || 0
         : cabDetail.privateRate || 0;
-    
+
     // Get totalRateWithoutMrk from cabDetail or fallback to calculated rate
     const totalRateWithoutMrk =
       cabDetail.totalRateWithoutMrk !== undefined &&
-      cabDetail.totalRateWithoutMrk !== null &&
-      cabDetail.totalRateWithoutMrk !== 0
+        cabDetail.totalRateWithoutMrk !== null &&
+        cabDetail.totalRateWithoutMrk !== 0
         ? cabDetail.totalRateWithoutMrk
         : rate;
-    
+
     // Get totalRate from cabDetail or use totalRateWithoutMrk as fallback
     const totalRate =
       cabDetail.totalRate !== undefined &&
-      cabDetail.totalRate !== null &&
-      cabDetail.totalRate !== 0
+        cabDetail.totalRate !== null &&
+        cabDetail.totalRate !== 0
         ? cabDetail.totalRate
         : totalRateWithoutMrk;
 
@@ -1512,19 +1729,19 @@ export default function MakePkgCombineSearch() {
                                   <>
                                     Showing{" "}
                                     {hotelSearchTerm?.trim() ||
-                                    hotelType.length > 0 ||
-                                    channelType.length > 0 ||
-                                    starRating.length > 0
+                                      hotelType.length > 0 ||
+                                      channelType.length > 0 ||
+                                      starRating.length > 0
                                       ? `1-${filteredResults.length}`
                                       : `${pageIndex * pageSize + 1}-${Math.min(
-                                          pageIndex * pageSize + pageSize,
-                                          totalElements
-                                        )}`}{" "}
+                                        pageIndex * pageSize + pageSize,
+                                        totalElements
+                                      )}`}{" "}
                                     of{" "}
                                     {hotelSearchTerm?.trim() ||
-                                    hotelType.length > 0 ||
-                                    channelType.length > 0 ||
-                                    starRating.length > 0
+                                      hotelType.length > 0 ||
+                                      channelType.length > 0 ||
+                                      starRating.length > 0
                                       ? filteredResults.length
                                       : totalElements}{" "}
                                     results{" "}
@@ -1598,10 +1815,6 @@ export default function MakePkgCombineSearch() {
                             {view === "card" && (
                               <Row
                                 xs={1}
-                                sm={2}
-                                md={3}
-                                lg={3}
-                                xl={3}
                                 className="g-4"
                               >
                                 {filteredResults.length > 0 ? (
@@ -1621,229 +1834,245 @@ export default function MakePkgCombineSearch() {
                                             overflow: "hidden",
                                           }}
                                         >
-                                          <div
-                                            style={{
-                                              position: "relative",
-                                              height: "200px",
-                                              overflow: "hidden",
-                                            }}
-                                          >
-                                            <LazyImage
-                                              src={hotel.image}
-                                              alt={hotel.name}
-                                            />
-                                            <div
-                                              style={{
-                                                position: "absolute",
-                                                top: "10px",
-                                                right: "10px",
-                                                backgroundColor:
-                                                  "rgba(0,0,0,0.7)",
-                                                color: "white",
-                                                padding: "5px 10px",
-                                                borderRadius: "15px",
-                                                fontSize: "12px",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: "5px",
-                                              }}
-                                            >
-                                              <FaStar className="text-warning me-1" />
-                                              {hotel.rating}
-                                              <span
-                                                style={{
-                                                  marginLeft: "5px",
-                                                  backgroundColor: "#6c757d",
-                                                  padding: "2px 6px",
-                                                  borderRadius: "10px",
-                                                }}
-                                              >
-                                                {hotel.channelType.toUpperCase()}
-                                              </span>
-                                            </div>
-                                          </div>
-
-                                          <div
-                                            style={{
-                                              padding: "16px",
-                                              backgroundColor: "white",
-                                            }}
-                                          >
-                                            <h6
-                                              style={{
-                                                fontSize: "1.3rem",
-                                                fontWeight: "600",
-                                                marginBottom: "8px",
-                                                color: "#333",
-                                                lineHeight: "1.3",
-                                              }}
-                                            >
-                                              {hotel.name ||
-                                                "Hotel Name Not Available"}
-                                            </h6>
-
-                                            <p
-                                              style={{
-                                                fontSize: "0.875rem",
-                                                color: "#666",
-                                                marginBottom: "8px",
-                                                lineHeight: "1.4",
-                                              }}
-                                            >
-                                              📍{" "}
-                                              {hotel.address ||
-                                                "Address Not Available"}
-                                            </p>
-
-                                            <div
-                                              style={{
-                                                backgroundColor: "#28a745",
-                                                color: "white",
-                                                padding: "4px 8px",
-                                                borderRadius: "4px",
-                                                fontSize: "0.75rem",
-                                                fontWeight: "500",
-                                                display: "inline-block",
-                                                marginBottom: "12px",
-                                              }}
-                                            >
-                                              {hotel.badge}
-                                            </div>
-
-                                            <div
-                                              style={{
-                                                display: "flex",
-                                                justifyContent: "space-between",
-                                                alignItems: "center",
-                                                marginTop: "12px",
-                                                paddingTop: "12px",
-                                                borderTop: "1px solid #eee",
-                                              }}
-                                            >
+                                          <Row className="g-0">
+                                            <Col md={4} lg={3}>
                                               <div
                                                 style={{
-                                                  fontSize: "1.5rem",
-                                                  fontWeight: "600",
-                                                  color: "#333",
+                                                  position: "relative",
+                                                  height: "100%",
+                                                  minHeight: "200px",
+                                                  overflow: "hidden",
                                                 }}
                                               >
-                                                {hotel.price
-                                                  ? `AED ${hotel.price.toLocaleString()}`
-                                                  : "Price on request"}
+                                                <LazyImage
+                                                  src={hotel.image}
+                                                  alt={hotel.name}
+                                                  className="h-100 w-100 object-fit-cover"
+                                                />
+                                                <div
+                                                  style={{
+                                                    position: "absolute",
+                                                    top: "10px",
+                                                    left: "10px",
+                                                    backgroundColor:
+                                                      "rgba(0,0,0,0.7)",
+                                                    color: "white",
+                                                    padding: "5px 10px",
+                                                    borderRadius: "15px",
+                                                    fontSize: "12px",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "5px",
+                                                  }}
+                                                >
+                                                  <FaStar className="text-warning me-1" />
+                                                  {hotel.rating}
+                                                  <span
+                                                    style={{
+                                                      marginLeft: "5px",
+                                                      backgroundColor: "#6c757d",
+                                                      padding: "2px 6px",
+                                                      borderRadius: "10px",
+                                                    }}
+                                                  >
+                                                    {hotel.channelType.toUpperCase()}
+                                                  </span>
+                                                </div>
                                               </div>
-
-                                              <Button
-                                                className="btn-view-rooms"
-                                                size="sm"
-                                                //  disabled={clickedHotelIds.includes(hotel.id)}
-                                                variant={
-                                                  clickedHotelIds.includes(
-                                                    hotel.id
-                                                  )
-                                                    ? "secondary"
-                                                    : "primary"
-                                                }
-                                                onClick={() => {
-                                                  // Add hotel ID to clickedHotelIds
-                                                  setClickedHotelIds((prev) => [
-                                                    ...prev,
-                                                    hotel.id,
-                                                  ]);
-
-                                                  const nationalityValue =
-                                                    nationality?.value;
-
-                                                  const nationalityCode =
-                                                    (nationality?.code || "")
-                                                      .length === 2
-                                                      ? nationality.code
-                                                      : " ";
-
-                                                  const agentIdToUse = agent; // Use selected agent or default to 1
-
-                                                  // console.log("rooms before mapping::", rooms);
-                                                  const roomsPayload =
-                                                    rooms.map((r) => ({
-                                                      adults: r.adults || 1,
-                                                      children: r.children || 0,
-                                                      childAges:
-                                                        r.childAges || [],
-                                                      adultAges: Array.from(
-                                                        {
-                                                          length: r.adults || 1,
-                                                        },
-                                                        () => 30
-                                                      ),
-                                                    }));
-
-                                                  // Dynamic apiId based on channelType
-                                                  const apiIdMapping = {
-                                                    jumeirah: 10,
-                                                    iwtx: 12,
-                                                    x3: 15,
-                                                    inhouse: 1,
-                                                    ratehawk: 14,
-                                                    darina: 16,
-                                                  };
-
-                                                  const apiId =
-                                                    apiIdMapping[
-                                                      hotel.channelType?.toLowerCase()
-                                                    ] || 0;
-
-                                                  const payload = {
-                                                    checkInDate: checkIn,
-                                                    checkOutDate: checkOut,
-                                                    hotelCode:
-                                                      hotel.hotelCode ||
-                                                      hotel.id
-                                                        ?.split("-")
-                                                        .slice(1)
-                                                        .join("-") ||
-                                                      "",
-                                                    nationality:
-                                                      nationalityCode,
-                                                    agentId:
-                                                      String(agentIdToUse),
-                                                    apiId: apiId,
-                                                    rooms: roomsPayload,
-                                                  };
-                                                  const meta = {
-                                                    hotelName: hotel.name,
-                                                    address:
-                                                      hotel.address ||
-                                                      hotel.city,
-                                                    starRating:
-                                                      hotel.rating || 0,
-                                                    phone: "",
-                                                    hotelImage: hotel.image,
-                                                  };
-
-                                                  // console.log("payload::", payload);
-                                                  // console.log("meta::", meta);
-                                                  try {
-                                                    sessionStorage.setItem(
-                                                      "makeYourPkgRoomListPayload",
-                                                      JSON.stringify({
-                                                        payload,
-                                                        meta,
-                                                      })
-                                                    );
-                                                    setTimeout(() => {
-                                                      window.open(
-                                                        "/make-your-pkg-room-list",
-                                                        "_blank"
-                                                      );
-                                                    }, 50);
-
-                                                    // navigate("/room-list", { state: { payload, meta } });
-                                                  } catch {}
+                                            </Col>
+                                            <Col md={8} lg={9}>
+                                              <div
+                                                style={{
+                                                  padding: "10px",
+                                                  backgroundColor: "white",
+                                                  height: "100%",
+                                                  display: "flex",
+                                                  flexDirection: "column",
+                                                  justifyContent: "space-between"
                                                 }}
                                               >
-                                                View Rooms
-                                              </Button>
+                                                <div>
+                                                  <div className="d-flex align-items-center mb-1">
+                                                    <h6
+                                                      style={{
+                                                        fontSize: "1.2rem",
+                                                        fontWeight: "600",
+                                                        marginBottom: "0",
+                                                        color: "#333",
+                                                        lineHeight: "1.2",
+                                                        marginRight: "8px"
+                                                      }}
+                                                    >
+                                                      {hotel.name ||
+                                                        "Hotel Name Not Available"}
+                                                    </h6>
+                                                    <div className="d-flex gap-1">
+                                                      {renderStars(hotel.rating)}
+                                                    </div>
+                                                  </div>
+
+                                                  <p
+                                                    style={{
+                                                      fontSize: "0.8rem",
+                                                      color: "#666",
+                                                      marginBottom: "4px",
+                                                      lineHeight: "1.2",
+                                                    }}
+                                                  >
+                                                    📍{" "}
+                                                    {hotel.address ||
+                                                      "Address Not Available"}
+                                                  </p>
+
+                                                  <div
+                                                    style={{
+                                                      backgroundColor: "#28a745",
+                                                      color: "white",
+                                                      padding: "2px 6px",
+                                                      borderRadius: "4px",
+                                                      fontSize: "0.7rem",
+                                                      fontWeight: "500",
+                                                      display: "inline-block",
+                                                      marginBottom: "6px",
+                                                    }}
+                                                  >
+                                                    {hotel.badge}
+                                                  </div>
+                                                </div>
+
+                                                <div
+                                                  style={{
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    alignItems: "center",
+                                                    marginTop: "8px",
+                                                    paddingTop: "8px",
+                                                    borderTop: "1px solid #eee",
+                                                  }}
+                                                >
+                                                  <div
+                                                    style={{
+                                                      fontSize: "1.3rem",
+                                                      fontWeight: "600",
+                                                      color: "#333",
+                                                    }}
+                                                  >
+                                                    {hotel.price
+                                                      ? `AED ${hotel.price.toLocaleString()}`
+                                                      : "Price on request"}
+                                                  </div>
+
+                                                  <Button
+                                                    className="btn-view-rooms"
+                                                    size="sm"
+                                                    onClick={() => handleViewRooms(hotel)}
+                                                  >
+                                                    {expandedHotels[hotel.id]
+                                                      ? "Hide Rooms"
+                                                      : "View Rooms"}
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            </Col>
+                                          </Row>
+
+                                          {/* Inline Room List */}
+                                          {expandedHotels[hotel.id] && (
+                                            <div className="border-top p-3 bg-light">
+                                              {loadingRooms[hotel.id] ? (
+                                                <div className="text-center py-4">
+                                                  <Spinner animation="border" variant="primary" />
+                                                  <p className="mt-2 text-muted">Fetching rooms...</p>
+                                                </div>
+                                              ) : hotelRooms[hotel.id] ? (
+                                                <div className="room-categories-section">
+                                                  {(hotelRooms[hotel.id].hotels[0].roomCategories || []).map((category, idx) => (
+                                                    <Accordion key={idx} defaultActiveKey="0" className="mb-3">
+                                                      <Accordion.Item eventKey="0" className="room-category-item border-0 shadow-sm">
+                                                        <Accordion.Header className="room-category-header">
+                                                          <div className="d-flex justify-content-between align-items-center w-100 me-3">
+                                                            <div className="room-category-info">
+                                                              <h6 className="mb-1 fw-bold">{category.roomCategory}</h6>
+                                                              <p className="mb-0 text-muted small">{category.baseRoomType}</p>
+                                                            </div>
+                                                            <div className="room-category-price text-end">
+                                                              <span className="price-range d-block fw-bold text-primary">
+                                                                From {formatPrice(Math.min(...category.availableRates.map((r) => r.rate)))}
+                                                              </span>
+                                                              <span className="rates-count d-block small text-muted">
+                                                                {category.availableRates.length} rate{category.availableRates.length !== 1 ? "s" : ""} available
+                                                              </span>
+                                                            </div>
+                                                          </div>
+                                                        </Accordion.Header>
+                                                        <Accordion.Body className="room-rates-section p-3">
+                                                          <Row>
+                                                            {category.availableRates.map((rate, rIdx) => (
+                                                              <Col key={rIdx} lg={6} xl={4} className="mb-3">
+                                                                <Card className="rate-card h-100 border-0 shadow-sm">
+                                                                  <Card.Body className="p-3">
+                                                                    <div className="rate-header mb-3 pb-2 border-bottom">
+                                                                      <div className="d-flex align-items-center gap-2 mb-2">
+                                                                        {getMealPlanIcon(rate.mealPlan)}
+                                                                        <span className="fw-semibold small">{rate.mealPlan}</span>
+                                                                      </div>
+                                                                      <div className="mb-1">{getRoomStatusBadge(rate.roomStatus)}</div>
+                                                                      <div>{getRefundStatusBadge(rate.nonRefundable)}</div>
+                                                                    </div>
+
+                                                                    <div className="rate-pricing mb-3 text-center">
+                                                                      <div className="current-price fs-4 fw-bold text-success">
+                                                                        {formatPrice(rate.totalRate)}
+                                                                      </div>
+                                                                      {rate.recommendedRetailPrice > rate.totalRate && (
+                                                                        <div className="original-price text-muted text-decoration-line-through small">
+                                                                          {formatPrice(rate.recommendedRetailPrice)}
+                                                                        </div>
+                                                                      )}
+                                                                      <div className="price-per-night text-muted small">per night</div>
+                                                                    </div>
+
+                                                                    <div className="rate-features mb-3">
+                                                                      <div className="feature-item d-flex align-items-start gap-2 mb-1">
+                                                                        <FaInfoCircle className="text-muted mt-1" size={12} />
+                                                                        <span className="small">{rate.contractLabel}</span>
+                                                                      </div>
+                                                                      {rate.cancellationPolicies && rate.cancellationPolicies.length > 0 && typeof rate.cancellationPolicies[0] === 'object' && (
+                                                                        <div className="feature-item d-flex align-items-start gap-2">
+                                                                          <FaShieldAlt className="text-muted mt-1" size={12} />
+                                                                          <span className="small" title={rate.cancellationPolicies[0].policyText}>
+                                                                            Cancellation Policy Applies
+                                                                          </span>
+                                                                        </div>
+                                                                      )}
+                                                                    </div>
+
+                                                                    <div className="d-grid gap-2">
+                                                                      <Button
+                                                                        variant="primary"
+                                                                        size="sm"
+                                                                        onClick={() => handleAddToCart(hotel.id, rate)}
+                                                                      >
+                                                                        Add to Package
+                                                                      </Button>
+                                                                    </div>
+                                                                  </Card.Body>
+                                                                </Card>
+                                                              </Col>
+                                                            ))}
+                                                          </Row>
+                                                        </Accordion.Body>
+                                                      </Accordion.Item>
+                                                    </Accordion>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <div className="text-center py-3 text-muted">
+                                                  No rooms available.
+                                                </div>
+                                              )}
                                             </div>
-                                          </div>
+                                          )}
                                         </div>
                                       </Col>
                                     );
@@ -1856,39 +2085,38 @@ export default function MakePkgCombineSearch() {
                                         <h5>No results found</h5>
                                         <p>
                                           {channelType.length > 0
-                                            ? `No hotels found for the selected channel${
-                                                channelType.length > 1
-                                                  ? "s"
-                                                  : ""
-                                              }: ${channelType
-                                                .map((c) => c.label)
-                                                .join(
-                                                  ", "
-                                                )}. Try selecting different channels or clearing the channel filter.`
+                                            ? `No hotels found for the selected channel${channelType.length > 1
+                                              ? "s"
+                                              : ""
+                                            }: ${channelType
+                                              .map((c) => c.label)
+                                              .join(
+                                                ", "
+                                              )}. Try selecting different channels or clearing the channel filter.`
                                             : hotelSearchTerm ||
                                               starRating.length > 0 ||
                                               hotelType.length > 0
-                                            ? "No hotels match your current filters. Try adjusting your search criteria or clearing some filters."
-                                            : "Try adjusting your filters or search criteria."}
+                                              ? "No hotels match your current filters. Try adjusting your search criteria or clearing some filters."
+                                              : "Try adjusting your filters or search criteria."}
                                         </p>
                                         {(hotelSearchTerm ||
                                           starRating.length > 0 ||
                                           hotelType.length > 0 ||
                                           channelType.length > 0) && (
-                                          <Button
-                                            variant="outline-primary"
-                                            size="sm"
-                                            onClick={() => {
-                                              setStarRating([]);
-                                              setHotelType([]);
-                                              setChannelType([]);
-                                              setSortBy("priceAsc");
-                                              setHotelSearchTerm("");
-                                            }}
-                                          >
-                                            Clear All Filters
-                                          </Button>
-                                        )}
+                                            <Button
+                                              variant="outline-primary"
+                                              size="sm"
+                                              onClick={() => {
+                                                setStarRating([]);
+                                                setHotelType([]);
+                                                setChannelType([]);
+                                                setSortBy("priceAsc");
+                                                setHotelSearchTerm("");
+                                              }}
+                                            >
+                                              Clear All Filters
+                                            </Button>
+                                          )}
                                       </Card.Body>
                                     </Card>
                                   </Col>
@@ -1913,9 +2141,9 @@ export default function MakePkgCombineSearch() {
                                 const showingEnd = hasClientOnlyFilters
                                   ? filteredResults.length
                                   : Math.min(
-                                      pageIndex * pageSize + pageSize,
-                                      totalElements
-                                    );
+                                    pageIndex * pageSize + pageSize,
+                                    totalElements
+                                  );
                                 const totalCount = hasClientOnlyFilters
                                   ? filteredResults.length
                                   : totalElements;
@@ -2142,219 +2370,219 @@ export default function MakePkgCombineSearch() {
                                     className="mb-4 shadow-sm"
                                     style={{ borderRadius: "12px" }}
                                   >
-                                <Card.Body>
-                                  {/* Cab Header with Image and Name */}
-                                  <Row className="mb-3">
-                                    <Col
-                                      md={3}
-                                      sm={4}
-                                      xs={12}
-                                      className="mb-3 mb-md-0"
-                                    >
-                                      <div
-                                        style={{
-                                          width: "100%",
-                                          height: "200px",
-                                          borderRadius: "8px",
-                                          overflow: "hidden",
-                                          backgroundColor: "#f5f5f5",
-                                        }}
-                                      >
-                                        <LazyImage
-                                          src={cab.cabpic}
-                                          alt={cab.cabname}
-                                        />
-                                      </div>
-                                    </Col>
-                                    <Col
-                                      md={9}
-                                      sm={8}
-                                      xs={12}
-                                      className="d-flex align-items-center"
-                                    >
-                                      <div>
-                                        <h5
-                                          className="fw-bold mb-2"
-                                          style={{
-                                            fontSize: "1.5rem",
-                                            color: "#333",
-                                          }}
+                                    <Card.Body>
+                                      {/* Cab Header with Image and Name */}
+                                      <Row className="mb-3">
+                                        <Col
+                                          md={3}
+                                          sm={4}
+                                          xs={12}
+                                          className="mb-3 mb-md-0"
                                         >
-                                          {cab.cabname || "Transfer Vehicle"}
-                                        </h5>
-                                        {cab.cabdetails && (
-                                          <p
-                                            className="text-muted mb-0"
-                                            style={{ fontSize: "0.9rem" }}
-                                          >
-                                            {cab.cabdetails}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </Col>
-                                  </Row>
-
-                                  {/* Transfer Options Table */}
-                                  {cab.searchCabDetailsDTO &&
-                                    cab.searchCabDetailsDTO.length > 0 && (
-                                      <div className="table-responsive">
-                                        <Table
-                                          striped
-                                          bordered
-                                          hover
-                                          className="mb-0"
-                                        >
-                                          <thead
+                                          <div
                                             style={{
-                                              backgroundColor: "#f8f9fa",
+                                              width: "100%",
+                                              height: "200px",
+                                              borderRadius: "8px",
+                                              overflow: "hidden",
+                                              backgroundColor: "#f5f5f5",
                                             }}
                                           >
-                                            <tr>
-                                              <th
-                                                style={{
-                                                  fontWeight: "600",
-                                                  padding: "12px",
-                                                }}
+                                            <LazyImage
+                                              src={cab.cabpic}
+                                              alt={cab.cabname}
+                                            />
+                                          </div>
+                                        </Col>
+                                        <Col
+                                          md={9}
+                                          sm={8}
+                                          xs={12}
+                                          className="d-flex align-items-center"
+                                        >
+                                          <div>
+                                            <h5
+                                              className="fw-bold mb-2"
+                                              style={{
+                                                fontSize: "1.5rem",
+                                                color: "#333",
+                                              }}
+                                            >
+                                              {cab.cabname || "Transfer Vehicle"}
+                                            </h5>
+                                            {cab.cabdetails && (
+                                              <p
+                                                className="text-muted mb-0"
+                                                style={{ fontSize: "0.9rem" }}
                                               >
-                                                Transfer Option
-                                              </th>
-                                              <th
-                                                style={{
-                                                  fontWeight: "600",
-                                                  padding: "12px",
-                                                }}
-                                              >
-                                                Share Type
-                                              </th>
-                                              <th
-                                                style={{
-                                                  fontWeight: "600",
-                                                  padding: "12px",
-                                                }}
-                                              >
-                                                Total Price
-                                              </th>
-                                              <th
-                                                style={{
-                                                  fontWeight: "600",
-                                                  padding: "12px",
-                                                  width: "150px",
-                                                }}
-                                              >
-                                                Action
-                                              </th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {cab.searchCabDetailsDTO.map(
-                                              (detail, idx) => {
-                                                const rate =
-                                                  detail.types === "SIC"
-                                                    ? detail.sicRate
-                                                    : detail.privateRate;
-                                                const totalRate =
-                                                  detail.totalRateWithoutMrk ||
-                                                  rate ||
-                                                  0;
-                                                const uniqueId = `${cab.cabid}-${detail.dropDetails}-${detail.paxDetails}-${detail.types}`;
-                                                const isAdding =
-                                                  addingTransferId === uniqueId;
-
-                                                return (
-                                                  <tr key={idx}>
-                                                    <td
-                                                      style={{
-                                                        padding: "12px",
-                                                        verticalAlign: "middle",
-                                                      }}
-                                                    >
-                                                      {detail.location || "N/A"}{" "}
-                                                      -{" "}
-                                                      {detail.dropOff || "N/A"}
-                                                    </td>
-                                                    <td
-                                                      style={{
-                                                        padding: "12px",
-                                                        verticalAlign: "middle",
-                                                      }}
-                                                    >
-                                                      <span
-                                                        style={{
-                                                          display:
-                                                            "inline-block",
-                                                          fontSize: "0.9rem",
-                                                          fontWeight: 600,
-                                                          color: "#333",
-                                                        }}
-                                                      >
-                                                        {detail.types}
-                                                      </span>
-                                                    </td>
-
-                                                    <td
-                                                      style={{
-                                                        padding: "12px",
-                                                        verticalAlign: "middle",
-                                                      }}
-                                                    >
-                                                      <span
-                                                        style={{
-                                                          fontSize: "1rem",
-                                                          fontWeight: "600",
-                                                          color: "#333",
-                                                        }}
-                                                      >
-                                                        AED{" "}
-                                                        {totalRate.toLocaleString()}
-                                                      </span>
-                                                    </td>
-                                                    <td
-                                                      style={{
-                                                        padding: "12px",
-                                                        verticalAlign: "middle",
-                                                        textAlign: "center",
-                                                      }}
-                                                    >
-                                                      <Button
-                                                        variant="success"
-                                                        size="sm"
-                                                        className="add-transfer-to-cart"
-                                                        onClick={() =>
-                                                          handleAddTransferToCart(
-                                                            cab,
-                                                            detail
-                                                          )
-                                                        }
-                                                        disabled={isAdding}
-                                                        style={{
-                                                          minWidth: "120px",
-                                                        }}
-                                                      >
-                                                        {isAdding ? (
-                                                          <>
-                                                            <Spinner
-                                                              size="sm"
-                                                              className="me-2"
-                                                            />
-                                                            Adding...
-                                                          </>
-                                                        ) : (
-                                                          <>
-                                                            
-                                                            Add to cart
-                                                          </>
-                                                        )}
-                                                      </Button>
-                                                    </td>
-                                                  </tr>
-                                                );
-                                              }
+                                                {cab.cabdetails}
+                                              </p>
                                             )}
-                                          </tbody>
-                                        </Table>
-                                      </div>
-                                    )}
-                                </Card.Body>
+                                          </div>
+                                        </Col>
+                                      </Row>
+
+                                      {/* Transfer Options Table */}
+                                      {cab.searchCabDetailsDTO &&
+                                        cab.searchCabDetailsDTO.length > 0 && (
+                                          <div className="table-responsive">
+                                            <Table
+                                              striped
+                                              bordered
+                                              hover
+                                              className="mb-0"
+                                            >
+                                              <thead
+                                                style={{
+                                                  backgroundColor: "#f8f9fa",
+                                                }}
+                                              >
+                                                <tr>
+                                                  <th
+                                                    style={{
+                                                      fontWeight: "600",
+                                                      padding: "12px",
+                                                    }}
+                                                  >
+                                                    Transfer Option
+                                                  </th>
+                                                  <th
+                                                    style={{
+                                                      fontWeight: "600",
+                                                      padding: "12px",
+                                                    }}
+                                                  >
+                                                    Share Type
+                                                  </th>
+                                                  <th
+                                                    style={{
+                                                      fontWeight: "600",
+                                                      padding: "12px",
+                                                    }}
+                                                  >
+                                                    Total Price
+                                                  </th>
+                                                  <th
+                                                    style={{
+                                                      fontWeight: "600",
+                                                      padding: "12px",
+                                                      width: "150px",
+                                                    }}
+                                                  >
+                                                    Action
+                                                  </th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {cab.searchCabDetailsDTO.map(
+                                                  (detail, idx) => {
+                                                    const rate =
+                                                      detail.types === "SIC"
+                                                        ? detail.sicRate
+                                                        : detail.privateRate;
+                                                    const totalRate =
+                                                      detail.totalRateWithoutMrk ||
+                                                      rate ||
+                                                      0;
+                                                    const uniqueId = `${cab.cabid}-${detail.dropDetails}-${detail.paxDetails}-${detail.types}`;
+                                                    const isAdding =
+                                                      addingTransferId === uniqueId;
+
+                                                    return (
+                                                      <tr key={idx}>
+                                                        <td
+                                                          style={{
+                                                            padding: "12px",
+                                                            verticalAlign: "middle",
+                                                          }}
+                                                        >
+                                                          {detail.location || "N/A"}{" "}
+                                                          -{" "}
+                                                          {detail.dropOff || "N/A"}
+                                                        </td>
+                                                        <td
+                                                          style={{
+                                                            padding: "12px",
+                                                            verticalAlign: "middle",
+                                                          }}
+                                                        >
+                                                          <span
+                                                            style={{
+                                                              display:
+                                                                "inline-block",
+                                                              fontSize: "0.9rem",
+                                                              fontWeight: 600,
+                                                              color: "#333",
+                                                            }}
+                                                          >
+                                                            {detail.types}
+                                                          </span>
+                                                        </td>
+
+                                                        <td
+                                                          style={{
+                                                            padding: "12px",
+                                                            verticalAlign: "middle",
+                                                          }}
+                                                        >
+                                                          <span
+                                                            style={{
+                                                              fontSize: "1rem",
+                                                              fontWeight: "600",
+                                                              color: "#333",
+                                                            }}
+                                                          >
+                                                            AED{" "}
+                                                            {totalRate.toLocaleString()}
+                                                          </span>
+                                                        </td>
+                                                        <td
+                                                          style={{
+                                                            padding: "12px",
+                                                            verticalAlign: "middle",
+                                                            textAlign: "center",
+                                                          }}
+                                                        >
+                                                          <Button
+                                                            variant="success"
+                                                            size="sm"
+                                                            className="add-transfer-to-cart"
+                                                            onClick={() =>
+                                                              handleAddTransferToCart(
+                                                                cab,
+                                                                detail
+                                                              )
+                                                            }
+                                                            disabled={isAdding}
+                                                            style={{
+                                                              minWidth: "120px",
+                                                            }}
+                                                          >
+                                                            {isAdding ? (
+                                                              <>
+                                                                <Spinner
+                                                                  size="sm"
+                                                                  className="me-2"
+                                                                />
+                                                                Adding...
+                                                              </>
+                                                            ) : (
+                                                              <>
+
+                                                                Add to cart
+                                                              </>
+                                                            )}
+                                                          </Button>
+                                                        </td>
+                                                      </tr>
+                                                    );
+                                                  }
+                                                )}
+                                              </tbody>
+                                            </Table>
+                                          </div>
+                                        )}
+                                    </Card.Body>
                                   </Card>
                                 </Col>
                               ))}
@@ -2706,9 +2934,8 @@ export default function MakePkgCombineSearch() {
                                           }}
                                         >
                                           {activity.totalRate > 0
-                                            ? `${
-                                                activity.currency
-                                              } ${activity.totalRate.toLocaleString()}`
+                                            ? `${activity.currency
+                                            } ${activity.totalRate.toLocaleString()}`
                                             : "-"}
                                         </div>
 
@@ -2745,8 +2972,8 @@ export default function MakePkgCombineSearch() {
                                             }
                                           >
                                             {addingActivityId ===
-                                            (activity.id ||
-                                              activity.activityId) ? (
+                                              (activity.id ||
+                                                activity.activityId) ? (
                                               <>
                                                 <Spinner
                                                   animation="border"
@@ -2786,15 +3013,16 @@ export default function MakePkgCombineSearch() {
                 </Tab>
               </Tabs>
             </Card.Body>
-          </Card>
+          </Card >
 
           {/* Activity Details Modal */}
-          <Modal
+          < Modal
             show={showActivityModal}
             onHide={() => {
               setShowActivityModal(false);
               setSelectedActivity(null);
-            }}
+            }
+            }
             size="lg"
             centered
           >
@@ -2909,14 +3137,13 @@ export default function MakePkgCombineSearch() {
                       <div>
                         <h5 className="mb-0">
                           {selectedActivity.totalRate > 0
-                            ? `${
-                                selectedActivity.currency
-                              } ${selectedActivity.totalRate.toLocaleString()}`
+                            ? `${selectedActivity.currency
+                            } ${selectedActivity.totalRate.toLocaleString()}`
                             : "Price on request"}
                         </h5>
                         {selectedActivity.totalRateWithoutMrk > 0 &&
                           selectedActivity.totalRateWithoutMrk !==
-                            selectedActivity.totalRate && (
+                          selectedActivity.totalRate && (
                             <small className="text-muted">
                               Without markup: {selectedActivity.currency}{" "}
                               {selectedActivity.totalRateWithoutMrk.toLocaleString()}
@@ -2960,9 +3187,9 @@ export default function MakePkgCombineSearch() {
                 Select Activity
               </Button>
             </Modal.Footer>
-          </Modal>
-        </main>
-      </div>
-    </div>
+          </Modal >
+        </main >
+      </div >
+    </div >
   );
 }

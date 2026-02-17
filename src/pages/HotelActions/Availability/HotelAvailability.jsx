@@ -90,7 +90,7 @@ const HotelAvailability = () => {
   const [pageBlock, setPageBlock] = useState(0);
   const [totalPagesBlock, setTotalPagesBlock] = useState(0);
   const [searchBlock, setSearchBlock] = useState("");
-  
+
   // State for Block live status modal
   const [showLiveStatusModalBlock, setShowLiveStatusModalBlock] = useState(false);
   const [selectedItemBlock, setSelectedItemBlock] = useState(null);
@@ -111,7 +111,7 @@ const HotelAvailability = () => {
   const [pageStopSale, setPageStopSale] = useState(0);
   const [totalPagesStopSale, setTotalPagesStopSale] = useState(0);
   const [searchStopSale, setSearchStopSale] = useState("");
-  
+
   // State for Stop Sale live status modal
   const [showLiveStatusModalStopSale, setShowLiveStatusModalStopSale] = useState(false);
   const [selectedItemStopSale, setSelectedItemStopSale] = useState(null);
@@ -190,9 +190,9 @@ const HotelAvailability = () => {
         { marketTypeId: 100, name: "All", marketTypeName: "All" },
         ...(response.data || [])
       ];
-      
+
       setMarketTypes(marketTypesWithAll);
-     
+
     } catch (error) {
       console.error("Failed to load market types:", error);
       toast.error("Failed to load market types");
@@ -304,8 +304,8 @@ const HotelAvailability = () => {
         releaseDay: data.releaseDay || "0",
         availabilityType: data.availabilityType || "FREE_SALE",
         availabilityValidities: (data.availabilityValidities || []).map((period) => ({
-          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
-          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+          validityFrom: period.validityFrom ? period.validityFrom.substring(0, 16) : "",
+          validityTo: period.validityTo ? period.validityTo.substring(0, 16) : "",
         })),
         checkinAllowedDays: data.checkinAllowedDays || [
           "SUNDAY",
@@ -344,8 +344,8 @@ const HotelAvailability = () => {
         releaseDay: data.releaseDay || "",
         availabilityType: data.availabilityType || "FREE_SALE",
         availabilityValidities: (data.availabilityValidities || []).map((period) => ({
-          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
-          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+          validityFrom: period.validityFrom ? period.validityFrom.substring(0, 16) : "",
+          validityTo: period.validityTo ? period.validityTo.substring(0, 16) : "",
         })),
         checkinAllowedDays: data.checkinAllowedDays || [
           "SUNDAY",
@@ -451,8 +451,8 @@ const HotelAvailability = () => {
         availabilityType: formData.availabilityType,
         availabilityValidities: formData.availabilityValidities.map(
           (period) => ({
-            validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
-            validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
+            validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
+            validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
           })
         ),
         checkinAllowedDays: formData.checkinAllowedDays,
@@ -478,8 +478,7 @@ const HotelAvailability = () => {
     } catch (error) {
       console.error("Save availability error:", error);
       toast.error(
-        `Failed to save availability: ${
-          error.response?.data?.message || error.message
+        `Failed to save availability: ${error.response?.data?.message || error.message
         }`
       );
     } finally {
@@ -509,8 +508,8 @@ const HotelAvailability = () => {
         availabilityType: formData.availabilityType,
         availabilityValidities: formData.availabilityValidities.map(
           (period) => ({
-            validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
-            validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
+            validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
+            validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
           })
         ),
         checkinAllowedDays: formData.checkinAllowedDays,
@@ -545,10 +544,9 @@ const HotelAvailability = () => {
       console.error("Error status:", error.response?.status);
       console.error("Error data:", error.response?.data);
       toast.error(
-        `Failed to update availability: ${
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          error.message
+        `Failed to update availability: ${error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message
         }`
       );
     } finally {
@@ -694,8 +692,7 @@ const HotelAvailability = () => {
         toast.error("Server error. Please check the backend logs.");
       } else {
         toast.error(
-          `Failed to update status: ${
-            error.response?.data?.message || error.message
+          `Failed to update status: ${error.response?.data?.message || error.message
           }`
         );
       }
@@ -752,7 +749,7 @@ const HotelAvailability = () => {
       setShowLiveStatusModalStopSale(false);
       setSelectedItemStopSale(null);
     } catch (error) {
-    
+
 
       // Handle different types of errors
       if (error.response?.status === 404) {
@@ -761,8 +758,7 @@ const HotelAvailability = () => {
         toast.error("Server error. Please check the backend logs.");
       } else {
         toast.error(
-          `Failed to update status: ${
-            error.response?.data?.message || error.message
+          `Failed to update status: ${error.response?.data?.message || error.message
           }`
         );
       }
@@ -835,8 +831,7 @@ const HotelAvailability = () => {
         toast.error("Server error. Please check the backend logs.");
       } else {
         toast.error(
-          `Failed to update status: ${
-            error.response?.data?.message || error.message
+          `Failed to update status: ${error.response?.data?.message || error.message
           }`
         );
       }
@@ -962,8 +957,8 @@ const HotelAvailability = () => {
         marketTypeId: data.marketTypeId || "",
         type: data.isCheckin ? "CheckIn" : "CheckOut",
         validityList: (data.validityList || []).map((period) => ({
-          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
-          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+          validityFrom: period.validityFrom ? period.validityFrom.substring(0, 16) : "",
+          validityTo: period.validityTo ? period.validityTo.substring(0, 16) : "",
         })),
       });
       setValidationErrorsBlock({});
@@ -990,8 +985,8 @@ const HotelAvailability = () => {
         marketTypeId: data.marketTypeId || "",
         type: data.isCheckin ? "CheckIn" : "CheckOut",
         validityList: (data.validityList || []).map((period) => ({
-          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
-          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+          validityFrom: period.validityFrom ? period.validityFrom.substring(0, 16) : "",
+          validityTo: period.validityTo ? period.validityTo.substring(0, 16) : "",
         })),
       });
       setValidationErrorsBlock({});
@@ -1058,8 +1053,8 @@ const HotelAvailability = () => {
         isCheckin: formDataBlock.type === "CheckIn",
         isCheckOut: formDataBlock.type === "CheckOut",
         validityList: formDataBlock.validityList.map((period) => ({
-          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
-          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
+          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
+          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
         })),
       };
 
@@ -1083,8 +1078,7 @@ const HotelAvailability = () => {
     } catch (error) {
       console.error("Save block error:", error);
       toast.error(
-        `Failed to save block: ${
-          error.response?.data?.message || error.message
+        `Failed to save block: ${error.response?.data?.message || error.message
         }`
       );
     } finally {
@@ -1109,8 +1103,8 @@ const HotelAvailability = () => {
         isCheckin: formDataBlock.type === "CheckIn",
         isCheckOut: formDataBlock.type === "CheckOut",
         validityList: formDataBlock.validityList.map((period) => ({
-          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
-          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
+          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
+          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
         })),
       };
       console.log("editingBlock:", editingBlock);
@@ -1134,8 +1128,7 @@ const HotelAvailability = () => {
     } catch (error) {
       console.error("Update block error:", error);
       toast.error(
-        `Failed to update block: ${
-          error.response?.data?.message || error.message
+        `Failed to update block: ${error.response?.data?.message || error.message
         }`
       );
     } finally {
@@ -1243,11 +1236,11 @@ const HotelAvailability = () => {
         type: data.roomAllocation
           ? "Room Allocation"
           : data.block
-          ? "Block"
-          : "Free-Sale",
+            ? "Block"
+            : "Free-Sale",
         validityList: (data.stopSaleValidityDTO || []).map((period) => ({
-          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
-          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+          validityFrom: period.validityFrom ? period.validityFrom.substring(0, 16) : "",
+          validityTo: period.validityTo ? period.validityTo.substring(0, 16) : "",
         })),
       });
       setValidationErrorsStopSale({});
@@ -1276,11 +1269,11 @@ const HotelAvailability = () => {
         type: data.roomAllocation
           ? "Room Allocation"
           : data.block
-          ? "Block"
-          : "Free-Sale",
+            ? "Block"
+            : "Free-Sale",
         validityList: (data.stopSaleValidityDTO || []).map((period) => ({
-          validityFrom: period.validityFrom ? period.validityFrom.split('T')[0] : "",
-          validityTo: period.validityTo ? period.validityTo.split('T')[0] : "",
+          validityFrom: period.validityFrom ? period.validityFrom.substring(0, 16) : "",
+          validityTo: period.validityTo ? period.validityTo.substring(0, 16) : "",
         })),
       });
       setValidationErrorsStopSale({});
@@ -1352,8 +1345,8 @@ const HotelAvailability = () => {
         block: formDataStopSale.type === "Block",
         freeSale: formDataStopSale.type === "Free-Sale",
         stopSaleValidityDTO: formDataStopSale.validityList.map((period) => ({
-          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
-          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
+          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
+          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
         })),
       };
 
@@ -1377,8 +1370,7 @@ const HotelAvailability = () => {
     } catch (error) {
       console.error("Save stop sale error:", error);
       toast.error(
-        `Failed to save stop sale: ${
-          error.response?.data?.message || error.message
+        `Failed to save stop sale: ${error.response?.data?.message || error.message
         }`
       );
     } finally {
@@ -1406,8 +1398,8 @@ const HotelAvailability = () => {
         block: formDataStopSale.type === "Block",
         freeSale: formDataStopSale.type === "Free-Sale",
         stopSaleValidityDTO: formDataStopSale.validityList.map((period) => ({
-          validityFrom: period.validityFrom ? new Date(period.validityFrom + 'T00:00:00').toISOString() : period.validityFrom,
-          validityTo: period.validityTo ? new Date(period.validityTo + 'T23:59:59').toISOString() : period.validityTo,
+          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
+          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
         })),
       };
 
@@ -1431,8 +1423,7 @@ const HotelAvailability = () => {
     } catch (error) {
       console.error("Update stop sale error:", error);
       toast.error(
-        `Failed to update stop sale: ${
-          error.response?.data?.message || error.message
+        `Failed to update stop sale: ${error.response?.data?.message || error.message
         }`
       );
     } finally {
@@ -1549,8 +1540,8 @@ const HotelAvailability = () => {
                             <Badge
                               bg={
                                 item.availabilityType === "FREE_SALE" ||
-                                item.availabilityType === "PRE_BUY" ||
-                                item.availabilityType === "ROOM_ALLOCATION"
+                                  item.availabilityType === "PRE_BUY" ||
+                                  item.availabilityType === "ROOM_ALLOCATION"
                                   ? "info"
                                   : "warning"
                               }
@@ -1853,8 +1844,8 @@ const HotelAvailability = () => {
                             {item.roomAllocation
                               ? "Room Allocation"
                               : item.block
-                              ? "Block"
-                              : "Free-Sale"}
+                                ? "Block"
+                                : "Free-Sale"}
                           </td>
 
                           <td>
@@ -1951,8 +1942,8 @@ const HotelAvailability = () => {
             {isViewMode
               ? "View Hotel Availability"
               : editingItem
-              ? "Update Hotel Availability"
-              : "Create Hotel Availability"}
+                ? "Update Hotel Availability"
+                : "Create Hotel Availability"}
           </Modal.Title>
           <span className="text-muted small ms-auto">* mandatory fields</span>
         </Modal.Header>
@@ -2143,7 +2134,7 @@ const HotelAvailability = () => {
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="date"
+                          type="datetime-local"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
                             const newValidityList = [
@@ -2151,13 +2142,13 @@ const HotelAvailability = () => {
                             ];
                             newValidityList[index].validityFrom =
                               e.target.value;
-                            
+
                             // Clear Validity To if it becomes invalid (before or equal to From date)
                             const currentToDate = formData.availabilityValidities[index].validityTo;
                             if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
                               newValidityList[index].validityTo = "";
                             }
-                            
+
                             setFormData({
                               ...formData,
                               availabilityValidities: newValidityList,
@@ -2181,7 +2172,7 @@ const HotelAvailability = () => {
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="date"
+                          type="datetime-local"
                           value={period.validityTo || ""}
                           min={getMinValidityToDate(period.validityFrom)}
                           onChange={(e) => {
@@ -2386,8 +2377,8 @@ const HotelAvailability = () => {
             {isViewModeBlock
               ? "View Hotel Block Checkin Checkout"
               : editingBlock
-              ? "Update Hotel Block Checkin Checkout"
-              : "Create Hotel Block Checkin Checkout"}
+                ? "Update Hotel Block Checkin Checkout"
+                : "Create Hotel Block Checkin Checkout"}
           </Modal.Title>
           <span className="text-muted small ms-auto">* mandatory fields</span>
         </Modal.Header>
@@ -2478,7 +2469,7 @@ const HotelAvailability = () => {
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="date"
+                          type="datetime-local"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
                             const newValidityList = [
@@ -2486,13 +2477,13 @@ const HotelAvailability = () => {
                             ];
                             newValidityList[index].validityFrom =
                               e.target.value;
-                            
+
                             // Clear Validity To if it becomes invalid (before or equal to From date)
                             const currentToDate = formDataBlock.validityList[index].validityTo;
                             if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
                               newValidityList[index].validityTo = "";
                             }
-                            
+
                             setFormDataBlock({
                               ...formDataBlock,
                               validityList: newValidityList,
@@ -2508,7 +2499,7 @@ const HotelAvailability = () => {
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="date"
+                          type="datetime-local"
                           value={period.validityTo || ""}
                           min={getMinValidityToDate(period.validityFrom)}
                           onChange={(e) => {
@@ -2664,8 +2655,8 @@ const HotelAvailability = () => {
             {isViewModeStopSale
               ? "View Hotel Stop Sale"
               : editingStopSale
-              ? "Update Hotel Stop Sale"
-              : "Create Hotel Stop Sale"}
+                ? "Update Hotel Stop Sale"
+                : "Create Hotel Stop Sale"}
           </Modal.Title>
           <span className="text-muted small ms-auto">* mandatory fields</span>
         </Modal.Header>
@@ -2806,7 +2797,7 @@ const HotelAvailability = () => {
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="date"
+                          type="datetime-local"
                           value={period.validityFrom || ""}
                           onChange={(e) => {
                             const newValidityList = [
@@ -2814,13 +2805,13 @@ const HotelAvailability = () => {
                             ];
                             newValidityList[index].validityFrom =
                               e.target.value;
-                            
+
                             // Clear Validity To if it becomes invalid (before or equal to From date)
                             const currentToDate = formDataStopSale.validityList[index].validityTo;
                             if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
                               newValidityList[index].validityTo = "";
                             }
-                            
+
                             setFormDataStopSale({
                               ...formDataStopSale,
                               validityList: newValidityList,
@@ -2836,7 +2827,7 @@ const HotelAvailability = () => {
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          type="date"
+                          type="datetime-local"
                           value={period.validityTo || ""}
                           min={getMinValidityToDate(period.validityFrom)}
                           onChange={(e) => {
