@@ -631,7 +631,7 @@ export default function HotelSearch() {
               ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
               : "Unknown City",
             price: hotel.baseRate || null,
-            badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+            // badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
             image:
               hotel.hotelImage ||
               "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",

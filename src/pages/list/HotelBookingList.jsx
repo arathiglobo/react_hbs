@@ -103,6 +103,11 @@ const HotelBookingList = () => {
   const [updatingConfirmationStatus, setUpdatingConfirmationStatus] = useState(null);
   const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
   const [bookingToUpdateStatus, setBookingToUpdateStatus] = useState(null);
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [voucherEmail, setVoucherEmail] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
+  const [loadingPdfBlob, setLoadingPdfBlob] = useState(false);
   const hasTimeFilter = Boolean(selectedMonth) && Boolean(selectedYear);
   const statusOptions = useMemo(
     () => [
@@ -235,7 +240,7 @@ const HotelBookingList = () => {
       console.error("Error updating confirmation status:", error);
       toast.error(
         error.response?.data?.message ||
-          "Failed to update confirmation status. Please try again."
+        "Failed to update confirmation status. Please try again."
       );
     } finally {
       setUpdatingConfirmationStatus(null);
@@ -265,7 +270,7 @@ const HotelBookingList = () => {
       console.error("Error confirming booking:", error);
       alert(
         error.response?.data?.message ||
-          "Failed to confirm booking. Please try again."
+        "Failed to confirm booking. Please try again."
       );
     } finally {
       setConfirmingBooking(false);
@@ -283,7 +288,7 @@ const HotelBookingList = () => {
 
       if (response.data && response.data.success) {
         setVoucherDetails(response.data.voucherDetails);
-      
+
       } else {
         toast.error(
           response.data?.message || "Failed to load voucher details."
@@ -293,7 +298,7 @@ const HotelBookingList = () => {
       console.error("Error fetching voucher details:", error);
       toast.error(
         error.response?.data?.message ||
-          "Failed to load voucher details. Please try again."
+        "Failed to load voucher details. Please try again."
       );
     } finally {
       setLoadingVoucherDetails(false);
@@ -307,12 +312,14 @@ const HotelBookingList = () => {
     try {
       setGeneratingPdf(true);
       setPdfUrl(null);
-      const response = await axiosInstance.post(
+      const response = await axiosInstance.get(
         `/api/booking-confirmation/generate/${selectedBooking.bookingId}`
       );
 
       if (response.data && response.data.status === "SUCCESS") {
         setPdfUrl(response.data.pdfUrl);
+        setVoucherEmail("");
+        setShowPdfModal(true);
         toast.success(response.data.message || "PDF generated successfully!");
       } else {
         toast.error(response.data?.message || "Failed to generate PDF.");
@@ -321,16 +328,70 @@ const HotelBookingList = () => {
       console.error("Error generating PDF:", error);
       toast.error(
         error.response?.data?.message ||
-          "Failed to generate PDF. Please try again."
+        "Failed to generate PDF. Please try again."
       );
     } finally {
       setGeneratingPdf(false);
     }
   };
 
+  // Send confirmation email
+  const sendConfirmationEmail = async () => {
+    if (!selectedBooking || !voucherEmail.trim()) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+    try {
+      setSendingEmail(true);
+      const response = await axiosInstance.post(
+        `/api/booking-confirmation/send-email/${selectedBooking.bookingId}`,
+        { email: voucherEmail.trim(), pdfUrl }
+      );
+      if (response.data && (response.data.status === "SUCCESS" || response.data.success)) {
+        toast.success(response.data.message || "Email sent successfully!");
+        setShowPdfModal(false);
+      } else {
+        toast.error(response.data?.message || "Failed to send email.");
+      }
+    } catch (error) {
+      console.error("Error sending email:", error);
+      toast.error(
+        error.response?.data?.message ||
+        "Failed to send email. Please try again."
+      );
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
+
+  // Fetch PDF as blob when PDF modal opens, to avoid cross-origin iframe restrictions
+  useEffect(() => {
+    let objectUrl = null;
+    if (showPdfModal && pdfUrl) {
+      setLoadingPdfBlob(true);
+      setPdfBlobUrl(null);
+      axiosInstance
+        .get(pdfUrl, { responseType: "blob" })
+        .then((res) => {
+          objectUrl = URL.createObjectURL(
+            new Blob([res.data], { type: "application/pdf" })
+          );
+          setPdfBlobUrl(objectUrl);
+        })
+        .catch(() => {
+          // fallback: use pdfUrl directly
+          setPdfBlobUrl(pdfUrl);
+        })
+        .finally(() => setLoadingPdfBlob(false));
+    }
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [showPdfModal, pdfUrl]);
 
   // Get bookings based on selected status
   useEffect(() => {
@@ -1423,12 +1484,12 @@ const HotelBookingList = () => {
                             <div>
                               {bookingDetails.bookingHeader?.bookingDate
                                 ? new Date(
-                                    bookingDetails.bookingHeader.bookingDate
-                                  ).toLocaleDateString("en-US", {
-                                    year: "numeric",
-                                    month: "short",
-                                    day: "numeric",
-                                  })
+                                  bookingDetails.bookingHeader.bookingDate
+                                ).toLocaleDateString("en-US", {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                })
                                 : "-"}
                             </div>
                             {bookingDetails.bookingHeader?.deadlineDate && (
@@ -1541,8 +1602,8 @@ const HotelBookingList = () => {
                                     ""}{" "}
                                   {bookingDetails?.bookingDetails?.total
                                     ? bookingDetails.bookingDetails.total.toFixed(
-                                        2
-                                      )
+                                      2
+                                    )
                                     : "0.00"}
                                 </span>
                               </div>
@@ -1902,46 +1963,29 @@ const HotelBookingList = () => {
                       />
                     </div>
 
-                    {/* PDF URL Display */}
-                    {pdfUrl && selectedVoucherType === "Confirmation" && (
+                    {/* PDF already generated indicator */}
+                    {/* {pdfUrl && selectedVoucherType === "Confirmation" && (
                       <div
-                        className="mb-3 p-3"
+                        className="mb-3 p-2 d-flex align-items-center gap-2"
                         style={{
-                          backgroundColor: "#e7f3ff",
+                          backgroundColor: "#d1e7dd",
                           borderRadius: "8px",
-                          border: "1px solid #b3d9ff",
+                          border: "1px solid #a3cfbb",
+                          fontSize: "0.85rem",
                         }}
                       >
-                        <div className="d-flex align-items-center justify-content-between">
-                          <div>
-                            <strong style={{ color: "#0066cc" }}>
-                              PDF Generated Successfully:
-                            </strong>
-                            <div className="mt-2">
-                              <a
-                                href={pdfUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  color: "#0066cc",
-                                  textDecoration: "underline",
-                                  wordBreak: "break-all",
-                                }}
-                              >
-                                {pdfUrl}
-                              </a>
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline-primary"
-                            size="sm"
-                            onClick={() => window.open(pdfUrl, "_blank")}
-                          >
-                            Open PDF
-                          </Button>
-                        </div>
+                        <span style={{ color: "#0a6640", fontWeight: 600 }}>
+                          ✓ PDF generated.
+                        </span>
+                        <Button
+                          variant="outline-success"
+                          size="sm"
+                          onClick={() => { setVoucherEmail(""); setShowPdfModal(true); }}
+                        >
+                          View / Send
+                        </Button>
                       </div>
-                    )}
+                    )} */}
 
                     {/* Table */}
                     <div className="table-responsive">
@@ -2078,8 +2122,8 @@ const HotelBookingList = () => {
                                   selectedVoucherType === "Request"
                                     ? 8
                                     : selectedVoucherType === "Confirmation"
-                                    ? 7
-                                    : 7
+                                      ? 7
+                                      : 7
                                 }
                                 style={{
                                   padding: "2rem",
@@ -2115,12 +2159,12 @@ const HotelBookingList = () => {
                                     fontWeight: "500",
                                     color:
                                       voucherDetails?.confirmationStatus ===
-                                      "Confirmed"
+                                        "Confirmed"
                                         ? "#28a745" // success green
                                         : "#dc3545", // danger red
                                     backgroundColor:
                                       voucherDetails?.confirmationStatus ===
-                                      "Confirmed"
+                                        "Confirmed"
                                         ? "#d4edda" // Light green
                                         : "#f8d7da", // Light red
                                     borderRadius: "0.375rem",
@@ -2128,7 +2172,7 @@ const HotelBookingList = () => {
                                   }}
                                 >
                                   {voucherDetails?.confirmationStatus ===
-                                  "Confirmed"
+                                    "Confirmed"
                                     ? "CONFIRMED"
                                     : "NOT CONFIRMED"}
                                 </span>
@@ -2218,21 +2262,21 @@ const HotelBookingList = () => {
                               >
                                 {voucherDetails?.checkIn
                                   ? new Date(
-                                      voucherDetails.checkIn
-                                    ).toLocaleDateString("en-GB", {
-                                      day: "2-digit",
-                                      month: "short",
-                                      year: "numeric",
-                                    })
+                                    voucherDetails.checkIn
+                                  ).toLocaleDateString("en-GB", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
                                   : selectedBooking?.checkInDate
-                                  ? new Date(
+                                    ? new Date(
                                       selectedBooking.checkInDate
                                     ).toLocaleDateString("en-GB", {
                                       day: "2-digit",
                                       month: "short",
                                       year: "numeric",
                                     })
-                                  : "-"}
+                                    : "-"}
                               </td>
                               <td
                                 style={{
@@ -2242,21 +2286,21 @@ const HotelBookingList = () => {
                               >
                                 {voucherDetails?.checkout
                                   ? new Date(
-                                      voucherDetails.checkout
-                                    ).toLocaleDateString("en-GB", {
-                                      day: "2-digit",
-                                      month: "short",
-                                      year: "numeric",
-                                    })
+                                    voucherDetails.checkout
+                                  ).toLocaleDateString("en-GB", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
                                   : selectedBooking?.checkOutDate
-                                  ? new Date(
+                                    ? new Date(
                                       selectedBooking.checkOutDate
                                     ).toLocaleDateString("en-GB", {
                                       day: "2-digit",
                                       month: "short",
                                       year: "numeric",
                                     })
-                                  : "-"}
+                                    : "-"}
                               </td>
                               <td
                                 style={{
@@ -2280,12 +2324,12 @@ const HotelBookingList = () => {
                                   onClick={() => {
                                     // Check if booking is confirmed
                                     const isConfirmed = voucherDetails?.confirmationStatus === "Confirmed";
-                                    
+
                                     if (!isConfirmed) {
                                       toast.error("Confirm the booking then only Confirmation or voucherDetails can be get");
                                       return;
                                     }
-                                    
+
                                     if (
                                       selectedVoucherType === "Confirmation"
                                     ) {
@@ -2332,6 +2376,156 @@ const HotelBookingList = () => {
                   }}
                 >
                   <i className="bi bi-check-circle me-1"></i> Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* PDF Preview & Send Email Modal */}
+            <Modal
+              show={showPdfModal}
+              onHide={() => setShowPdfModal(false)}
+              size="lg"
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header
+                closeButton
+                style={{ backgroundColor: "#0d6efd", color: "#fff" }}
+              >
+                <Modal.Title className="fw-bold">
+                  Booking Confirmation to Agent
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: 0 }}>
+                <div style={{ display: "flex", height: "75vh" }}>
+                  {/* Left: PDF preview */}
+                  <div
+                    style={{
+                      flex: "0 0 62%",
+                      borderRight: "1px solid #dee2e6",
+                      overflow: "hidden",
+                      position: "relative",
+                    }}
+                  >
+                    {loadingPdfBlob && (
+                      <div
+                        className="d-flex align-items-center justify-content-center"
+                        style={{ height: "100%" }}
+                      >
+                        <Spinner animation="border" variant="primary" />
+                        <span className="ms-3 text-muted">Loading PDF...</span>
+                      </div>
+                    )}
+                    {!loadingPdfBlob && pdfBlobUrl && (
+                      <iframe
+                        src={pdfBlobUrl}
+                        title="Booking Confirmation PDF"
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          border: "none",
+                          display: "block",
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Right: Hotel + Email form */}
+                  <div
+                    style={{
+                      flex: "0 0 38%",
+                      padding: "1.5rem",
+                      backgroundColor: "#f8f9fa",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "1.25rem",
+                    }}
+                  >
+                    {/* Hotel */}
+                    <Form.Group>
+                      <Form.Label className="fw-semibold" style={{ fontSize: "0.875rem" }}>
+                        <span className="text-danger">*</span> Hotel
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={
+                          voucherDetails?.hotelName ||
+                          selectedBooking?.hotelName ||
+                          ""
+                        }
+                        readOnly
+                        style={{ fontSize: "0.875rem", backgroundColor: "#fff" }}
+                      />
+                    </Form.Group>
+
+                    {/* Email */}
+                    <Form.Group>
+                      <Form.Label className="fw-semibold" style={{ fontSize: "0.875rem" }}>
+                        <span className="text-danger">*</span> Email Id
+                      </Form.Label>
+                      <Form.Control
+                        type="email"
+                        placeholder="Enter recipient email address"
+                        value={voucherEmail}
+                        onChange={(e) => setVoucherEmail(e.target.value)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && sendConfirmationEmail()
+                        }
+                        disabled={sendingEmail}
+                        style={{ fontSize: "0.875rem" }}
+                      />
+                    </Form.Group>
+
+                    {/* spacer */}
+                    <div style={{ flex: 1 }} />
+
+                    {/* Buttons */}
+                    <div className="d-flex flex-column gap-2">
+                      <Button
+                        variant="success"
+                        onClick={sendConfirmationEmail}
+                        disabled={sendingEmail || !voucherEmail.trim()}
+                      >
+                        {sendingEmail ? (
+                          <>
+                            <Spinner
+                              animation="border"
+                              size="sm"
+                              className="me-1"
+                            />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <FaPaperPlane className="me-1" />
+                            Send Email
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => window.open(pdfUrl, "_blank")}
+                      >
+                        Open PDF in new tab
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="success"
+                  onClick={() => setShowPdfModal(false)}
+                  disabled={sendingEmail}
+                >
+                  ✓ Close
                 </Button>
               </Modal.Footer>
             </Modal>

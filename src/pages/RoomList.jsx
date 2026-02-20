@@ -333,7 +333,13 @@ const RoomList = () => {
           </small>
         );
       default:
-        return <Badge bg="secondary">{roomStatus}</Badge>;
+        return (
+          <small>
+            {" "}
+            This room is Available{" "}
+            
+          </small>
+        );
     }
   };
 
