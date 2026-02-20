@@ -82,18 +82,34 @@ const PolicyUpdate = () => {
     }));
   };
 
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 minute)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setMinutes(date.getMinutes() + 1); // Add 1 minute
+    return date.toISOString().slice(0, 16);
+  };
+
   // ✅ Save updates
   const handleSave = async (e) => {
     e.preventDefault();
     try {
       setSaving(true);
-      const policyUpdateRes = await axiosInstance.put(`/api/hotelPolicy/${policyId}`, policy);
-      
-      if(policyUpdateRes.data != null){
-         toast.success("Policy updated successfully!");
-          navigate(`/hotel-actions/${id}/hotel-policy`);
+      const payload = {
+        ...policy,
+        validityPeriods: policy.validityPeriods.map(period => ({
+          ...period,
+          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
+          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo
+        }))
+      };
+      const policyUpdateRes = await axiosInstance.put(`/api/hotelPolicy/${policyId}`, payload);
+
+      if (policyUpdateRes.data != null) {
+        toast.success("Policy updated successfully!");
+        navigate(`/hotel-actions/${id}/hotel-policy`);
       }
-    
+
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to update policy.");
@@ -211,9 +227,9 @@ const PolicyUpdate = () => {
                           Validity From
                         </Form.Label>
                         <Form.Control
-                          type="date"
+                          type="datetime-local"
                           className="rounded-3"
-                          value={v.validityFrom?.split("T")[0] || ""}
+                          value={v.validityFrom || ""}
                           onChange={(e) =>
                             handleNestedChange(
                               "validityPeriods",
@@ -229,9 +245,10 @@ const PolicyUpdate = () => {
                           Validity To
                         </Form.Label>
                         <Form.Control
-                          type="date"
+                          type="datetime-local"
                           className="rounded-3"
-                          value={v.validityTo?.split("T")[0] || ""}
+                          value={v.validityTo || ""}
+                          min={getMinValidityToDate(v.validityFrom)}
                           onChange={(e) =>
                             handleNestedChange(
                               "validityPeriods",

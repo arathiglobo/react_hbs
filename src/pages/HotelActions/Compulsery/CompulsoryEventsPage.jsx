@@ -25,15 +25,46 @@ const CompulsoryEventsPage = () => {
   const { id } = useParams(); // hotelId
   const navigate = useNavigate();
 
-  // Helper function to convert date from DD-MM-YYYY to YYYY-MM-DD
+  // Helper function to convert date for datetime-local input (YYYY-MM-DDTHH:mm)
   const convertDateFormat = (dateString) => {
     if (!dateString) return "";
-    const parts = dateString.split("-");
-    if (parts.length === 3) {
-      const [day, month, year] = parts;
-      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+
+    // Check if format is DD-MM-YYYY HH:mm:ss or DD-MM-YYYY
+    const parts = dateString.split(/[- :]/); // split by -, space, or :
+    if (parts.length >= 3) {
+      // Assuming DD-MM-YYYY HH:mm:ss or DD-MM-YYYY order
+      // parts[0] = Day, parts[1] = Month, parts[2] = Year
+      const day = parts[0];
+      const month = parts[1];
+      const year = parts[2];
+
+      if (day.length === 2 && month.length === 2 && year.length === 4) {
+        let time = "00:00";
+        if (parts.length >= 5) {
+          const hour = parts[3].padStart(2, "0");
+          const minute = parts[4].padStart(2, "0");
+          time = `${hour}:${minute}`;
+        }
+        return `${year}-${month}-${day}T${time}`;
+      }
     }
-    return dateString;
+
+    // Fallback: If it's already in ISO format or similar, try to parse it
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "";
+
+    const pad = (num) => num.toString().padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
+  // ✅ Helper function to get minimum date for Validity To (From date + 1 minute)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    date.setMinutes(date.getMinutes() + 1); // Add 1 minute
+    // Format to YYYY-MM-DDTHH:MM for datetime-local input
+    const pad = (num) => num.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
   const [events, setEvents] = useState([]);
@@ -142,31 +173,31 @@ const CompulsoryEventsPage = () => {
       compulsorySupplymentsRateDTO:
         event.compulsorySupplymentsRateDTO?.length > 0
           ? event.compulsorySupplymentsRateDTO.map((rate) => ({
-              ...rate,
-              uniqueId: rate.uniqueId || Date.now() + Math.random(),
-            }))
+            ...rate,
+            uniqueId: rate.uniqueId || Date.now() + Math.random(),
+          }))
           : [
-              {
-                supplymentrateId: "",
-                hotelRoomcategoryId: "",
-                ocuppancytypeId: "",
-                rate: "",
-                rateAdult: "",
-                rateChild: "",
-                uniqueId: Date.now() + Math.random(),
-              },
-            ],
+            {
+              supplymentrateId: "",
+              hotelRoomcategoryId: "",
+              ocuppancytypeId: "",
+              rate: "",
+              rateAdult: "",
+              rateChild: "",
+              uniqueId: Date.now() + Math.random(),
+            },
+          ],
       compulsorySupplyValidityDTO:
         event.compulsorySupplyValidityDTO?.length > 0
           ? event.compulsorySupplyValidityDTO.map((validity) => ({
-              ...validity,
-              validityFrom: validity.validityFrom
-                ? convertDateFormat(validity.validityFrom)
-                : "",
-              validityTo: validity.validityTo
-                ? convertDateFormat(validity.validityTo)
-                : "",
-            }))
+            ...validity,
+            validityFrom: validity.validityFrom
+              ? convertDateFormat(validity.validityFrom)
+              : "",
+            validityTo: validity.validityTo
+              ? convertDateFormat(validity.validityTo)
+              : "",
+          }))
           : [{ supplymentValidityId: "", validityFrom: "", validityTo: "" }],
     });
     setFormErrors({
@@ -192,33 +223,33 @@ const CompulsoryEventsPage = () => {
       compulsorySupplymentsRateDTO:
         event.compulsorySupplymentsRateDTO?.length > 0
           ? event.compulsorySupplymentsRateDTO.map((rate) => ({
-              ...rate,
-              supplymentrateId: "", // Clear ID for new record
-              uniqueId: Date.now() + Math.random(), // New unique ID for copy
-            }))
+            ...rate,
+            supplymentrateId: "", // Clear ID for new record
+            uniqueId: Date.now() + Math.random(), // New unique ID for copy
+          }))
           : [
-              {
-                supplymentrateId: "",
-                hotelRoomcategoryId: "",
-                ocuppancytypeId: "",
-                rate: "",
-                rateAdult: "",
-                rateChild: "",
-                uniqueId: Date.now() + Math.random(),
-              },
-            ],
+            {
+              supplymentrateId: "",
+              hotelRoomcategoryId: "",
+              ocuppancytypeId: "",
+              rate: "",
+              rateAdult: "",
+              rateChild: "",
+              uniqueId: Date.now() + Math.random(),
+            },
+          ],
       compulsorySupplyValidityDTO:
         event.compulsorySupplyValidityDTO?.length > 0
           ? event.compulsorySupplyValidityDTO.map((validity) => ({
-              ...validity,
-              supplymentValidityId: "", // Clear ID for new record
-              validityFrom: validity.validityFrom
-                ? convertDateFormat(validity.validityFrom)
-                : "",
-              validityTo: validity.validityTo
-                ? convertDateFormat(validity.validityTo)
-                : "",
-            }))
+            ...validity,
+            supplymentValidityId: "", // Clear ID for new record
+            validityFrom: validity.validityFrom
+              ? convertDateFormat(validity.validityFrom)
+              : "",
+            validityTo: validity.validityTo
+              ? convertDateFormat(validity.validityTo)
+              : "",
+          }))
           : [{ supplymentValidityId: "", validityFrom: "", validityTo: "" }],
     });
     setFormErrors({
@@ -313,6 +344,23 @@ const CompulsoryEventsPage = () => {
     return isValid;
   };
 
+  // Helper to format date for payload: DD-MM-YYYY HH:mm:ss
+  const formatDateForPayload = (dateString, isEndOfDay = false) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return null;
+
+    const pad = (num) => num.toString().padStart(2, "0");
+    const day = pad(date.getDate());
+    const month = pad(date.getMonth() + 1);
+    const year = date.getFullYear();
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    const seconds = "00";
+
+    return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+  };
+
   // Save (create)
   const handleSave = async () => {
     if (!validateForm()) {
@@ -320,23 +368,13 @@ const CompulsoryEventsPage = () => {
     }
 
     try {
-      // Format validity dates to DD-MM-YYYY
+      // Format validity dates to DD-MM-YYYY HH:mm:ss
       const formattedValidityDTO = formData.compulsorySupplyValidityDTO.map(
         (validity) => {
-          const fromDate = new Date(validity.validityFrom);
-          const toDate = new Date(validity.validityTo);
           return {
             supplymentValidityId: validity.supplymentValidityId || null,
-            validityFrom: `${fromDate.getDate().toString().padStart(2, "0")}-${(
-              fromDate.getMonth() + 1
-            )
-              .toString()
-              .padStart(2, "0")}-${fromDate.getFullYear()}`,
-            validityTo: `${toDate.getDate().toString().padStart(2, "0")}-${(
-              toDate.getMonth() + 1
-            )
-              .toString()
-              .padStart(2, "0")}-${toDate.getFullYear()}`,
+            validityFrom: formatDateForPayload(validity.validityFrom),
+            validityTo: formatDateForPayload(validity.validityTo),
           };
         }
       );
@@ -389,23 +427,13 @@ const CompulsoryEventsPage = () => {
     }
 
     try {
-      // Format validity dates to DD-MM-YYYY
+      // Format validity dates to DD-MM-YYYY HH:mm:ss
       const formattedValidityDTO = formData.compulsorySupplyValidityDTO.map(
         (validity) => {
-          const fromDate = new Date(validity.validityFrom);
-          const toDate = new Date(validity.validityTo);
           return {
             supplymentValidityId: validity.supplymentValidityId || null,
-            validityFrom: `${fromDate.getDate().toString().padStart(2, "0")}-${(
-              fromDate.getMonth() + 1
-            )
-              .toString()
-              .padStart(2, "0")}-${fromDate.getFullYear()}`,
-            validityTo: `${toDate.getDate().toString().padStart(2, "0")}-${(
-              toDate.getMonth() + 1
-            )
-              .toString()
-              .padStart(2, "0")}-${toDate.getFullYear()}`,
+            validityFrom: formatDateForPayload(validity.validityFrom),
+            validityTo: formatDateForPayload(validity.validityTo),
           };
         }
       );
@@ -734,7 +762,7 @@ const CompulsoryEventsPage = () => {
             {/* ================= Modal ================= */}
             <Modal
               show={showModal}
-              onHide={() => {}} // Prevent closing on outside click
+              onHide={() => { }} // Prevent closing on outside click
               centered
               size="lg"
               backdrop="static"
@@ -788,9 +816,8 @@ const CompulsoryEventsPage = () => {
                             }
                           }}
                           placeholder="Enter code"
-                          className={`rounded-3 ${
-                            formErrors.supplymentCode ? "is-invalid" : ""
-                          }`}
+                          className={`rounded-3 ${formErrors.supplymentCode ? "is-invalid" : ""
+                            }`}
                         />
                         {formErrors.supplymentCode && (
                           <div className="invalid-feedback">
@@ -820,9 +847,8 @@ const CompulsoryEventsPage = () => {
                             }
                           }}
                           placeholder="Enter tagline"
-                          className={`rounded-3 ${
-                            formErrors.supplyments ? "is-invalid" : ""
-                          }`}
+                          className={`rounded-3 ${formErrors.supplyments ? "is-invalid" : ""
+                            }`}
                         />
                         {formErrors.supplyments && (
                           <div className="invalid-feedback">
@@ -962,9 +988,9 @@ const CompulsoryEventsPage = () => {
                                         const targetIdx = newRates.findIndex(
                                           (r) =>
                                             r.hotelRoomcategoryId ===
-                                              rate.hotelRoomcategoryId &&
+                                            rate.hotelRoomcategoryId &&
                                             r.ocuppancytypeId ===
-                                              rate.ocuppancytypeId
+                                            rate.ocuppancytypeId
                                         );
                                         if (targetIdx > -1) {
                                           newRates[targetIdx].ocuppancytypeId =
@@ -1008,9 +1034,9 @@ const CompulsoryEventsPage = () => {
                                         const targetIdx = newRates.findIndex(
                                           (r) =>
                                             r.hotelRoomcategoryId ===
-                                              rate.hotelRoomcategoryId &&
+                                            rate.hotelRoomcategoryId &&
                                             r.ocuppancytypeId ===
-                                              rate.ocuppancytypeId
+                                            rate.ocuppancytypeId
                                         );
                                         if (targetIdx > -1)
                                           newRates[targetIdx].rate =
@@ -1039,9 +1065,9 @@ const CompulsoryEventsPage = () => {
                                         const targetIdx = newRates.findIndex(
                                           (r) =>
                                             r.hotelRoomcategoryId ===
-                                              rate.hotelRoomcategoryId &&
+                                            rate.hotelRoomcategoryId &&
                                             r.ocuppancytypeId ===
-                                              rate.ocuppancytypeId
+                                            rate.ocuppancytypeId
                                         );
                                         if (targetIdx > -1)
                                           newRates[targetIdx].rateAdult =
@@ -1071,9 +1097,9 @@ const CompulsoryEventsPage = () => {
                                         const targetIdx = newRates.findIndex(
                                           (r) =>
                                             r.hotelRoomcategoryId ===
-                                              rate.hotelRoomcategoryId &&
+                                            rate.hotelRoomcategoryId &&
                                             r.ocuppancytypeId ===
-                                              rate.ocuppancytypeId
+                                            rate.ocuppancytypeId
                                         );
                                         if (targetIdx > -1)
                                           newRates[targetIdx].rateChild =
@@ -1119,16 +1145,16 @@ const CompulsoryEventsPage = () => {
                                   room.rommCategoryId || room.roomCategoryId
                                 )
                             ).length === 0 && (
-                              <tr>
-                                <td
-                                  colSpan={5}
-                                  className="text-center text-muted py-3"
-                                >
-                                  No rates added for this room category. Click
-                                  "Add Rate" to add rates.
-                                </td>
-                              </tr>
-                            )}
+                                <tr>
+                                  <td
+                                    colSpan={5}
+                                    className="text-center text-muted py-3"
+                                  >
+                                    No rates added for this room category. Click
+                                    "Add Rate" to add rates.
+                                  </td>
+                                </tr>
+                              )}
                           </tbody>
                         </Table>
                       </div>
@@ -1160,7 +1186,7 @@ const CompulsoryEventsPage = () => {
                               <tr key={idx}>
                                 <td>
                                   <Form.Control
-                                    type="date"
+                                    type="datetime-local"
                                     value={validity.validityFrom}
                                     onChange={(e) => {
                                       const newValidity = [
@@ -1172,7 +1198,7 @@ const CompulsoryEventsPage = () => {
                                       if (
                                         newValidity[idx].validityTo &&
                                         newValidity[idx].validityTo <=
-                                          e.target.value
+                                        e.target.value
                                       ) {
                                         newValidity[idx].validityTo = "";
                                       }
@@ -1206,9 +1232,9 @@ const CompulsoryEventsPage = () => {
                                 </td>
                                 <td>
                                   <Form.Control
-                                    type="date"
+                                    type="datetime-local"
                                     value={validity.validityTo}
-                                    min={minToDate}
+                                    min={getMinValidityToDate(validity.validityFrom)}
                                     onChange={(e) => {
                                       const newValidity = [
                                         ...formData.compulsorySupplyValidityDTO,
