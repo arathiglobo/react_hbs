@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Form } from "react-bootstrap";
 import axiosInstance from "../AxiosInstance";
 
-export default function RoomCategory({ value, onChange }) {
+export default function RoomCategory({ value, onChange, filteredIds = null }) {
   const [roomCategory, setRoomCategory] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -13,10 +13,17 @@ export default function RoomCategory({ value, onChange }) {
       .catch(err => console.error(err));
   }, []);
 
-  const filtered = searchTerm 
-    ? roomCategory.filter(rc => rc.roomCategory?.toLowerCase().includes(searchTerm.toLowerCase()))
+  // Filter by available room category IDs if provided
+  const availableCategories = filteredIds && filteredIds.length > 0
+    ? roomCategory.filter(rc => filteredIds.includes(Number(rc.roomCategoryId)))
     : roomCategory;
-  const selectedOption = roomCategory.find(opt => String(opt.roomCategoryId) === String(value));
+
+  const filtered = searchTerm 
+    ? availableCategories.filter(rc => rc.roomCategory?.toLowerCase().includes(searchTerm.toLowerCase()))
+    : availableCategories;
+  
+  // Find selected option from available categories
+  const selectedOption = availableCategories.find(opt => String(opt.roomCategoryId) === String(value));
 
   return (
     <Form.Group>

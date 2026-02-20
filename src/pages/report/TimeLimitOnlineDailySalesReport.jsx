@@ -1,21 +1,67 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
-import {
-  Row,
-  Col,
-  Card,
-  Form,
-  Button,
-  Table,
-  Pagination,
-} from "react-bootstrap";
+import {Row,Col,Card,Form,Button,Table,Pagination,} from "react-bootstrap";
+import Agent from "../../components/filters/Agent";
+import Staff from "../../components/filters/Staff";
+import axiosInstance from "../../components/AxiosInstance";
+import Supplier from "../../components/filters/Supplier";
 
 export default function TimeLimitOnlineDailySalesReport() {
 
+  const [agentsList,setAgentList]=useState([]);
+  const [employeesList,setEmployeesList]=useState([]);
+  const [timeList,setTimeList]=useState([]);
   const [currentPage,setCurrentPage] =useState(1);
   const [itemsPerPage,setItemsPerPage] =useState(10);
-  const [searcQuery,setSearchQuery]=useState("");
+  const [searchQuery,setSearchQuery]=useState("");
+ 
+// Temporary filter states (what user sees/edits)
+  const [tempSupplier,setTempSupplier]=useState("");
+  const [tempStaff,setTempStaff]= useState("");
+  const [tempAgent, setTempAgent] = useState("");
+  const [tempFromDate,setTempFromDate]=useState("");
+  const [tempToDate,setTempToDate]=useState("");
+
+// Applied filter states (used for actual filtering)
+  const [supplier,setSupplier]=useState("");
+  const [staff,setStaff] = useState("");
+  const [agent,setAgent] =useState("");
+  const [fromDate,setFromDate]=useState("");
+  const [toDate,setToDate]=useState("");
+
+  useEffect(()=>{
+    const fetchAgents = async () =>{
+      try{
+        const response = await axiosInstance.get("/api/agent")
+        setAgentList(response.data || []);
+      }catch(error){
+          console.error("Error Fetching Data",error)
+      }
+    };fetchAgents();
+  },[])
+
+  useEffect(()=>{
+    const fetchEmployees = async () =>{
+      try{
+        const response = await axiosInstance.get("/api/employee")
+        setEmployeesList(response.data || []);
+      }catch(error){
+          console.error("Error Fetching Employees",error)
+      }
+    };fetchEmployees();
+  },[])
+
+  useEffect(()=>{
+    const fetchEmployeeList = async()=>{
+      try{
+        const response = await axiosInstance.get("/api/reports/timeLimitSales")
+        setTimeList(response.data || []);
+      }catch(error){
+        console.error("error while fetching data",error)
+      }
+    };fetchEmployeeList();
+  },[])
 
 const handlePrint =()=>{
   const printWindow = window.open('','_blank');
@@ -52,15 +98,15 @@ const handlePrint =()=>{
           ${currentreports.map((r,index)=>
             `<tr>
             <td>${index+1}</td>
-             <td>${r.agent}</td>
-             <td>${r.supplier}</td>
-             <td>${r.customer}</td>
-             <td>${r.bookingCode}</td>
-             <td>${r.reference}</td>
-             <td>${r.bookingBy}</td>
-             <td>${r.bookDate}</td>
-             <td>${r.details}</td>
-             <td>${r.deadline}</td>
+             <td>${r.agentName || ''}</td>
+             <td>${r.supplierName || ''}</td>
+             <td>${r.customerName || ''}</td>
+             <td>${r.bookingCode || ''}</td>
+             <td>${r.referenceCode || ''}</td>
+             <td>${r.bookingDoneBy || ''}</td>
+             <td>${r.bookingDate ? r.bookingDate.split('T')[0]:'_'}</td>
+             <td>${r.bookingDetails ? (r.bookingDetails.hotelName || r.bookingDetails.hotelname || 'N/A') + ' - ' + (r.bookingDetails.checkInDate || r.bookingDetails.checkIndate || '') + ' to ' + (r.bookingDetails.checkOutDate || r.bookingDetails.checktodate || '') : (r.details || 'N/A')}</td>
+             <td>${r.deadlineDate ? r.deadlineDate.split('T')[0]:'_'}</td>
             </tr>
             `
           ).join('')}
@@ -68,13 +114,15 @@ const handlePrint =()=>{
           </table>
           </body>
     </html>
-    `)
+    `);
+  printWindow.document.close();
+  printWindow.print();
 }
 
 const handleExcel = () => {
   const headers = [
     'SI.No', 'Agent', 'Supplier', 'Customer', 'Booking Code',
-    'Reference', 'BookingBy', 'BookDate', 'Details'
+    'Reference', 'BookingBy', 'BookDate', 'Details', 'Deadline Date'
   ];
 
   const escapeCSV = (value) => {
@@ -90,15 +138,15 @@ const handleExcel = () => {
     headers.map(escapeCSV).join(','),
     ...currentreports.map((r, index) => [
       index + 1,
-      r.agent,
-      r.supplier,
-      r.customer,
-      r.bookingCode,
-      r.reference,
-      r.bookingBy,
-      r.bookDate,
-      r.details,
-      r.sellingPrice
+      r.agentName || '',
+      r.supplierName || '',
+      r.customerName || '',
+      r.bookingCode || '',
+      r.referenceCode || '',
+      r.bookingDoneBy || '',
+      r.bookingDate ? r.bookingDate.split('T')[0]:'_',
+      r.bookingDetails ? (r.bookingDetails.hotelName || r.bookingDetails.hotelname || 'N/A') + ' - ' + (r.bookingDetails.checkInDate || r.bookingDetails.checkIndate || '') + ' to ' + (r.bookingDetails.checkOutDate || r.bookingDetails.checktodate || '') : (r.details || 'N/A'),
+      r.deadlineDate ? r.deadlineDate.split('T')[0]:'_'
     ].map(escapeCSV).join(','))
   ].join('\n');
 
@@ -112,261 +160,118 @@ const handleExcel = () => {
   window.URL.revokeObjectURL(url);
 };
 
-// Dummy data
-  const reports = [
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Balaraju Barkam",
-      bookingCode: "CNF_BOOK_0236",
-      reference: "CNFS2023111414821434",
-      bookingBy: "Gautham",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-17
-Check-Out: 2023-11-26
-Total Pax: adult(s) and child(ren)`,
-      deadline: "2023-11-14",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Sachin ",
-      bookingCode: "CNF_BOOK_0237",
-      reference: "CNFS2023111411054716",
-      bookingBy: "Mubassir Bhatkar",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-16
-Check-Out: 2023-11-26`,
-      deadline: "2023-11-13",
-    },
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Balaraju Barkam",
-      bookingCode: "CNF_BOOK_0236",
-      reference: "CNFS2023111414821434",
-      bookingBy: "Gautham",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-17
-Check-Out: 2023-11-26
-Total Pax: adult(s) and child(ren)`,
-      deadline: "2023-11-14",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Sachin ",
-      bookingCode: "CNF_BOOK_0237",
-      reference: "CNFS2023111411054716",
-      bookingBy: "Mubassir Bhatkar",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-16
-Check-Out: 2023-11-26`,
-      deadline: "2023-11-13",
-    },
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Balaraju Barkam",
-      bookingCode: "CNF_BOOK_0236",
-      reference: "CNFS2023111414821434",
-      bookingBy: "Gautham",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-17
-Check-Out: 2023-11-26
-Total Pax: adult(s) and child(ren)`,
-      deadline: "2023-11-14",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Sachin ",
-      bookingCode: "CNF_BOOK_0237",
-      reference: "CNFS2023111411054716",
-      bookingBy: "Mubassir Bhatkar",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-16
-Check-Out: 2023-11-26`,
-      deadline: "2023-11-13",
-    },
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Balaraju Barkam",
-      bookingCode: "CNF_BOOK_0236",
-      reference: "CNFS2023111414821434",
-      bookingBy: "Gautham",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-17
-Check-Out: 2023-11-26
-Total Pax: adult(s) and child(ren)`,
-      deadline: "2023-11-14",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Sachin ",
-      bookingCode: "CNF_BOOK_0237",
-      reference: "CNFS2023111411054716",
-      bookingBy: "Mubassir Bhatkar",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-16
-Check-Out: 2023-11-26`,
-      deadline: "2023-11-13",
-    },
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Balaraju Barkam",
-      bookingCode: "CNF_BOOK_0236",
-      reference: "CNFS2023111414821434",
-      bookingBy: "Gautham",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-17
-Check-Out: 2023-11-26
-Total Pax: adult(s) and child(ren)`,
-      deadline: "2023-11-14",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Sachin ",
-      bookingCode: "CNF_BOOK_0237",
-      reference: "CNFS2023111411054716",
-      bookingBy: "Mubassir Bhatkar",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-16
-Check-Out: 2023-11-26`,
-      deadline: "2023-11-13",
-    },
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Balaraju Barkam",
-      bookingCode: "CNF_BOOK_0236",
-      reference: "CNFS2023111414821434",
-      bookingBy: "Gautham",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-17
-Check-Out: 2023-11-26
-Total Pax: adult(s) and child(ren)`,
-      deadline: "2023-11-14",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Sachin",
-      bookingCode: "CNF_BOOK_0237",
-      reference: "CNFS2023111411054716",
-      bookingBy: "Mubassir Bhatkar",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-16
-Check-Out: 2023-11-26`,
-      deadline: "2023-11-13",
-    },
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Balaraju Barkam",
-      bookingCode: "CNF_BOOK_0236",
-      reference: "CNFS2023111414821434",
-      bookingBy: "Gautham",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-17
-Check-Out: 2023-11-26
-Total Pax: adult(s) and child(ren)`,
-      deadline: "2023-11-14",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Sachin ",
-      bookingCode: "CNF_BOOK_0237",
-      reference: "CNFS2023111411054716",
-      bookingBy: "Mubassir Bhatkar",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-16
-Check-Out: 2023-11-26`,
-      deadline: "2023-11-13",
-    },
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Balaraju Barkam",
-      bookingCode: "CNF_BOOK_0236",
-      reference: "CNFS2023111414821434",
-      bookingBy: "Gautham",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-17
-Check-Out: 2023-11-26
-Total Pax: adult(s) and child(ren)`,
-      deadline: "2023-11-14",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Inhouse",
-      customer: "Mr. Sachin ",
-      bookingCode: "CNF_BOOK_0237",
-      reference: "CNFS2023111411054716",
-      bookingBy: "Mubassir Bhatkar",
-      bookDate: "2023-11-14",
-      details: `Hotel Name: 
-Check-in: 2023-11-16
-Check-Out: 2023-11-26`,
-      deadline: "2023-11-13",
-    }
-  ];
 
-  const filteredreports= reports.filter(a=>{
-    const search = searcQuery.toLowerCase();
-    return(
-      String(a.agent).toLowerCase().includes(search)||
-      String(a.supplier).toLowerCase().includes(search)||
-      String(a.customer).toLowerCase().includes(search)||
+
+const handleSearch = () => {
+ //  setSearchQuery(searchQuery);
+ setAgent(tempAgent);
+ setStaff(tempStaff);
+ setSupplier(tempSupplier);
+ setFromDate(tempFromDate);
+ setToDate(tempToDate);
+ setCurrentPage(1);
+ };
+
+
+ const filteredreports = useMemo(() => {
+   return timeList.filter(a => {
+ 
+     if (searchQuery && searchQuery.trim()) {
+       const search = searchQuery.trim().toLowerCase();
+ 
+       const matchesSearch =
+       String(a.agentName).toLowerCase().includes(search)||
+      String(a.supplierName).toLowerCase().includes(search)||
+      String(a.customerName).toLowerCase().includes(search)||
       String(a.bookingCode).toLowerCase().includes(search)||
-      String(a.reference).toLowerCase().includes(search)||
-      String(a.bookingBy).toLowerCase().includes(search)||
-      String(a.bookDate).toLowerCase().includes(search)||
+      String(a.referenceCode).toLowerCase().includes(search)||
+      String(a.bookingDoneBy).toLowerCase().includes(search)||
+      String(a.bookingDate).toLowerCase().includes(search)||
       String(a.details).toLowerCase().includes(search)||
-      String(a.deadline).toLowerCase().includes(search)
-    )
-  })
+      String(a.deadlineDate).toLowerCase().includes(search)
 
-  const totalPages=Math.ceil(filteredreports.length / itemsPerPage);
-  const startIndex = (currentPage -1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentreports = filteredreports.slice(startIndex,endIndex);
+      if (!matchesSearch) return false;
+    }
+
+// supplier
+if(supplier && supplier.trim()){
+  const selectedSupplier = String(supplier).trim();
+  const reportSupplier = String(a.supplierName || '').trim();
+  if(selectedSupplier.toLowerCase() !== reportSupplier.toLowerCase()){
+    return false;
+  }
+}
+
+//agent
+if(agent) {
+  let matches = false;
+if(a.agentId && String (a.agentId) === String(agent)){
+    matches = true;
+  } else{
+    const selectedAgentOption = agentsList.find(opt =>
+      String(opt.id ||opt.agentId)=== String(agent)
+    );
+   if(selectedAgentOption){
+    const selectedAgentName = String(selectedAgentOption.companyName || '').trim();
+    const reportAgentName   = String(a.agentName || '').trim();
+    matches= selectedAgentName.toLowerCase()=== reportAgentName.toLowerCase()||
+     reportAgentName.toLowerCase().includes(selectedAgentName.toLowerCase());
+   }
+  }
+if (!matches) return false;
+}
+
+//Staff
+if(staff) {
+  let matches = false;
+  
+  if (a.employeeId && String(a.employeeId) === String(staff)) {
+    matches = true;
+  } else if (a.staffId && String(a.staffId) === String(staff)) {
+    matches = true;
+  } else {
+    const selectedEmployeeOption = employeesList.find(opt => 
+      String(opt.employeeId) === String(staff)
+    );
+    
+    if (selectedEmployeeOption) {
+      const employeeFullName = `${selectedEmployeeOption.firstName || ""} ${selectedEmployeeOption.lastName || ""}`.trim();
+      const reportBookingBy = String(a.bookingDoneBy || '').trim();
+      
+      // Match exact or partial match
+      matches = employeeFullName.toLowerCase() === reportBookingBy.toLowerCase() ||
+                reportBookingBy.toLowerCase().includes(employeeFullName.toLowerCase()) ||
+                employeeFullName.toLowerCase().includes(reportBookingBy.toLowerCase());
+    }
+  }
+  
+  if (!matches) return false;
+}
+
+   
+     if (fromDate || toDate) {
+       const bookingDateStr = a.bookingDate
+         ? a.bookingDate.split("T")[0]
+         : "";
+ 
+       if (fromDate && bookingDateStr < fromDate) {
+         return false;
+       }
+ 
+       if (toDate && bookingDateStr > toDate) {
+         return false;
+       }
+     }
+     return true; // keep booking
+   });
+ }, [timeList, searchQuery, fromDate, supplier, toDate, agent, staff, agentsList, employeesList]);
+
+  
+    const totalPages = useMemo(() => Math.ceil(filteredreports.length / itemsPerPage), [filteredreports.length,itemsPerPage]);
+    const startIndex = useMemo(() => (currentPage -1)* itemsPerPage, [currentPage, itemsPerPage]);
+    const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
+    const currentreports = useMemo(() => filteredreports.slice(startIndex,endIndex), [filteredreports, startIndex,endIndex]);
+  
 
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
@@ -379,51 +284,42 @@ Check-Out: 2023-11-26`,
             <Card.Header>
               <span className="fw-semibold">TimeLimit Online Sales Report</span>
             </Card.Header>
-
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
               <Row className="align-items-end g-4">
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempFromDate}
+                    onChange={(e)=>setTempFromDate(e.target.value)}/>
                   </Form.Group>
                 </Col>
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempToDate}
+                    onChange={(e)=>setTempToDate(e.target.value)}/>
                   </Form.Group>
                 </Col>
                 <Col md={2}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Supplier</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Inhouse</option>
-                    </Form.Select>
-                  </Form.Group>
+                  <Supplier
+                    value={tempSupplier}
+                    onChange={setTempSupplier}/>
                 </Col>
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Search Agent</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Direct Client</option>
-                    </Form.Select>
-                  </Form.Group>
+                  <Agent
+                  value={tempAgent}
+                  onChange={setTempAgent}/>
                 </Col>
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Staff</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Mubassir Bhatkar</option>
-                    </Form.Select>
-                  </Form.Group>
+                 <Staff
+                 value={tempStaff}
+                 onChange={setTempStaff}/>
                 </Col>
                 <Col md={12} className="d-flex justify-content-end mt-3">
-                  <Button variant="success" size="sm">
+                  <Button variant="success" size="sm" onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
                 </Col>
@@ -446,7 +342,7 @@ Check-Out: 2023-11-26`,
                 <Col className="d-flex">
                   <input
                     type="text"
-                    value={searcQuery}
+                    value={searchQuery}
                     onChange={(e)=>setSearchQuery(e.target.value)}
                     placeholder="search here"
                     className="form-control form-control-sm w-auto"
@@ -497,15 +393,26 @@ Check-Out: 2023-11-26`,
                     currentreports.map((r, index) => (
                       <tr key={index}>
                         <td>{startIndex + index + 1}</td>
-                        <td>{r.agent}</td>
-                        <td>{r.supplier}</td>
-                        <td>{r.customer}</td>
+                        <td>{r.agentName}</td>
+                        <td>{r.supplierName}</td>
+                        <td>{r.customerName}</td>
                         <td>{r.bookingCode}</td>
-                        <td>{r.reference}</td>
-                        <td>{r.bookingBy}</td>
-                        <td>{r.bookDate}</td>
-                        <td style={{ whiteSpace: "pre-line" }}>{r.details}</td>
-                        <td>{r.deadline}</td>
+                        <td>{r.referenceCode}</td>
+                        <td>{r.bookingDoneBy}</td>
+                        <td>{r.bookingDate?.split('T')[0]}</td>
+                        <td style={{ whiteSpace: "pre-line" }}>
+                          {r.bookingDetails ? (
+                            <>
+                              {r.bookingDetails.hotelName || r.bookingDetails.hotelname || 'N/A'}<br/>
+                              {r.bookingDetails.checkInDate || r.bookingDetails.checkIndate || ''} - {r.bookingDetails.checkOutDate || r.bookingDetails.checktodate || ''}
+                            </>
+                          ) : r.details ? (
+                            r.details
+                          ) : (
+                            'N/A'
+                          )}
+                        </td>
+                        <td>{r.deadlineDate?.split('T')[0]}</td>
                       </tr>
                     ))
                   ) : (

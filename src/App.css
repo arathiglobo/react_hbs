@@ -7,6 +7,33 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+
+:root {
+  --bs-body-font-family: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --bs-font-sans-serif: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  font-family: var(--bs-font-sans-serif);
+  font-weight: 400;
+  line-height: 1.5;
+}
+h1, h2, h3, h4 {
+  font-weight: 600;
+}
+
+button,
+input,
+select,
+textarea,
+.nav-link,
+.dropdown-item,
+.btn {
+  font-family: inherit;
+}
+
+
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .toast {

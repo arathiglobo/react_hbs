@@ -1,5 +1,5 @@
 // ✅ ADDED: Additional imports for table, modal, toast, PDF and Excel functionality
-import React, { useState } from "react";
+import React, { useEffect, useState,useMemo } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { Row, Col, Card, Form, Button, Dropdown, Table, Modal } from "react-bootstrap";
@@ -8,8 +8,12 @@ import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+
 function Comparison() {
   
+  const [comparison,setComparison] = useState([]);
+  const [agentsList, setAgentsList] = useState([]);
+  const [hotelsList, setHotelsList] = useState([]);
   const [searchQuery,setSearchQuery]=useState("");
   const [selectedOption, setSelectedOption] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -22,17 +26,175 @@ function Comparison() {
    const [showMailModal, setShowMailModal] = useState(false);
   const [emailAddress, setEmailAddress] = useState("");
   const [isSending, setIsSending] = useState(false);
-  // ✅ ADDED: New state variables for showing results and tracking report type
   const [showResults, setShowResults] = useState(false);
   const [reportType, setReportType] = useState("");
-  // 🔥 NEW: Date state variables for filtering
   const [selectedFromDate, setSelectedFromDate] = useState("");
   const [selectedToDate, setSelectedToDate] = useState("");
-  // 🔥 NEW: State for "Other" comparison selection
   const [selectedOtherEntity, setSelectedOtherEntity] = useState("");
 
+  // Fetch agents list
+  useEffect(()=>{
+    const fetchAgents = async ()=>{
+      try{
+        const response = await axiosInstance.get("/api/agent")
+        setAgentsList(response.data || [])
+      }catch(error){
+        console.error("Error while fetching agents",error)
+      }
+    };fetchAgents();
+  },[])
+
+  // Fetch hotels list
+  useEffect(()=>{
+    const fetchHotels = async ()=>{
+      try{
+        const response = await axiosInstance.get("/api/hotels")
+        setHotelsList(response.data || [])
+      }catch(error){
+        console.error("Error while fetching hotels",error)
+      }
+    };fetchHotels();
+  },[])
+
+  const fetchcomparison = async ( fromDate = null,toDate = null ) => {
+    try{
+      const params = {};
+      if(fromDate && toDate){
+        params.fromDate = fromDate,
+        params.toDate = toDate;
+      }
+      const response =await axiosInstance.get(
+        "/api/reports/hotel-summary",
+        {params}
+      );
+      setComparison(response.data || []);
+    }catch(error){
+      console.error("Error while fetching data",error)
+      toast.error("failed to load data")
+    }
+  }
+
+  useEffect(()=>{
+    fetchcomparison();
+  },[]);
+
+  // useEffect(()=>{
+  //   const fetchcomparison = async ()=>{
+  //     try{
+  //       const response = await axiosInstance.get("/api/reports/hotel-summary")
+  //       setComparison(response.data || [])
+  //     }catch(error){
+  //       console.error("Error while fetching data",error)
+  //       toast.error("Failed to load data");
+  //     }
+  //   };fetchcomparison();
+  // },[])
+
+  // Reset "Compare With" section when switching between Agent and Hotel
+ 
+  useEffect(() => {
+    // Clear comparison-related states when selectedOption changes
+    setCompareOption("");
+    setSelectedOtherEntity("");
+    setSelectedFromDate("");
+    setSelectedToDate("");
+    setShowCompareDropdown(false);
+    setShowDateInputs(false);
+  }, [selectedOption]);
+
+  // Options for Agent/Hotel dropdown
+  const agentOptions = useMemo(() => {
+    if (!agentsList || !Array.isArray(agentsList)) return [];
+    return agentsList
+      .map(agent => agent.companyName || agent.agentName || agent.name || '')
+      .filter(Boolean)
+      .sort();
+  }, [agentsList]);
+
+  const hotelOptions = useMemo(() => {
+    if (!hotelsList || !Array.isArray(hotelsList)) return [];
+    return hotelsList
+      .map(hotel => hotel.hotelName || hotel.name || '')
+      .filter(Boolean)
+      .sort();
+  }, [hotelsList]);
+
+  // Extract agent booking data from comparison API response
+  const agentData = useMemo(() => {
+    if (!comparison || !Array.isArray(comparison)) return [];
+    return comparison
+      .filter(item => item.agentId || item.agentName || item.agentname)
+      .map(item => {
+        const agentName = item.agentName || item.agentname || '';
+        return {
+          slNo: item.slNo || item.id,
+          agentname: agentName,
+          noofbooking: item.noOfBooking || item.noofbooking || item.noOfBookings || 0,
+          cancelledbooking: item.cancelledBooking || item.cancelledbooking || item.cancelledBookings || 0,
+          fromDate: item.fromDate || item.checkIn || item.bookingDate || item.date,
+          toDate: item.toDate || item.checkOut || item.bookingDate || item.date
+        };
+      });
+  }, [comparison]);
+
+  // Extract hotel booking data from comparison API response
+  const hotelData = useMemo(() => {
+    if (!comparison || !Array.isArray(comparison)) return [];
+    return comparison
+      .filter(item => item.hotelId || item.hotelName || item.hotelname)
+      .map(item => {
+        const hotelName = item.hotelName || item.hotelname || '';
+        return {
+          slNo: item.slNo || item.id,
+          agentname: hotelName,
+          noofbooking: item.noOfBooking || item.noofbooking || item.noOfBookings || 0,
+          cancelledbooking: item.cancelledBooking || item.cancelledbooking || item.cancelledBookings || 0,
+          fromDate: item.fromDate || item.checkIn || item.bookingDate || item.date,
+          toDate: item.toDate || item.checkOut || item.bookingDate || item.date
+        };
+      });
+  }, [comparison]);
+
+  // Other entities for comparison (exclude the selected one)
+  const otherOptions = useMemo(() => {
+    if (selectedOption === "agent") {
+      if (!selectedAgentHotel) {
+        return agentOptions.filter(opt => opt && opt.trim() !== '');
+      }
+      const selectedTrimmed = String(selectedAgentHotel).trim().toLowerCase();
+      return agentOptions.filter(opt => {
+        if (!opt || opt.trim() === '') return false;
+        const optTrimmed = String(opt).trim().toLowerCase();
+        return optTrimmed !== selectedTrimmed;
+      });
+    } else if (selectedOption === "hotel") {
+      if (!selectedAgentHotel) {
+        return hotelOptions.filter(opt => opt && opt.trim() !== '');
+      }
+      const selectedTrimmed = String(selectedAgentHotel).trim().toLowerCase();
+      return hotelOptions.filter(opt => {
+        if (!opt || opt.trim() === '') return false;
+        const optTrimmed = String(opt).trim().toLowerCase();
+        return optTrimmed !== selectedTrimmed;
+      });
+    }
+    return [];
+  }, [selectedOption, selectedAgentHotel, agentOptions, hotelOptions]);
+
+  // Data for other entities (for "Other" comparison)
+  const otherEntitiesData = useMemo(() => {
+    const data = {};
+    otherOptions.forEach(option => {
+      if (selectedOption === "agent") {
+        data[option] = agentData.filter(item => item.agentname === option);
+      } else if (selectedOption === "hotel") {
+        data[option] = hotelData.filter(item => item.agentname === option);
+      }
+    });
+    return data;
+  }, [otherOptions, selectedOption, agentData, hotelData]);
+
   const handleSendEmail = async () => {
-    // Validate email
     if (!emailAddress || !emailAddress.includes('@')) {
       toast.error("Please enter a valid email address");
       return;
@@ -40,15 +202,17 @@ function Comparison() {
   
     setIsSending(true);
     try {
-      // API call to send email
       const response = await axiosInstance.post('/api/reports/send-email', {
         email: emailAddress,
         reportType: 'Comparison',
-        subType: reportType, // 'inhouse' or 'api'
+        subType: reportType, 
         filters: {
-          fromDate: fromDate,
-          toDate: toDate,
-          // ... other filters
+          selectedOption: selectedOption,
+          selectedAgentHotel: selectedAgentHotel,
+          compareOption: compareOption,
+          selectedOtherEntity: selectedOtherEntity,
+          fromDate: selectedFromDate,
+          toDate: selectedToDate,
         }
       });
   
@@ -66,7 +230,6 @@ function Comparison() {
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
-    
     const primaryData = (reportType === 'agent' ? agentData : hotelData)
       .filter(item => item.agentname === selectedAgentHotel)
       .filter(item => {
@@ -82,11 +245,8 @@ function Comparison() {
     const otherData = compareOption === "other" && selectedOtherEntity 
       ? otherEntitiesData[selectedOtherEntity] || []
       : [];
-    
-    
     const allData = [...primaryData, ...otherData];
-    
-    const columns = ['Sl.No', 'Entity Name', 'No Of Booking', 'Cancelled Booking'];
+  const columns = ['Sl.No', 'Entity Name', 'No Of Booking', 'Cancelled Booking'];
     
     printWindow.document.write(`
       <html>
@@ -129,11 +289,9 @@ function Comparison() {
   const handlePDF = () => {
     const doc = new jsPDF();
     
-    // 🔥 NEW: Get unified data (primary + other entity data)
     const primaryData = (reportType === 'agent' ? agentData : hotelData)
-      .filter(item => item.agentname === selectedAgentHotel) // 🔥 Agent/Hotel filter
+      .filter(item => item.agentname === selectedAgentHotel) 
       .filter(item => {
-        // 🔥 NEW: Date range filter
         if (!selectedFromDate || !selectedToDate) return true;
         const itemFromDate = new Date(item.fromDate);
         const itemToDate = new Date(item.toDate);
@@ -142,12 +300,11 @@ function Comparison() {
         return itemFromDate <= selectedTo && itemToDate >= selectedFrom;
       });
     
-    // 🔥 NEW: Get other entity data if "Other" is selected
     const otherData = compareOption === "other" && selectedOtherEntity 
       ? otherEntitiesData[selectedOtherEntity] || []
       : [];
     
-    // 🔥 NEW: Combine both datasets for unified table
+  
     const allData = [...primaryData, ...otherData];
     
     doc.text(`Comparison Report - ${reportType === 'agent' ? 'Agent' : 'Hotel'}`, 20, 20);
@@ -155,7 +312,7 @@ function Comparison() {
     autoTable(doc, {
       head: [['Sl.No', 'Entity Name', 'No Of Booking', 'Cancelled Booking']],
       body: allData.map((item, index) => [
-        index + 1, // 🔥 NEW: Sequential numbering across both datasets
+        index + 1,
         item.agentname,
         item.noofbooking,
         item.cancelledbooking,
@@ -167,11 +324,10 @@ function Comparison() {
   };
   
   const handleExcel = () => {
-    // 🔥 NEW: Get unified data (primary + other entity data)
+    
     const primaryData = (reportType === 'agent' ? agentData : hotelData)
-      .filter(item => item.agentname === selectedAgentHotel) // 🔥 Agent/Hotel filter
+      .filter(item => item.agentname === selectedAgentHotel) 
       .filter(item => {
-        // 🔥 NEW: Date range filter
         if (!selectedFromDate || !selectedToDate) return true;
         const itemFromDate = new Date(item.fromDate);
         const itemToDate = new Date(item.toDate);
@@ -180,17 +336,14 @@ function Comparison() {
         return itemFromDate <= selectedTo && itemToDate >= selectedFrom;
       });
     
-    // 🔥 NEW: Get other entity data if "Other" is selected
     const otherData = compareOption === "other" && selectedOtherEntity 
       ? otherEntitiesData[selectedOtherEntity] || []
       : [];
     
-    // 🔥 NEW: Combine both datasets for unified table
     const allData = [...primaryData, ...otherData];
     
     const headers = ['Sl.No', 'Entity Name', 'No Of Booking', 'Cancelled Booking'];
     
-    // Create CSV content with proper escaping
     const escapeCSV = (value) => {
       if (value === null || value === undefined) return '';
       const stringValue = String(value);
@@ -204,7 +357,7 @@ function Comparison() {
       headers.map(escapeCSV).join(','),
       ...allData.map((item, index) => {
         return [
-          index + 1, // 🔥 NEW: Sequential numbering across both datasets
+          index + 1, 
           item.agentname,
           item.noofbooking,
           item.cancelledbooking,
@@ -225,150 +378,25 @@ function Comparison() {
   const handleOptionChange = (option) => {
     setSelectedOption(option);
     setShowDropdown(true);
+    // Clear selected agent/hotel when switching between Agent and Hotel
+    setSelectedAgentHotel("");
+    // Also clear related comparison states
+    setCompareOption("");
+    setSelectedOtherEntity("");
+    setSelectedFromDate("");
+    setSelectedToDate("");
+    setShowCompareDropdown(false);
+    setShowDateInputs(false);
+    setShowResults(false);
   };
 
   const handleCompareChange = (option) => {
     setCompareOption(option);
     setShowCompareDropdown(option === "other");
     setShowDateInputs(option === "date");
-    setShowCompareValidation(false); // Hide validation when user selects an option
+    setShowCompareValidation(false); 
   };
-
-  // 🔥 NEW: Updated data structure with date fields for filtering
-  // Each record now has fromDate and toDate fields to enable date range filtering
-  // This allows filtering by both agent/hotel selection AND date range
-  const agentData = [
-    {
-      slNo: 1,
-      agentname: "Globo Agent",
-      noofbooking: "5",
-      cancelledbooking: "0",
-      fromDate: "2025-05-01", // 🔥 FIXED: Only one Globo Agent record for May 1-15
-      toDate: "2025-05-15"
-    },
-    {
-      slNo: 2,
-      agentname: "Direct Client",
-      noofbooking: "3",
-      cancelledbooking: "1",
-      fromDate: "2025-05-01", // 🔥 FIXED: Only one Direct Client record for May 1-20
-      toDate: "2025-05-20"
-    },
-    {
-      slNo: 3,
-      agentname: "Globo Agent",
-      noofbooking: "8",
-      cancelledbooking: "2",
-      fromDate: "2025-06-01", // 🔥 CHANGED: Different month to avoid overlap
-      toDate: "2025-06-15"
-    },
-    {
-      slNo: 4,
-      agentname: "Direct Client",
-      noofbooking: "12",
-      cancelledbooking: "3",
-      fromDate: "2025-06-01", // 🔥 CHANGED: Different month to avoid overlap
-      toDate: "2025-06-20"
-    }
-  ];
-
-  // 🔥 NEW: Hotel data also updated with date fields for consistent filtering
-  const hotelData = [
-    {
-      slNo: 1,
-      agentname: "Test One",
-      noofbooking: "7",
-      cancelledbooking: "1",
-      fromDate: "2025-05-01", // 🔥 FIXED: Only one Test One record for May 1-10
-      toDate: "2025-05-10"
-    },
-    {
-      slNo: 2,
-      agentname: "Test Two",
-      noofbooking: "4",
-      cancelledbooking: "0",
-      fromDate: "2025-05-01", // 🔥 FIXED: Only one Test Two record for May 1-15
-      toDate: "2025-05-15"
-    },
-    {
-      slNo: 3,
-      agentname: "Test One",
-      noofbooking: "9",
-      cancelledbooking: "2",
-      fromDate: "2025-06-01", // 🔥 CHANGED: Different month to avoid overlap
-      toDate: "2025-06-10"
-    },
-    {
-      slNo: 4,
-      agentname: "Test Two",
-      noofbooking: "6",
-      cancelledbooking: "1",
-      fromDate: "2025-06-01", // 🔥 CHANGED: Different month to avoid overlap
-      toDate: "2025-06-15"
-    }
-  ];
-
-  // 🔥 NEW: Other entities data for comparison
-  const otherEntitiesData = {
-    "Direct Hotel": [
-      {
-        slNo: 1,
-        agentname: "Direct Hotel",
-        noofbooking: "7",
-        cancelledbooking: "1",
-        fromDate: "2025-05-01",
-        toDate: "2025-05-15"
-      }
-    ],
-    "Test One": [
-      {
-        slNo: 1,
-        agentname: "Test One",
-        noofbooking: "9",
-        cancelledbooking: "2",
-        fromDate: "2025-05-01",
-        toDate: "2025-05-15"
-      }
-    ],
-    "Test Two": [
-      {
-        slNo: 1,
-        agentname: "Test Two",
-        noofbooking: "6",
-        cancelledbooking: "1",
-        fromDate: "2025-05-01",
-        toDate: "2025-05-15"
-      }
-    ],
-    "Test Three": [
-      {
-        slNo: 1,
-        agentname: "Test Three",
-        noofbooking: "4",
-        cancelledbooking: "0",
-        fromDate: "2025-05-01",
-        toDate: "2025-05-15"
-      }
-    ]
-  };
-
-  const agentOptions = [
-    "Globo Agent",
-    "Direct Client",
-  ];
-
-  const hotelOptions = [
-    "Test One",
-    "Test Two"
-  ];
-
-  // 🔥 NEW: Other comparison options for comparing different entities
-  const otherOptions = [
-    "Direct Hotel",
-    "Test One",
-    "Test Two", 
-    "Test Three"
-  ];
+  
 
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
@@ -448,52 +476,79 @@ function Comparison() {
                         type="radio" 
                         label="Date" 
                         name="compareOption" 
+                        checked={compareOption === "date"}
                         onChange={() => handleCompareChange("date")} 
                       />
                       <Form.Check 
                         type="radio" 
                         label="Other" 
                         name="compareOption" 
+                        checked={compareOption === "other"}
                         onChange={() => handleCompareChange("other")}
                       />
                     </div>
                     
                     {showCompareDropdown && (
                       <div className="mt-3 mb-4">
-                        <Dropdown
-                          drop="down"
-                          flip={false}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Dropdown.Toggle variant="outline-secondary" size="sm">
-                            {selectedOtherEntity
-                              ? selectedOtherEntity
-                              : "Select Comparison Entity"}
-                          </Dropdown.Toggle>
-
-                          <Dropdown.Menu
-                            container={document.body}
-                            style={{
-                              position: 'fixed !important',
-                              zIndex: "9999",
-                              minWidth: "200px",
-                              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                              border: "1px solid #dee2e6",
-                              top: 'auto !important',
-                              left: 'auto !important',
-                              transform: 'none !important'
-                            }}
+                        {!selectedOption ? (
+                          <div className="text-muted small">
+                            Please select Agent or Hotel first
+                          </div>
+                        ) : !selectedAgentHotel ? (
+                          <div className="text-muted small">
+                            Please select a {selectedOption === "agent" ? "agent" : "hotel"} first
+                          </div>
+                        ) : (
+                          <Dropdown
+                            drop="down"
+                            flip={false}
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            {otherOptions.map((option, index) => (
-                              <Dropdown.Item
-                                key={index}
-                                onClick={() => setSelectedOtherEntity(option)}
-                              >
-                                {option}
-                              </Dropdown.Item>
-                            ))}
-                          </Dropdown.Menu>
-                        </Dropdown>
+                            <Dropdown.Toggle variant="outline-secondary" size="sm">
+                              {selectedOtherEntity
+                                ? selectedOtherEntity
+                                : `Select ${selectedOption === "agent" ? "Agent" : "Hotel"} to Compare`}
+                            </Dropdown.Toggle>
+
+                            <Dropdown.Menu
+                              container={document.body}
+                              style={{
+                                position: 'fixed !important',
+                                zIndex: "9999",
+                                minWidth: "200px",
+                                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                                border: "1px solid #dee2e6",
+                                top: 'auto !important',
+                                left: 'auto !important',
+                                transform: 'none !important'
+                              }}
+                            >
+                              {(() => {
+                                // Get all available options (not filtered)
+                                const allOptions = selectedOption === "agent" ? agentOptions : hotelOptions;
+                                const availableOptions = allOptions.filter(opt => opt && opt.trim() !== '');
+                                
+                                if (availableOptions.length === 0) {
+                                  return (
+                                    <Dropdown.Item disabled className="text-muted">
+                                      No {selectedOption === "agent" ? "agents" : "hotels"} available
+                                    </Dropdown.Item>
+                                  );
+                                }
+                                
+                                // Show all options normally
+                                return availableOptions.map((option, index) => (
+                                  <Dropdown.Item
+                                    key={index}
+                                    onClick={() => setSelectedOtherEntity(option)}
+                                  >
+                                    {option}
+                                  </Dropdown.Item>
+                                ));
+                              })()}
+                            </Dropdown.Menu>
+                          </Dropdown>
+                        )}
                       </div>
                     )}
 
@@ -539,7 +594,7 @@ function Comparison() {
                       variant="success" 
                       size="sm"
                       disabled={!selectedAgentHotel}
-                      onClick={() => {
+                      onClick={async() => {
                         if (!selectedAgentHotel) {
                           alert("Please select Agent or Hotel criteria first");
                           return;
@@ -558,6 +613,12 @@ function Comparison() {
                         }
                         // Set report type and show results
                         setReportType(selectedOption);
+                        
+                        if (compareOption === "date" && selectedFromDate && selectedToDate) {
+                          await fetchcomparison(selectedFromDate,selectedToDate);
+                        }else{
+                              await fetchcomparison();
+                             }
                         setShowResults(true);
                       }}
                     >

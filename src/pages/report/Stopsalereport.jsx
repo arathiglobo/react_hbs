@@ -1,24 +1,81 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useMemo} from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
-import { Row, Col, Card, Form,Button,Table,Modal, Pagination } from "react-bootstrap";
+import { Row, Col, Card, Form,Button,Table,Modal, Pagination, Spinner } from "react-bootstrap";
 import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import HotelFilter from "../../components/filters/Hotelfilters";
 
 export default function Stopsalereport() {
  
+   const [stopSale,setStopSale]=useState([])
     const [currentPage,setCurrentPage]=useState(1);
     const [itemsPerPage,setItemsPerPage]=useState(10);
     const [searchQuery,setSearchQuery]=useState("");
     const [showMailModal,setShowMailModal]=useState(false);
     const [emailAddress,setEmailAddress]=useState("");
     const [isSending,setIsSending]=useState(false);
+    
+    // Temporary filter state (what user sees/edits)
+    const [tempFromDate, setTempFromDate] = useState("");
+    const [tempToDate, setTempToDate] = useState("");
+    const [tempSelectedHotel, setTempSelectedHotel] = useState("");
+    
+    // Applied filter states (used for actual filtering - backend)
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
+    const [selectedHotel, setSelectedHotel] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+
+   // ============================================
+   // FILTERING LOGIC - FETCH DATA (ONLY ON SEARCH)
+   // ============================================
+   // Removed initial fetch - data will only load when user clicks Search
+   const fetchsale = async()=>{
+    setIsLoading(true);
+    try{
+      // Fetch all data without filters (frontend filtering)
+      const response = await axiosInstance.get("/api/report/stopsale?page=0&limit=1000");
+      setStopSale(response.data || []);
+    }catch(error){
+      console.error("error while fetching data",error);
+      toast.error("Failed to load stop sale data");
+      setStopSale([]);
+    } finally {
+      setIsLoading(false);
+    }
+   };
 
     useEffect(()=>{
       setCurrentPage(1);
     },[searchQuery])
+
+  // Function to format validityList array to string
+  const formatValidity = (validityList) => {
+    if (!validityList || !Array.isArray(validityList) || validityList.length === 0) {
+      return "N/A";
+    }
+
+    return validityList.map((validity) => {
+      const fromDate = validity.validityFrom 
+        ? new Date(validity.validityFrom).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : '';
+      const toDate = validity.validityTo 
+        ? new Date(validity.validityTo).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : '';
+      
+      if (fromDate && toDate) {
+        return `${fromDate} - ${toDate}`;
+      } else if (fromDate) {
+        return `From ${fromDate}`;
+      } else if (toDate) {
+        return `Until ${toDate}`;
+      }
+      return 'N/A';
+    }).join(', ');
+  };
 
   const handleSendEmail = async ()=>{
     if (!emailAddress || !/^\S+@\S+\.\S+$/.test(emailAddress)){
@@ -73,22 +130,22 @@ export default function Stopsalereport() {
                 <th>Market</th>
                 <th>Type</th>
                 <th>Room Category</th>
-               <th>CustomerName</th>
                 <th>Validity</th>
               </tr>
             </thead>
             <tbody>
+
               ${currentStopSale.map((s, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${s.hotelName}</td>
+                  <td>${s.hotel}</td>
                   <td>${s.market}</td>
                   <td>${s.type}</td>
                   <td>${s.roomCategory}</td>
-                  <td>${s.customerName}</td>
-                  <td>${s.validity}</td>
+                  <td>${formatValidity(s.validityList)}</td>
                 </tr>
               `).join('')}
+
             </tbody>
           </table>
         </body>
@@ -106,27 +163,24 @@ export default function Stopsalereport() {
       
       // Add table
       autoTable(doc, {
-        head: [['Sl.No', 'Hotel Name', 'Market', 'Type', 'Room Category', 'CustomerName','Validity' ]],
+        head: [['Sl.No', 'Hotel Name', 'Market', 'Type', 'Room Category','Validity' ]],
         body: currentStopSale.map((s, index) => [
           index + 1,
-          s.hotelName,
+          s.hotel,
           s.market,
           s.type,
           s.roomCategory,
-          s.customerName,
-          s.validity,
+          formatValidity(s.validityList),
           ]),
         startY: 30,
       });
-      
       // Download PDF
       doc.save('hotel-wise-report.pdf');
     };
 
     const handleExcel = () => {
-    const headers = ['Sl.No', 'Hotel Name', 'Hotel Type', 'Hotel Category', 'Room Category', 'Region', 'Country', 'State', 'Place'];
-    
-    // Create CSV content with proper escaping
+    const headers = ['Sl.No', 'Hotel Name', 'Market', 'Type', 'Room Category', 'Validity'];
+     // Create CSV content with proper escaping
     const escapeCSV = (value) => {
       if (value === null || value === undefined) return '';
       const stringValue = String(value);
@@ -141,12 +195,11 @@ export default function Stopsalereport() {
       headers.map(escapeCSV).join(','),
       ...currentStopSale.map((s, index) => [
         index + 1,
-        s.hotelName,
+        s.hotel,
           s.market,
           s.type,
           s.roomCategory,
-          s.customerName,
-          s.validity,
+          formatValidity(s.validityList),
       ].map(escapeCSV).join(','))
     ].join('\n');
 
@@ -160,140 +213,120 @@ export default function Stopsalereport() {
     link.click();
     window.URL.revokeObjectURL(url);
   };
-  
-  // Dummy data
-  const stopsale = [
-    { slNo: 1,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
 
-     { slNo: 2,
-    hotelName: "direct Hotel",
-    market: "india",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
+  // ============================================
+  // FILTERING LOGIC - TEXT SEARCH FILTER
+  // ============================================
+  // ✅ This filter is WORKING - filters by text search across multiple fields
+  // ⚠️ NOTE: This only does client-side filtering on already loaded data
+  //    If you want server-side filtering, need to pass searchQuery to API call
+  // ============================================
+  // FILTERING LOGIC - CLIENT-SIDE FILTERING
+  // ============================================
+  const handleSearch = async () => {
+    // Update applied filters
+    setFromDate(tempFromDate);
+    setToDate(tempToDate);
+    setSelectedHotel(tempSelectedHotel);
+    setCurrentPage(1);
+    
+    // Fetch data when search is clicked
+    setIsLoading(true);
+    try{
+      const response = await axiosInstance.get("/api/report/stopsale?page=0&limit=1000");
+      setStopSale(response.data || []);
+    }catch(error){
+      console.error("error while fetching data",error);
+      toast.error("Failed to load stop sale data");
+      setStopSale([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-     { slNo: 3,
-    hotelName: "globo",
-    market: "kerala",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
+  const filteredstopsale = useMemo(() => {
+    return stopSale.filter(s => {
+      // Text search filter
+      if (searchQuery && searchQuery.trim()) {
+        const search = searchQuery.trim().toLowerCase();
+        const matchesSearch =
+          String(s.hotel || '').toLowerCase().includes(search) ||
+          String(s.market || '').toLowerCase().includes(search) ||
+          String(s.type || '').toLowerCase().includes(search) ||
+          String(s.roomCategory || '').toLowerCase().includes(search) ||
+          formatValidity(s.validityList).toLowerCase().includes(search) ||
+          String(s.customerName || '').toLowerCase().includes(search);
+        
+        if (!matchesSearch) return false;
+      }
 
-     { slNo: 4,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
+      // Hotel filter
+      if (selectedHotel) {
+        // Assuming hotelId is in the data, adjust field name as needed
+        if (s.hotelId && String(s.hotelId) !== String(selectedHotel)) {
+          return false;
+        }
+        // If hotelId not available, try matching by hotel name
+        // You may need to adjust this based on your data structure
+      }
 
-     { slNo: 5,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
-     { slNo: 1,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
+      // Date range filter - handle three cases:
+      // 1. Only From Date: show records from that date onwards
+      // 2. Only To Date: show records before/up to that date
+      // 3. Both From and To Date: show records between those dates
+      if (fromDate || toDate) {
+        if (!s.validityList || s.validityList.length === 0) {
+          return false; // No validity means no match
+        }
 
-     { slNo: 2,
-    hotelName: "direct Hotel",
-    market: "india",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
+        let hasMatchingValidity = false;
+        for (const validity of s.validityList) {
+          const validityFrom = validity.validityFrom ? validity.validityFrom.split('T')[0] : '';
+          const validityTo = validity.validityTo ? validity.validityTo.split('T')[0] : '';
 
-     { slNo: 3,
-    hotelName: "globo",
-    market: "kerala",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
+          if (!validityFrom && !validityTo) continue; // Skip if no dates
 
-     { slNo: 4,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
+          // Case 1: Only From Date selected - show records from that date onwards
+          if (fromDate && !toDate) {
+            // Record is valid if validityTo is on or after fromDate
+            // (validity period starts before or on fromDate and ends on or after fromDate)
+            if (validityTo && validityTo >= fromDate) {
+              hasMatchingValidity = true;
+              break;
+            }
+          }
+          // Case 2: Only To Date selected - show records before/up to that date
+          else if (!fromDate && toDate) {
+            // Record is valid if validityFrom is on or before toDate
+            // (validity period starts on or before toDate)
+            if (validityFrom && validityFrom <= toDate) {
+              hasMatchingValidity = true;
+              break;
+            }
+          }
+          // Case 3: Both From and To Date selected - show records between those dates
+          else if (fromDate && toDate) {
+            // Record is valid if validity period overlaps with filter range
+            // Validity period overlaps if:
+            // - validityFrom is on or before toDate AND
+            // - validityTo is on or after fromDate
+            const overlaps = 
+              (!validityFrom || validityFrom <= toDate) &&
+              (!validityTo || validityTo >= fromDate);
+            
+            if (overlaps) {
+              hasMatchingValidity = true;
+              break;
+            }
+          }
+        }
 
-     { slNo: 5,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
-     { slNo: 1,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
+        if (!hasMatchingValidity) return false;
+      }
 
-     { slNo: 2,
-    hotelName: "direct Hotel",
-    market: "india",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
-
-     { slNo: 3,
-    hotelName: "globo",
-    market: "kerala",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
-
-     { slNo: 4,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"},
-
-     { slNo: 5,
-    hotelName: "Test Hotel",
-    market: "asia",
-    type: "Hotel",
-    roomCategory: "Deluxe Room",
-    validity:"01/10/2025 - 04/10/2025, 01/11/2025 - 04/11/2025",
-    customerName: "Norling Trevor Mason"}
-  ];
-
-  const filteredstopsale = stopsale.filter(s=>{
-    const search=searchQuery.toLowerCase();
-    return(
-      String(s.hotelName).toLowerCase().includes(search)||
-      String(s.market).toLowerCase().includes(search)||
-      String(s.type).toLowerCase().includes(search)||
-      String(s.roomCategory).toLowerCase().includes(search)||
-      String(s.validity).toLowerCase().includes(search)||
-      String(s.customerName).toLowerCase().includes(search)
-    )
-  }
-)
+      return true;
+    });
+  }, [stopSale, searchQuery, fromDate, toDate, selectedHotel]);
 
 const totalPages =Math.ceil(filteredstopsale.length / itemsPerPage);
 const startindex = (currentPage -1) * itemsPerPage;
@@ -319,27 +352,39 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control 
+                      type="date" 
+                      size="sm" 
+                      value={tempFromDate}
+                      onChange={(e) => setTempFromDate(e.target.value)}
+                    />
                   </Form.Group>
                 </Col>
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control 
+                      type="date" 
+                      size="sm" 
+                      value={tempToDate}
+                      onChange={(e) => setTempToDate(e.target.value)}
+                      min={tempFromDate || undefined}
+                    />
                   </Form.Group>
                 </Col>
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Hotel</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Test Hotel</option>
-                      <option>City View Hotel</option>
-                    </Form.Select>
-                  </Form.Group>
+                 <HotelFilter 
+                   value={tempSelectedHotel} 
+                   onChange={setTempSelectedHotel} 
+                 />
                 </Col>
                 <Col md={3}>
-                  <Button variant="success" className="w-100" size="sm">
+                  <Button 
+                    variant="success" 
+                    className="w-100" 
+                    size="sm"
+                    onClick={handleSearch}
+                  >
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
                 </Col>
@@ -395,11 +440,11 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
                     currentStopSale.map((s, index) => (
                       <tr key={s.id}>
                         <td>{startindex + index + 1}</td>
-                        <td>{s.hotelName}</td>
+                        <td>{s.hotel}</td>
                         <td>{s.market}</td>
                         <td>{s.type}</td>
                         <td>{s.roomCategory}</td>
-                        <td>{s.validity}</td>
+                        <td>{formatValidity(s.validityList)}</td>
                       </tr>
                     ))
                   ) : (
@@ -410,6 +455,7 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
                     </tr>
                   )}
                 </tbody>
+              
               </Table>
 
               {/* Pagination */}
@@ -488,11 +534,7 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
                                       (
                                          <>
                     <i className="fas fa-paper-plane me-1"></i>Send Email
-                  </>
-                                      )
-          
-          
-                                      }
+                  </>)}
                                     </Button>
           
                                   </Modal.Footer>

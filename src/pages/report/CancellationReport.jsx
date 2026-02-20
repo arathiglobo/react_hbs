@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useMemo, useState} from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
@@ -17,9 +17,13 @@ import {
   Pagination,
   Modal
 } from "react-bootstrap";
-
+import Country from "../../components/filters/Country";
 
 export default function CancellationReport() {
+
+    const [cancellation,setCancellation]=useState([]);
+
+    const [countryOptions,setCountryOptions]=useState([]);
 
     const[currentPage,setCurrentPage]=useState(1);
     const[itemsPerPage,setItemsPerPage]=useState(10);
@@ -28,9 +32,42 @@ export default function CancellationReport() {
     const [emailAddress,setEmailAddress]=useState("");
     const [isSending,setIsSending]=useState(false);
 
+    const [tempCountry,setTempCountry]=useState("");
+    const [tempFromDate,setTempFromDate]=useState("");
+    const [tempToDate,setTempToDate]= useState("");
+
+    const[country,setCountry]=useState("");
+    const[fromDate,setFromDate]=useState("");
+    const[toDate,setToDate]=useState("");
+
+
     useEffect(()=>{
       setCurrentPage(1);
-    },[searchQuery])
+    },[searchQuery]);
+
+
+    useEffect(()=>{
+      const fetchcancellation= async ()=>{
+        try {const response = await axiosInstance.get("/api/cancellationreport/cancellation");
+        setCancellation(response.data);
+      }catch(error){
+        console.log("Booking Report Fetch Error",error)
+        toast.error("failed to load data")
+      }
+    }
+      fetchcancellation();
+    },[])
+
+    useEffect(()=>{
+      const fetchCountryOptions = async ()=>{
+        try{
+          const response = await axiosInstance.get("/api/country");
+          setCountryOptions(Array.isArray(response.data) ? response.data: []);
+        }catch(error){
+          console.error("error fetching data country options", error)
+        }
+      };fetchCountryOptions();
+    },[])
     
      const handleSendEmail = async () => {
       // Validate email
@@ -62,6 +99,12 @@ export default function CancellationReport() {
       }
     };
 
+    const handleSearch = ()=>{
+      setCountry(tempCountry);
+      setFromDate(tempFromDate);
+      setToDate(tempToDate);
+      setCurrentPage(1);
+    }
    
     const handlePrint = () => {
       const printWindow = window.open('', '_blank');
@@ -94,12 +137,12 @@ export default function CancellationReport() {
                 ${filteredcancellation.map((c, index) => `
                   <tr>
                     <td>${index + 1}</td>
-                    <td>${c.code}</td>
-                    <td>${c.date}</td>
-                    <td>${c.customer}</td>
-                    <td>${c.doneBy}</td>
-                    <td>${c.country}</td>
-                  </tr>
+                    <td>${c.bookingCode}</td>
+                     <td>${c.bookingDate ? c.bookingDate.split('T')[0]:'_'}</td>
+                    <td>${c.customerName}</td>
+                    <td>${c.bookingDoneBy}</td>
+                    <td>${c.nativeCountry}</td>
+                   </tr>
                 `).join('')}
               </tbody>
             </table>
@@ -122,22 +165,19 @@ export default function CancellationReport() {
         head: [['Sl.No', 'Booking Code', 'Booking Date', 'Customer Name', 'Booking Done By', 'Native Country']],
         body: filteredcancellation.map((c, index) => [
           index + 1,
-          c.code,
-          c.date,
-          c.customer,
-          c.doneBy,
-          c.country
+         c.bookingCode,
+          c.customerName,
+          c.bookingDoneBy,
+          c.nativeCountry,
+          c.bookingDate
         ]),
         startY: 30,
       });
-      
       // Download PDF
       doc.save('Cancellation-report.pdf');
     };
     
     
-    
-
     const handleExcel = () => {
       const headers = ['Sl.No', 'Booking Code', 'Booking Date', 'Customer Name', 'Booking Done By', 'Native Country'];
       
@@ -156,11 +196,11 @@ export default function CancellationReport() {
         headers.map(escapeCSV).join(','),
         ...filteredcancellation.map((c, index) => [
           index + 1,
-          c.code,
-          c.date,
-          c.customer,
-          c.doneBy,
-          c.country
+          c.bookingCode,
+          c.customerName,
+          c.bookingDoneBy,
+          c.nativeCountry,
+          c.bookingDate
         ].map(escapeCSV).join(','))
       ].join('\n');
     
@@ -175,46 +215,67 @@ export default function CancellationReport() {
       window.URL.revokeObjectURL(url);
     };
 
-  
-  // Dummy cancellation data
-  const cancellations = [
-    {
-      id: 1,
-      code: "CNRJ2026",
-      date: "2025-09-08",
-      customer: "Rui Nakibio",
-      doneBy: "Direct Client",
-      country: "Spain",
-    },
-    {
-      id: 2,
-      code: "CNDA2028",
-      date: "2025-09-06",
-      customer: "Jiaz Zheng",
-      doneBy: "Direct Client",
-      country: "China",
-    },
-    
-  ];
 
+ const filteredcancellation = useMemo(() => {
+  return cancellation.filter(c => {
+    // Text search filter
+    if (searchQuery && searchQuery.trim()) {
+      const search = searchQuery.trim().toLowerCase();
+      const matchesSearch =
+        String(c.bookingCode || '').toLowerCase().includes(search) ||
+        String(c.bookingDate || '').toLowerCase().includes(search) ||
+        String(c.customerName || '').toLowerCase().includes(search) ||
+        String(c.bookingDoneBy || '').toLowerCase().includes(search) ||
+        String(c.nativeCountry || '').toLowerCase().includes(search);
 
-  const filteredcancellation =cancellations.filter(c=>{
-    const search = searchQuery.toLowerCase()
-    return(
-      String(c.code).toLowerCase().includes(search)||
-      String(c.date).toLowerCase().includes(search)||
-      String(c.customer).toLowerCase().includes(search)||
-      String(c.doneBy).toLowerCase().includes(search)||
-      String(c.country).toLowerCase().includes(search)
-    )
+      if (!matchesSearch) return false;
+    }
+
+    // Date range filter
+    if (fromDate || toDate) {
+      const bookingDateStr = c.bookingDate ? c.bookingDate.split('T')[0] : '';
+
+      if (fromDate && bookingDateStr < fromDate) {
+        return false;
+      }
+      if (toDate && bookingDateStr > toDate) {
+        return false;
+      }
+    }
+
+    if(country){
+      let matches = false;
+      const selectedCountryOption= countryOptions.find(
+        opt=> String(opt.id) === String(country)
+      );
+      const selectedCountryName = selectedCountryOption?.name;
+
+      if(selectedCountryName){
+        const bookingCountryCode = String(c.nativeCountry || "").trim();
+        const selectedCode = String(selectedCountryName ||"").trim();
+        
+        matches = bookingCountryCode.toLowerCase() === selectedCode.toLowerCase();
+
+      }
+
+      if( !matches && c.countryId && String(c.countryId)===String(country)){
+        matches = true;
+      }
+        if (!matches) return false;
+    }
+
+    return true; // ✅ MUST HAVE THIS!
   });
+}, [cancellation, searchQuery, fromDate, toDate, country,countryOptions]);
 
-  const totalPages =Math.ceil(filteredcancellation.length / itemsPerPage);
-  const startIndex =(currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentBookings = filteredcancellation.slice(startIndex,endIndex)
+  const totalPages = useMemo(()=>Math.ceil(filteredcancellation.length / itemsPerPage),[filteredcancellation.length,itemsPerPage]);
+  const startIndex = useMemo(()=>(currentPage -1)*itemsPerPage, [currentPage,itemsPerPage]);
+  const endIndex = useMemo(()=>startIndex+itemsPerPage,[startIndex,itemsPerPage]);
+  const currentBookings = useMemo(()=>filteredcancellation.slice(startIndex,endIndex),[filteredcancellation,startIndex,endIndex])
+
 
   return (
+    
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
@@ -231,56 +292,84 @@ export default function CancellationReport() {
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempFromDate}
+                    onChange={(e)=>setTempFromDate(e.target.value)}/>
                   </Form.Group>
                 </Col>
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempToDate}
+                    onChange={(e)=>setTempToDate(e.target.value)}/>
                   </Form.Group>
                 </Col>
+
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Country</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Spain</option>
-                      <option>China</option>
-                      <option>India</option>
-                    </Form.Select>
-                  </Form.Group>
+                <Country
+                value={tempCountry}
+                onChange={setTempCountry}/>
                 </Col>
+
                 <Col md={3}>
-                  <Button variant="success" className="w-100" size="sm">
+                  <Button variant="success" className="w-100" size="sm" onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
                 </Col>
                 <Col md={12} className="mt-4">
-                  <div className="d-flex gap-2 justify-content-end">
-                    <Button variant="outline-primary" size="sm" onClick={()=> setShowMailModal(true)}>
-                      <i className="fas fa-envelope me-1"></i>Mail
-                    </Button>
-                    <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
-                      <i className="fas fa-print me-1"></i>Print
-                    </Button>
-                    <Button variant="outline-danger" size="sm" onClick={handlePDF}>
-                      <i className="fas fa-file-pdf me-1"></i>PDF
-                    </Button>
-                    <Button variant="outline-success" size="sm" onClick={handleExcel}>
-                      <i className="fas fa-file-excel me-1"></i>Excel
-                    </Button>
-                  </div>
-                  <div>
-                    <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e)=>setSearchQuery(e.target.value)}
-                    placeholder="Search"
-                    className="form-control form-control-sm w-auto"
-                    />
-                  </div>
-                </Col>
+  <div className="d-flex justify-content-between align-items-center">
+    
+    {/* LEFT SIDE - SEARCH */}
+    <div>
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Search"
+        className="form-control form-control-sm"
+        style={{ width: "200px" }}
+      />
+    </div>
+
+    {/* RIGHT SIDE - BUTTONS */}
+    <div className="d-flex gap-2">
+      <Button
+        variant="outline-primary"
+        size="sm"
+        onClick={() => setShowMailModal(true)}
+      >
+        <i className="fas fa-envelope me-1"></i>Mail
+      </Button>
+
+      <Button
+        variant="outline-secondary"
+        size="sm"
+        onClick={handlePrint}
+      >
+        <i className="fas fa-print me-1"></i>Print
+      </Button>
+
+      <Button
+        variant="outline-danger"
+        size="sm"
+        onClick={handlePDF}
+      >
+        <i className="fas fa-file-pdf me-1"></i>PDF
+      </Button>
+
+      <Button
+        variant="outline-success"
+        size="sm"
+        onClick={handleExcel}
+      >
+        <i className="fas fa-file-excel me-1"></i>Excel
+      </Button>
+    </div>
+
+  </div>
+</Col>
+
               </Row>
             </div>
 
@@ -301,11 +390,11 @@ export default function CancellationReport() {
                     currentBookings.map((c, index) => (
                       <tr key={c.id}>
                         <td>{startIndex + index + 1}</td>
-                        <td>{c.code}</td>
-                        <td>{c.date}</td>
-                        <td>{c.customer}</td>
-                        <td>{c.doneBy}</td>
-                        <td>{c.country}</td>
+                       <td>{c.bookingCode}</td> 
+                        <td>{c.customerName}</td>
+                        <td>{c.bookingDoneBy}</td>
+                        <td>{c.bookingDate ? c.bookingDate.split('T')[0]:'_'}</td>
+                        <td>{c.nativeCountry}</td>
                       </tr>
                     ))
                   ) : (

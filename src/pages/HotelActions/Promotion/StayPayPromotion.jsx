@@ -25,18 +25,16 @@ export default function StayPayPromotion() {
   const [loading, setLoading] = useState(false);
   const [hotelRoomsData, setHotelRoomsData] = useState([]);
   const [roomRates, setRoomRates] = useState({});
-   const [markets, setMarkets] = useState([]);
-    const [countries, setCountries] = useState([]);
-    const [filteredCountries, setFilteredCountries] = useState([]);
+  const [markets, setMarkets] = useState([]);
+  const [countries, setCountries] = useState([]);
+  const [filteredCountries, setFilteredCountries] = useState([]);
   const [seasonData, setSeasonData] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
 
-  // ✅ Helper function to get minimum validity to date (next day from from date)
+  // ✅ Helper function to get minimum validity to date (same as from date for datetime)
   const getMinValidityToDate = (fromDate) => {
     if (!fromDate) return "";
-    const date = new Date(fromDate);
-    date.setDate(date.getDate() + 1);
-    return date.toISOString().split("T")[0];
+    return fromDate;
   };
 
   // ✅ Validation function - Only basic required fields
@@ -80,9 +78,9 @@ export default function StayPayPromotion() {
 
   // ✅ Load hotel room data dynamically (same as Special Rates)
   const loadHotelRoomDatas = async () => {
-  try {
-    setLoading(true);
-    console.log("Loading room data for hotel ID:", id);
+    try {
+      setLoading(true);
+      console.log("Loading room data for hotel ID:", id);
       const response = await axiosInstance.get(
         `/api/hotelRoomDetailsController/${id}`
       );
@@ -90,19 +88,19 @@ export default function StayPayPromotion() {
       console.log("Room data length:", response.data?.length);
       setHotelRoomsData(response.data || []);
       console.log("Hotel rooms data set:", response.data || []);
-  } catch (error) {
+    } catch (error) {
       console.error("Room fetch error:", error);
       console.error("Error details:", error.response?.data);
       toast.error("Failed to load Hotel Rooms Data");
-  } finally {
-    setLoading(false);
-  }
-};
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ✅ Handle Stay/Pay table changes with auto-calculation and validation
   const handleStayPayChange = (roomCategory, roomType, field, value) => {
     const baseKey = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}`;
-    
+
     if (field === "stay") {
       // When Stay changes, just update Stay (no auto-calculation of Free)
       setRoomRates(prev => ({
@@ -114,14 +112,14 @@ export default function StayPayPromotion() {
       const currentRates = roomRates;
       const stayValue = currentRates[`${baseKey}_stay`] || 0;
       let payValue = value;
-      
+
       // Validation: Pay cannot exceed Stay - 1
       if (stayValue > 0) {
         payValue = Math.min(payValue, stayValue - 1);
       }
-      
+
       const freeValue = Math.max(0, stayValue - payValue);
-      
+
       setRoomRates(prev => ({
         ...prev,
         [`${baseKey}_pay`]: payValue,
@@ -140,45 +138,45 @@ export default function StayPayPromotion() {
 
 
   const fetchDropdowns = async () => {
-  try {
-    const [marketRes, countryRes, seasonRes] = await Promise.all([
-      axiosInstance.get("/api/marketType"),
-      axiosInstance.get("/api/country"),
-      axiosInstance.get("/api/seasonType"),
-    ]);
+    try {
+      const [marketRes, countryRes, seasonRes] = await Promise.all([
+        axiosInstance.get("/api/marketType"),
+        axiosInstance.get("/api/country"),
+        axiosInstance.get("/api/seasonType"),
+      ]);
 
       // Add "All" option with value -1 at the beginning
-        const marketsWithAll = [
-          { marketTypeId: 100, name: "All" },
-          ...(marketRes.data || [])
-        ]; 
-        
-    setMarkets(marketsWithAll);
-    setCountries(countryRes.data || []);
-    setFilteredCountries(countryRes.data || []);
-    setSeasonData(seasonRes.data || []);
-  } catch {
-    toast.error("Failed to load dropdown data");
-  }
-};
+      const marketsWithAll = [
+        { marketTypeId: 100, name: "All" },
+        ...(marketRes.data || [])
+      ];
 
-useEffect(() => {
-  if (!formData.marketType?.length) {
-    setFilteredCountries(countries);
-  } else {
-    const selectedIds = formData.marketType.map((m) => m.value);
-    const filtered = countries.filter((c) =>
-      selectedIds.includes(c.marketTypeId)
-    );
-    setFilteredCountries(filtered);
-  }
-}, [formData.marketType, countries]);
+      setMarkets(marketsWithAll);
+      setCountries(countryRes.data || []);
+      setFilteredCountries(countryRes.data || []);
+      setSeasonData(seasonRes.data || []);
+    } catch {
+      toast.error("Failed to load dropdown data");
+    }
+  };
+
+  useEffect(() => {
+    if (!formData.marketType?.length) {
+      setFilteredCountries(countries);
+    } else {
+      const selectedIds = formData.marketType.map((m) => m.value);
+      const filtered = countries.filter((c) =>
+        selectedIds.includes(c.marketTypeId)
+      );
+      setFilteredCountries(filtered);
+    }
+  }, [formData.marketType, countries]);
 
 
-useEffect(() => {
-  loadHotelRoomDatas();
-  fetchDropdowns();
-}, [id]);
+  useEffect(() => {
+    loadHotelRoomDatas();
+    fetchDropdowns();
+  }, [id]);
 
 
   // ✅ Handle validity / blackout date logic
@@ -204,120 +202,117 @@ useEffect(() => {
 
 
   // ✅ Submit handler
- const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  // Validate form before submission
-  if (!validateForm()) {
-    return;
-  }
-  
-  try {
-    const formatDate = (date) => {
-      if (!date) return "";
-      const d = new Date(date);
-      return `${String(d.getDate()).padStart(2, "0")}-${String(
-        d.getMonth() + 1
-      ).padStart(2, "0")}-${d.getFullYear()}`;
-    };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-    const weekDay = formData.weekType === "weekdays" ? 1 : 0;
-    const weekEnd = formData.weekType === "weekends" ? 1 : 0;
-    const allDays = formData.weekType === "all" ? 1 : 0;
+    // Validate form before submission
+    if (!validateForm()) {
+      return;
+    }
 
-    const validityList = formData.validityList.map((v) => ({
-      promo_validity_id: "",
-      validityFrom: formatDate(v.from),
-      validityTo: formatDate(v.to),
-      deleted: 0,
-      isType: "V",
-    }));
-
-    const blackoutDates = formData.blackoutDates.map((b) => ({
-      promo_validity_id: "",
-      validityFrom: formatDate(b.from),
-      validityTo: formatDate(b.to),
-      deleted: 0,
-      isType: "B",
-    }));
-
-    const payload = {
-      marketype: formData.marketType.map((m) => m.value),
-      combinedPromo: [],
-      promotypeArray: [],
-      hotelId: String(id),
-      seasonId: String(formData.season),
-      staypayId: "",
-      rateCode: formData.rateCode.trim(),
-      // ========================================
-      // EXCLUDE NATIONALITY - CURRENT FORMAT (STRING)
-      // ========================================
-      excludeCountry: formData.excludeNationality.length > 0 
-        ? formData.excludeNationality.map((n) => n.value).join(",") 
-        : "",
-      
-      // ========================================
-      // EXCLUDE NATIONALITY - FUTURE FORMAT (ARRAY) - COMMENTED OUT
-      // ========================================
-      // excludeCountrys: formData.excludeNationality.map((n) => n.value),
-      weekDay,
-      weekEnd,
-      allDays,
-      refund: formData.isRefundable ? 1 : 0,
-      bookDate: formatDate(formData.bookByDate),
-      bookDay: String(formData.bookByPriorDays),
-      promotionfor: formData.promotionFor === "rooms" ? "1" : "2",
-      remark: formData.remarks || "",
-      promotionValidityDTO: [...validityList, ...blackoutDates],
-      promotionRoomDTO: hotelRoomsData.flatMap((roomCategory) =>
-        roomCategory.roomTypeDetailsDTOs?.map((roomType) => ({
-          promo_room_id: "",
-          hotelRoomcategoryId: String(roomCategory.rommCategoryId),
-          hotelRoomtypeId: String(roomType.roomTypeId),
-          noOffree: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_free`] || 0),
-          noOfpay: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_pay`] || 0),
-          noOfstay: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_stay`] || 0),
-        })) || []
-      ),
-    };
-
-    console.log("Stay Pay payload:", payload);
-    console.log("Hotel rooms data being sent:", hotelRoomsData);
-    console.log("Form data:", formData);
-    console.log("Exclude Nationality form data:", formData.excludeNationality);
-    console.log("Exclude Country in payload:", payload.excludeCountry);
-    console.log("Exclude Nationality length:", formData.excludeNationality.length);
-    console.log("Exclude Country type:", typeof payload.excludeCountry);
-    
-    // Try different endpoint patterns
-    let response;
     try {
-      response = await axiosInstance.post("/api/hotelStaypay/save", payload);
-    } catch (firstError) {
-      if (firstError.response?.status === 404) {
-        // Try alternative endpoint
-        console.log("Trying alternative endpoint...");
-        response = await axiosInstance.post("/api/hotelStaypay", payload);
+      const formatDate = (date) => {
+        if (!date) return "";
+        return `${date}:00`;
+      };
+
+      const weekDay = formData.weekType === "weekdays" ? 1 : 0;
+      const weekEnd = formData.weekType === "weekends" ? 1 : 0;
+      const allDays = formData.weekType === "all" ? 1 : 0;
+
+      const validityList = formData.validityList.map((v) => ({
+        promo_validity_id: "",
+        validityFrom: formatDate(v.from),
+        validityTo: formatDate(v.to),
+        deleted: 0,
+        isType: "V",
+      }));
+
+      const blackoutDates = formData.blackoutDates.map((b) => ({
+        promo_validity_id: "",
+        validityFrom: formatDate(b.from),
+        validityTo: formatDate(b.to),
+        deleted: 0,
+        isType: "B",
+      }));
+
+      const payload = {
+        marketype: formData.marketType.map((m) => m.value),
+        combinedPromo: [],
+        promotypeArray: [],
+        hotelId: String(id),
+        seasonId: String(formData.season),
+        staypayId: "",
+        rateCode: formData.rateCode.trim(),
+        // ========================================
+        // EXCLUDE NATIONALITY - CURRENT FORMAT (STRING)
+        // ========================================
+        excludeCountry: formData.excludeNationality.length > 0
+          ? formData.excludeNationality.map((n) => n.value).join(",")
+          : "",
+
+        // ========================================
+        // EXCLUDE NATIONALITY - FUTURE FORMAT (ARRAY) - COMMENTED OUT
+        // ========================================
+        // excludeCountrys: formData.excludeNationality.map((n) => n.value),
+        weekDay,
+        weekEnd,
+        allDays,
+        refund: formData.isRefundable ? 1 : 0,
+        bookDate: formatDate(formData.bookByDate),
+        bookDay: String(formData.bookByPriorDays),
+        promotionfor: formData.promotionFor === "rooms" ? "1" : "2",
+        remark: formData.remarks || "",
+        promotionValidityDTO: [...validityList, ...blackoutDates],
+        promotionRoomDTO: hotelRoomsData.flatMap((roomCategory) =>
+          roomCategory.roomTypeDetailsDTOs?.map((roomType) => ({
+            promo_room_id: "",
+            hotelRoomcategoryId: String(roomCategory.rommCategoryId),
+            hotelRoomtypeId: String(roomType.roomTypeId),
+            noOffree: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_free`] || 0),
+            noOfpay: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_pay`] || 0),
+            noOfstay: String(roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_stay`] || 0),
+          })) || []
+        ),
+      };
+
+      console.log("Stay Pay payload:", payload);
+      console.log("Hotel rooms data being sent:", hotelRoomsData);
+      console.log("Form data:", formData);
+      console.log("Exclude Nationality form data:", formData.excludeNationality);
+      console.log("Exclude Country in payload:", payload.excludeCountry);
+      console.log("Exclude Nationality length:", formData.excludeNationality.length);
+      console.log("Exclude Country type:", typeof payload.excludeCountry);
+
+      // Try different endpoint patterns
+      let response;
+      try {
+        response = await axiosInstance.post("/api/hotelStaypay/save", payload);
+      } catch (firstError) {
+        if (firstError.response?.status === 404) {
+          // Try alternative endpoint
+          console.log("Trying alternative endpoint...");
+          response = await axiosInstance.post("/api/hotelStaypay", payload);
+        } else {
+          throw firstError;
+        }
+      }
+
+      if (response.data) {
+        toast.success("Stay & Pay Promotion Saved Successfully!");
+        navigate(`/hotel-actions/${id}/promotions`);
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+      if (error.response?.status === 403) {
+        toast.error("Access denied. Please check your permissions or contact administrator.");
+      } else if (error.response?.status === 400) {
+        toast.error("Invalid data. Please check all required fields.");
       } else {
-        throw firstError;
+        toast.error("Failed to save Stay & Pay promotion");
       }
     }
-    
-    if (response.data) {
-    toast.success("Stay & Pay Promotion Saved Successfully!");
-      navigate(`/hotel-actions/${id}/promotions`);
-    }
-  } catch (error) {
-    console.error("Save error:", error);
-    if (error.response?.status === 403) {
-      toast.error("Access denied. Please check your permissions or contact administrator.");
-    } else if (error.response?.status === 400) {
-      toast.error("Invalid data. Please check all required fields.");
-    } else {
-    toast.error("Failed to save Stay & Pay promotion");
-    }
-  }
-};
+  };
 
 
   return (
@@ -362,7 +357,7 @@ useEffect(() => {
                             });
                             // Clear validation error when user selects
                             if (validationErrors.season) {
-                              setValidationErrors({...validationErrors, season: ""});
+                              setValidationErrors({ ...validationErrors, season: "" });
                             }
                           }}
                           isInvalid={!!validationErrors.season}
@@ -393,7 +388,7 @@ useEffect(() => {
                             });
                             // Clear validation error when user types
                             if (validationErrors.rateCode) {
-                              setValidationErrors({...validationErrors, rateCode: ""});
+                              setValidationErrors({ ...validationErrors, rateCode: "" });
                             }
                           }}
                           placeholder="Enter Rate Code"
@@ -407,64 +402,64 @@ useEffect(() => {
                       </Form.Group>
                     </Col>
                     {/* Market Type */}
-<Col md={3}>
-  <Form.Group>
-    <Form.Label>Market Type *</Form.Label>
-    <Select
-      isMulti
-      options={markets.map((m) => ({
-        value: m.marketTypeId,
-        label: m.name,
-      }))}
-      value={formData.marketType}
-      onChange={(selected) => {
-        setFormData({ ...formData, marketType: selected });
-        // Clear validation error when user selects
-        if (validationErrors.marketType) {
-          setValidationErrors({...validationErrors, marketType: ""});
-        }
-      }}
-      classNamePrefix="react-select"
-      placeholder="Select Market Type"
-      className={validationErrors.marketType ? 'is-invalid' : ''}
-      styles={{
-        control: (base, state) => ({
-          ...base,
-          borderColor: validationErrors.marketType ? '#dc3545' : base.borderColor,
-          boxShadow: validationErrors.marketType ? '0 0 0 0.25rem rgba(220, 53, 69, 0.25)' : base.boxShadow,
-        })
-      }}
-    />
-    {validationErrors.marketType && (
-      <div className="invalid-feedback d-block">
-        {validationErrors.marketType}
-      </div>
-    )}
-  </Form.Group>
-</Col>
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Market Type *</Form.Label>
+                        <Select
+                          isMulti
+                          options={markets.map((m) => ({
+                            value: m.marketTypeId,
+                            label: m.name,
+                          }))}
+                          value={formData.marketType}
+                          onChange={(selected) => {
+                            setFormData({ ...formData, marketType: selected });
+                            // Clear validation error when user selects
+                            if (validationErrors.marketType) {
+                              setValidationErrors({ ...validationErrors, marketType: "" });
+                            }
+                          }}
+                          classNamePrefix="react-select"
+                          placeholder="Select Market Type"
+                          className={validationErrors.marketType ? 'is-invalid' : ''}
+                          styles={{
+                            control: (base, state) => ({
+                              ...base,
+                              borderColor: validationErrors.marketType ? '#dc3545' : base.borderColor,
+                              boxShadow: validationErrors.marketType ? '0 0 0 0.25rem rgba(220, 53, 69, 0.25)' : base.boxShadow,
+                            })
+                          }}
+                        />
+                        {validationErrors.marketType && (
+                          <div className="invalid-feedback d-block">
+                            {validationErrors.marketType}
+                          </div>
+                        )}
+                      </Form.Group>
+                    </Col>
                     {/* Exclude Nationality */}
-<Col md={3}>
-  <Form.Group>
-    <Form.Label>Exclude Nationality</Form.Label>
-    <Select
-      isMulti
-      options={filteredCountries.map((c) => ({
-        value: c.id,
-        label: `${c.name} (${c.marketType})`,
-      }))}
-      value={formData.excludeNationality}
-      onChange={(selected) => {
-        console.log("Exclude Nationality selected:", selected);
-        setFormData({
-          ...formData,
-          excludeNationality: selected,
-        });
-      }}
-      classNamePrefix="react-select"
-      placeholder="Select Countries"
-    />
-  </Form.Group>
-</Col>
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Exclude Nationality</Form.Label>
+                        <Select
+                          isMulti
+                          options={filteredCountries.map((c) => ({
+                            value: c.id,
+                            label: `${c.name} (${c.marketType})`,
+                          }))}
+                          value={formData.excludeNationality}
+                          onChange={(selected) => {
+                            console.log("Exclude Nationality selected:", selected);
+                            setFormData({
+                              ...formData,
+                              excludeNationality: selected,
+                            });
+                          }}
+                          classNamePrefix="react-select"
+                          placeholder="Select Countries"
+                        />
+                      </Form.Group>
+                    </Col>
                   </Row>
 
                   {/* ==================== OPTIONS ==================== */}
@@ -594,7 +589,7 @@ useEffect(() => {
                           <Row key={i} className="align-items-center mb-2">
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={v.from}
                                 onChange={(e) => {
                                   const updated = [...formData.validityList];
@@ -613,7 +608,7 @@ useEffect(() => {
                             </Col>
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={v.to}
                                 min={getMinValidityToDate(v.from)}
                                 onChange={(e) =>
@@ -660,7 +655,7 @@ useEffect(() => {
                           <Row key={i} className="align-items-center mb-2">
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={b.from}
                                 onChange={(e) => {
                                   const updated = [...formData.blackoutDates];
@@ -679,7 +674,7 @@ useEffect(() => {
                             </Col>
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={b.to}
                                 min={getMinValidityToDate(b.from)}
                                 onChange={(e) =>
@@ -713,112 +708,112 @@ useEffect(() => {
 
                   {/* ==================== STAY & PAY TABLE ==================== */}
                   {/* ==================== STAY & PAY TABLE ==================== */}
-<Card className="p-3 border-0 mb-4">
-  <h6 className="fw-bold mb-3 text-primary">Stay and Pay Details</h6>
-  {validationErrors.roomData && (
-    <div className="text-danger small mb-3">
-      {validationErrors.roomData}
-    </div>
-  )}
+                  <Card className="p-3 border-0 mb-4">
+                    <h6 className="fw-bold mb-3 text-primary">Stay and Pay Details</h6>
+                    {validationErrors.roomData && (
+                      <div className="text-danger small mb-3">
+                        {validationErrors.roomData}
+                      </div>
+                    )}
 
-  <div className="table-responsive">
-    <Table bordered hover responsive size="sm">
-      <thead className="table-light text-center align-middle">
-        <tr>
-          <th>Room Type</th>
-          <th>Stay</th>
-          <th>Pay </th>
-          <th>Free </th>
-        </tr>
-      </thead>
-      <tbody>
-        {loading ? (
-          <tr>
-            <td colSpan={4} className="text-center py-4">
-              <div className="d-flex align-items-center justify-content-center">
-                <Spinner animation="border" size="sm" className="me-2" />
-                Loading rooms...
-              </div>
-            </td>
-            </tr>
-        ) : hotelRoomsData && hotelRoomsData.length > 0 ? (
-          hotelRoomsData.flatMap((roomCategory, categoryIndex) => {
-            return roomCategory.roomTypeDetailsDTOs?.map((roomType, roomTypeIndex) => (
-              <tr key={`${roomCategory.rommCategoryId}-${roomType.roomTypeId}`}>
-                <td className="fw-semibold">
-                  {roomCategory.roomCategory} - {roomType.roomTypeName}
-                </td>
-                <td>
-                    <Form.Control
-                      type="number"
-                      min="0"
-                      max="25"
-                      step="1"
-                      placeholder="0"
-                      value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_stay`] || 0}
-                      onChange={(e) => {
-                        const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
-                        handleStayPayChange(roomCategory, roomType, "stay", value);
-                      }}
-                      onKeyDown={(e) => {
-                        if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-                          e.preventDefault();
-                        }
-                      }}
-                    />
-                </td>
-                <td>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    max="25"
-                    step="1"
-                    placeholder="0"
-                    value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_pay`] || 0}
-                    onChange={(e) => {
-                      const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
-                      handleStayPayChange(roomCategory, roomType, "pay", value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-                        e.preventDefault();
-                      }
-                    }}
-                  />
-                </td>
-                <td>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    max="25"
-                    step="1"
-                    placeholder="0"
-                    value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_free`] || 0}
-                    onChange={(e) => {
-                      const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
-                      handleStayPayChange(roomCategory, roomType, "free", value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-                        e.preventDefault();
-                      }
-                    }}
-                  />
-                </td>
-              </tr>
-            ))
-          })
-        ) : (
-          <tr>
-            <td colSpan={4} className="text-center py-4 text-muted">
-              No rooms found for this hotel. Please check if the hotel has room configurations.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </Table>
-  </div>
-</Card>
+                    <div className="table-responsive">
+                      <Table bordered hover responsive size="sm">
+                        <thead className="table-light text-center align-middle">
+                          <tr>
+                            <th>Room Type</th>
+                            <th>Stay</th>
+                            <th>Pay </th>
+                            <th>Free </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {loading ? (
+                            <tr>
+                              <td colSpan={4} className="text-center py-4">
+                                <div className="d-flex align-items-center justify-content-center">
+                                  <Spinner animation="border" size="sm" className="me-2" />
+                                  Loading rooms...
+                                </div>
+                              </td>
+                            </tr>
+                          ) : hotelRoomsData && hotelRoomsData.length > 0 ? (
+                            hotelRoomsData.flatMap((roomCategory, categoryIndex) => {
+                              return roomCategory.roomTypeDetailsDTOs?.map((roomType, roomTypeIndex) => (
+                                <tr key={`${roomCategory.rommCategoryId}-${roomType.roomTypeId}`}>
+                                  <td className="fw-semibold">
+                                    {roomCategory.roomCategory} - {roomType.roomTypeName}
+                                  </td>
+                                  <td>
+                                    <Form.Control
+                                      type="number"
+                                      min="0"
+                                      max="25"
+                                      step="1"
+                                      placeholder="0"
+                                      value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_stay`] || 0}
+                                      onChange={(e) => {
+                                        const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
+                                        handleStayPayChange(roomCategory, roomType, "stay", value);
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                                          e.preventDefault();
+                                        }
+                                      }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <Form.Control
+                                      type="number"
+                                      min="0"
+                                      max="25"
+                                      step="1"
+                                      placeholder="0"
+                                      value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_pay`] || 0}
+                                      onChange={(e) => {
+                                        const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
+                                        handleStayPayChange(roomCategory, roomType, "pay", value);
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                                          e.preventDefault();
+                                        }
+                                      }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <Form.Control
+                                      type="number"
+                                      min="0"
+                                      max="25"
+                                      step="1"
+                                      placeholder="0"
+                                      value={roomRates[`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_free`] || 0}
+                                      onChange={(e) => {
+                                        const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
+                                        handleStayPayChange(roomCategory, roomType, "free", value);
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                                          e.preventDefault();
+                                        }
+                                      }}
+                                    />
+                                  </td>
+                                </tr>
+                              ))
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="text-center py-4 text-muted">
+                                No rooms found for this hotel. Please check if the hotel has room configurations.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </Table>
+                    </div>
+                  </Card>
 
 
                   {/* ==================== REMARKS + BUTTONS ==================== */}

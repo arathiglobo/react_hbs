@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useAccordionButton } from "react-bootstrap/AccordionButton";
 import {
   Card,
   Button,
@@ -35,13 +36,29 @@ import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
 import axios from "axios";
 
+function AccordionToggleButton({ eventKey, isActive }) {
+  const decoratedOnClick = useAccordionButton(eventKey);
+
+  return (
+    <Button
+      variant="outline-primary"
+      size="sm"
+      onClick={decoratedOnClick}
+      className="d-flex align-items-center gap-1"
+    >
+      {isActive ? "Hide Details/Book" : "View Details/Book"}
+      {isActive ? <FaChevronUp /> : <FaChevronDown />}
+    </Button>
+  );
+}
+
 const RoomList = () => {
   const [roomData, setRoomData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedRate, setSelectedRate] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [activeAccordion, setActiveAccordion] = useState("0");
+  const [activeAccordion, setActiveAccordion] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
   const [hotelStaticData, setHotelStaticData] = useState(null);
@@ -90,7 +107,7 @@ const RoomList = () => {
 
         const res = await axiosInstance.post(
           "/api/hotel-rooms/search",
-          payload
+          payload,
         );
 
         // console.log("room search res::", res);
@@ -143,7 +160,7 @@ const RoomList = () => {
     const { payload, hotels } = roomData;
     const hotelsdetail = hotels[0];
 
-     console.log("hotelsdetail::", hotelsdetail);
+    console.log("hotelsdetail::", hotelsdetail);
     // console.log("rate::", rate);
 
     // For API IDs 12 and 15, fetch accurate rates
@@ -205,11 +222,10 @@ const RoomList = () => {
               contractLabel: room.contractLabel,
               nonRefundable: room.nonRefundable,
               rate: room.rateDetails.rate,
-              currency: room.currCode
-              
+              currency: room.currCode,
             }));
 
-           console.log("accurateRate:", accurateRates);
+          console.log("accurateRate:", accurateRates);
           setSelectedRate(accurateRates[0]);
           setLoadingRate(false);
           setShowBookingModal(true);
@@ -232,10 +248,12 @@ const RoomList = () => {
             contractLabel: rate.contractLabel,
             nonRefundable: rate.nonRefundable,
             rate: rate.totalRate,
-            rateWithoutMarkup :  rate.totalRateWithoutMarkup,
+            rateWithoutMarkup: rate.totalRateWithoutMarkup,
             currency: "AED",
             cancellationPolicy: hotelsdetail.cancellationPolicies,
-            roomStatus : rate.roomStatus,
+            roomStatus: rate.roomStatus,
+            roomRateBasedOnRoomCount: rate.roomRateBasedOnRoomCount,
+            roomRateBasedOnRoomCount_WithoutMarkup: rate.roomRateBasedOnRoomCount_WithoutMarkup,
           },
           hotelStaticData: roomData.meta,
           payload: payload,
@@ -301,9 +319,7 @@ const RoomList = () => {
           <small>
             {" "}
             This room can be booked{" "}
-            <span className="bg-warning text-dark px-2 py-0 rounded">
-              On Request{" "}
-            </span>
+            <span className="text-dark px-2 py-0 rounded">On Request </span>
           </small>
         );
       case "Available":
@@ -360,8 +376,10 @@ const RoomList = () => {
 
       try {
         const hotelsdetail = roomData.hotels[0];
-        const response = await axiosInstance.get(`/api/hotels/${hotelsdetail.hotelId}/policies`);
-         console.log("response for policy list:", response.data);
+        const response = await axiosInstance.get(
+          `/api/hotels/${hotelsdetail.hotelId}/policies`,
+        );
+        console.log("response for policy list:", response.data);
         setPolicyList(response.data);
       } catch (error) {
         // console.log("error for policy list :", error);
@@ -376,7 +394,8 @@ const RoomList = () => {
       <div className="d-flex" style={{ minHeight: "100vh" }}>
         <Sidebar />
         <div className="flex-grow-1 d-flex flex-column">
-          <TopBar />
+          <TopBar style={{ marginLeft: "-200px" }} />
+
           <main className="flex-grow-1 d-flex justify-content-center align-items-center">
             <div className="text-center results-loader">
               <div className="loader-ring">
@@ -403,7 +422,7 @@ const RoomList = () => {
       <div className="d-flex" style={{ minHeight: "100vh" }}>
         <Sidebar />
         <div className="flex-grow-1 d-flex flex-column">
-          <TopBar />
+          <TopBar style={{ marginLeft: "-200px" }} />
           <main className="flex-grow-1 d-flex justify-content-center align-items-center p-3">
             <div className="w-100" style={{ maxWidth: 480 }}>
               <Alert variant="danger" className="mb-3">
@@ -428,7 +447,7 @@ const RoomList = () => {
       <div className="d-flex" style={{ minHeight: "100vh" }}>
         <Sidebar />
         <div className="flex-grow-1 d-flex flex-column">
-          <TopBar />
+          <TopBar style={{ marginLeft: "-200px" }} />
           <main className="flex-grow-1 d-flex justify-content-center align-items-center p-3">
             <Alert variant="info">
               <Alert.Heading>No Rooms Available</Alert.Heading>
@@ -453,11 +472,14 @@ const RoomList = () => {
 
   return (
     <div className="room-list-container">
-      <Sidebar />
       <div className="main-content">
-        <TopBar />
-        <main className="content-wrapper">
-          <div className="container-fluid">
+        <TopBar className="toproomlist" />
+        <Sidebar />
+        <main
+          className="content-wrapper"
+          style={{ paddingLeft: "250px", marginTop: "-580px" }}
+        >
+          <div className="container-fluid" style={{ paddingTop: "10px" }}>
             {/* Loader Modal */}
             <Modal
               show={loadingRate}
@@ -532,12 +554,16 @@ const RoomList = () => {
                           </p>
                           <div className="mt-2">
                             <small className="text-muted">
-                              <strong>Please note:</strong> Some properties may
-                              collect additional charges such as city tax,
-                              resort fees, or security deposits during check-in.
-                              Policies such as check-in time, child
-                              accommodation, and cancellation rules can vary by
-                              room and provider.
+                              <strong>Please note:</strong>{" "}
+                              <p className="someproperties">
+                                {" "}
+                                Some properties may collect additional charges
+                                such as city tax, resort fees, or security
+                                deposits during check-in. Policies such as
+                                check-in time, child accommodation, and
+                                cancellation rules can vary by room and
+                                provider.
+                              </p>
                             </small>
                           </div>
                         </div>
@@ -615,121 +641,152 @@ const RoomList = () => {
             {/* Room Categories Accordion */}
             <div className="room-categories-section">
               <h4 className="mb-4">Available Room Categories</h4>
+
               <Accordion
                 activeKey={activeAccordion}
                 onSelect={(key) => setActiveAccordion(key)}
               >
-                {hotel.roomCategories.map((category, index) => (
-                  <Accordion.Item
-                    key={index}
-                    eventKey={index.toString()}
-                    className="room-category-item"
-                  >
-                    <Accordion.Header className="room-category-header">
-                      <div className="d-flex justify-content-between align-items-center w-100 me-3">
-                        <div className="room-category-info">
-                          <h5 className="mb-1">{category.roomCategory}</h5>
-                          <p className="mb-0 text-muted small">
-                            {category.baseRoomType}
-                          </p>
-                        </div>
-                        <div className="room-category-price">
-                          <span className="price-range">
-                            From{" "}
-                            {formatPrice(
-                              Math.min(
-                                ...category.availableRates.map(
-                                  (rate) => rate.rate
-                                )
-                              )
-                            )}
-                          </span>
-                          <span className="rates-count">
-                            {category.availableRates.length} rate
-                            {category.availableRates.length !== 1
-                              ? "s"
-                              : ""}{" "}
-                            available
-                          </span>
-                        </div>
-                      </div>
-                    </Accordion.Header>
-                    <Accordion.Body className="room-rates-section">
-                      <Row>
-                        {category.availableRates.map((rate, rateIndex) => (
-                          <Col key={rateIndex} lg={6} xl={4} className="mb-3">
-                            <Card className="rate-card h-100" role="button">
-                              <Card.Body className="p-3">
-                                <div className="rate-header mb-3">
-                                  <div className="d-flex align-items-center gap-2 mb-2">
-                                    {getMealPlanIcon(rate.mealPlan)}
-                                    <span className="fw-semibold">
-                                      {rate.mealPlan}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span>
-                                      {" "}
-                                      {getRoomStatusBadge(rate.roomStatus)}{" "}
-                                    </span>
-                                  </div>
-                                  {getRefundStatusBadgeInRoomList(
-                                    rate.nonRefundable
-                                  )}
-                                </div>
+                {hotel.roomCategories.map((category, index) => {
+                  const eventKey = index.toString();
+                  const isActive = activeAccordion === eventKey;
 
-                                <div className="rate-pricing mb-3">
-                                  <div className="current-price">
-                                    {formatPrice(rate.totalRate)}
-                                  </div>
-                                  {rate.recommendedRetailPrice >
-                                    rate.totalRate && (
-                                    <div className="original-price text-muted text-decoration-line-through">
-                                      {formatPrice(rate.recommendedRetailPrice)}
-                                    </div>
-                                  )}
-                                  <div className="price-per-night text-muted small">
-                                    per night
-                                  </div>
-                                </div>
+                  return (
+                    <Accordion.Item
+                      key={eventKey}
+                      eventKey={eventKey}
+                      className="room-category-item"
+                    >
+                      {/* ✅ Header is NOT clickable */}
+                      <Accordion.Header
+                        as="div"
+                        className="room-category-header"
+                      >
+                        <div className="d-flex justify-content-between align-items-center w-100">
+                          <div className="room-category-info">
+                            <h5 className="mb-1">{category.roomCategory}</h5>
+                            <p className="mb-0 text-muted small">
+                              {category.baseRoomType}
+                            </p>
+                          </div>
 
-                                <div className="rate-features mb-3">
-                                  <div className="feature-item">
-                                    <FaInfoCircle className="text-muted me-2" />
-                                    <span className="small">
-                                      {rate.contractLabel}
-                                    </span>
-                                  </div>
-                                  {rate.cancellationPolicies &&
-                                    rate.cancellationPolicies.length > 0 && (
-                                      <div className="feature-item">
-                                        <FaShieldAlt className="text-muted me-2" />
-                                        <span className="small">
-                                          {
-                                            rate.cancellationPolicies[0]
-                                              .policyText
-                                          }
+                          <div className="d-flex align-items-center gap-3">
+                            <div className="room-category-price text-end">
+                              <div className="price-range">
+                                From{" "}
+                                {formatPrice(
+                                  Math.min(
+                                    ...category.availableRates.map(
+                                      (rate) => rate.rate,
+                                    ),
+                                  ),
+                                )}
+                              </div>
+                              <div className="rates-count small text-muted">
+                                {category.availableRates.length} rate
+                                {category.availableRates.length !== 1
+                                  ? "s"
+                                  : ""}{" "}
+                                available
+                              </div>
+                            </div>
+
+                            {/* ✅ Button toggle */}
+                            <AccordionToggleButton
+                              eventKey={eventKey}
+                              isActive={isActive}
+                            />
+                          </div>
+                        </div>
+                      </Accordion.Header>
+
+                      <Accordion.Body className="room-rates-section">
+                        <Row>
+                          {category.availableRates.map((rate, rateIndex) => (
+                            <Col key={rateIndex} lg={6} xl={4} className="mb-3">
+                              <Card className="rate-card h-100">
+                                <Card.Body className="p-3 d-flex flex-column gap-2">
+                                  {/* Header */}
+                                  <div className="rate-header d-flex justify-content-between align-items-start">
+                                    <div>
+                                      <div className="d-flex align-items-center gap-2">
+                                        {getMealPlanIcon(rate.mealPlan)}
+                                        <span className="fw-semibold small">
+                                          {rate.mealPlan}
                                         </span>
                                       </div>
-                                    )}
-                                </div>
 
-                                <Button
-                                  variant="primary"
-                                  className="w-100 book-now-btn"
-                                  onClick={() => handleBooking(rate)}
-                                >
-                                  <FaMoneyBillWave className="me-2" /> View
-                                  Details / Book
-                                </Button>
-                              </Card.Body>
-                            </Card>
-                          </Col>
-                        ))}
-                      </Row>
-                    </Accordion.Body>
-                  </Accordion.Item>
-                ))}
+                                      <div className="mt-1">
+                                        {getRoomStatusBadge(rate.roomStatus)}
+                                      </div>
+                                    </div>
+
+                                    {getRefundStatusBadgeInRoomList(
+                                      rate.nonRefundable,
+                                    )}
+                                  </div>
+
+                                  {/* Pricing */}
+                                  <div className="rate-pricing text-center py-2">
+                                    <div className="current-price">
+                                      {formatPrice(rate.roomRateBasedOnRoomCount)}
+                                    </div>
+
+                                    {/* {rate.recommendedRetailPrice >
+                                      rate.totalRate && (
+                                      <div className="original-price text-decoration-line-through">
+                                        {formatPrice(
+                                          rate.recommendedRetailPrice,
+                                        )}
+                                      </div>
+                                    )} */}
+
+                                    <div className="indivial-price-per-room-noofroom">
+                                      <div className="text-muted small">
+                                        {formatPrice(rate.totalRate || 0)} ×{" "}
+                                        {rate.numberOfRooms || 1} rooms
+                                      </div>
+                                    </div>
+                                    <div className="price-per-night small text-muted">
+                                      per night
+                                    </div>
+                                  </div>
+
+                                  {/* Features */}
+                                  <div className="rate-features small">
+                                    <div className="feature-item">
+                                      <FaInfoCircle className="me-2 text-muted" />
+                                      {rate.contractLabel}
+                                    </div>
+
+                                    {rate.cancellationPolicies?.length > 0 && (
+                                      <div className="feature-item">
+                                        <FaShieldAlt className="me-2 text-muted" />
+                                        {
+                                          rate.cancellationPolicies[0]
+                                            .policyText
+                                        }
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Button */}
+                                  <Button
+                                    variant="primary"
+                                    className="w-100 book-now-btn mt-2"
+                                    onClick={() => handleBooking(rate)}
+                                  >
+                                    <FaMoneyBillWave className="me-2" />
+                                    View Details / Select
+                                  </Button>
+                                </Card.Body>
+                              </Card>
+                            </Col>
+                          ))}
+                        </Row>
+                      </Accordion.Body>
+                    </Accordion.Item>
+                  );
+                })}
               </Accordion>
             </div>
 
@@ -753,12 +810,10 @@ const RoomList = () => {
                                 <p key={index} className="mb-2 text-muted">
                                   {policy.policyText}
                                 </p>
-                              )
+                              ),
                             )}
                           </div>
                         )}
-
-                    
                     </div>
                   ) : (
                     <ul className="mb-0 text-muted">
@@ -771,12 +826,12 @@ const RoomList = () => {
                         property during check-in.
                       </li>
                       <li>
-                        Special requests are subject to availability and may incur
-                        additional charges.
+                        Special requests are subject to availability and may
+                        incur additional charges.
                       </li>
                       <li>
-                        Photo identification and a credit card or cash deposit may
-                        be required at check-in for incidental charges.
+                        Photo identification and a credit card or cash deposit
+                        may be required at check-in for incidental charges.
                       </li>
                     </ul>
                   )}
@@ -802,18 +857,24 @@ const RoomList = () => {
                                   <p className="text-muted mb-1">
                                     {policy.policyText}
                                   </p>
-                                  <small className="text-muted">
+                                  <small
+                                    className="text-muted"
+                                    style={{
+                                      fontWeight: "400",
+                                      fontSize: "0.99rem",
+                                    }}
+                                  >
                                     Valid:{" "}
                                     {new Date(
-                                      policy.fromDate
+                                      policy.fromDate,
                                     ).toLocaleDateString()}{" "}
                                     -{" "}
                                     {new Date(
-                                      policy.toDate
+                                      policy.toDate,
                                     ).toLocaleDateString()}
                                   </small>
                                 </div>
-                              )
+                              ),
                             )}
                           </div>
                         )}
@@ -832,18 +893,24 @@ const RoomList = () => {
                                   <p className="text-muted mb-1">
                                     {policy.policyText}
                                   </p>
-                                  <small className="text-muted">
+                                  <small
+                                    style={{
+                                      fontWeight: "400",
+                                      fontSize: "0.99rem",
+                                    }}
+                                    className="text-muted"
+                                  >
                                     Valid:{" "}
                                     {new Date(
-                                      policy.fromDate
+                                      policy.fromDate,
                                     ).toLocaleDateString()}{" "}
                                     -{" "}
                                     {new Date(
-                                      policy.toDate
+                                      policy.toDate,
                                     ).toLocaleDateString()}
                                   </small>
                                 </div>
-                              )
+                              ),
                             )}
                           </div>
                         )}
@@ -905,7 +972,9 @@ const RoomList = () => {
                         </div>
                         <div className="d-flex justify-content-between">
                           <span className="text-muted">Cancellation</span>
-                          <span className="fw-semibold">See rate conditions</span>
+                          <span className="fw-semibold">
+                            See rate conditions
+                          </span>
                         </div>
                       </Col>
                     </Row>
@@ -1009,7 +1078,7 @@ const RoomList = () => {
                       {getRefundStatusBadge(
                         selectedRate.nonRefundable === "Y"
                           ? "NON REFUNDABLE"
-                          : "FLEXIBLE"
+                          : "FLEXIBLE",
                       )}
                     </span>
                   </div>
@@ -1039,7 +1108,7 @@ const RoomList = () => {
               try {
                 sessionStorage.setItem(
                   "bookingData",
-                  JSON.stringify({ selectedRate, hotelStaticData, payload })
+                  JSON.stringify({ selectedRate, hotelStaticData, payload }),
                 );
               } catch (e) {
                 console.error("Error storing bookingData:", e);

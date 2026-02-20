@@ -1,5 +1,34 @@
 /* RoomList Component Styles */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* 🔥 Remove default accordion arrow */
+.accordion-button::after {
+  display: none !important;
+}
+
+/* Prevent pointer interaction on header */
+.room-category-header .accordion-button {
+  pointer-events: none;
+}
+
+/* Re-enable pointer only for custom button */
+.room-category-header button {
+  pointer-events: auto;
+}
+
+.toproomlist {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 60px;
+  z-index: 1100;
+  
+}
+
+.someproperties{
+  font-weight: 400;
+  color: #000 !important;
+  font-size: 0.85rem;
+}
 
 :root {
   --rl-bg: #f8fafc; /* light slate-50 */
@@ -22,7 +51,7 @@
   min-height: 100vh;
   background: var(--rl-bg);
   color: var(--rl-text);
-  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+  font-family: var(--bs-body-font-family);
 }
 
 .main-content {
@@ -244,14 +273,14 @@
 }
 
 .rate-header {
+    padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--rl-border);
-  padding-bottom: 0.75rem;
 }
 
 .rate-pricing {
   text-align: center;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--rl-border);
+ padding: 0.4rem 0;
+  border-bottom: 1px solid var(--rl-border)
 }
 
 .current-price {
@@ -273,15 +302,16 @@
 }
 
 .rate-features {
-  padding: 0.75rem 0;
+ padding: 0.25rem 0;
+ min-height: 65px;
 }
 
 .feature-item {
   display: flex;
   align-items: flex-start;
-  margin-bottom: 0.4rem;
+    margin-bottom: 0.2rem;
+  line-height: 1.3;
   font-size: 0.82rem;
-  line-height: 1.35;
   color: var(--rl-text-muted);
 }
 
@@ -465,7 +495,7 @@
 
 /* Icon Colors */
 .text-primary {
-  color: #28a745 !important;
+  color: #7193d5 !important;
 }
 
 .text-success {

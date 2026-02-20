@@ -4,211 +4,260 @@ import TopBar from "../../components/TopBar";
 import { Row, Col, Card, Form, Button, Table } from "react-bootstrap";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import HotelFilter from "../../components/filters/Hotelfilters";
+import MarketType from "../../components/filters/MarketType";
 
 export default function Contractrate() {
-  const [marketTypes, setMarketTypes] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedMarketType, setSelectedMarketType] = useState("");
-  const [hotels, setHotels] = useState([]);
-  const [selectedHotel, setSelectedHotel] = useState("");
   const [contracts, setContracts] = useState([]);
+  const [marketTypes, setMarketTypes] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+
   const [filters, setFilters] = useState({
-    fromDate: '',
-    toDate: ''
+    fromDate: "",
+    toDate: "",
+    marketType: "",
+    hotelId: "",
   });
 
-  // Helper function to convert market type IDs to names
-  const getMarketTypeNames = (marketTypeIds) => {
-    if (!Array.isArray(marketTypeIds) || marketTypeIds.length === 0) {
-      return "N/A";
-    }
-    
-    const names = marketTypeIds.map(id => {
-      const marketType = marketTypes.find(mt => mt.marketTypeId === Number(id));
-      return marketType ? marketType.name : `ID ${id}`;
-    });
-    
-    return names.join(", ");
-  };
-
-  const handleSearch = async () => {
-    // Check if dates are selected
-    if (!filters.fromDate || !filters.toDate) {
-      toast.error("Please select both From and To dates");
-      return;
-    }
-
-    setSearchLoading(true);
-    try {
-      // Build query parameters for dates
-      const params = new URLSearchParams();
-      if (filters.fromDate) params.append('fromDate', filters.fromDate);
-      if (filters.toDate) params.append('toDate', filters.toDate);
-
-      const queryString = params.toString();
-      const url = `/api/hotelContractRate${queryString ? `?${queryString}` : ''}`;
-      
-      console.log('Fetching from URL:', url);
-      
-      const res = await axiosInstance.get(url);
-      
-      if (res && res.data !== undefined) {
-        let contractsData = Array.isArray(res.data) ? res.data : [];
-        
-        // Filter by market type if selected (client-side filtering)
-        if (selectedMarketType && contractsData.length > 0) {
-          const selectedId = Number(selectedMarketType);
-          const beforeCount = contractsData.length;
-          
-          contractsData = contractsData.filter(contract => {
-            // Contract has markeType as array of numbers like [2], [5], [6]
-            const contractMarketTypes = contract.markeType || contract.marketType || [];
-            
-            if (!Array.isArray(contractMarketTypes)) {
-              return false;
-            }
-            
-            // Check if the array includes the selected market type ID
-            return contractMarketTypes.includes(selectedId);
-          });
-          
-          const selectedMarketTypeName = marketTypes.find(mt => mt.marketTypeId === selectedId)?.name || `ID ${selectedId}`;
-          console.log(`Filtered from ${beforeCount} to ${contractsData.length} contracts for market type: ${selectedMarketTypeName} (${selectedId})`);
-        }
-        
-        setContracts(contractsData);
-        
-        if (contractsData.length === 0) {
-          toast("No contract rates found matching your criteria", { icon: 'ℹ️' });
-        } else {
-          toast.success(`Found ${contractsData.length} contract rate(s)`);
-        }
-      } else {
-        toast("No data returned from server", { icon: '⚠️' });
-        setContracts([]);
-      }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || "Failed to fetch contract rates";
-      toast.error(errorMessage);
-      console.error('Error details:', error);
-      console.error('Error response:', error.response);
-      setContracts([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-
-  // Fetch market types from API
+  // Fetch initial contract data
   useEffect(() => {
-    const fetchMarketTypes = async () => {
-      setLoading(true);
+    const fetchContracts = async () => {
       try {
-        const response = await axiosInstance.get('/api/marketType');
-        if (response.data && Array.isArray(response.data)) {
-          // Filter out deleted items
-          const activeMarketTypes = response.data.filter(item => !item.isDeleted);
-          setMarketTypes(activeMarketTypes);
-        }
-      } catch (error) {
-        console.error('Error fetching market types:', error);
-        toast.error("Failed to load market types");
-      } finally {
-        setLoading(false);
+        const res = await axiosInstance.get("/api/reports/contract-rate/[id]");
+        setContracts(res.data || []);
+      } catch (e) {
+        console.error(e);
       }
     };
+    fetchContracts();
+  }, []);
 
+  // Fetch market types for display purposes
+  useEffect(() => {
+    const fetchMarketTypes = async () => {
+      try {
+        const res = await axiosInstance.get("/api/marketType");
+        setMarketTypes(res.data?.filter((i) => !i.isDeleted) || []);
+      } catch (e) {
+        console.error("Failed to load market types");
+      }
+    };
     fetchMarketTypes();
   }, []);
 
-  // Print handler
-  const handlePrint = () => {
-    if (!contracts || contracts.length === 0) {
-      toast.error("No contract rates to print");
-      return;
-    }
+  const getMarketTypeNames = (ids) => {
+    if (!Array.isArray(ids) || ids.length === 0) return "N/A";
+    return ids
+      .map((id) => marketTypes.find((m) => m.marketTypeId === id)?.name || id)
+      .join(", ");
+  };
 
-    const printWindow = window.open('', '_blank');
-    let printContent = `
+  const handleSearch = async () => {
+    if (!filters.fromDate || !filters.toDate)
+      return toast.error("Select From & To Dates");
+
+    setSearchLoading(true);
+    try {
+      const params = new URLSearchParams({
+        fromDate: filters.fromDate,
+        toDate: filters.toDate,
+        ...(filters.marketType && { marketType: filters.marketType }),
+        ...(filters.hotelId && { hotelId: filters.hotelId }),
+      }).toString();
+      
+      const res = await axiosInstance.get(`/api/hotelContractRate?${params}`);
+
+      let data = Array.isArray(res.data) ? res.data : [];
+
+      if (filters.marketType) {
+        const id = Number(filters.marketType);
+        data = data.filter((c) => (c.markeType || []).includes(id));
+      }
+
+      if (filters.hotelId) {
+        data = data.filter((c) => String(c.hotelId) === String(filters.hotelId));
+      }
+
+      setContracts(data);
+      toast.success(`Found ${data.length} contract(s)`);
+    } catch (e) {
+      toast.error("Failed to fetch contracts");
+      setContracts([]);
+    }
+    setSearchLoading(false);
+  };
+
+  const handlePrint = () => {
+    if (!contracts.length) return toast.error("No data to print");
+
+    const win = window.open("", "_blank");
+    let html = `
       <html>
         <head>
           <title>Contract Rate Report</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
             th { background-color: #f2f2f2; font-weight: bold; }
             h1 { text-align: center; margin-bottom: 20px; }
-            .contract-section { margin-bottom: 30px; page-break-inside: avoid; }
-            .contract-header { background-color: #e9ecef; padding: 10px; font-weight: bold; }
           </style>
         </head>
         <body>
           <h1>Contract Rate Report</h1>
     `;
 
-    contracts.forEach((contract, contractIdx) => {
-      const marketTypeNames = getMarketTypeNames(contract.markeType || contract.marketType);
-      const validityText = contract.contractRateValidityDTO && contract.contractRateValidityDTO.length > 0
-        ? contract.contractRateValidityDTO.map(v => `${v.validityFrom} to ${v.validityTo}`).join('<br>')
-        : 'N/A';
+    contracts.forEach((c) => {
+      html += `
+        <h4>Rate Code: ${c.rateCode || "N/A"}</h4>
+        <p><b>Market Type:</b> ${getMarketTypeNames(c.markeType)}</p>
+        <p><b>Validity:</b><br>${
+          c.contractRateValidityDTO?.map(
+            (v) => `${v.validityFrom} to ${v.validityTo}<br>`
+          ) || "N/A"
+        }</p>
 
-      printContent += `
-        <div class="contract-section">
-          <div class="contract-header">Contract ${contractIdx + 1}: ${contract.rateCode || 'N/A'}</div>
-          <table>
-            <tr><th style="width: 150px;">Market Type</th><td>${marketTypeNames}</td></tr>
-            <tr><th>Rate Code</th><td>${contract.rateCode || 'N/A'}</td></tr>
-            <tr><th>Validity</th><td>${validityText}</td></tr>
-          </table>
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Single</th>
+              <th>Double</th>
+              <th>EB Adult</th>
+              <th>EB Child</th>
+            </tr>
+          </thead>
+          <tbody>
       `;
 
-      if (contract.contractRateRoomDTO && contract.contractRateRoomDTO.length > 0) {
-        printContent += `
-          <table>
-            <thead>
-              <tr>
-                <th>Type Of Room</th>
-                <th>Single</th>
-                <th>Double</th>
-                <th>EB Adult</th>
-                <th>EB Child</th>
-              </tr>
-            </thead>
-            <tbody>
+      c.contractRateRoomDTO?.forEach((r) => {
+        html += `
+          <tr>
+            <td>${r.meal ? "Room with Breakfast" : "Room Only"}</td>
+            <td>${r.rate || "-"}</td>
+            <td>${r.rate || "-"}</td>
+            <td>${r.adultRate || "-"}</td>
+            <td>${r.childRate || "-"}</td>
+          </tr>
         `;
+      });
 
-        contract.contractRateRoomDTO.forEach((room, i) => {
-          printContent += `
-            <tr>
-              <td>${room.meal ? "Room with Breakfast" : "Room Only"}</td>
-              <td>${room.rate || "-"}</td>
-              <td>${room.rate || "-"}</td>
-              <td>${room.adultRate || "-"}</td>
-              <td>${room.childRate || "-"}</td>
-            </tr>
-          `;
+      html += `</tbody></table><br><hr>`;
+    });
+
+    html += `</body></html>`;
+    win.document.write(html);
+    win.document.close();
+    win.print();
+  };
+
+  const handlePDF = () => {
+    if (!contracts.length) {
+      toast.error("No data available to export");
+      return;
+    }
+
+    const doc = new jsPDF();
+    doc.text("Contract Rate Report", 20, 20);
+
+    contracts.forEach((c, idx) => {
+      let yPos = 30;
+      
+      if (idx > 0) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.text(`Rate Code: ${c.rateCode || "N/A"}`, 20, yPos);
+      yPos += 10;
+      doc.text(`Market Type: ${getMarketTypeNames(c.markeType)}`, 20, yPos);
+      yPos += 10;
+      
+      if (c.contractRateValidityDTO?.length > 0) {
+        doc.text("Validity:", 20, yPos);
+        yPos += 7;
+        c.contractRateValidityDTO.forEach((v) => {
+          doc.text(`${v.validityFrom} to ${v.validityTo}`, 25, yPos);
+          yPos += 7;
         });
+      }
 
-        printContent += `
-            </tbody>
-          </table>
-        </div>
-        `;
-      } else {
-        printContent += `<p>No room rates available</p></div>`;
+      if (c.contractRateRoomDTO?.length > 0) {
+        const tableData = c.contractRateRoomDTO.map((r) => [
+          r.meal ? "Room with Breakfast" : "Room Only",
+          r.rate || "-",
+          r.rate || "-",
+          r.adultRate || "-",
+          r.childRate || "-",
+        ]);
+
+        autoTable(doc, {
+          head: [["Type", "Single", "Double", "EB Adult", "EB Child"]],
+          body: tableData,
+          startY: yPos + 5,
+          margin: { left: 20 },
+        });
       }
     });
 
-    printContent += `
-        </body>
-      </html>
-    `;
+    doc.save("contract-rate-report.pdf");
+    toast.success("PDF downloaded successfully");
+  };
 
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.print();
+  const handleExcel = () => {
+    if (!contracts.length) {
+      toast.error("No data available to export");
+      return;
+    }
+
+    const escapeCSV = (v) => {
+      const s = String(v || "");
+      return (s.includes(",") || s.includes("\n") || s.includes('"'))
+        ? `"${s.replace(/"/g, '""')}"`
+        : s;
+    };
+
+    let csvRows = [];
+    
+    contracts.forEach((c) => {
+      csvRows.push(`Rate Code: ${escapeCSV(c.rateCode || "N/A")}`);
+      csvRows.push(`Market Type: ${escapeCSV(getMarketTypeNames(c.markeType))}`);
+      
+      if (c.contractRateValidityDTO?.length > 0) {
+        csvRows.push("Validity:");
+        c.contractRateValidityDTO.forEach((v) => {
+          csvRows.push(`${escapeCSV(v.validityFrom)} to ${escapeCSV(v.validityTo)}`);
+        });
+      }
+
+      csvRows.push("Type,Single,Double,EB Adult,EB Child");
+      if (c.contractRateRoomDTO?.length > 0) {
+        c.contractRateRoomDTO.forEach((r) => {
+          csvRows.push([
+            escapeCSV(r.meal ? "Room with Breakfast" : "Room Only"),
+            escapeCSV(r.rate || "-"),
+            escapeCSV(r.rate || "-"),
+            escapeCSV(r.adultRate || "-"),
+            escapeCSV(r.childRate || "-"),
+          ].join(","));
+        });
+      }
+      
+      csvRows.push(""); // Empty line between contracts
+    });
+
+    const csv = csvRows.join("\n");
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "contract-rate-report.csv";
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success("Excel file downloaded successfully");
   };
 
   return (
@@ -220,85 +269,66 @@ export default function Contractrate() {
         <main className="flex-grow-1 p-4" style={{ overflow: "auto" }}>
           <Card className="shadow-sm rounded-xl">
             <Card.Header>
-              <span className="fw-semibold">Contract Report</span>
+              <span className="fw-semibold">Contract Rate Report</span>
             </Card.Header>
 
-            {/* Filters Section */}
+            {/* Filters */}
             <div className="p-4 bg-light border-bottom">
               <Row className="align-items-end g-4">
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control 
-                      type="date" 
+                    <Form.Control
+                      type="date"
                       size="sm"
                       value={filters.fromDate}
-                      onChange={(e) => setFilters({...filters, fromDate: e.target.value})}
+                      onChange={(e) =>
+                        setFilters({ ...filters, fromDate: e.target.value })
+                      }
                     />
                   </Form.Group>
                 </Col>
+
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control 
-                      type="date" 
+                    <Form.Control
+                      type="date"
                       size="sm"
                       value={filters.toDate}
-                      onChange={(e) => setFilters({...filters, toDate: e.target.value})}
+                      onChange={(e) =>
+                        setFilters({ ...filters, toDate: e.target.value })
+                      }
                     />
                   </Form.Group>
                 </Col>
-                <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Market Type</Form.Label>
-                    <Form.Select
-                      size="sm"
-                      value={selectedMarketType}
-                      onChange={(e) => setSelectedMarketType(e.target.value)}
-                      disabled={loading}
-                    >
-                      <option value="">Select</option>
-                      {marketTypes.map((marketType) => (
-                        <option key={marketType.marketTypeId} value={marketType.marketTypeId}>
-                          {marketType.name}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
+
+                <Col md={3}
+>
+                  <MarketType
+                    value={filters.marketType}
+                    onChange={(value) =>
+                      setFilters({ ...filters, marketType: value || "" })
+                    }
+                  />
                 </Col>
+
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Hotel</Form.Label>
-                    <Form.Select
-                      size="sm"
-                      value={selectedHotel}
-                      onChange={(e) => setSelectedHotel(e.target.value)}
-                    >
-                      <option value="">Select</option>
-                      {hotels.map((hotel) => (
-                        <option key={hotel.hotelId || hotel.id} value={hotel.hotelId || hotel.id}>
-                          {hotel.hotelName || hotel.name}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
+                  <HotelFilter
+                    value={filters.hotelId}
+                    onChange={(value) =>
+                      setFilters({ ...filters, hotelId: value })
+                    }
+                  />
                 </Col>
-                <Col md={12} className="d-flex justify-content-end gap-2 mt-3">
-                  <Button 
-                    variant="secondary" 
+              </Row>
+
+              <Row className="mt-3">
+                <Col md={3}>
+                  <Button
+                    variant="success"
+                    className="w-100"
                     size="sm"
-                    onClick={() => {
-                      setFilters({ fromDate: '', toDate: '' });
-                      setSelectedMarketType('');
-                      setSelectedHotel('');
-                      setContracts([]);
-                    }}
-                  >
-                    Clear
-                  </Button>
-                  <Button 
-                    variant="success" 
-                    size="sm" 
                     onClick={handleSearch}
                     disabled={searchLoading}
                   >
@@ -317,52 +347,44 @@ export default function Contractrate() {
               </Row>
 
               {/* Action Buttons */}
-              {contracts && contracts.length > 0 && (
-                <Row className="mt-4">
-                  <Col md={12} className="d-flex gap-2 justify-content-end">
-                    <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
-                      <i className="fas fa-print me-1"></i>Print
-                    </Button>
-                  </Col>
-                </Row>
-              )}
+              <Row className="mt-4">
+                <Col md={12} className="d-flex gap-2 justify-content-end">
+                  <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
+                    <i className="fas fa-print me-1"></i>Print
+                  </Button>
+                </Col>
+              </Row>
             </div>
 
-            {/* Results Section */}
-            <Card.Body className="p-4">
-              {contracts && contracts.length > 0 ? (
-                contracts.map((contract, idx) => (
-                  <div key={idx} className={idx > 0 ? "mt-4 pt-4 border-top" : ""}>
-                    <h5 className="fw-bold text-center mb-3">Contract Rate</h5>
-                    
+            {/* Results */}
+            <Card.Body className="p-0 mt-1">
+              {contracts.length > 0 ? (
+                contracts.map((c, idx) => (
+                  <div key={idx} className="mb-4">
+                    <h5 className="text-center">Contract Rate</h5>
+
                     <Row className="mb-3">
                       <Col md={4}>
-                        <p className="mb-1"><strong>Market Type:</strong></p>
-                        <p>{getMarketTypeNames(contract.markeType || contract.marketType)}</p>
+                        <b>Market Type:</b>
+                        <p>{getMarketTypeNames(c.markeType)}</p>
                       </Col>
                       <Col md={4}>
-                        <p className="mb-1"><strong>Validity:</strong></p>
-                        <div>
-                          {contract.contractRateValidityDTO && contract.contractRateValidityDTO.length > 0
-                            ? contract.contractRateValidityDTO.map((v, i) => (
-                                <div key={i} className="mb-1" style={{ fontSize: '0.9rem' }}>
-                                  {v.validityFrom} to {v.validityTo}
-                                </div>
-                              ))
-                            : <span className="text-muted">N/A</span>}
-                        </div>
+                        <b>Validity:</b>
+                        {c.contractRateValidityDTO?.map((v, i) => (
+                          <p key={i}>{v.validityFrom} - {v.validityTo}</p>
+                        ))}
                       </Col>
                       <Col md={4}>
-                        <p className="mb-1"><strong>Rate Code:</strong></p>
-                        <p>{contract.rateCode || "N/A"}</p>
+                        <b>Rate Code:</b>
+                        <p>{c.rateCode || "N/A"}</p>
                       </Col>
                     </Row>
 
-                    {contract.contractRateRoomDTO && contract.contractRateRoomDTO.length > 0 ? (
-                      <Table responsive hover striped className="mb-0 align-middle">
+                    {c.contractRateRoomDTO?.length > 0 ? (
+                      <Table bordered>
                         <thead>
                           <tr>
-                            <th>Type Of Room</th>
+                            <th>Type</th>
                             <th>Single</th>
                             <th>Double</th>
                             <th>EB Adult</th>
@@ -370,30 +392,29 @@ export default function Contractrate() {
                           </tr>
                         </thead>
                         <tbody>
-                          {contract.contractRateRoomDTO.map((room, i) => (
+                          {c.contractRateRoomDTO.map((r, i) => (
                             <tr key={i}>
-                              <td>{room.meal ? "Room with Breakfast" : "Room Only"}</td>
-                              <td>{room.rate || "-"}</td>
-                              <td>{room.rate || "-"}</td>
-                              <td>{room.adultRate || "-"}</td>
-                              <td>{room.childRate || "-"}</td>
+                              <td>{r.meal ? "Room with Breakfast" : "Room Only"}</td>
+                              <td>{r.rate}</td>
+                              <td>{r.rate}</td>
+                              <td>{r.adultRate}</td>
+                              <td>{r.childRate}</td>
                             </tr>
                           ))}
                         </tbody>
                       </Table>
                     ) : (
-                      <p className="text-muted text-center">No room rates available</p>
+                      <p className="text-muted text-center">
+                        No room rate data
+                      </p>
                     )}
                   </div>
                 ))
               ) : (
-                <p className="text-center text-muted mb-0">
-                  {contracts.length === 0 ? "No contract rates found. Please use the filters above to search for contract rates." : ""}
-                </p>
+                <p className="text-center text-muted">No contract data</p>
               )}
             </Card.Body>
           </Card>
-
         </main>
       </div>
     </div>

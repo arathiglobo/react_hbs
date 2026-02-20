@@ -8,23 +8,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 
-// --- Static Data ---
-const staticPromotionData = [
-  { id: 1, code: 'PROMO1', name: 'Special Agent Deal', status: 'Available', contractRate: 120, specialRate: 100, description: 'Promo for agents' },
-  { id: 2, code: 'PROMO2', name: 'Holiday Offer', status: 'Unavailable', contractRate: 140, specialRate: 120, description: 'Holiday season discount' },
-];
-
-const staticAvailabilityData = [
-  { id: 1, room: 'Deluxe', date: '2025-11-01', available: 'Yes', note: 'High demand' },
-  { id: 2, room: 'Suite', date: '2025-11-01', available: 'No', note: 'Sold Out' },
-];
-
-const staticBookingData = [
-  { id: 1, bookingId: 'BK001', guest: 'Alice', date: '2025-11-01', status: 'Confirmed', amount: 250 },
-  { id: 2, bookingId: 'BK002', guest: 'Bob', date: '2025-11-02', status: 'Pending', amount: 150 },
-];
-
-
 export default function UserReport() {
   // Dummy data
   const users = [];
@@ -34,6 +17,8 @@ export default function UserReport() {
   const [specialRates, setSpecialRates] = useState([]);
   const [agents, setAgents] = useState([]);
   const [promotions, setPromotions] = useState([]);
+  const [availability,setAvailability]=useState([]);
+  const [booking,setBoooking]=useState([]);
   const [loading, setLoading] = useState(false);
   const [showMailModal,setShowMailModal]=useState(false);
   const [emailAddress,setEmailAddress]=useState("");
@@ -86,7 +71,7 @@ export default function UserReport() {
         try {
           // Make API call to get contract rate data
           // API endpoint: /api/hotelContractRate
-          const response = await axiosInstance.get('/api/hotelContractRate');
+          const response = await axiosInstance.get('/api/report/user-record?type=contract');
           
           // Check if response contains data and it's an array
           if (response.data && Array.isArray(response.data)) {
@@ -110,7 +95,7 @@ export default function UserReport() {
         setLoading(true);
         try {
           // API endpoint assumed: /api/hotelSpecialRate
-          const response = await axiosInstance.get('/api/hotelSpecialRate');
+          const response = await axiosInstance.get('/api/report/user-record?type=SpecialRate');
           if (response.data && Array.isArray(response.data)) {
             setSpecialRates(response.data);
           } else {
@@ -123,14 +108,39 @@ export default function UserReport() {
         } finally {
           setLoading(false);
         }
-      } else if (reportType === "Promotion") {
-        // Fetch Promotion data
-        setPromotions(staticPromotionData);
+
+          } else if (reportType === "Promotion") {
+        setLoading(true);
+        try {
+          const response = await axiosInstance.get('/api/report/user-record?type=promotion');
+          setPromotions(Array.isArray(response.data) ? response.data : []);
+        } catch (error) {
+          console.error('Error fetching Promotion:', error);
+          toast.error("Failed to fetch Promotion");
+          setPromotions([]);
+        } finally {
           setLoading(false);
+        }
+
+      
+      } else if (reportType === "Availability") {
+        setLoading(true);
+        try {
+          const response = await axiosInstance.get('/api/report/user-record?type=availability');
+          setAvailability(Array.isArray(response.data) ? response.data : []);
+        } catch (error) {
+          console.error('Error fetching agents:', error);
+          toast.error("Failed to fetch agent data");
+          setAvailability([]);
+        } finally {
+          setLoading(false);
+        }
+
+
       } else if (reportType === "Agent") {
         setLoading(true);
         try {
-          const response = await axiosInstance.get('/api/agent?page=0&limit=20');
+          const response = await axiosInstance.get('/api/report/user-record?type=agent');
           setAgents(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
           console.error('Error fetching agents:', error);
@@ -139,13 +149,21 @@ export default function UserReport() {
         } finally {
           setLoading(false);
         }
-      } else if (reportType === "Availability") {
-        setPromotions([]); // to clear prior promotions
-        setContracts(staticAvailabilityData);
-        setLoading(false);
-      } else if (reportType === "Booking") {
-        setSpecialRates(staticBookingData);
-        setLoading(false);
+
+
+       } else if (reportType === "Booking") {
+        setLoading(true);
+        try {
+          const response = await axiosInstance.get('/api/report/user-record?type=booking');
+          setBoooking(Array.isArray(response.data) ? response.data : []);
+        } catch (error) {
+          console.error('Error fetching agents:', error);
+          toast.error("Failed to fetch agent data");
+          setBoooking([]);
+        } finally {
+          setLoading(false);
+        }
+
       } else {
         // Clear datasets for other report types
         setContracts([]);
@@ -171,6 +189,9 @@ export default function UserReport() {
     if (reportType === "Special Rate") return specialRates || [];
     if (reportType === "Agent") return agents || [];
     if (reportType === "Promotion") return promotions || [];
+     if (reportType === "Availability") return availability || [];
+          if (reportType === "Booking") return booking || [];
+
     return users || [];
   };
 
@@ -214,8 +235,8 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${c.rateCode || 'N/A'}</td>
-            <td>${c.rateCode || 'N/A'}</td>
+            <td>${c.code || 'N/A'}</td>
+            <td>${c.name || 'N/A'}</td>
             <td>${c.createdBy || 'N/A'}</td>
             <td>${c.modifiedBy || 'N/A'}</td>
           </tr>`;
@@ -225,8 +246,8 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${(s.rateCode && String(s.rateCode).toLowerCase() !== 'null') ? s.rateCode : 'N/A'}</td>
-            <td>${s.promotype || s.remark || s.rateName || ((s.rateCode && String(s.rateCode).toLowerCase() !== 'null') ? s.rateCode : 'N/A')}</td>
+           <td>${s.code || 'N/A'}</td>
+            <td>${s.name || 'N/A'}</td>
             <td>${s.createdBy || 'N/A'}</td>
             <td>${s.modifiedBy || 'N/A'}</td>
           </tr>`;
@@ -236,10 +257,32 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${normalizeCell(p.promotionCode)}</td>
-            <td>${normalizeCell(p.promotionName)}</td>
-            <td>${normalizeCell(p.createdBy)}</td>
-            <td>${normalizeCell(p.modifiedBy)}</td>
+            <td>${p.code || 'N/A'}</td>
+            <td>${p.name || 'N/A'}</td>
+            <td>${p.createdBy || 'N/A'}</td>
+            <td>${p.modifiedBy || 'N/A'}</td>
+          </tr>`;
+      });
+      } else if (reportType === "Availability") {
+      availability.forEach((a, i) => {
+        html += `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${a.code || 'N/A'}</td>
+            <td>${a.name || 'N/A'}</td>
+            <td>${a.createdBy || 'N/A'}</td>
+            <td>${a.modifiedBy || 'N/A'}</td>
+          </tr>`;
+      });
+       } else if (reportType === "Booking") {
+      booking.forEach((b, i) => {
+        html += `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${b.code || 'N/A'}</td>
+            <td>${b.name || 'N/A'}</td>
+            <td>${b.createdBy || 'N/A'}</td>
+            <td>${b.modifiedBy || 'N/A'}</td>
           </tr>`;
       });
     } else if (reportType === "Agent") {
@@ -247,10 +290,10 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${normalizeCell(a.companyName)}</td>
-            <td>${normalizeCell(a.firstName)}</td>
-            <td>${normalizeCell(a.lastName)}</td>
-            <td>${normalizeCell(a.personalEmail)}</td>
+           <td>${a.code || 'N/A'}</td>
+            <td>${a.name || 'N/A'}</td>
+            <td>${a.createdBy || 'N/A'}</td>
+            <td>${a.modifiedBy || 'N/A'}</td>
            
           </tr>`;
       });
@@ -259,7 +302,7 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${u.code || 'N/A'}</td>
+           <td>${u.code || 'N/A'}</td>
             <td>${u.name || 'N/A'}</td>
             <td>${u.createdBy || 'N/A'}</td>
             <td>${u.modifiedBy || 'N/A'}</td>
@@ -292,43 +335,61 @@ export default function UserReport() {
     if (reportType === "Contract Rate") {
       body = contracts.map((c, i) => [
         i + 1,
-        normalizeCell(c.rateCode),
-        normalizeCell(c.rateCode),
-        'N/A',
-        'N/A'
+        (c.code),
+        (c.name),
+        (c.modifiedBy),
+        (c.createdBy),
+        
       ]);
     } else if (reportType === "Special Rate") {
       body = specialRates.map((s, i) => [
         i + 1,
-        normalizeCell(s.rateCode),
-        normalizeCell(s.rateName || s.rateCode),
-        normalizeCell(s.createdBy),
-        normalizeCell(s.modifiedBy)
+       (s.code),
+        (s.name),
+        (s.modifiedBy),
+        (s.createdBy)
       ]);
     } else if (reportType === "Promotion") {
       body = promotions.map((p, i) => [
         i + 1,
-        normalizeCell(p.promotionCode),
-        normalizeCell(p.promotionName),
-        normalizeCell(p.createdBy),
-        normalizeCell(p.modifiedBy)
+       (p.code),
+        (p.name),
+        (p.modifiedBy),
+        (p.createdBy)
       ]);
     } else if (reportType === "Agent") {
       body = agents.map((a, i) => [
         i + 1,
-        normalizeCell(a.companyName),
-        normalizeCell(a.firstName),
-        normalizeCell(a.lastName),
-        normalizeCell(a.personalEmail),
-       
+       (a.code),
+        (a.name),
+        (a.modifiedBy),
+        (a.createdBy)
+        
+      ]);
+       } else if (reportType === "Availability") {
+      body = agents.map((a, i) => [
+        i + 1,
+       (a.code),
+        (a.name),
+        (a.modifiedBy),
+        (a.createdBy)
+      ]);
+      } else if (reportType === "Booking") {
+      body = agents.map((b, i) => [
+        i + 1,
+       (b.code),
+        (b.name),
+        (b.modifiedBy),
+        (b.createdBy)
+        
       ]);
     } else {
       body = users.map((u, i) => [
         i + 1,
-        normalizeCell(u.code),
-        normalizeCell(u.name),
-        normalizeCell(u.createdBy),
-        normalizeCell(u.modifiedBy)
+        (i.code),
+        (i.name),
+        (i.modifiedBy),
+        (i.createdBy)
       ]);
     }
 
@@ -361,43 +422,61 @@ export default function UserReport() {
     if (reportType === "Contract Rate") {
       rows = contracts.map((c, i) => [
         i + 1,
-        normalizeCell(c.rateCode),
-        normalizeCell(c.rateCode),
-        'N/A',
-        'N/A'
+        (c.code),
+        (c.name),
+        (c.modifiedBy),
+        (c.createdBy)
       ]);
     } else if (reportType === "Special Rate") {
       rows = specialRates.map((s, i) => [
         i + 1,
-        normalizeCell(s.rateCode),
-        normalizeCell(s.rateName || s.rateCode),
-        normalizeCell(s.createdBy),
-        normalizeCell(s.modifiedBy)
+       (s.code),
+        (s.name),
+        (s.modifiedBy),
+        (s.createdBy)
       ]);
     } else if (reportType === "Promotion") {
       rows = promotions.map((p, i) => [
         i + 1,
-        normalizeCell(p.promotionCode),
-        normalizeCell(p.promotionName),
-        normalizeCell(p.createdBy),
-        normalizeCell(p.modifiedBy)
+        (p.code),
+        (p.name),
+        (p.modifiedBy),
+        (p.createdBy)
       ]);
     } else if (reportType === "Agent") {
       rows = agents.map((a, i) => [
         i + 1,
-        normalizeCell(a.companyName),
-        normalizeCell(a.firstName),
-        normalizeCell(a.lastName),
-        normalizeCell(a.personalEmail),
+        (a.code),
+        (a.name),
+        (a.modifiedBy),
+        (a.createdBy)
+       
+      ]);
+       } else if (reportType === "Availability") {
+      rows = agents.map((a, i) => [
+        i + 1,
+        (a.code),
+        (a.name),
+        (a.modifiedBy),
+        (a.createdBy)
+       
+      ]);
+       } else if (reportType === "Booking") {
+      rows = agents.map((a, i) => [
+        i + 1,
+        (a.code),
+        (a.name),
+        (a.modifiedBy),
+        (a.createdBy)
        
       ]);
     } else {
       rows = users.map((u, i) => [
         i + 1,
-        normalizeCell(u.code),
-        normalizeCell(u.name),
-        normalizeCell(u.createdBy),
-        normalizeCell(u.modifiedBy)
+       (u.code),
+        (u.name),
+        (u.modifiedBy),
+        (u.createdBy)
       ]);
     }
 
@@ -532,20 +611,11 @@ export default function UserReport() {
                   contracts.length > 0 ? (
                     contracts.map((contract, index) => (
                       <tr key={contract.contractrateId || index}>
-                        {/* Sl.No: Serial number starting from 1 */}
                         <td>{index + 1}</td>
-                        
-                        {/* Code: Rate code from contract (e.g., "S1", "Week2") */}
-                        <td>{contract.rateCode || "N/A"}</td>
-                        
-                        {/* Name: Using rateCode as name (you can change this to something else if needed) */}
-                        <td>{contract.rateCode || "N/A"}</td>
-                        
-                        {/* Created By: Not available in API response, showing N/A */}
-                        <td>N/A</td>
-                        
-                        {/* Modified By: Not available in API response, showing N/A */}
-                        <td>N/A</td>
+                        <td>{contract.code}</td>
+                        <td>{contract.name}</td>
+                        <td>{contract.createdBy}</td>
+                        <td>{contract.modifiedBy}</td>
                       </tr>
                     ))
                   ) : (
@@ -561,8 +631,8 @@ export default function UserReport() {
                     specialRates.map((s, index) => (
                       <tr key={s.id || index}>
                         <td>{index + 1}</td>
-                        <td>{s.rateCode || "N/A"}</td>
-                        <td>{s.rateName || s.rateCode || "N/A"}</td>
+                        <td>{s.code || "N/A"}</td>
+                        <td>{s.name}</td>
                         <td>{s.createdBy || "N/A"}</td>
                         <td>{s.modifiedBy || "N/A"}</td>
                       </tr>
@@ -575,14 +645,14 @@ export default function UserReport() {
                     </tr>
                   )
                 ) : reportType === "Promotion" ? (
-                  (staticPromotionData.length > 0 ? (
-                    staticPromotionData.map((p, index) => (
+                  (promotions.length > 0 ? (
+                    promotions.map((p, index) => (
                       <tr key={p.id}>
                         <td>{index + 1}</td>
                         <td>{p.code}</td>
                         <td>{p.name}</td>
-                        <td>{p.status}</td>
-                        <td>{p.contractRate}</td>
+                        <td>{p.createdBy}</td>
+                        <td>{p.modifiedBy}</td>
                       </tr>
                     ))
                   ) : (
@@ -597,10 +667,10 @@ export default function UserReport() {
                     agents.map((a, index) => (
                       <tr key={a.id || index}>
                         <td>{index + 1}</td>
-                        <td>{normalizeCell(a.companyName)}</td>
-                        <td>{normalizeCell(a.firstName)}</td>
-                        <td>{normalizeCell(a.lastName)}</td>
-                        <td>{normalizeCell(a.personalEmail)}</td>
+                        <td>{a.code}</td>
+                        <td>{a.name}</td>
+                        <td>{a.createdBy}</td>
+                        <td>{a.modifiedBy}</td>
                        
                       </tr>
                     ))
@@ -612,14 +682,14 @@ export default function UserReport() {
                     </tr>
                   )
                 ) : reportType === "Availability" ? (
-                  staticAvailabilityData.length > 0 ? (
-                    staticAvailabilityData.map((a, index) => (
+                  availability.length > 0 ? (
+                    availability.map((a, index) => (
                       <tr key={a.id || index}>
                         <td>{index + 1}</td>
-                        <td>{normalizeCell(a.room)}</td>
-                        <td>{normalizeCell(a.date)}</td>
-                        <td>{normalizeCell(a.available)}</td>
-                        <td>{normalizeCell(a.note)}</td>
+                        <td>{a.code}</td>
+                        <td>{a.name}</td>
+                        <td>{a.createdBy}</td>
+                        <td>{a.modifiedBy}</td>
                       </tr>
                     ))
                   ) : (
@@ -630,16 +700,15 @@ export default function UserReport() {
                     </tr>
                   )
                 ) : reportType === "Booking" ? (
-                  staticBookingData.length > 0 ? (
-                    staticBookingData.map((b, index) => (
+                  booking.length > 0 ? (
+                    booking.map((b, index) => (
                       <tr key={b.id || index}>
                         <td>{index + 1}</td>
-                        <td>{normalizeCell(b.bookingId)}</td>
-                        <td>{normalizeCell(b.guest)}</td>
-                        <td>{normalizeCell(b.date)}</td>
-                        <td>{normalizeCell(b.status)}</td>
-                       
-                      </tr>
+                        <td>{b.code}</td>
+                        <td>{b.name}</td>
+                        <td>{b.createdBy}</td>
+                        <td>{b.modifiedBy ?b.modifiedBy.split('T')[0]:'_'}</td>
+                    </tr>
                     ))
                   ) : (
                     <tr>

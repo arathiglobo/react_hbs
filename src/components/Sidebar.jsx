@@ -1,6 +1,25 @@
 import React, { useState } from "react";
 import { Nav, Button, Offcanvas } from "react-bootstrap";
 import { Link } from "react-router-dom";
+
+import {
+  LayoutDashboard,
+  Puzzle,
+  Building2,
+  ClipboardList,
+  PlusCircle,
+  BookOpen,
+  FileText,
+  Landmark,
+  Users,
+  CalendarDays,
+ FileSignature,
+  BarChart3,
+  Tag,
+  ImagePlus,
+  Dot,
+} from "lucide-react";
+
   
 let labelForDashboard = " ";
 
@@ -69,11 +88,12 @@ export default function Sidebar() {
         {
           label: "Mapping settings",
           children: [
-            { label: "Country", to: "/masters/country-mapping" },
+            // { label: "Country", to: "/masters/country-mapping" },
             { label: "City", to: "/masters/city-mapping" },
             // { label: "Hotel", to: "/masters/hotel-mapping" },
           ],
         },
+        //nee to uncomment once implemented
         // {
         //   label: "UnMapping settings",
         //   children: [
@@ -155,11 +175,11 @@ export default function Sidebar() {
           label: "Make Your Own Package",
           to: "/new-booking/make-your-own-package",
         },
-        // { label: "Package Booking", to: "/new-booking/package" },
-        // {
-        //   label: "Tours and Activity",
-        //   to: "/new-booking/tours-and-activities",
-        // },
+        { label: "Package Booking", to: "/new-booking/package" },
+        {
+          label: "Tours and Activity",
+          to: "/new-booking/tours-and-activities",
+        },
       ],
     },
     {
@@ -174,22 +194,22 @@ export default function Sidebar() {
           label: "Custom Booking",
           to: "/booking-details/custom-booking-list",
         },
-        // {
-        //   label: "Package Booking",
-        //   to: "/booking-details/package-booking-list",
-        // },
-        // {
-        //   label: "Complete Booking",
-        //   to: "/booking-details/complete-booking-list",
-        // },
+        {
+          label: "Package Booking",
+          to: "/booking-details/package-booking-list",
+        },
+        {
+          label: "Complete Booking",
+          to: "/booking-details/complete-booking-list",
+        },
         {
           label: "Quotation List",
-          to: "/booking-details/quotation-booking-list",
+          to: "/booking-details/quotation-list-list",
         },
-        // {
-        //   label: "Offline Booking List",
-        //   to: "/booking-details/offline-booking-list",
-        // },
+        {
+          label: "Offline Booking List",
+          to: "/booking-details/offline-booking-list",
+        },
       ],
     },
     {
@@ -230,34 +250,78 @@ export default function Sidebar() {
       to: "/extranet-contract",
       roles: ["admin"],
     },
-    {
+{
       label: "Report",
       to: "/report",
       roles: ["admin", "agent"],
       children: [
         {
           label: "Booking",
-          to: "/reports/booking",
+          to: "/report/booking",
         },
         {
           label: "Cancellation",
-          to: "/reports/cancellation",
+          to: "/report/cancellation",
         },
         {
           label: "Inventory",
-          to: "/reports/inventory",
+          to: "/report/inventory",
         },
         {
           label: "Hotel Wise",
-          to: "/reports/hotel-wise",
+          to: "/report/hotel-wise",
         },
         {
           label: "Accounts",
-          to: "/reports/accounts",
+          to: "/report/accounts",
         },
         {
           label: "Day Wise",
-          to: "/reports/day-wise",
+          to: "/report/day-wise",
+        },
+        {
+          label: "Monthly Wise",
+          to: "/report/monthly-wise",
+        },
+        {
+          label: "Comparison",
+          to: "/report/comparison",
+        },
+        {
+          label: "Agent Wise",
+          to: "/report/agent-wise",
+        },
+        {
+          label: "Contract Expiry",
+          to: "/report/contract-expiry",
+        },
+        {
+          label: "Contract Rate",
+          to: "/report/contract-rate",
+        },
+        {
+          label: "User Report",
+          to: "/report/user-report",
+        },
+        {
+          label: "Stop Sale",
+          to: "/report/stop-sale",
+        },
+        {
+          label: "User Logins",
+          to: "/report/user-logins",
+        },
+        {
+          label: "Offline Daily Sales",
+          to: "/report/offline-daily-sales",
+        },
+        {
+          label: "Online Daily Sales",
+          to: "/report/online-daily-sales",
+        },
+        {
+          label: "Time Limit Daily Sales",
+          to: "/report/time-limit-daily-sales",
         },
       ],
     },
@@ -271,6 +335,7 @@ export default function Sidebar() {
       to: "/upload-offer-image",
       roles: ["admin"],
     },
+    
   ];
 
   // Filter menu based on allowed roles
@@ -354,7 +419,16 @@ export default function Sidebar() {
       </Button>
 
       {/* Sidebar for large screens */}
-      <aside className="sidebar d-none d-lg-block">
+      <aside className="sidebar d-none d-lg-block"
+       style={{
+    position: "sticky",
+    top: "60px",                     // 👈 height of top bar
+    height: "calc(100vh - 60px)",    // 👈 reserve space
+    background: "#fff",
+    borderRight: "1px solid #e5e7eb",
+    zIndex: 100,
+    // zIndex: 100,
+  }}>
         <Nav className="flex-column">
           {filteredItems.map((item) => {
             const hasChildren = Array.isArray(item.children) && item.children.length > 0;
@@ -394,9 +468,20 @@ export default function Sidebar() {
                     className={`submenu ${openGroups[item.label] ? 'show' : ''}`}
                     style={{ 
                       display: openGroups[item.label] ? 'block' : 'none',
-                      zIndex: 9999 
+                      zIndex: 9999 ,
+                       marginLeft: "12px",
+                       marginTop: "6px",
+                       paddingLeft: "8px",
+                       borderLeft: "1px solid #e5e7eb",
+
+    // ⭐ IMPORTANT FIX
+    maxHeight: "380px",     // controls submenu height
+    overflowY: "auto",      // enables scroll
+     scrollbarWidth: "thin",          // Firefox
+    scrollbarColor: "#eeeaea",
                     }}
-                  >
+
+ >
                     {hasChildren &&
                       item.children.map((child) => (
                         <Nav.Link
@@ -409,7 +494,8 @@ export default function Sidebar() {
                             padding: '8px 12px',
                             color: '#111827',
                             textDecoration: 'none',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            fontWeight:450,
                           }}
                         >
                           {child.label}
@@ -567,36 +653,57 @@ export default function Sidebar() {
 }
 
 function getIcon(label) {
+  const iconProps = {
+    size: 18,
+    strokeWidth: 1.5,   // 👈 thinner (IMPORTANT)
+    className: "sidebar-icon",
+  };
+
   switch (label) {
     case labelForDashboard:
-      return "🏠";
+      return <LayoutDashboard {...iconProps} />;
+
     case "Manage Masters":
-      return "🧩";
+      return <Puzzle {...iconProps} />;
+
     case "Company Profile":
-      return "🏢";
+      return <Building2 {...iconProps} />;
+
     case "Registration":
-      return "📝";
+      return <ClipboardList {...iconProps} />;
+
     case "New Booking":
-      return "🆕";
+      return <PlusCircle {...iconProps} />;
+
     case "Booking List":
-      return "📚";
+      return <BookOpen {...iconProps} />;
+
     case "Invoice":
-      return "🧾";
+      return <FileText {...iconProps} />;
+
     case "Inhouse Accounts":
-      return "🏦";
+      return <Landmark {...iconProps} />;
+
     case "Assigned Agents":
-      return "👥";
+      return <Users {...iconProps} />;
+
     case "Calendar":
-      return "🗓️";
+      return <CalendarDays {...iconProps} />;
+
     case "Extranet Contract":
-      return "📑";
+      return <FileSignature {...iconProps} />;
+
     case "Report":
-      return "📈";
+      return <BarChart3 {...iconProps} />;
+
     case "Offer":
-      return "🏷️";
+      return <Tag {...iconProps} />;
+
     case "Upload Offer Image":
-      return "🖼️";
+      return <ImagePlus {...iconProps} />;
+
     default:
-      return "•";
+      return <Dot {...iconProps} />;
   }
 }
+

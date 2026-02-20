@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState,useMemo } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import {
@@ -10,13 +10,62 @@ import {
   Table,
   Pagination,
 } from "react-bootstrap";
+import Agent from "../../components/filters/Agent";
+import Staff from "../../components/filters/Staff";
+import axiosInstance from "../../components/AxiosInstance";
+import Supplier from "../../components/filters/Supplier";
 
 export default function OfflineBookingDailySalesStatement() {
-
+ 
+  const [agentsList,setAgentList] = useState([]);
+  const [employeesList,setEmployeesList]=useState([]);
   const [searchQuery,setSearchQuery]=useState("");
   const [currentPage,setCurrentPage]=useState(1);
   const [itemsPerPage,setItemsPerPage]=useState(10);
 
+  const [tempSupplier,setTempSupplier]=useState("");
+  const [tempStaff,setTempStaff] =useState("");
+  const [tempAgent,setTempAgent] = useState("");
+  const [tempFromDate,setTempFromDate]=useState("");
+  const [tempToDate,setTempToDate]=useState("");
+
+  const [supplier,setSupplier]=useState("");
+  const [staff,setStaff]=useState("");
+  const [agent,setAgent] = useState("");
+  const [fromDate,setFromDate]=useState("");
+  const [toDate,setToDate]=useState("");
+
+
+  useEffect(()=>{
+    const fetchAgents = async ()=>{
+      try{
+        const response = await axiosInstance.get("/api/agents")
+        setAgentList(response.data ||[])
+      }catch(error){
+        console.error("error while fetchin",error)
+      }
+    };fetchAgents();
+  },[])
+
+  useEffect(()=>{
+    const fetchEmployees = async ()=>{
+      try{
+        const response = await axiosInstance.get("/api/employee")
+        setEmployeesList(response.data || [])
+      }catch(error){
+        console.error("error while fetching",error)
+      }
+    }; fetchEmployees();
+  },[])
+
+  const handleSearch = () =>{
+  setAgent(tempAgent);
+  setStaff(tempStaff);
+  setSupplier(tempSupplier);
+  setFromDate(tempFromDate);
+  setToDate(tempToDate);
+  setCurrentPage(1);
+}
 
  const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -168,113 +217,6 @@ Total Pax: 2 adult(s) and child(ren)`,
       profit: "400.0",
     },
     {
-      id: 2,
-      date: "2024-12-11",
-      invoiceNumber: "INV-CNF-0105",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Twinkle Pahwa",
-      reference: "TPCNF0105",
-      details: `SupplierType Name: One and Only Royal Mirage
-Customer Name: Mr. Musa Sabir`,
-      sellingPrice: "68612.0",
-      netPrice: "65856.0",
-      profit: "756.0",
-    },
-    {
-      id: 1,
-      date: "2025-06-12",
-      invoiceNumber: "INV-CNF-0106",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Rajesh Mathew",
-      reference: "RM-CNF-1002",
-      details: `SupplierType Name: TEST HOTEL (ONLY FOR TESTING)
-Customer Name: TEST TEST
-Check-In: 2025-06-17
-Check-Out: 2025-06-21
-Total Pax: 2 adult(s) and child(ren)`,
-      sellingPrice: "1600.0",
-      netPrice: "1200.0",
-      profit: "400.0",
-    },
-    {
-      id: 2,
-      date: "2024-12-11",
-      invoiceNumber: "INV-CNF-0105",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Twinkle Pahwa",
-      reference: "TPCNF0105",
-      details: `SupplierType Name: One and Only Royal Mirage
-Customer Name: Mr. Musa Sabir`,
-      sellingPrice: "68612.0",
-      netPrice: "65856.0",
-      profit: "756.0",
-    },
-    {
-      id: 1,
-      date: "2025-06-12",
-      invoiceNumber: "INV-CNF-0106",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Rajesh Mathew",
-      reference: "RM-CNF-1002",
-      details: `SupplierType Name: TEST HOTEL (ONLY FOR TESTING)
-Customer Name: TEST TEST
-Check-In: 2025-06-17
-Check-Out: 2025-06-21
-Total Pax: 2 adult(s) and child(ren)`,
-      sellingPrice: "1600.0",
-      netPrice: "1200.0",
-      profit: "400.0",
-    },
-    {
-      id: 2,
-      date: "2024-12-11",
-      invoiceNumber: "INV-CNF-0105",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Twinkle Pahwa",
-      reference: "TPCNF0105",
-      details: `SupplierType Name: One and Only Royal Mirage
-Customer Name: Mr. Musa Sabir`,
-      sellingPrice: "68612.0",
-      netPrice: "65856.0",
-      profit: "756.0",
-    },
-    {
-      id: 1,
-      date: "2025-06-12",
-      invoiceNumber: "INV-CNF-0106",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Rajesh Mathew",
-      reference: "RM-CNF-1002",
-      details: `SupplierType Name: TEST HOTEL (ONLY FOR TESTING)
-Customer Name: TEST TEST
-Check-In: 2025-06-17
-Check-Out: 2025-06-21
-Total Pax: 2 adult(s) and child(ren)`,
-      sellingPrice: "1600.0",
-      netPrice: "1200.0",
-      profit: "400.0",
-    },
-    {
-      id: 2,
-      date: "2024-12-11",
-      invoiceNumber: "INV-CNF-0105",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Twinkle Pahwa",
-      reference: "TPCNF0105",
-      details: `SupplierType Name: One and Only Royal Mirage
-Customer Name: Mr. Musa Sabir`,
-      sellingPrice: "68612.0",
-      netPrice: "65856.0",
-      profit: "756.0",
-    },
-    {
       id: 1,
       date: "2025-06-12",
       invoiceNumber: "INV-CNF-0106",
@@ -293,9 +235,27 @@ Total Pax: 2 adult(s) and child(ren)`,
     }
   ];
 
-  const filteredsales = sales.filter(s=>{
-    const search = searchQuery.toLowerCase();
-    return(
+  // const filteredsales = sales.filter(s=>{
+  //   const search = searchQuery.toLowerCase();
+  //   return(
+  //     String(s.date).toLowerCase().includes(search)||
+  //     String(s.invoiceNumber).toLowerCase().includes(search)||
+  //     String(s.supplier).toLowerCase().includes(search)||
+  //     String(s.agent).toLowerCase().includes(search)||
+  //     String(s.bookingBy).toLowerCase().includes(search)||
+  //     String(s.reference).toLowerCase().includes(search)||
+  //     String(s.details).toLowerCase().includes(search)||
+  //     String(s.sellingPrice).toLowerCase().includes(search)||
+  //     String(s.netPrice).toLowerCase().includes(search)||
+  //     String(s.profit).toLowerCase().includes(search)
+  //   )
+  //  })
+
+  const filteredsales = useMemo(()=>{
+    return sales.filter(s=>{
+      if(searchQuery && searchQuery.trim()){
+        const search = searchQuery.trim().toLowerCase();
+        const matchesSearch =
       String(s.date).toLowerCase().includes(search)||
       String(s.invoiceNumber).toLowerCase().includes(search)||
       String(s.supplier).toLowerCase().includes(search)||
@@ -306,13 +266,77 @@ Total Pax: 2 adult(s) and child(ren)`,
       String(s.sellingPrice).toLowerCase().includes(search)||
       String(s.netPrice).toLowerCase().includes(search)||
       String(s.profit).toLowerCase().includes(search)
-    )
-   })
+      if(!matchesSearch) return false;
+      }
 
-   const totalPages= Math.ceil(filteredsales.length / itemsPerPage);
-   const startIndex = (currentPage -1)*itemsPerPage;
-   const endIndex = startIndex + itemsPerPage;
-   const currentLogin = filteredsales.slice(startIndex,endIndex);
+      //SUPPLIER
+      if(supplier && supplier.trim()){
+        const selectedSupplier = String(supplier).trim();
+        const reportSupplier = String(supplier || '').trim();
+        if(selectedSupplier.toLowerCase() !== reportSupplier.toLowerCase()){
+          return false;
+        }
+      }
+      //agent
+      if(agent){
+        let matches = false;
+        if(agent.agentId && String(agent.agentId)===String(agent)){
+          matches = true;
+        }else{
+           const selectedAgentOption = agentsList.find(opt =>
+            String(opt.id || opt.agentId) === String(agent)
+           )
+           if(selectedAgentOption){
+            const selectedAgentName= String(selectedAgentOption.companyName || '').trim();
+            const reportAgentName = String(agent.agent || '').trim();
+            matches = selectedAgentName.toLowerCase()=== reportAgentName.toLowerCase()||
+            reportAgentName.toLowerCase().includes(selectedAgentName.toLowerCase())
+           }
+        }
+        if(!matches) return false;
+      }
+
+      if(Staff){
+        let matches = false;
+        if(s.employeeId && String(s.employeeId)===String(staff)){
+          matches = true;
+        }else if(s.staffId && String(s.staffId)===String(staff)){
+          matches = true;
+        }else{
+          const selectedEmployeeOption = employeesList.find(opt =>
+           String(opt.employeeId) === String(staff)
+          );
+          if(selectedEmployeeOption){
+            const employeeFullName = `${selectedEmployeeOption.firstName || ''} ${selectedEmployeeOption.lastname || ''}`.trim();
+            const reportBookingBy = String(a.bookingBy || '').trim();
+
+            matches = employeeFullName.toLowerCase().includes(employeeFullName.toLowerCase())||
+                      reportBookingBy.toLowerCase().includes(employeeFullName.toLowerCase())||
+                      employeeFullName.toLowerCase().includes(reportBookingBy.toLowerCase())
+          }
+        }
+        if(!matches) return false;
+      }
+        if(fromDate || toDate){
+          const bookingDateStr = a.bookDate
+          ? a.bookDate.split("T")[0]
+          :"";
+          if(fromDate && bookingDateStr <fromDate){
+            return false;
+          }
+          if(toDate && bookingDateStr > toDate){
+            return false;
+          }
+        }
+        return true;
+    })
+  },[sales,searchQuery,fromDate,supplier,toDate,agent,staff,agentsList,employeesList])
+
+         
+    const totalPages = useMemo(() => Math.ceil(filteredsales.length / itemsPerPage), [filteredsales.length,itemsPerPage]);
+    const startIndex = useMemo(() => (currentPage -1)* itemsPerPage, [currentPage, itemsPerPage]);
+    const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
+    const currentLogin = useMemo(() => filteredsales.slice(startIndex,endIndex), [filteredsales, startIndex,endIndex]);
 
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
@@ -332,39 +356,35 @@ Total Pax: 2 adult(s) and child(ren)`,
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempFromDate}
+                    onChange={(e)=>setTempFromDate(e.target.value)} />
                   </Form.Group>
                 </Col>
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempToDate}
+                    onChange={(e)=>setTempToDate(e.target.value)}/>
                   </Form.Group>
                 </Col>
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Search Agent</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Globo Agent</option>
-                      <option>Direct Client</option>
-                    </Form.Select>
-                  </Form.Group>
+                 <Agent
+                 value={tempAgent}
+                 onChange={setTempAgent}/>
                 </Col>
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Staff</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Rajesh Mathew</option>
-                      <option>Twinkle Pahwa</option>
-                    </Form.Select>
-                  </Form.Group>
+                 <Staff
+                 value={tempStaff}
+                 onChange={setTempStaff}/>
                 </Col>
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Supplier</Form.Label>
-                    <Form.Select size="sm">
+                    <Form.Select size="sm"
+                    value={tempSupplier}
+                    onChange={setTempSupplier}>
                       <option>Select</option>
                       <option>Darina Holidays</option>
                       <option>Connect World Tours</option>
@@ -372,7 +392,7 @@ Total Pax: 2 adult(s) and child(ren)`,
                   </Form.Group>
                 </Col>
                 <Col md={12} className="d-flex justify-content-end mt-3">
-                  <Button variant="success" size="sm">
+                  <Button variant="success" size="sm" onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
                 </Col>

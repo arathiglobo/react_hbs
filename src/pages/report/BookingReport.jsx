@@ -1,4 +1,4 @@
-import React,{useState,useEffect} from "react";
+import React,{useState,useEffect, useMemo} from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
@@ -15,9 +15,15 @@ import {
   Pagination,
   Modal,
 } from "react-bootstrap";
+import Country from "../../components/filters/Country";
 
 export default function BookingReport() {
-  // const [bookings] = useState([]);
+
+  const [bookings,setBookings] = useState([]);
+
+  // Store country options to map IDs to names/codes
+  const [countryOptions, setCountryOptions] = useState([]);
+
   const [currentPage,setCurrentPage]=useState(1);
   const [itemsPerPage,setItemsPerPage]=useState(10);
   const [searchQuery,setSearchQuery]= useState("");
@@ -25,9 +31,55 @@ export default function BookingReport() {
   const [emailAddress, setEmailAddress] = useState("");
   const [isSending, setIsSending] = useState(false);
 
+  // Temporary filter state (what user sees/edits)
+const [tempCountry, setTempCountry] = useState("");
+const [tempFromDate, setTempFromDate] = useState("");
+const [tempToDate, setTempToDate] = useState("");
+
+// Applied filter states (used for actual filtering)
+const [country, setCountry] = useState("");
+const [fromDate, setFromDate] = useState("");
+const [toDate, setToDate] = useState("");
+
+
+
   useEffect(()=>{
   setCurrentPage(1);
   },[searchQuery]);
+
+  useEffect(()=>{
+   const fetchBookings = async ()=>{
+    try{
+      const response = await axiosInstance.get("/api/report/bookings");
+      setBookings(response.data);
+    }catch(error){
+      console.error("Booking Report fetch error",error)
+      toast.error("failed to load booking data")
+    }
+   };
+   fetchBookings();
+  },[])
+
+  useEffect(() => {
+  const fetchCountryOptions = async () => {
+    try {
+      const response = await axiosInstance.get("/api/country").catch(() => ({ data: [] }));
+      setCountryOptions(Array.isArray(response.data) ? response.data.map(c => ({ id: c.id || c.Id, name: c.name })) : []);
+    } catch (error) {
+      console.error("Error fetching country options:", error);
+    }
+  };
+  fetchCountryOptions();
+}, []);
+
+
+const handleSearch = () => {
+  setCountry(tempCountry);
+  setFromDate(tempFromDate);
+  setToDate(tempToDate);
+  setCurrentPage(1);
+};
+
 
   const handleSendEmail = async () => {
     // Validate email
@@ -92,14 +144,14 @@ export default function BookingReport() {
             ${currentBookings.map((b, index) => `
               <tr>
                 <td>${index + 1}</td>
-                <td>${b.code}</td>
-                <td>${b.date}</td>
-                <td>${b.customer}</td>
-                <td>${b.doneBy}</td>
+                <td>${b.bookingCode}</td>
+                <td>${b.bookingDate ? b.bookingDate.split('T')[0]:'_'}</td>
+                <td>${b.customerName}</td>
+                <td>${b.bookingDoneBy}</td>
                 <td>${b.sellingPrice}</td>
                 <td>${b.netPrice}</td>
                 <td>${b.profit}</td>
-                <td>${b.country}</td>
+                <td>${b.nativeCountry}</td>
               </tr>
             `
               )
@@ -136,14 +188,14 @@ export default function BookingReport() {
       ],
       body:currentBookings.map((b, index) => [
         index + 1,
-        b.code,
-        b.date,
-        b.customer,
-        b.doneBy,
+        b.bookingCode,
+        b.bookingDate ? b.bookingDate.split('T')[0] : '_',
+        b.customerName,
+        b.bookingDoneBy,
         b.sellingPrice,
         b.netPrice,
         b.profit,
-        b.country,
+        b.nativeCountry,
       ]),
       startY: 30,
     });
@@ -185,14 +237,14 @@ export default function BookingReport() {
       ...currentBookings.map((b, index) =>
         [
           index + 1,
-          b.code,
-          b.date,
-          b.customer,
-          b.doneBy,
+          b.bookingCode,
+           b.bookingDate ? b.bookingDate.split('T')[0] : '_',
+          b.customerName,
+          b.bookingDoneBy,
           b.sellingPrice,
           b.netPrice,
           b.profit,
-          b.country,
+          b.nativeCountry,
         ]
           .map(escapeCSV)
           .join(",")
@@ -212,55 +264,74 @@ export default function BookingReport() {
     window.URL.revokeObjectURL(url);
   };
 
-  // Dummy data for now
-  const bookings = [
-    {
-      id: 1,
-      code: "CNRJ2026",
-      date: "2025-09-08",
-      customer: "Rui Nakibio",
-      doneBy: "Direct Client",
-      sellingPrice: "58754.25",
-      netPrice: "58754.25",
-      profit: "0",
-      country: "Spain",
-    },
-    {
-      id: 2,
-      code: "CNDA2028",
-      date: "2025-09-06",
-      customer: "Jiaz Zheng",
-      doneBy: "Direct Client",
-      sellingPrice: "21248",
-      netPrice: "21248",
-      profit: "0",
-      country: "China",
-    },
-    
-    
-];
+ 
+ 
+ const filteredbookings = useMemo(() => {
+  return bookings.filter(b => {
 
-  const filteredbookings =bookings.filter(b=>{
-    const search= searchQuery.toLowerCase()
-    return(
-      String(b.code).toLowerCase().includes(search)||
-      String(b.date).toLowerCase().includes(search)||
-      b.customer.toLowerCase().includes(search)||
-      b.doneBy.toLowerCase().includes(search)||
-      String(b.sellingPrice).toLowerCase().includes(search)||
-      String(b.netPrice).toLowerCase().includes(search)||
-      String(b.profit).toLowerCase().includes(search)||
-      b.country.toLowerCase().includes(search)
-    )
- } )
+    if (searchQuery && searchQuery.trim()) {
+      const search = searchQuery.trim().toLowerCase();
 
- const totalPages =Math.ceil(filteredbookings.length / itemsPerPage);
- const startIndex =(currentPage - 1) * itemsPerPage;
- const endIndex = startIndex + itemsPerPage;
- const currentBookings = filteredbookings.slice(startIndex, endIndex);
+      const matchesSearch =
+        String(b.bookingCode || '').toLowerCase().includes(search) ||
+        String(b.bookingDate || '').toLowerCase().includes(search) ||
+        String(b.customerName || '').toLowerCase().includes(search) ||
+        String(b.bookingDoneBy || '').toLowerCase().includes(search) ||
+        String(b.sellingPrice || '').toLowerCase().includes(search) ||
+        String(b.netPrice || '').toLowerCase().includes(search) ||
+        String(b.profit || '').toLowerCase().includes(search) ||
+        String(b.nativeCountry || '').toLowerCase().includes(search);
+
+      if (!matchesSearch) return false;
+    }
+
+    if (country) {
+      let matches = false;
+
+      const selectedCountryOption = countryOptions.find(
+        opt => String(opt.id) === String(country)
+      );
+      const selectedCountryName = selectedCountryOption?.name;
+
+      if (selectedCountryName) {
+        const bookingCountryCode = String(b.nativeCountry || '').trim();
+        const selectedCode = String(selectedCountryName || '').trim();
+
+        // Match country code (e.g. IN, US)
+        matches = bookingCountryCode === selectedCode;
+      }
+
+      // Fallback: match using countryId
+      if (!matches && b.countryId && String(b.countryId) === String(country)) {
+        matches = true;
+      }
+
+      if (!matches) return false;
+    }
+    if (fromDate || toDate) {
+      const bookingDateStr = b.bookingDate
+        ? b.bookingDate.split("T")[0]
+        : "";
+
+      if (fromDate && bookingDateStr < fromDate) {
+        return false;
+      }
+
+      if (toDate && bookingDateStr > toDate) {
+        return false;
+      }
+    }
+
+    return true; // keep booking
+  });
+}, [bookings, searchQuery, country, fromDate, toDate, countryOptions]);
 
 
-
+const totalPages = useMemo(() => Math.ceil(filteredbookings.length / itemsPerPage), [filteredbookings.length, itemsPerPage]);
+const startIndex = useMemo(() => (currentPage - 1) * itemsPerPage, [currentPage, itemsPerPage]);
+const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
+const currentBookings = useMemo(() => filteredbookings.slice(startIndex, endIndex), [filteredbookings, startIndex, endIndex]);
+  
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -269,79 +340,99 @@ export default function BookingReport() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header>
-              <span className="fw-semibold"> Booking Report</span>
+              <span className="fw-medium"> Booking Report</span>
             </Card.Header>
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
               <Row className="align-items-end g-4">
+              
+
+
+               
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm"
+                    value={tempFromDate}  
+                    onChange={(e)=>setTempFromDate(e.target.value)} />
                   </Form.Group>
                 </Col>
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempToDate}
+                    onChange={(e)=>setTempToDate(e.target.value)}/>
                   </Form.Group>
                 </Col>
+
+
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Country</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Spain</option>
-                      <option>China</option>
-                      <option>India</option>
-                    </Form.Select>
-                  </Form.Group>
+                 <Country
+                 value={tempCountry}
+                 onChange={setTempCountry}
+                 />
                 </Col>
                 <Col md={3}>
-                  <Button variant="success" className="w-100" size="sm">
+                  <Button variant="success" className="w-100" size="sm" onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
                 </Col>
-                <Col md={12} className="mt-4">
-                  <div className="d-flex gap-2 justify-content-end">
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      onClick={() => setShowMailModal(true)}
-                    >
-                      <i className="fas fa-envelope me-1"></i>Mail
-                    </Button>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={handlePrint}
-                    >
-                      <i className="fas fa-print me-1"></i>Print
-                    </Button>
-                    <Button variant="outline-danger" size="sm" onClick={handlePDF}>
-                      <i className="fas fa-file-pdf me-1"></i>PDF
-                    </Button>
-                    <Button
-                      variant="outline-success"
-                      size="sm"
-                      onClick={handleExcel}
-                    >
-                      <i className="fas fa-file-excel me-1"></i>Excel
-                    </Button>
-                  </div>
-                </Col>
-                <Col>
-                <div className="d-flex justify-content-end" >
-                  <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e)=>setSearchQuery(e.target.value)}
-                  placeholder="search here"
-                  className="form-control form-control-sm w-auto "
-                  />
-                </div>
-                </Col>
+
+                <Col md={12} className="mb-0">
+  <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+    {/* LEFT SIDE - SEARCH */}
+    <div>
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Search here"
+        className="form-control form-control-sm"
+        style={{ width: "200px" }}
+      />
+    </div>
+
+    {/* RIGHT SIDE - BUTTONS */}
+    <div className="d-flex gap-2">
+      <Button
+        variant="outline-primary"
+        size="sm"
+        onClick={() => setShowMailModal(true)}
+      >
+        <i className="fas fa-envelope me-1"></i>Mail
+      </Button>
+
+      <Button
+        variant="outline-secondary"
+        size="sm"
+        onClick={handlePrint}
+      >
+        <i className="fas fa-print me-1"></i>Print
+      </Button>
+
+      <Button
+        variant="outline-danger"
+        size="sm"
+        onClick={handlePDF}
+      >
+        <i className="fas fa-file-pdf me-1"></i>PDF
+      </Button>
+
+      <Button
+        variant="outline-success"
+        size="sm"
+        onClick={handleExcel}
+      >
+        <i className="fas fa-file-excel me-1"></i>Excel
+      </Button>
+    </div>
+
+  </div>
+</Col>
+               
               </Row>
             </div>
 
@@ -364,14 +455,14 @@ export default function BookingReport() {
                   {currentBookings.map((b, index) => (
                     <tr key={b.id}>
                       <td>{startIndex+index + 1}</td>
-                      <td>{b.code}</td>
-                      <td>{b.date}</td>
-                      <td>{b.customer}</td>
-                      <td>{b.doneBy}</td>
+                      <td>{b.bookingCode}</td>
+                     <td>{b.bookingDate ? b.bookingDate.split('T')[0]:'_'}</td>
+                      <td>{b.customerName}</td>
+                      <td>{b.bookingDoneBy}</td>
                       <td>{b.sellingPrice}</td>
                       <td>{b.netPrice}</td>
                       <td>{b.profit}</td>
-                      <td>{b.country}</td>
+                      <td>{b.nativeCountry}</td>
                     </tr>
                   ))}
                 </tbody>

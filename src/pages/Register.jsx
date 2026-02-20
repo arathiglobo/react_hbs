@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "../styles/Register.css";
 import axios from "axios";
+import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { Card, Form, Row, Col, Button, Container, Alert } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
@@ -25,6 +26,7 @@ const Register = () => {
     agentRegisterstatus: "",
     agentHsncode: "",
     agentStatus: "yes",
+    currency: "",
   });
 
   const [errors, setErrors] = useState({});
@@ -32,11 +34,12 @@ const Register = () => {
   const [provinces, setProvinces] = useState([]);
   const [places, setPlaces] = useState("");
   const [agentCategoryies, setAgentCategoryies] = useState([]);
+  const [currencies, setCurrencies] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(5);
-  
+
   const navigate = useNavigate();
 
   const agentCategoryList = async () => {
@@ -60,6 +63,7 @@ const Register = () => {
   useEffect(() => {
     countryList();
     agentCategoryList();
+
   }, []);
 
   const provinceList = async (countryId) => {
@@ -82,6 +86,31 @@ const Register = () => {
       console.log("axios call error for city list : ", error);
     }
   };
+
+  const currencyList = async () => {
+    try {
+      const response = await axiosInstance.get("/api/currency?page=0&limit=100");
+      console.log("Currency API Response:", response.data);
+
+      const currencyData = Array.isArray(response.data) ? response.data : [];
+      setCurrencies(currencyData);
+
+      // Auto-select first currency if none selected
+      if (currencyData.length > 0 && !formData.currency) {
+        console.log("Auto-selecting currency:", currencyData[0].currencyId);
+        setFormData(prev => ({
+          ...prev,
+          currency: currencyData[0].currencyId
+        }));
+      }
+    } catch (error) {
+      console.log("axios call error for currency list : ", error);
+    }
+  };
+
+  useEffect(() => {
+    currencyList(); // Call currencyList on component mount
+  }, []);
 
   useEffect(() => {
     if (formData.countryId) {
@@ -142,11 +171,13 @@ const Register = () => {
 
   const validateCurrentStep = () => {
     const newErrors = {};
-    
+
     if (currentStep === 1) {
       if (!formData.companyName.trim()) newErrors.companyName = "Company Name is required";
       if (!formData.businessType.trim()) newErrors.businessType = "Business Type is required";
       if (!formData.agentCategoryId) newErrors.agentCategoryId = "Company Type is required";
+      if (!formData.currency) newErrors.currency = "Currency is required";
+
     } else if (currentStep === 2) {
       if (!formData.firstName.trim()) newErrors.firstName = "First Name is required";
       if (!formData.lastName.trim()) newErrors.lastName = "Last Name is required";
@@ -174,7 +205,7 @@ const Register = () => {
         newErrors.agentCorrespondmail = "Invalid correspondence email format";
       }
     }
-    
+
     return newErrors;
   };
 
@@ -197,6 +228,7 @@ const Register = () => {
       newErrors.businessType = "Business Type is required";
     if (!formData.agentCategoryId)
       newErrors.agentCategoryId = "Company Type or Agent category is required";
+    if (!formData.currency) newErrors.currency = "Currency is required";
     if (!formData.firstName.trim())
       newErrors.firstName = "First Name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last Name is required";
@@ -246,7 +278,7 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+
     const formErrors = validateForm();
 
     if (Object.keys(formErrors).length > 0) {
@@ -255,52 +287,53 @@ const Register = () => {
       return;
     }
 
-         try {
-       const registerResponse = await axios.post(
-         "/api/agent/register",
-         formData
-       );
-       console.log("registerResponse::", registerResponse);
-       
-       // Show success state
-       setShowSuccess(true);
-       setRedirectCountdown(5);
-       
-       // Start countdown for auto-redirect
-       const countdownInterval = setInterval(() => {
-         setRedirectCountdown((prev) => {
-           if (prev <= 1) {
-             clearInterval(countdownInterval);
-                           navigate('/');
-             return 0;
-           }
-           return prev - 1;
-         });
-       }, 1000);
+    try {
+      const registerResponse = await axios.post(
+        "/api/agent/register",
+        formData
+      );
+      console.log("registerResponse::", registerResponse);
 
-       // Reset form on success
-       setFormData({
-         companyName: "",
-         businessType: "",
-         agentCategoryId: "",
-         firstName: "",
-         lastName: "",
-         mobileNumber: "",
-         personalEmail: "",
-         countryId: "",
-         provinceId: "",
-         placeId: "",
-         address: "",
-         agentClassification: "registered",
-         agentGstIn: "",
-         agentProvisionalGstno: "",
-         agentCorrespondmail: "",
-         agentRegisterstatus: "",
-         agentHsncode: "",
-         agentStatus: "yes",
-       });
-       setErrors({});
-       setCurrentStep(1);
+      // Show success state
+      setShowSuccess(true);
+      setRedirectCountdown(5);
+
+      // Start countdown for auto-redirect
+      const countdownInterval = setInterval(() => {
+        setRedirectCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            navigate('/');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      // Reset form on success
+      setFormData({
+        companyName: "",
+        businessType: "",
+        agentCategoryId: "",
+        firstName: "",
+        lastName: "",
+        mobileNumber: "",
+        personalEmail: "",
+        countryId: "",
+        provinceId: "",
+        placeId: "",
+        address: "",
+        agentClassification: "registered",
+        agentGstIn: "",
+        agentProvisionalGstno: "",
+        agentCorrespondmail: "",
+        agentRegisterstatus: "",
+        agentHsncode: "",
+        currency: "",
+        agentStatus: "yes",
+      });
+      setErrors({});
+      setCurrentStep(1);
     } catch (error) {
       if (error.response) {
         if (error.response.data.message) {
@@ -369,20 +402,20 @@ const Register = () => {
                 />
               </div>
             </div>
-                         {/* Back to Login Button */}
-             <div className="back-to-login">
-               <Button 
-                 variant="outline-secondary" 
-                 size="sm"
-                 onClick={() => navigate('/')}
-                 className="back-button"
-               >
-                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" className="me-2">
-                   <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                 </svg>
-                 Back to Home
-               </Button>
-             </div>
+            {/* Back to Login Button */}
+            <div className="back-to-login">
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => navigate('/')}
+                className="back-button"
+              >
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" className="me-2">
+                  <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Back to Home
+              </Button>
+            </div>
           </div>
 
           {/* Success Screen */}
@@ -398,24 +431,24 @@ const Register = () => {
                     </div>
                     <h2 className="success-title">Registration Successful!</h2>
                     <p className="success-message">
-                      Welcome to our network! Your account has been created successfully. 
+                      Welcome to our network! Your account has been created successfully.
                       You can now log in with your email and password.
                     </p>
                     <div className="success-actions">
-                                             <Button 
-                         variant="primary" 
-                         size="lg"
-                         onClick={() => navigate('/')}
-                         className="login-now-button"
-                       >
+                      <Button
+                        variant="primary"
+                        size="lg"
+                        onClick={() => navigate('/')}
+                        className="login-now-button"
+                      >
                         <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="me-2">
                           <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                                                 Go to Home
+                        Go to Home
                       </Button>
-                                             <p className="redirect-message">
-                         Redirecting to home page in <strong>{redirectCountdown}</strong> seconds...
-                       </p>
+                      <p className="redirect-message">
+                        Redirecting to home page in <strong>{redirectCountdown}</strong> seconds...
+                      </p>
                     </div>
                   </div>
                 </Card.Body>
@@ -426,557 +459,557 @@ const Register = () => {
               {/* Progress Indicator */}
               {renderStepIndicator()}
 
-                             {/* Form */}
-               <div className="register-form-container">
-                 <Form onSubmit={handleSubmit} className="register-form" noValidate autoComplete="off">
-                   <Card className="form-card">
-                     <Card.Body className="p-4">
-                       
-                       {/* Step 1: Company Details */}
-                       <div className={`form-step ${currentStep === 1 ? 'active' : ''}`}>
-                    <div className="step-header">
-                      <h3 className="step-title">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
-                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clipRule="evenodd" />
-                        </svg>
-                        Company Information
-                      </h3>
-                      <p className="step-description">Tell us about your business</p>
-                    </div>
+              {/* Form */}
+              <div className="register-form-container">
+                <Form onSubmit={handleSubmit} className="register-form" noValidate autoComplete="off">
+                  <Card className="form-card">
+                    <Card.Body className="p-4">
 
-                    <Row className="g-3">
-                      <Col xs={12}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Company Name <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            name="companyName"
-                            value={formData.companyName}
-                            onChange={handleChange}
-                            placeholder="Enter your company name"
-                            className={`form-input ${errors.companyName ? 'is-invalid' : ''}`}
-                          />
-                          {errors.companyName && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.companyName}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
+                      {/* Step 1: Company Details */}
+                      <div className={`form-step ${currentStep === 1 ? 'active' : ''}`}>
+                        <div className="step-header">
+                          <h3 className="step-title">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
+                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clipRule="evenodd" />
+                            </svg>
+                            Company Information
+                          </h3>
+                          <p className="step-description">Tell us about your business</p>
+                        </div>
 
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Business Type <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            name="businessType"
-                            value={formData.businessType}
-                            onChange={handleChange}
-                            placeholder="e.g. Travel Agency, Tour Operator"
-                            className={`form-input ${errors.businessType ? 'is-invalid' : ''}`}
-                            maxLength={15}
-                          />
-                          {errors.businessType && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.businessType}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
+                        <Row className="g-3">
+                          <Col xs={12}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Company Name <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="companyName"
+                                value={formData.companyName}
+                                onChange={handleChange}
+                                placeholder="Enter your company name"
+                                className={`form-input ${errors.companyName ? 'is-invalid' : ''}`}
+                              />
+                              {errors.companyName && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.companyName}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
 
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Company Type <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Select
-                            name="agentCategoryId"
-                            value={formData.agentCategoryId}
-                            onChange={handleChange}
-                            className={`form-input ${errors.agentCategoryId ? 'is-invalid' : ''}`}
-                          >
-                            <option value="">Select company type</option>
-                            {agentCategoryies.map((agent) => (
-                              <option key={agent.agentCategoryId} value={agent.agentCategoryId}>
-                                {agent.name}
-                              </option>
-                            ))}
-                          </Form.Select>
-                          {errors.agentCategoryId && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.agentCategoryId}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </div>
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Business Type <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="businessType"
+                                value={formData.businessType}
+                                onChange={handleChange}
+                                placeholder="e.g. Travel Agency, Tour Operator"
+                                className={`form-input ${errors.businessType ? 'is-invalid' : ''}`}
+                                maxLength={15}
+                              />
+                              {errors.businessType && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.businessType}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
 
-                  {/* Step 2: Contact Information */}
-                  <div className={`form-step ${currentStep === 2 ? 'active' : ''}`}>
-                    <div className="step-header">
-                      <h3 className="step-title">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
-                          <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                          <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
-                        </svg>
-                        Contact Information
-                      </h3>
-                      <p className="step-description">How can we reach you?</p>
-                    </div>
-
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            First Name <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            name="firstName"
-                            value={formData.firstName}
-                            onChange={handleChange}
-                            placeholder="Enter first name"
-                            className={`form-input ${errors.firstName ? 'is-invalid' : ''}`}
-                            maxLength={15}
-                          />
-                          {errors.firstName && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.firstName}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Last Name <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            name="lastName"
-                            value={formData.lastName}
-                            onChange={handleChange}
-                            placeholder="Enter last name"
-                            className={`form-input ${errors.lastName ? 'is-invalid' : ''}`}
-                            maxLength={15}
-                          />
-                          {errors.lastName && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.lastName}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Mobile Number <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            type="tel"
-                            name="mobileNumber"
-                            value={formData.mobileNumber}
-                            onChange={handleChange}
-                            placeholder="Enter mobile number"
-                            className={`form-input ${errors.mobileNumber ? 'is-invalid' : ''}`}
-                            maxLength={15}
-                          />
-                          {errors.mobileNumber && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.mobileNumber}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Email Address <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            type="email"
-                            name="personalEmail"
-                            value={formData.personalEmail}
-                            onChange={handleChange}
-                            placeholder="Enter email address"
-                            className={`form-input ${errors.personalEmail ? 'is-invalid' : ''}`}
-                          />
-                          {errors.personalEmail && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.personalEmail}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </div>
-
-                  {/* Step 3: Location */}
-                  <div className={`form-step ${currentStep === 3 ? 'active' : ''}`}>
-                    <div className="step-header">
-                      <h3 className="step-title">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
-                          <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                        </svg>
-                        Location Details
-                      </h3>
-                      <p className="step-description">Where are you located?</p>
-                    </div>
-
-                    <Row className="g-3">
-                      <Col md={4}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Country <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Select
-                            name="countryId"
-                            value={formData.countryId}
-                            onChange={handleChange}
-                            className={`form-input ${errors.countryId ? 'is-invalid' : ''}`}
-                          >
-                            <option value="">Select country</option>
-                            {countries.map((country) => (
-                              <option key={country.id} value={country.id}>
-                                {country.name}
-                              </option>
-                            ))}
-                          </Form.Select>
-                          {errors.countryId && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.countryId}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-
-                      <Col md={4}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Province/State <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Select
-                            name="provinceId"
-                            value={formData.provinceId}
-                            onChange={handleChange}
-                            disabled={!formData.countryId}
-                            className={`form-input ${errors.provinceId ? 'is-invalid' : ''}`}
-                          >
-                            <option value="">Select province/state</option>
-                            {Array.isArray(provinces) &&
-                              provinces.map((province) => (
-                                <option key={province.id} value={province.id}>
-                                  {province.stateName}
-                                </option>
-                              ))}
-                          </Form.Select>
-                          {errors.provinceId && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.provinceId}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-
-                      <Col md={4}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            City <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Select
-                            name="placeId"
-                            value={formData.placeId}
-                            onChange={handleChange}
-                            disabled={!formData.provinceId}
-                            className={`form-input ${errors.placeId ? 'is-invalid' : ''}`}
-                          >
-                            <option value="">Select city</option>
-                            {Array.isArray(places) &&
-                              places.map((place) => (
-                                <option key={place.id} value={place.id}>
-                                  {place.name}
-                                </option>
-                              ))}
-                          </Form.Select>
-                          {errors.placeId && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.placeId}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-
-                      <Col xs={12}>
-                        <Form.Group>
-                          <Form.Label className="form-label">
-                            Address <span className="required">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            as="textarea"
-                            rows={3}
-                            name="address"
-                            value={formData.address}
-                            onChange={handleChange}
-                            placeholder="Enter your complete address"
-                            className={`form-input ${errors.address ? 'is-invalid' : ''}`}
-                          />
-                          {errors.address && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.address}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </div>
-
-                  {/* Step 4: GST Details (India only) */}
-                  {formData.countryId === "1" && (
-                    <div className={`form-step ${currentStep === 4 ? 'active' : ''}`}>
-                      <div className="step-header">
-                        <h3 className="step-title">
-                          <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
-                            <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                          </svg>
-                          GST Information
-                        </h3>
-                        <p className="step-description">Tax registration details for Indian businesses</p>
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Company Type <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                name="agentCategoryId"
+                                value={formData.agentCategoryId}
+                                onChange={handleChange}
+                                className={`form-input ${errors.agentCategoryId ? 'is-invalid' : ''}`}
+                              >
+                                <option value="">Select company type</option>
+                                {agentCategoryies.map((agent) => (
+                                  <option key={agent.agentCategoryId} value={agent.agentCategoryId}>
+                                    {agent.name}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                              {errors.agentCategoryId && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.agentCategoryId}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
                       </div>
 
-                      <Row className="g-3">
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="form-label">
-                              Agency Classification
-                            </Form.Label>
-                            <Form.Select
-                              name="agentClassification"
-                              value={formData.agentClassification}
-                              onChange={handleChange}
-                              className="form-input"
-                            >
-                              <option value="registered">Registered</option>
-                              <option value="unregistered">Unregistered</option>
-                            </Form.Select>
-                          </Form.Group>
-                        </Col>
+                      {/* Step 2: Contact Information */}
+                      <div className={`form-step ${currentStep === 2 ? 'active' : ''}`}>
+                        <div className="step-header">
+                          <h3 className="step-title">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
+                              <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                              <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                            </svg>
+                            Contact Information
+                          </h3>
+                          <p className="step-description">How can we reach you?</p>
+                        </div>
 
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="form-label">
-                              GSTIN <span className="required">*</span>
-                            </Form.Label>
-                            <Form.Control
-                              type="text"
-                              name="agentGstIn"
-                              value={formData.agentGstIn}
-                              onChange={handleChange}
-                              placeholder="Enter 15-digit GSTIN"
-                              className={`form-input ${errors.agentGstIn ? 'is-invalid' : ''}`}
-                              maxLength={15}
-                            />
-                            {errors.agentGstIn && (
-                              <Form.Control.Feedback type="invalid">
-                                {errors.agentGstIn}
-                              </Form.Control.Feedback>
-                            )}
-                          </Form.Group>
-                        </Col>
-
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="form-label">
-                              Provisional GST Number
-                            </Form.Label>
-                            <Form.Control
-                              type="text"
-                              name="agentProvisionalGstno"
-                              value={formData.agentProvisionalGstno}
-                              onChange={handleChange}
-                              placeholder="Enter provisional GST number"
-                              className="form-input"
-                              maxLength={30}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="form-label">
-                              Correspondence Email
-                            </Form.Label>
-                            <Form.Control
-                              type="email"
-                              name="agentCorrespondmail"
-                              value={formData.agentCorrespondmail}
-                              onChange={handleChange}
-                              placeholder="Enter correspondence email"
-                              className={`form-input ${errors.agentCorrespondmail ? 'is-invalid' : ''}`}
-                            />
-                            {errors.agentCorrespondmail && (
-                              <Form.Control.Feedback type="invalid">
-                                {errors.agentCorrespondmail}
-                              </Form.Control.Feedback>
-                            )}
-                          </Form.Group>
-                        </Col>
-
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="form-label">
-                              GST Registration Status
-                            </Form.Label>
-                            <Form.Control
-                              type="text"
-                              name="agentRegisterstatus"
-                              value={formData.agentRegisterstatus}
-                              onChange={handleChange}
-                              placeholder="Enter registration status"
-                              className="form-input"
-                              maxLength={30}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="form-label">
-                              HSN/SAC Code
-                            </Form.Label>
-                            <Form.Control
-                              type="text"
-                              name="agentHsncode"
-                              value={formData.agentHsncode}
-                              onChange={handleChange}
-                              placeholder="Enter HSN/SAC code"
-                              className="form-input"
-                              maxLength={30}
-                            />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                    </div>
-                  )}
-
-                                     {/* Form Actions */}
-                   <div className="form-actions">
-                     <div className="d-flex justify-content-between align-items-center">
-                       <div className="form-info">
-                         <span className="required">*</span> Required fields
-                       </div>
-                       <div className="d-flex gap-3">
-                         {currentStep > 1 && (
-                           <Button 
-                             type="button" 
-                             variant="outline-secondary" 
-                             size="lg"
-                             onClick={() => setCurrentStep(currentStep - 1)}
-                             className="nav-button"
-                           >
-                             <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="me-2">
-                               <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                             </svg>
-                             Previous
-                           </Button>
-                         )}
-                                                   {currentStep < 3 && (
-                            <Button 
-                              type="button" 
-                              variant="outline-primary" 
-                              size="lg"
-                              onClick={handleNextStep}
-                              className="nav-button"
-                            >
-                              Next
-                              <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="ms-2">
-                                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                              </svg>
-                            </Button>
-                          )}
-                          {currentStep === 3 && formData.countryId === "1" && (
-                            <Button 
-                              type="button" 
-                              variant="outline-primary" 
-                              size="lg"
-                              onClick={handleNextStep}
-                              className="nav-button"
-                            >
-                              Next
-                              <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="ms-2">
-                                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                              </svg>
-                            </Button>
-                          )}
-                                                   {currentStep === 3 && formData.countryId !== "1" && (
-                            <Button 
-                              type="submit" 
-                              variant="primary" 
-                              size="lg"
-                              disabled={isSubmitting}
-                              className="submit-button"
-                            >
-                              {isSubmitting ? (
-                                <>
-                                  <svg className="spinner me-2" width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                                  </svg>
-                                  Creating Account...
-                                </>
-                              ) : (
-                                <>
-                                  <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="me-2">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                  </svg>
-                                  Create Account
-                                </>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                First Name <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="firstName"
+                                value={formData.firstName}
+                                onChange={handleChange}
+                                placeholder="Enter first name"
+                                className={`form-input ${errors.firstName ? 'is-invalid' : ''}`}
+                                maxLength={15}
+                              />
+                              {errors.firstName && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.firstName}
+                                </Form.Control.Feedback>
                               )}
-                            </Button>
-                          )}
-                          {currentStep === 4 && formData.countryId === "1" && (
-                            <Button 
-                              type="submit" 
-                              variant="primary" 
-                              size="lg"
-                              disabled={isSubmitting}
-                              className="submit-button"
-                            >
-                              {isSubmitting ? (
-                                <>
-                                  <svg className="spinner me-2" width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                                  </svg>
-                                  Creating Account...
-                                </>
-                              ) : (
-                                <>
-                                  <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="me-2">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                  </svg>
-                                  Create Account
-                                </>
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Last Name <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="lastName"
+                                value={formData.lastName}
+                                onChange={handleChange}
+                                placeholder="Enter last name"
+                                className={`form-input ${errors.lastName ? 'is-invalid' : ''}`}
+                                maxLength={15}
+                              />
+                              {errors.lastName && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.lastName}
+                                </Form.Control.Feedback>
                               )}
-                            </Button>
-                          )}
-                       </div>
-                     </div>
-                   </div>
-                 </Card.Body>
-               </Card>
-             </Form>
-           </div>
-         </>
-       )}
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Mobile Number <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Control
+                                type="tel"
+                                name="mobileNumber"
+                                value={formData.mobileNumber}
+                                onChange={handleChange}
+                                placeholder="Enter mobile number"
+                                className={`form-input ${errors.mobileNumber ? 'is-invalid' : ''}`}
+                                maxLength={15}
+                              />
+                              {errors.mobileNumber && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.mobileNumber}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Email Address <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Control
+                                type="email"
+                                name="personalEmail"
+                                value={formData.personalEmail}
+                                onChange={handleChange}
+                                placeholder="Enter email address"
+                                className={`form-input ${errors.personalEmail ? 'is-invalid' : ''}`}
+                              />
+                              {errors.personalEmail && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.personalEmail}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                      </div>
+
+                      {/* Step 3: Location */}
+                      <div className={`form-step ${currentStep === 3 ? 'active' : ''}`}>
+                        <div className="step-header">
+                          <h3 className="step-title">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
+                              <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                            </svg>
+                            Location Details
+                          </h3>
+                          <p className="step-description">Where are you located?</p>
+                        </div>
+
+                        <Row className="g-3">
+                          <Col md={4}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Country <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                name="countryId"
+                                value={formData.countryId}
+                                onChange={handleChange}
+                                className={`form-input ${errors.countryId ? 'is-invalid' : ''}`}
+                              >
+                                <option value="">Select country</option>
+                                {countries.map((country) => (
+                                  <option key={country.id} value={country.id}>
+                                    {country.name}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                              {errors.countryId && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.countryId}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={4}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Province/State <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                name="provinceId"
+                                value={formData.provinceId}
+                                onChange={handleChange}
+                                disabled={!formData.countryId}
+                                className={`form-input ${errors.provinceId ? 'is-invalid' : ''}`}
+                              >
+                                <option value="">Select province/state</option>
+                                {Array.isArray(provinces) &&
+                                  provinces.map((province) => (
+                                    <option key={province.id} value={province.id}>
+                                      {province.stateName}
+                                    </option>
+                                  ))}
+                              </Form.Select>
+                              {errors.provinceId && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.provinceId}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={4}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                City <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                name="placeId"
+                                value={formData.placeId}
+                                onChange={handleChange}
+                                disabled={!formData.provinceId}
+                                className={`form-input ${errors.placeId ? 'is-invalid' : ''}`}
+                              >
+                                <option value="">Select city</option>
+                                {Array.isArray(places) &&
+                                  places.map((place) => (
+                                    <option key={place.id} value={place.id}>
+                                      {place.name}
+                                    </option>
+                                  ))}
+                              </Form.Select>
+                              {errors.placeId && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.placeId}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+
+                          <Col xs={12}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Address <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Control
+                                as="textarea"
+                                rows={3}
+                                name="address"
+                                value={formData.address}
+                                onChange={handleChange}
+                                placeholder="Enter your complete address"
+                                className={`form-input ${errors.address ? 'is-invalid' : ''}`}
+                              />
+                              {errors.address && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.address}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                      </div>
+
+                      {/* Step 4: GST Details (India only) */}
+                      {formData.countryId === "1" && (
+                        <div className={`form-step ${currentStep === 4 ? 'active' : ''}`}>
+                          <div className="step-header">
+                            <h3 className="step-title">
+                              <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
+                                <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                              </svg>
+                              GST Information
+                            </h3>
+                            <p className="step-description">Tax registration details for Indian businesses</p>
+                          </div>
+
+                          <Row className="g-3">
+                            <Col md={6}>
+                              <Form.Group>
+                                <Form.Label className="form-label">
+                                  Agency Classification
+                                </Form.Label>
+                                <Form.Select
+                                  name="agentClassification"
+                                  value={formData.agentClassification}
+                                  onChange={handleChange}
+                                  className="form-input"
+                                >
+                                  <option value="registered">Registered</option>
+                                  <option value="unregistered">Unregistered</option>
+                                </Form.Select>
+                              </Form.Group>
+                            </Col>
+
+                            <Col md={6}>
+                              <Form.Group>
+                                <Form.Label className="form-label">
+                                  GSTIN <span className="required">*</span>
+                                </Form.Label>
+                                <Form.Control
+                                  type="text"
+                                  name="agentGstIn"
+                                  value={formData.agentGstIn}
+                                  onChange={handleChange}
+                                  placeholder="Enter 15-digit GSTIN"
+                                  className={`form-input ${errors.agentGstIn ? 'is-invalid' : ''}`}
+                                  maxLength={15}
+                                />
+                                {errors.agentGstIn && (
+                                  <Form.Control.Feedback type="invalid">
+                                    {errors.agentGstIn}
+                                  </Form.Control.Feedback>
+                                )}
+                              </Form.Group>
+                            </Col>
+
+                            <Col md={6}>
+                              <Form.Group>
+                                <Form.Label className="form-label">
+                                  Provisional GST Number
+                                </Form.Label>
+                                <Form.Control
+                                  type="text"
+                                  name="agentProvisionalGstno"
+                                  value={formData.agentProvisionalGstno}
+                                  onChange={handleChange}
+                                  placeholder="Enter provisional GST number"
+                                  className="form-input"
+                                  maxLength={30}
+                                />
+                              </Form.Group>
+                            </Col>
+
+                            <Col md={6}>
+                              <Form.Group>
+                                <Form.Label className="form-label">
+                                  Correspondence Email
+                                </Form.Label>
+                                <Form.Control
+                                  type="email"
+                                  name="agentCorrespondmail"
+                                  value={formData.agentCorrespondmail}
+                                  onChange={handleChange}
+                                  placeholder="Enter correspondence email"
+                                  className={`form-input ${errors.agentCorrespondmail ? 'is-invalid' : ''}`}
+                                />
+                                {errors.agentCorrespondmail && (
+                                  <Form.Control.Feedback type="invalid">
+                                    {errors.agentCorrespondmail}
+                                  </Form.Control.Feedback>
+                                )}
+                              </Form.Group>
+                            </Col>
+
+                            <Col md={6}>
+                              <Form.Group>
+                                <Form.Label className="form-label">
+                                  GST Registration Status
+                                </Form.Label>
+                                <Form.Control
+                                  type="text"
+                                  name="agentRegisterstatus"
+                                  value={formData.agentRegisterstatus}
+                                  onChange={handleChange}
+                                  placeholder="Enter registration status"
+                                  className="form-input"
+                                  maxLength={30}
+                                />
+                              </Form.Group>
+                            </Col>
+
+                            <Col md={6}>
+                              <Form.Group>
+                                <Form.Label className="form-label">
+                                  HSN/SAC Code
+                                </Form.Label>
+                                <Form.Control
+                                  type="text"
+                                  name="agentHsncode"
+                                  value={formData.agentHsncode}
+                                  onChange={handleChange}
+                                  placeholder="Enter HSN/SAC code"
+                                  className="form-input"
+                                  maxLength={30}
+                                />
+                              </Form.Group>
+                            </Col>
+                          </Row>
+                        </div>
+                      )}
+
+                      {/* Form Actions */}
+                      <div className="form-actions">
+                        <div className="d-flex justify-content-between align-items-center">
+                          <div className="form-info">
+                            <span className="required">*</span> Required fields
+                          </div>
+                          <div className="d-flex gap-3">
+                            {currentStep > 1 && (
+                              <Button
+                                type="button"
+                                variant="outline-secondary"
+                                size="lg"
+                                onClick={() => setCurrentStep(currentStep - 1)}
+                                className="nav-button"
+                              >
+                                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="me-2">
+                                  <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                                Previous
+                              </Button>
+                            )}
+                            {currentStep < 3 && (
+                              <Button
+                                type="button"
+                                variant="outline-primary"
+                                size="lg"
+                                onClick={handleNextStep}
+                                className="nav-button"
+                              >
+                                Next
+                                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="ms-2">
+                                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </Button>
+                            )}
+                            {currentStep === 3 && formData.countryId === "1" && (
+                              <Button
+                                type="button"
+                                variant="outline-primary"
+                                size="lg"
+                                onClick={handleNextStep}
+                                className="nav-button"
+                              >
+                                Next
+                                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="ms-2">
+                                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </Button>
+                            )}
+                            {currentStep === 3 && formData.countryId !== "1" && (
+                              <Button
+                                type="submit"
+                                variant="primary"
+                                size="lg"
+                                disabled={isSubmitting}
+                                className="submit-button"
+                              >
+                                {isSubmitting ? (
+                                  <>
+                                    <svg className="spinner me-2" width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                                    </svg>
+                                    Creating Account...
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="me-2">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    Create Account
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                            {currentStep === 4 && formData.countryId === "1" && (
+                              <Button
+                                type="submit"
+                                variant="primary"
+                                size="lg"
+                                disabled={isSubmitting}
+                                className="submit-button"
+                              >
+                                {isSubmitting ? (
+                                  <>
+                                    <svg className="spinner me-2" width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                                    </svg>
+                                    Creating Account...
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="me-2">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    Create Account
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                </Form>
+              </div>
+            </>
+          )}
         </div>
-      </Container>
-    </div>
+      </Container >
+    </div >
   );
 };
 

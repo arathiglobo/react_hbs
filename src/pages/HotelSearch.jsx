@@ -28,6 +28,8 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import "../styles/HotelSearch.css";
 
+
+
 function RoomGuestSelector({ value, onChange }) {
   const [rooms, setRooms] = useState(value);
 
@@ -189,9 +191,10 @@ function LazyImage({ src, alt, className }) {
   return (
     <div
       ref={containerRef}
-      className={`ratio ratio-16x9 rounded-top overflow-hidden ${
+      className={`ratio  rounded-xl overflow-hidden ${
         className || ""
       }`}
+      style={{ "--bs-aspect-ratio": "66.25%" }}
     >
       {!loaded && <div className="skeleton w-100 h-100" />}
       {inView && (
@@ -211,7 +214,14 @@ function LazyImage({ src, alt, className }) {
   );
 }
 
+const fullText = "Search Hotel Name...";
+
+
+
 export default function HotelSearch() {
+
+  const [isSticky, setIsSticky] = useState(false);
+  const [placeholder, setPlaceholder] = useState("");
   const navigate = useNavigate();
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
@@ -275,6 +285,40 @@ export default function HotelSearch() {
     { value: "ratehawk", label: "Ratehawk" },
     { value: "darina", label: "Darina" },
   ];
+
+  useEffect(() => {
+  const handleScroll = () => {
+    setIsSticky(window.scrollY > 120); // adjust threshold
+  };
+
+  window.addEventListener("scroll", handleScroll);
+  return () => window.removeEventListener("scroll", handleScroll);
+}, []);
+
+    useEffect(() => {
+    let index = 0;
+    let isDeleting = false;
+
+    const interval = setInterval(() => {
+      if (!isDeleting) {
+        setPlaceholder(fullText.slice(0, index + 1));
+        index++;
+
+        if (index === fullText.length) {
+          setTimeout(() => (isDeleting = true), 900);
+        }
+      } else {
+        setPlaceholder(fullText.slice(0, index - 1));
+        index--;
+
+        if (index === 0) {
+          isDeleting = false;
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Debounce utility function
   function debounce(func, wait) {
@@ -613,6 +657,8 @@ export default function HotelSearch() {
       return res.data;
     } catch (err) {
       console.error("Fetch hotels failed:", err);
+console.log("hotelType:", hotelType);
+console.log("channelType:", channelType);
       setPollStatus("ERROR");
       throw err;
     }
@@ -1198,60 +1244,25 @@ export default function HotelSearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl mb-4 search-card-modern">
+          <Card className={`shadow-sm rounded-xl mb-4 search-card-modern bg-white ${
+    isSticky ? "search-card-sticky" : ""
+  }`}>
             <Card.Body className="p-4">
               <div className="text-center mb-4">
-                <h2 className="fw-bold text-primary mb-2">
+                <h2 className="fw-semibold text-primary mb-1">
                   Find Your Perfect Stay
                 </h2>
-                <p className="text-muted">
+                {/* <p className="text-muted">
                   Discover amazing hotels and exclusive deals
-                </p>
+                </p> */}
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
                 <Row className="g-4">
-                  <Col lg={3} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaGlobe className="me-2 text-primary" />
-                        Nationality
-                      </Form.Label>
-                      <Select
-                        options={nationalityList}
-                        value={selectedNationality}
-                        onChange={(option) => {
-                          setSelectedNationality(option);
-                          if (option) clearError("nationality");
-                        }}
-                        placeholder="Select nationality"
-                        isSearchable
-                        isClearable
-                        className="modern-select"
-                        menuPortalTarget={document.body}   // 👈 force portal
-  styles={{
-    menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-    control: (base) => ({
-      ...base,
-      minHeight: "42px",
-      border: "1px solid #dee2e6",
-      "&:hover": { borderColor: "#86b7fe" },
-    }),
-  }}
-               
-                      />
-                      {errors.nationality && (
-                        <div className="text-danger small mt-1">
-                          {errors.nationality}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
 
-                  <Col lg={6} md={6}>
+                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        <FaLightbulb className="me-2 text-warning" />
                         Destination
                       </Form.Label>
                       <Select
@@ -1324,29 +1335,71 @@ export default function HotelSearch() {
                     </Form.Group>
                   </Col>
 
-                  <Col lg={3} md={6}>
+                  <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        📅 Check-in
+                        
+                        Nationality
                       </Form.Label>
-                      <Form.Control
-                        className="form-control-modern"
-                        type="date"
-                        value={checkIn}
-                        min={today}
-                        onChange={(e) => {
-                          const newCheckIn = e.target.value;
-                          setCheckIn(newCheckIn);
-                          if (newCheckIn) clearError("checkIn");
-                          
-                          // Always set checkout to next day when check-in changes
-                          if (newCheckIn) {
-                            const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
-                            setCheckOut(nextDay);
-                            clearError("checkOut");
-                          }
+                      <Select
+                        options={nationalityList}
+                        value={selectedNationality}
+                        onChange={(option) => {
+                          setSelectedNationality(option);
+                          if (option) clearError("nationality");
                         }}
+                        placeholder="Select nationality"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}   // 👈 force portal
+  styles={{
+    menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+    control: (base) => ({
+      ...base,
+      minHeight: "42px",
+      border: "1px solid #dee2e6",
+      "&:hover": { borderColor: "#86b7fe" },
+    }),
+  }}
+               
                       />
+                      {errors.nationality && (
+                        <div className="text-danger small mt-1">
+                          {errors.nationality}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                 
+
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                       Check-in
+                      </Form.Label>
+                     <Form.Control
+  className="form-control-modern"
+  type="date"
+  value={checkIn}
+  min={today}
+  onClick={(e) => {
+    e.target.showPicker && e.target.showPicker();
+  }}
+  onChange={(e) => {
+    const newCheckIn = e.target.value;
+    setCheckIn(newCheckIn);
+    if (newCheckIn) clearError("checkIn");
+
+    if (newCheckIn) {
+      const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
+      setCheckOut(nextDay);
+      clearError("checkOut");
+    }
+  }}
+/>
+
                       {errors.checkIn && (
                         <div className="text-danger small mt-1">
                           {errors.checkIn}
@@ -1354,34 +1407,39 @@ export default function HotelSearch() {
                       )}
                     </Form.Group>
                   </Col>
+<Col lg={3} md={6}>
+  <Form.Group>
+    <Form.Label className="fw-semibold text-dark">
+      Check-out
+    </Form.Label>
 
-                  <Col lg={3} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        📅 Check-out
-                      </Form.Label>
-                      <Form.Control
-                        className="form-control-modern"
-                        type="date"
-                        value={checkOut}
-                        min={minCheckOutDate}
-                        onChange={(e) => {
-                          setCheckOut(e.target.value);
-                          if (e.target.value) clearError("checkOut");
-                        }}
-                      />
-                      {errors.checkOut && (
-                        <div className="text-danger small mt-1">
-                          {errors.checkOut}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
+    <Form.Control
+      className="form-control-modern"
+      type="date"
+      value={checkOut}
+      min={minCheckOutDate}
+      onClick={(e) => {
+        e.target.showPicker && e.target.showPicker();
+      }}
+      onChange={(e) => {
+        setCheckOut(e.target.value);
+        if (e.target.value) clearError("checkOut");
+      }}
+    />
+
+    {errors.checkOut && (
+      <div className="text-danger small mt-1">
+        {errors.checkOut}
+      </div>
+    )}
+  </Form.Group>
+</Col>
+
 
                   <Col lg={2} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        🌙 Nights
+                        Nights
                       </Form.Label>
                       <Form.Control
                         className="form-control-modern"
@@ -1396,7 +1454,7 @@ export default function HotelSearch() {
 
                   <Col lg={4} md={6}>
                     <Form.Label className="fw-semibold text-dark">
-                      👥 Rooms & Guests
+                     Rooms & Guests
                     </Form.Label>
                     <Button
                       variant="outline-primary"
@@ -1416,7 +1474,7 @@ export default function HotelSearch() {
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        👤 Agent
+                         Agent
                       </Form.Label>
                       <Form.Select
                         className="form-control-modern"
@@ -1451,7 +1509,7 @@ export default function HotelSearch() {
                   </Row>
                 )}
 
-                <Row className="mt-4">
+                <Row className="mt-3">
                   <Col className="d-flex justify-content-center gap-3">
                     <Button
                       type="submit"
@@ -1535,267 +1593,424 @@ export default function HotelSearch() {
                 </Card>
               )} */}
 
-              <Card className="shadow-sm rounded-xl mb-3 filtersection">
-                <Card.Body className="p-3">
-                  <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-3">
-                    <h6 className="mb-2 mb-md-0 fw-bold text-primary">
-                      <FaSearch className="me-2" />
-                      {/* Filters & Sort ({completedChannels.size} channels complete) */}
-                      Filters & Sort
-                    </h6>
-                    <div className="d-flex flex-wrap gap-2">
-                      <ButtonGroup size="sm">
-                        <ToggleButton
-                          id="view-card"
-                          type="radio"
-                          variant={
-                            view === "card" ? "primary" : "outline-secondary"
-                          }
-                          checked={view === "card"}
-                          value="card"
-                          onChange={() => setView("card")}
-                        >
-                          <FaBuilding className="me-1" />
-                          Cards
-                        </ToggleButton>
-                        <ToggleButton
-                          id="view-map"
-                          type="radio"
-                          variant={
-                            view === "map" ? "primary" : "outline-secondary"
-                          }
-                          checked={view === "map"}
-                          value="map"
-                          onChange={() => setView("map")}
-                          disabled
-                        >
-                          🗺️ Map
-                        </ToggleButton>
-                      </ButtonGroup>
-                    </div>
-                  </div>
+              <Row className="g-4">
 
-                  <Row className="g-3">
-                    <Col lg={3} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaSearch className="me-1 text-info" />
-                          Hotel Name
-                        </Form.Label>
-                        <Form.Control
-                          type="text"
-                          placeholder="Search hotels..."
-                          className="form-control-modern-sm"
-                          value={hotelSearchTerm}
-                          onChange={(e) => setHotelSearchTerm(e.target.value)}
-                        />
-                      </Form.Group>
-                    </Col>
+  {/* ================= LEFT SIDEBAR ================= */}
+  <Col lg={3} className="leftside d-none d-lg-block sticky-top">
+  <div  style={{ maxWidth: "250px" }} >
+    <Card className=" shadow-sm rounded-xl filtersection " >
+      <Card.Body className=" p-3 ">
 
-                    <Col lg={3} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaStar className="me-1 text-warning" />
-                          Star Rating
-                        </Form.Label>
-                        <Select
-                          isMulti
-                          options={starOptions}
-                          value={starRating}
-                          onChange={setStarRating}
-                          placeholder="All Stars"
-                          className="modern-select-sm"
-                          menuPosition="absolute"
-                          menuPlacement="auto"
-                           menuPortalTarget={document.body}   // 👈 force portal
-                           styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-                            control: (base) => ({
-                              ...base,
-                              minHeight: "36px",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                              fontSize: "0.875rem",
-                              "&:hover": {
-                                borderColor: "#86b7fe",
-                              },
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              zIndex: 99999,
-                              position: "absolute",
-                              marginTop: "2px",
-                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                            }),
-                          }}
-                        />
-                      </Form.Group>
-                    </Col>
+        {/* MAP */}
+      <div className="map-preview-wrapper mb-3">
+  <img
+    src="/images/map.jpg"
+    alt="Map preview"
+    className="map-preview-img"
+  />
 
-                    <Col lg={3} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaBuilding className="me-1 text-info" />
-                          Hotel Type
-                        </Form.Label>
-                        <Select
-                          isMulti
-                          options={hotelTypeOptions}
-                          value={hotelType}
-                          onChange={setHotelType}
-                          placeholder="All Types"
-                          className="modern-select-sm"
-                          menuPosition="absolute"
-                          menuPlacement="auto"
-                           menuPortalTarget={document.body}  
-                          styles={{
-                             menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-                            control: (base) => ({
-                              ...base,
-                              minHeight: "36px",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                              fontSize: "0.875rem",
-                              "&:hover": {
-                                borderColor: "#86b7fe",
-                              },
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              zIndex: 99999,
-                              position: "absolute",
-                              marginTop: "2px",
-                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                            }),
-                          }}
-                        />
-                      </Form.Group>
-                    </Col>
+  <button className="map-overlay-btn">
+    EXPLORE ON MAP 📍
+  </button>
+</div>
 
-                    <Col lg={3} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaGlobe className="me-1 text-success" />
-                          Channel
-                        </Form.Label>
-                        <Select
-                          isMulti
-                          options={channelTypeOptions}
-                          value={channelType}
-                          onChange={setChannelType}
-                          placeholder="All Channels"
-                          className="modern-select-sm"
-                          menuPosition="absolute"
-                          menuPlacement="auto"
-                           menuPortalTarget={document.body}  
-                          styles={{
-                             menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-                            control: (base) => ({
-                              ...base,
-                              minHeight: "36px",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                              fontSize: "0.875rem",
-                              "&:hover": {
-                                borderColor: "#86b7fe",
-                              },
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              zIndex: 99999,
-                              position: "absolute",
-                              marginTop: "2px",
-                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                              border: "1px solid #dee2e6",
-                              borderRadius: "6px",
-                              maxHeight: "300px", // Increased from 200px
-                              overflowY: "auto", // Enable scrolling if needed
-                            }),
-                            option: (base, state) => ({
-                              ...base,
-                              backgroundColor: state.isFocused
-                                ? "#f8f9fa"
-                                : "white",
-                              color: state.isSelected ? "white" : "#212529",
-                              "&:active": {
-                                backgroundColor: "#0d6efd",
-                              },
-                            }),
-                          }}
-                        />
-                      </Form.Group>
-                    </Col>
+ 
+  <Form.Control
+    type="text"
+    placeholder={placeholder}
+    className="ps-3"
+    value={hotelSearchTerm}
+    onChange={(e) => setHotelSearchTerm(e.target.value)}
+  /><br/>
 
-                    <Col lg={2} md={4} sm={6}>
-                      <Form.Group>
-                        <Form.Label className="mb-1 small fw-semibold text-dark">
-                          <FaSort className="me-1 text-secondary" />
-                          Sort By
-                        </Form.Label>
-                        <Form.Select
-                          size="sm"
-                          value={sortBy}
-                          onChange={(e) => setSortBy(e.target.value)}
-                          className="form-control-modern-sm"
-                        >
-                          <option value="priceAsc">Price: Low to High</option>
-                          <option value="priceDesc">Price: High to Low</option>
-                        </Form.Select>
-                      </Form.Group>
-                    </Col>
 
-                    <Col
-                      lg={2}
-                      md={4}
-                      sm={6}
-                      className="d-flex align-items-end"
+        {/* HOTEL TYPE */}
+        <Form.Group className="mb-3">
+  <Form.Label className="fw-semibold small">Hotel Type</Form.Label>
+
+  <div className="filter-checkbox-list">
+    {hotelTypeOptions.map((item) => {
+      const isChecked = hotelType.some(
+        (t) => t.value === item.value
+      );
+
+      return (
+        <Form.Check
+          key={item.value}
+          type="checkbox"
+          id={`hotel-type-${item.value}`}
+          label={item.label}
+          checked={isChecked}
+          onChange={(e) => {
+            if (e.target.checked) {
+              setHotelType([...hotelType, item]); // ✅ store object
+            } else {
+              setHotelType(
+                hotelType.filter(
+                  (t) => t.value !== item.value
+                )
+              );
+            }
+          }}
+        />
+      );
+    })}
+  </div>
+</Form.Group>
+
+<hr/>
+
+        {/* CHANNEL */}
+       <Form.Group>
+  <Form.Label className="fw-semibold small">Channel</Form.Label>
+
+  <div className="filter-checkbox-list">
+    {channelTypeOptions.map((item) => {
+      const isChecked = channelType.some(
+        (c) => c.value === item.value
+      );
+
+      return (
+        <Form.Check
+          key={item.value}
+          type="checkbox"
+          id={`channel-${item.value}`}
+          label={item.label}
+          checked={isChecked}
+          onChange={(e) => {
+            if (e.target.checked) {
+              setChannelType([...channelType, item]); // ✅ store object
+            } else {
+              setChannelType(
+                channelType.filter(
+                  (c) => c.value !== item.value
+                )
+              );
+            }
+          }}
+        />
+      );
+    })}
+  </div>
+</Form.Group>
+
+
+
+      </Card.Body>
+    </Card>
+    </div>
+  </Col>
+
+  {/* ================= RIGHT CONTENT ================= */}
+  <Col lg={9}>
+
+    {/* ===== HORIZONTAL FILTER / SORT BAR ===== */}
+    <Card className="shadow-sm rounded-xl mb-3 filtersection">
+      <Card.Body className="p-2">
+        <div className="d-flex align-items-center gap-3 flex-wrap">
+
+          {/* STAR RATING */}
+         <Select
+  isMulti
+  options={starOptions}
+  value={starRating}
+  onChange={setStarRating}
+  placeholder="All Stars"
+  className="modern-select-sm"
+  menuPortalTarget={document.body}
+  styles={{
+    control: (base) => ({
+      ...base,
+      height: "36px",
+      minHeight: "36px",
+      width: "160px",
+      background: "#ffffff",
+      color: "#000000",
+      marginLeft: "30px",
+    }),
+    menuPortal: (base) => ({
+      ...base,
+      zIndex: 9999, // 🔥 THIS IS THE KEY
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999,
+    }),
+  }}
+/>
+
+
+          {/* SORT */}
+          <div className="d-flex gap-2">
+            <Button
+              size="sm"
+              className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
+              onClick={() => setSortBy("priceAsc")}
+            >
+              Low to High 
+            </Button>
+            <Button
+              size="sm"
+              className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
+              onClick={() => setSortBy("priceDesc")}
+            >
+              High to Low
+            </Button>
+          </div>
+
+          {/* CLEAR */}
+          <Button
+            className="clear-pill"
+            variant="outline-primary"
+            size="sm"
+            onClick={() => {
+              setStarRating([]);
+              setHotelType([]);
+              setChannelType([]);
+              setSortBy("priceAsc");
+              setHotelSearchTerm("");
+            }}
+          >
+            Clear
+          </Button>
+
+        </div>
+      </Card.Body>
+    </Card>
+
+    {/* ===== PAGINATION INFO ===== */}
+    {hasSearched && (
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <small className="text-muted fw-semibold">
+          Showing {filteredResults.length} results
+        </small>
+      </div>
+    )}
+
+    {/* ===== RESULT CARDS ===== */}
+    <Row className="g-4">
+      {filteredResults.map((hotel) => (
+        <Col xs={12} key={hotel.id}>
+           <div
+            style={{
+              backgroundColor: "white",
+              border: "1px solid #dee2e6",
+              borderRadius: "12px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              overflow: "hidden",
+            }}
+          >
+            <Row className="g-0">
+              {/* ================= LEFT IMAGE ================= */}
+              <Col md={4}>
+                <div
+                  style={{
+                   position: "relative",
+                    height: "100%",
+                      padding: "15px"
+                  }}
+                >
+                  <LazyImage
+                    src={hotel.image}
+                    alt={hotel.name}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      borderRadius:"9px"
+                     
+                    }}
+                  />
+
+                  {/* Rating & Channel */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "25px",
+                      left: "25px",
+                      backgroundColor: "rgba(0,0,0,0.7)",
+                      color: "white",
+                      padding: "5px 10px",
+                      borderRadius: "15px",
+                      fontSize: "12px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px",
+                    }}
+                  >
+                    <FaStar className="text-warning" />
+                    {hotel.rating}
+                    <span
+                      style={{
+                        marginLeft: "5px",
+                        backgroundColor: "#6c757d",
+                        padding: "2px 6px",
+                        borderRadius: "10px",
+                      }}
                     >
-                      <Button
-                        variant="outline-primary"
-                        size="sm"
-                        className="w-100"
-                        onClick={() => {
-                          setStarRating([]);
-                          setHotelType([]);
-                          setChannelType([]);
-                          setSortBy("priceAsc");
-                          setHotelSearchTerm("");
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
+                      {hotel.channelType.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              </Col>
 
+              {/* ================= RIGHT CONTENT ================= */}
+              <Col md={8}>
+                <div style={{ padding: "16px" }}>
+                  <h6
+                    style={{
+                      fontSize: "1.0rem",
+                      fontWeight: "600",
+                      marginBottom: "8px",
+                      color: "#333",
+                    }}
+                  >
+                    {hotel.name || "Hotel Name Not Available"}
+                  </h6>
+
+                  <p
+                    style={{
+                      fontSize: "0.875rem",
+                      color: "#666",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    📍 {hotel.address || hotel.city || "Address Not Available"}
+                  </p>
+
+                  {hotel.badge && (
+                    <span
+                      style={{
+                        backgroundColor: "#28a745",
+                        color: "white",
+                        padding: "4px 8px",
+                        borderRadius: "4px",
+                        fontSize: "0.75rem",
+                        display: "inline-block",
+                        marginBottom: "12px",
+                      }}
+                    >
+                      {hotel.badge}
+                    </span>
+                  )}
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginTop: "16px",
+                      paddingTop: "12px",
+                      borderTop: "1px solid #eee",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "1.1rem",
+                        fontWeight: "600",
+                        color: "#333",
+                      }}
+                    >
+                      {hotel.price
+                        ? `AED ${hotel.price.toLocaleString()}`
+                        : "Price on request"}
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant={
+                        clickedHotelIds.includes(hotel.id)
+                          ? "secondary"
+                          : "primary"
+                      }
+                      onClick={() => {
+                        setClickedHotelIds((prev) => [...prev, hotel.id]);
+
+                        const nationalityCode =
+                          (selectedNationality?.code || "").length === 2
+                            ? selectedNationality.code
+                            : " ";
+
+                        const roomsPayload = rooms.map((r) => ({
+                          adults: r.adults || 1,
+                          children: r.children || 0,
+                          childAges: r.childAges || [],
+                          adultAges: Array.from(
+                            { length: r.adults || 1 },
+                            () => 30
+                          ),
+                        }));
+
+                        const apiIdMapping = {
+                          jumeirah: 10,
+                          iwtx: 12,
+                          x3: 15,
+                          inhouse: 1,
+                          ratehawk: 14,
+                          darina: 16,
+                        };
+
+                        const apiId =
+                          apiIdMapping[
+                            hotel.channelType?.toLowerCase()
+                          ] || 0;
+
+                        const payload = {
+                          checkInDate: checkIn,
+                          checkOutDate: checkOut,
+                          hotelCode:
+                            hotel.hotelCode ||
+                            hotel.id
+                              ?.split("-")
+                              .slice(1)
+                              .join("-") ||
+                            "",
+                          nationality: nationalityCode,
+                          agentId: String(agent),
+                          apiId,
+                          rooms: roomsPayload,
+                        };
+
+                        const meta = {
+                          hotelName: hotel.name,
+                          address: hotel.address || hotel.city,
+                          starRating: hotel.rating || 0,
+                          phone: "",
+                          hotelImage: hotel.image,
+                        };
+
+                        sessionStorage.setItem(
+                          "roomListPayload",
+                          JSON.stringify({ payload, meta })
+                        );
+
+                        setTimeout(() => {
+                          window.open("/room-list", "_blank");
+                        }, 50);
+                      }}
+                    >
+                      View Rooms
+                    </Button>
+                  </div>
+                </div>
+              </Col>
+            </Row>
+          </div>
+          
+        </Col>
+      ))}
+    </Row>
+
+  </Col>
+
+  
                   {/* New Pagination Section After Filters */}
               {hasSearched && (
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
                   <small className="text-muted fw-semibold">
                     {filteredResults.length > 0 ? (
                       <>
-                        Showing{" "}
-                        {pageIndex * pageSize + 1}-
-                        {(hotelSearchTerm || hotelType.length > 0
-                          ? Math.min(
-                              pageIndex * pageSize + pageSize,
-                              filteredResults.length
-                            )
-                          : Math.min(
-                              pageIndex * pageSize + pageSize,
-                              totalElements
-                            ))}{" "}
-                        of{" "}
-                        {(hotelSearchTerm || hotelType.length > 0
-                          ? filteredResults.length
-                          : totalElements)}{" "}
-                        results{" "}
-                        {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
+                       
                       </>
                     ) : (
                       <>
@@ -1831,6 +2046,11 @@ export default function HotelSearch() {
                   )}
                 </div>
               )}
+</Row>
+
+
+
+
 
               {isLoading && (
                 <Card className="shadow-sm rounded-xl mb-4">
@@ -1850,292 +2070,52 @@ export default function HotelSearch() {
 
               <div>
                 {view === "card" && (
-        <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
+       <Row xs={1} sm={1} md={1} lg={1} xl={1} className="">
+  {filteredResults.length > 0 ? (
+    filteredResults.map((hotel) => {
+      return (
+        <Col key={hotel.id}>
           
-          
-          {filteredResults.length > 0 ? (
-            filteredResults.map((hotel, index) => {
-              // console.log('Hotel data:', hotel);
-              // console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
-              return (
-                        <Col key={hotel.id}>
-                          
-                          <div style={{
-                            backgroundColor: 'white',
-                            border: '1px solid #dee2e6',
-                            borderRadius: '12px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                            marginBottom: '20px',
-                            overflow: 'hidden'
-                          }}>
-                            <div style={{
-                              position: 'relative',
-                              height: '200px',
-                              overflow: 'hidden'
-                            }}>
-                              <LazyImage src={hotel.image} alt={hotel.name} />
-                              <div style={{
-                                position: 'absolute',
-                                top: '10px',
-                                right: '10px',
-                                backgroundColor: 'rgba(0,0,0,0.7)',
-                                color: 'white',
-                                padding: '5px 10px',
-                                borderRadius: '15px',
-                                fontSize: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}>
-                                <FaStar className="text-warning me-1" />
-                                {hotel.rating}
-                                <span style={{marginLeft: '5px', backgroundColor: '#6c757d', padding: '2px 6px', borderRadius: '10px'}}>
-                                  {hotel.channelType.toUpperCase()}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div style={{
-                              padding: '16px',
-                              backgroundColor: 'white'
-                            }}>
-                              <h6 style={{
-                                fontSize: '1.3rem',
-                                fontWeight: '600',
-                                marginBottom: '8px',
-                                color: '#333',
-                                lineHeight: '1.3'
-                              }}>
-                                {hotel.name || 'Hotel Name Not Available'}
-                              </h6>
-                              
-                              <p style={{
-                                fontSize: '0.875rem',
-                                color: '#666',
-                                marginBottom: '8px',
-                                lineHeight: '1.4'
-                              }}>
-                                📍 {hotel.address || 'Address Not Available'}
-                              </p>
-                              
-                              <div style={{
-                                backgroundColor: '#28a745',
-                                color: 'white',
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                display: 'inline-block',
-                                marginBottom: '12px'
-                              }}>
-                                {hotel.badge}
-                              </div>
-                              
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginTop: '12px',
-                                paddingTop: '12px',
-                                borderTop: '1px solid #eee'
-                              }}>
-                                <div style={{
-                                  fontSize: '1.5rem',
-                                  fontWeight: '600',
-                                  color: '#333'
-                                }}>
-                                  {hotel.price ? `AED ${hotel.price.toLocaleString()}` : 'Price on request'}
-                                </div>
+        </Col>
+      );
+    })
+  ) : (
+    <Col xs={12}>
+      <Card className="shadow-sm rounded-xl">
+        <Card.Body className="text-center text-muted py-5">
+          <FaSearch className="display-4 text-muted mb-3" />
+          <h5>No results found</h5>
+          <p>
+            {channelType.length > 0
+              ? `No hotels found for selected channel(s): ${channelType
+                  .map((c) => c.label)
+                  .join(", ")}`
+              : "Try adjusting your filters or search criteria."}
+          </p>
+          <Button
+            variant="outline-primary"
+            size="sm"
+            onClick={() => {
+              setStarRating([]);
+              setHotelType([]);
+              setChannelType([]);
+              setSortBy("priceAsc");
+              setHotelSearchTerm("");
+            }}
+          >
+            Clear All Filters
+          </Button>
+        </Card.Body>
+      </Card>
 
-                                 <Button
-                                  className="btn-view-rooms"
-                                  size="sm"
-                                  //  disabled={clickedHotelIds.includes(hotel.id)}
-                                  variant={clickedHotelIds.includes(hotel.id) ? "secondary" : "primary"}
-                                  onClick={() => {
-
-                                     // Add hotel ID to clickedHotelIds
-                                    setClickedHotelIds((prev) => [...prev, hotel.id]);
-                                    
-                                    const nationalityValue =
-                                      selectedNationality?.value;
-
-                                   const nationalityCode =
-                                      (selectedNationality?.code || "")
-                                        .length === 2
-                                        ? selectedNationality.code
-                                        : " ";
-
-                                    const agentIdToUse = agent; // Use selected agent or default to 1
-
-                                    // console.log("rooms before mapping::", rooms);
-                                    const roomsPayload = rooms.map((r) => ({
-                                      adults: r.adults || 1,
-                                      children: r.children || 0,
-                                      childAges:r.childAges || [],
-                                      adultAges: Array.from(
-                                        { length: r.adults || 1 },
-                                        () => 30
-                                      ),
-                                    }));
-
-                                    // Dynamic apiId based on channelType
-                                    const apiIdMapping = {
-                                      jumeirah: 10,
-                                      iwtx: 12,
-                                      x3: 15,
-                                      inhouse: 1,
-                                      ratehawk: 14,
-                                      darina: 16,
-                                    };
-                                    
-                                    const apiId = apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
+    </Col>
+  )}
+</Row>
 
 
-                                    const payload = {
-                                      checkInDate: checkIn,
-                                      checkOutDate: checkOut,
-                                      hotelCode:
-                                        hotel.hotelCode ||
-                                        hotel.id
-                                          ?.split("-")
-                                          .slice(1)
-                                          .join("-") ||
-                                        "",
-                                      nationality: nationalityCode,
-                                      agentId: String(agentIdToUse),
-                                      apiId: apiId,
-                                      rooms: roomsPayload,
-                                    };
-                                    const meta = {
-                                      hotelName: hotel.name,
-                                      address: hotel.address || hotel.city,
-                                      starRating: hotel.rating || 0,
-                                      phone: "",
-                                      hotelImage: hotel.image,
-                                    };
-
-                                    // console.log("payload::", payload);
-                                    // console.log("meta::", meta);
-                                    try {
-                                      sessionStorage.setItem(
-                                        "roomListPayload",
-                                        JSON.stringify({ payload, meta })
-                                      );
-                                      setTimeout(() => {
-                                        window.open("/room-list", "_blank");
-                                      }, 50);
-
-                                      // navigate("/room-list", { state: { payload, meta } });
-                                    } catch {}
-
-                                  }}
-                                >
-                                  View Rooms
-                                </Button>
-                             
-                              </div>
-                            </div>
-                          </div>
-                        </Col>
-                        );
-                      })
-                    ) : (
-                      <Col xs={12}>
-                        <Card className="shadow-sm rounded-xl">
-                          <Card.Body className="text-center text-muted py-5">
-                            <FaSearch className="display-4 text-muted mb-3" />
-                            <h5>No results found</h5>
-                            <p>
-                              {channelType.length > 0
-                                ? `No hotels found for the selected channel${channelType.length > 1 ? 's' : ''}: ${channelType.map(c => c.label).join(', ')}. Try selecting different channels or clearing the channel filter.`
-                                : hotelSearchTerm ||
-                                  starRating.length > 0 ||
-                                  hotelType.length > 0
-                                ? "No hotels match your current filters. Try adjusting your search criteria or clearing some filters."
-                                : "Try adjusting your filters or search criteria."}
-                            </p>
-                            {(hotelSearchTerm ||
-                              starRating.length > 0 ||
-                              hotelType.length > 0 ||
-                              channelType.length > 0) && (
-                              <Button
-                                variant="outline-primary"
-                                size="sm"
-                                onClick={() => {
-                                  setStarRating([]);
-                                  setHotelType([]);
-                                  setChannelType([]);
-                                  setSortBy("priceAsc");
-                                  setHotelSearchTerm("");
-                                }}
-                              >
-                                Clear All Filters
-                              </Button>
-                            )}
-                          </Card.Body>
-                        </Card>
-                      </Col>
-                    )}
-                  </Row>
                 )}
 
-                {hasSearched &&
-                  (() => {
-                    if (filteredResults.length === 0) {
-                      return null; // Don't show pagination when no results
-                    }
-                    
-                    const hasClientOnlyFilters =
-                      Boolean(hotelSearchTerm) || hotelType.length > 0;
-                    const showingStart = pageIndex * pageSize + 1;
-                    const showingEnd = hasClientOnlyFilters
-                      ? Math.min(
-                          pageIndex * pageSize + pageSize,
-                          filteredResults.length
-                        )
-                      : Math.min(
-                          pageIndex * pageSize + pageSize,
-                          totalElements
-                        );
-                    const totalCount = hasClientOnlyFilters
-                      ? filteredResults.length
-                      : totalElements;
-                    return (
-                      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
-                        <small className="text-muted fw-semibold">
-                          Showing {showingStart}-{showingEnd} of {totalCount}{" "}
-                          results{" "}
-                          {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
-                        </small>
-                        {!hasClientOnlyFilters && (
-                          <Pagination className="mb-0 pagination-modern">
-                            <Pagination.Prev
-                              disabled={pageIndex === 0}
-                              onClick={() => goToPage(pageIndex - 1)}
-                            />
-                            {pageNumbers.map((n) =>
-                              typeof n === "number" ? (
-                                <Pagination.Item
-                                  key={n}
-                                  active={n === pageIndex + 1}
-                                  onClick={() => goToPage(n - 1)}
-                                >
-                                  {n}
-                                </Pagination.Item>
-                              ) : (
-                                <Pagination.Ellipsis key={n} disabled />
-                              )
-                            )}
-                            <Pagination.Next
-                              disabled={pageIndex >= effectiveTotalPages - 1}
-                              onClick={() => goToPage(pageIndex + 1)}
-                            />
-                          </Pagination>
-                        )}
-                      </div>
-                    );
-                  })()}
+               
               </div>
             </div>
           )}

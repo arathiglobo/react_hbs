@@ -66,6 +66,8 @@ export default function HotelWise() {
   const [stateOptions, setStateOptions] = useState([]);
   const [placeOptions, setPlaceOptions] = useState([]);
 
+  
+
   useEffect(()=>{
      const fetchData = async ()=>{
       try{

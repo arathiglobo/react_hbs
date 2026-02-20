@@ -103,11 +103,11 @@ const SpecialRates = () => {
         axiosInstance.get("/api/country"),
       ]);
 
-        // Add "All" option with value -1 at the beginning
-        const marketsWithAll = [
-          { marketTypeId: 100, name: "All" },
-          ...(marketRes.data || [])
-        ];
+      // Add "All" option with value -1 at the beginning
+      const marketsWithAll = [
+        { marketTypeId: 100, name: "All" },
+        ...(marketRes.data || [])
+      ];
 
       setMarkets(marketsWithAll);
       setCountries(countryRes.data || []);
@@ -145,15 +145,15 @@ const SpecialRates = () => {
     }
   };
 
-    const seasonList = async () => {
+  const seasonList = async () => {
     try {
       setLoading(true);
       const seasonRes = await axiosInstance.get(`api/seasonType`);
-      console.log("seasonRes::",seasonRes.data);
-      if(seasonRes.data){
-         setSeasonData(seasonRes.data);
+      console.log("seasonRes::", seasonRes.data);
+      if (seasonRes.data) {
+        setSeasonData(seasonRes.data);
       }
-     
+
     } catch {
       toast.error("Failed to load seasons");
     } finally {
@@ -188,6 +188,17 @@ const SpecialRates = () => {
     setFormData({ ...formData, [field]: updated });
   };
 
+  // ✅ Helper function to get minimum validity to date (From date + 1 minute)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    // Add 1 minute to the from date to ensure validityTo is after validityFrom
+    date.setMinutes(date.getMinutes() + 1);
+    // Format to YYYY-MM-DDTHH:MM for datetime-local input
+    const pad = (num) => num.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
   const handleDateChange = (field, index, key, value) => {
     const updated = [...formData[field]];
     updated[index][key] = value;
@@ -197,19 +208,16 @@ const SpecialRates = () => {
   // ✅ Submit
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-  // Validate form before submission
+
+    // Validate form before submission
     if (!validateForm()) {
       console.log("Validation failed, showing errors");
-     return;
+      return;
     }
-     try {
+    try {
       const formatDate = (date) => {
         if (!date) return "";
-        const d = new Date(date);
-        return `${String(d.getDate()).padStart(2, "0")}-${String(
-          d.getMonth() + 1
-        ).padStart(2, "0")}-${d.getFullYear()}`;
+        return `${date}:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? 1 : 0;
@@ -293,7 +301,7 @@ const SpecialRates = () => {
       };
 
       console.log("Payload specialratesaveReq:", specialratesaveReq);
-     
+
       const response = await axiosInstance.post(
         "/api/hotelSpecialRate/save",
         specialratesaveReq
@@ -350,20 +358,20 @@ const SpecialRates = () => {
                             });
                             // Clear validation error when user selects
                             if (validationErrors.season) {
-                              setValidationErrors({...validationErrors, season: ""});
+                              setValidationErrors({ ...validationErrors, season: "" });
                             }
                           }}
                           className="rounded-pill"
                           isInvalid={!!validationErrors.season}
                         >
-                            <option value="">Select Season</option>
-                            {seasonData?.map(
-                                       (season) => (
-                                         <option key={season.seasonTypeId} value={season.seasonTypeId}>
-                                           {season.season}
-                                         </option>
-                                       )
-                                     )}
+                          <option value="">Select Season</option>
+                          {seasonData?.map(
+                            (season) => (
+                              <option key={season.seasonTypeId} value={season.seasonTypeId}>
+                                {season.season}
+                              </option>
+                            )
+                          )}
                         </Form.Select>
                         {validationErrors.season && (
                           <Form.Control.Feedback type="invalid">
@@ -386,7 +394,7 @@ const SpecialRates = () => {
                             });
                             // Clear validation error when user types
                             if (validationErrors.rateCode) {
-                              setValidationErrors({...validationErrors, rateCode: ""});
+                              setValidationErrors({ ...validationErrors, rateCode: "" });
                             }
                           }}
                           placeholder="Enter rate code"
@@ -415,7 +423,7 @@ const SpecialRates = () => {
                             setFormData({ ...formData, marketType: selected });
                             // Clear validation error when user selects
                             if (validationErrors.marketType) {
-                              setValidationErrors({...validationErrors, marketType: ""});
+                              setValidationErrors({ ...validationErrors, marketType: "" });
                             }
                           }}
                           classNamePrefix="react-select"
@@ -551,7 +559,7 @@ const SpecialRates = () => {
                             });
                             // Clear validation error when user types
                             if (validationErrors.minimumStay) {
-                              setValidationErrors({...validationErrors, minimumStay: ""});
+                              setValidationErrors({ ...validationErrors, minimumStay: "" });
                             }
                           }}
                           isInvalid={!!validationErrors.minimumStay}
@@ -584,7 +592,7 @@ const SpecialRates = () => {
                           <Row key={i} className="align-items-center mb-2">
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={v.from}
                                 onChange={(e) =>
                                   handleDateChange(
@@ -598,9 +606,9 @@ const SpecialRates = () => {
                             </Col>
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={v.to}
-                                min={v.from || ""}
+                                min={getMinValidityToDate(v.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -645,7 +653,7 @@ const SpecialRates = () => {
                           <Row key={i} className="align-items-center mb-2">
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={b.from}
                                 onChange={(e) =>
                                   handleDateChange(
@@ -659,9 +667,9 @@ const SpecialRates = () => {
                             </Col>
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={b.to}
-                                min={b.from || ""}
+                                min={getMinValidityToDate(b.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -832,7 +840,7 @@ const SpecialRates = () => {
                                                 placeholder="0"
                                                 value={
                                                   roomRates[
-                                                    `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
+                                                  `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
                                                   ] || ""
                                                 }
                                                 onChange={(e) => {

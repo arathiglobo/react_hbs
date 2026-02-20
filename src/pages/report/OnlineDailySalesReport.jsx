@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState,useMemo } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import {
@@ -10,17 +10,126 @@ import {
   Table,
   Pagination,
 } from "react-bootstrap";
-import { reference } from "@popperjs/core";
+import Agent from "../../components/filters/Agent";
+import Staff from "../../components/filters/Staff";
+import axiosInstance from "../../components/AxiosInstance";
+import { toast } from "react-hot-toast";
+import Supplier from "../../components/filters/Supplier";
 
 export default function OnlineDailySalesReport() {
 
+ const [onlineDaily,setOnlineDaily]=useState([]);
+ const [ agentList, setAgentList] = useState([]);
+ const [employeeList,setEmployeesList]=useState([]);
+ const [suppliers, setSuppliers] = useState([]);
  const [searchQuery,setSearchQuery]=useState("");
  const [currentPage,setCurrentPage]=useState(1);
  const [itemsPerPage,setItemsPerPage]=useState(10);
 
+ const [tempAgent,setTempAgent] = useState("");
+ const [tempStaff,setTempStaff] = useState("");
+ const [tempSupplier,setTempSupplier]=useState("");
+ const [tempFromDate,setTempFromDate]=useState("");
+ const [tempToDate,setTempToDate] =useState("");
+ 
+ const [agent,setAgent] = useState("");
+ const [staff,setStaff] = useState("");
+ const [supplier,setSupplier]=useState("");
+ const [fromDate,setFromDate]=useState("");
+ const [toDate,setToDate]=useState("");
+
+
+ useEffect(()=>{
+  const fetchdata = async()=>{
+    try{
+      // Initial load - can be empty or with default values
+      const response = await axiosInstance.get("/api/reports/onlineSales")
+      setOnlineDaily(response.data||[])
+    }catch(error){
+      console.error("error while fetching data",error)
+    }
+  };fetchdata();
+ },[])
+
+ useEffect(()=>{
+  const fetchAgents = async ()=>{
+    try{
+          const response = await axiosInstance.get("/api/agent")
+          setAgentList(response.data || []);
+    }catch(error){
+       console.error("error while fetching data",error)
+    }
+  };fetchAgents();
+ },[])
+
+ useEffect(()=>{
+  const fetchEmployees = async ()=>{
+    try{
+      const response = await axiosInstance.get("/api/employee")
+      setEmployeesList(response.data || [])
+    }catch(error){
+        console.error("error while fetching data",error)
+    }
+  };fetchEmployees();
+ },[])
+
+ useEffect(()=>{
+  const fetchSuppliers = async ()=>{
+    try{
+      const response = await axiosInstance.get("/api/external-apis/list")
+      setSuppliers(response.data || [])
+    }catch(error){
+        console.error("error while fetching suppliers",error)
+    }
+  };fetchSuppliers();
+ },[])
+
+
  useEffect(()=>{
   setCurrentPage(1);
  },[searchQuery])
+
+
+const handleSearch = async () =>{
+  // Validate dates
+  if (!tempFromDate || !tempToDate) {
+    toast.error("Please select both From Date and To Date");
+    return;
+  }
+
+  // Update states first
+  setAgent(tempAgent);
+  setStaff(tempStaff);
+  setSupplier(tempSupplier);
+  setFromDate(tempFromDate);
+  setToDate(tempToDate);
+  setCurrentPage(1);
+
+  // Build API query parameters according to API format
+  const params = new URLSearchParams();
+  params.append('fromDate', tempFromDate);
+  params.append('toDate', tempToDate);
+  if (tempAgent) params.append('agentId', tempAgent);
+  if (tempStaff) params.append('employeeId', tempStaff);
+  if (tempSupplier) {
+    params.append('supplierId', tempSupplier);
+  } else {
+    params.append('supplierId', '0'); // Default to 0 if not selected
+  }
+
+  try {
+    const queryString = params.toString();
+    const url = `/api/reports/onlineSales?${queryString}`;
+    console.log("Fetching from URL:", url);
+    const response = await axiosInstance.get(url);
+    setOnlineDaily(response.data || []);
+    toast.success(`Found ${response.data?.length || 0} record(s)`);
+  } catch (error) {
+    console.error("error while fetching data", error);
+    toast.error("Failed to fetch data");
+    setOnlineDaily([]);
+  }
+}
 
 
   const handlePrint =()=>{
@@ -28,7 +137,7 @@ export default function OnlineDailySalesReport() {
    printWindow.document.write(`
     <html>
     <head>
-    <title>Offline Booking Daily Sales Statement</title>
+    <title>Online Daily Sales Report</title>
     <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             table { width: 100%; border-collapse: collapse; }
@@ -38,39 +147,37 @@ export default function OnlineDailySalesReport() {
           </style>
     </head>
     <body>
-    <h1>Offline Booking Daily Sales Statement</h1>
+    <h1>Online Daily Sales Report</h1>
     <table>
     <thead>
     <tr>
     <th>SI.No</th>
-    <th>Agent</th>
-    <th>Supplier</th>
-    <th>Customer</th>
-    <th>BookingCode</th>
-     <th>Reference</th>
-     <th>BookingBy</th>
-      <th>BookDate</th>
-     <th>Details</th>
-      <th>Selling Price</th>
-      <th>Net Price</th>
-      <th>Profit</th>
+    <th>Agent Name</th>
+    <th>Supplier Name</th>
+    <th>Customer Name</th>
+    <th>Booking Code</th>
+    <th>Booking Done By</th>
+    <th>Book Date</th>
+    <th>Native Country</th>
+    <th>Selling Price</th>
+    <th>Net Price</th>
+    <th>Profit</th>
      </tr>
     </thead>
     <tbody>
     ${currentfilter.map((r,index)=>`
       <tr>
-      <th>${index+1}</th>
-      <th>${r.agent}</th>
-      <th>${r.supplier}</th>
-      <th>${r.customer}</th>
-      <th>${r.bookingCode}</th>
-      <th>${r.reference}</th>
-      <th>${r.bookingBy}</th>
-      <th>${r.bookDate}</th>
-       <th>${r.details}</th>
-        <th>${r.sellingPrice}</th>
-         <th>${r.netPrice}</th>
-          <th>${r.profit}</th>
+      <td>${index+1}</td>
+      <td>${r.agentName || 'N/A'}</td>
+      <td>${r.supplierName || 'N/A'}</td>
+      <td>${r.customerName || 'N/A'}</td>
+      <td>${r.bookingCode || 'N/A'}</td>
+      <td>${r.bookingDoneBy || 'N/A'}</td>
+      <td>${r.bookingDate ? r.bookingDate.split("T")[0] : 'N/A'}</td>
+      <td>${r.nativeCountry || 'N/A'}</td>
+      <td>${r.sellingPrice || '0.00'}</td>
+      <td>${r.netPrice || '0.00'}</td>
+      <td>${r.profit || '0.00'}</td>
       </tr>
       `).join('')}
     </tbody>
@@ -84,8 +191,8 @@ export default function OnlineDailySalesReport() {
 
 const handleExcel = () => {
   const headers = [
-    'SI.No', 'Agent', 'Supplier', 'Customer', 'Booking Code',
-    'Reference', 'BookingBy', 'BookDate', 'Details', 'Selling Price', 'NetPrice', 'Profit'
+    'SI.No', 'Agent Name', 'Supplier Name', 'Customer Name', 'Booking Code',
+    'Booking Done By', 'Book Date', 'Native Country', 'Selling Price', 'Net Price', 'Profit'
   ];
 
   const escapeCSV = (value) => {
@@ -97,24 +204,25 @@ const handleExcel = () => {
     return stringValue;
   };
 
+
   const csvContent = [
     headers.map(escapeCSV).join(','),
     ...currentfilter.map((r, index) => [
       index + 1,
-      r.agent,
-      r.supplier,
-      r.customer,
-      r.bookingCode,
-      r.reference,
-      r.bookingBy,
-      r.bookDate,
-      r.details,
-      r.sellingPrice,
-      r.netPrice,
-      r.profit
+      r.agentName || 'N/A',
+      r.supplierName || 'N/A',
+      r.customerName || 'N/A',
+      r.bookingCode || 'N/A',
+      r.bookingDoneBy || 'N/A',
+      r.bookingDate ? r.bookingDate.split("T")[0] : 'N/A',
+      r.nativeCountry || 'N/A',
+      r.sellingPrice || '0.00',
+      r.netPrice || '0.00',
+      r.profit || '0.00'
     ].map(escapeCSV).join(','))
   ].join('\n');
 
+  
   const BOM = '\uFEFF';
   const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = window.URL.createObjectURL(blob);
@@ -126,67 +234,98 @@ const handleExcel = () => {
 };
 
 
+const filteredreports = useMemo(()=>{
+   return onlineDaily.filter(a=>{
+if (searchQuery && searchQuery.trim()){
+        const search = searchQuery.trim().toLowerCase();
+        const matchesSearch = 
+         String(a.agentName || '').toLowerCase().includes(search)||
+        String(a.supplierName || '').toLowerCase().includes(search)||
+        String(a.customerName || '').toLowerCase().includes(search)||
+        String(a.bookingCode || '').toLowerCase().includes(search)||
+        String(a.bookingDoneBy || '').toLowerCase().includes(search)||
+        String(a.bookingDate || '').toLowerCase().includes(search)||
+        String(a.sellingPrice || '').toLowerCase().includes(search)||
+        String(a.netPrice || '').toLowerCase().includes(search)||
+        String(a.profit || '').toLowerCase().includes(search)
+ if(!matchesSearch) return false;
+      }
 
-// Dummy data
-  const reports = [
-    {
-      id: 1,
-      agent: "Direct Client",
-      supplier: "Jumeirah",
-      customer: "Mr. RUI NABEIRO",
-      bookingCode: "CNFJB2085",
-      reference: "CI5KAZNI",
-      bookingBy: "Rajesh Mathew",
-      bookDate: "2025-09-06",
-      details: `Hotel Name: Jumeirah Dar Al Masyaf
-Check-In: 2025-12-27
-Check-Out: 2026-01-02`,
-      sellingPrice: "56754.25",
-      netPrice: "56754.25",
-      profit: "0.0",
-    },
-    {
-      id: 2,
-      agent: "Direct Client",
-      supplier: "Darina",
-      customer: "Mr. JIAZE ZHENG",
-      bookingCode: "CNFDA2082",
-      reference: "1017045",
-      bookingBy: "Twinkle Pahwa",
-      bookDate: "2025-09-06",
-      details: `Hotel Name: BVLGARI RESORT
-Check-In: 2025-09-12
-Check-Out: 2025-09-13`,
-      sellingPrice: "2224.8",
-      netPrice: "2224.80",
-      profit: "0.0",
-    },
-    
-  ];
+      //supplier - client-side filter
+// if(supplier && supplier.trim()){
+//         const selectedSupplier = String(supplier).trim();
+//         const reportSupplier = String(a.supplierName || '').trim();
+//         if(selectedSupplier.toLowerCase() !== reportSupplier.toLowerCase()){
+//           return false;
+//         }
+//       }
 
-  const filteredreports = reports.filter(a=>{
-  const search=searchQuery.toLowerCase();
-return(
-        String(a.agent).toLowerCase().includes(search)||
-        String(a.supplier).toLowerCase().includes(search)||
-        String(a.customer).toLowerCase().includes(search)||
-        String(a.bookingCode).toLowerCase().includes(search)||
-        String(a.reference).toLowerCase().includes(search)||
-        String(a.bookingBy).toLowerCase().includes(search)||
-        String(a.bookDate).toLowerCase().includes(search)||
-        String(a.details).toLowerCase().includes(search)||
-        String(a.sellingPrice).toLowerCase().includes(search)||
-        String(a.netPrice).toLowerCase().includes(search)||
-        String(a.profit).toLowerCase().includes(search)
-      )})
+      //supplier - client-side filter (FIXED VERSION)
+if (supplier){
+  let matches = false;
+  // Find supplier by ID from suppliers list
+  const selectedSupplierOption = suppliers.find(opt =>
+    String(opt.id) === String(supplier)
+  );
+  
+  if(selectedSupplierOption){
+    // Get the supplier name/code (apiCode is what's shown in Supplier component)
+    const selectedSupplierName = String(selectedSupplierOption.apiCode || selectedSupplierOption.name || '').trim().toLowerCase();
+    const reportSupplierName = String(a.supplierName || '').trim().toLowerCase();
+    // Compare names (exact match or contains)
+    matches = selectedSupplierName === reportSupplierName ||
+              reportSupplierName.includes(selectedSupplierName);
+  }
+  
+  if(!matches) return false;
+}
 
-   const totalPages= Math.ceil(filteredreports.length / itemsPerPage);
-   const startIndex = (currentPage -1)*itemsPerPage;
-   const endIndex = startIndex + itemsPerPage;
-   const currentfilter = filteredreports.slice(startIndex,endIndex);
+  //agent - match by agentName (client-side filter, but API already filters by agentId)
+  if(agent){
+    let matches = false;
+    const selectedAgentOption = agentList.find(opt=>
+          String(opt.id || opt.agentId) === String(agent)
+      )
+      if(selectedAgentOption){
+      const selectedAgentName = String(selectedAgentOption.companyName || selectedAgentOption.agentName || '').trim();
+      const reportAgentName = String(a.agentName || '').trim();
+      matches= selectedAgentName.toLowerCase() === reportAgentName.toLowerCase() ||
+      reportAgentName.toLowerCase().includes(selectedAgentName.toLowerCase()) 
+      }
+    if(!matches) return false;
+  }
 
+  //staff - match by bookingDoneBy (employeeId)
+  if(staff){
+    let matches = false;
+    // bookingDoneBy is the employeeId in the API response
+    if(String(a.bookingDoneBy || '') === String(staff)){
+      matches = true;
+    }
+    if(!matches) return false;
+  }
 
-  return (
+  // Date filtering
+  if(fromDate || toDate){
+    const bookingDateStr = a.bookingDate
+     ? a.bookingDate.split("T")[0]
+     : "";
+      if (fromDate && bookingDateStr < fromDate) {
+         return false;
+       }
+        if (toDate && bookingDateStr > toDate) {
+         return false;
+       }}
+  return true;
+})
+},[ onlineDaily, searchQuery, fromDate, supplier, toDate, agent, staff, agentList, employeeList,suppliers])
+
+   const totalPages = useMemo(()=> Math.ceil(filteredreports.length / itemsPerPage),[filteredreports.length,itemsPerPage]);
+   const startIndex = useMemo(()=>(currentPage -1)* itemsPerPage, [currentPage,itemsPerPage]);
+   const endIndex = useMemo(() => startIndex +itemsPerPage, [startIndex,itemsPerPage]);
+   const currentfilter = useMemo(()=> filteredreports.slice(startIndex,endIndex),[filteredreports,startIndex,endIndex])
+ 
+   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
       <TopBar />
       <div className="d-flex flex-grow-1">
@@ -204,49 +343,48 @@ return(
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempFromDate}
+                    onChange={(e)=>setTempFromDate(e.target.value)}/>
                   </Form.Group>
                 </Col>
+
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm" 
+                    value={tempToDate}
+                    onChange={(e)=>setTempToDate(e.target.value)}/>
                   </Form.Group>
                 </Col>
+
                 <Col md={2}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Supplier</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Jumeirah</option>
-                      <option>Darina</option>
-                    </Form.Select>
-                  </Form.Group>
+                  <Supplier
+                  value={tempSupplier}
+                   onChange={setTempSupplier}
+                  />
                 </Col>
+
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Search Agent</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Direct Client</option>
-                    </Form.Select>
-                  </Form.Group>
+                <Agent
+                value={tempAgent}
+                onChange={setTempAgent}/>
                 </Col>
+
+
                 <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Staff</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Rajesh Mathew</option>
-                      <option>Twinkle Pahwa</option>
-                    </Form.Select>
-                  </Form.Group>
+                 <Staff
+                 value={tempStaff}
+                 onChange={setTempStaff}/>
                 </Col>
+
+
                 <Col md={12} className="d-flex justify-content-end mt-3">
-                  <Button variant="success" size="sm">
+                  <Button variant="success" size="sm" onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
                 </Col>
+
               </Row>
 
               {/* Action Buttons */}
@@ -301,10 +439,9 @@ return(
                     <th>Supplier Name</th>
                     <th>Customer Name</th>
                     <th>Booking Code</th>
-                    <th>Reference Code</th>
                     <th>Booking Done By</th>
                     <th>Book Date</th>
-                    <th>Booking Details</th>
+                    <th>Native Country</th>
                     <th>Selling Price</th>
                     <th>Net Price</th>
                     <th>Profit</th>
@@ -313,24 +450,23 @@ return(
                 <tbody>
                   {currentfilter.length > 0 ? (
                     currentfilter.map((r, index) => (
-                      <tr key={index}>
+                      <tr key={r.bookingId || index}>
                         <td>{startIndex + index + 1}</td>
-                        <td>{r.agent}</td>
-                        <td>{r.supplier}</td>
-                        <td>{r.customer}</td>
-                        <td>{r.bookingCode}</td>
-                        <td>{r.reference}</td>
-                        <td>{r.bookingBy}</td>
-                        <td>{r.bookDate}</td>
-                        <td style={{ whiteSpace: "pre-line" }}>{r.details}</td>
-                        <td>{r.sellingPrice}</td>
-                        <td>{r.netPrice}</td>
-                        <td>{r.profit}</td>
+                        <td>{r.agentName || 'N/A'}</td>
+                        <td>{r.supplierName || 'N/A'}</td>
+                        <td>{r.customerName || 'N/A'}</td>
+                        <td>{r.bookingCode || 'N/A'}</td>
+                        <td>{r.bookingDoneBy || 'N/A'}</td>
+                        <td>{r.bookingDate ? r.bookingDate.split("T")[0] : 'N/A'}</td>
+                        <td>{r.nativeCountry || 'N/A'}</td>
+                        <td>{r.sellingPrice || '0.00'}</td>
+                        <td>{r.netPrice || '0.00'}</td>
+                        <td>{r.profit || '0.00'}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="12" className="text-center text-muted py-4">
+                      <td colSpan="11" className="text-center text-muted py-4">
                         No data available in table
                       </td>
                     </tr>
@@ -381,8 +517,7 @@ return(
               </div>
             </Card.Body>
           </Card>
-
-        </main>
+          </main>
       </div>
     </div>
   );

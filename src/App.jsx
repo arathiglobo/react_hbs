@@ -95,6 +95,25 @@ import GenerateQuotationBooking from "./pages/roomlist/makeyourownpkg/GenerateQu
 import QuotationBookingList from "./pages/roomlist/makeyourownpkg/QuotationBookingList";
 import QuotationBookingPage from "./pages/roomlist/makeyourownpkg/QuotationBookingPage";
 
+// :bar_chart: Reports
+import ReportBooking from "./pages/report/BookingReport";
+import CancellationReport from "./pages/report/CancellationReport";
+import InventoryStatus from "./pages/report/InventoryStatus";
+import HotelWise from "./pages/report/HotelWise";
+import Accounts from "./pages/report/Accounts";
+import DayWise from "./pages/report/DayWise";
+import MonthlyWise from "./pages/report/MonthlyWise";
+import Comparison from "./pages/report/Comparison";
+import AgentWise from "./pages/report/AgentWise";
+import ContractExpiryReport from "./pages/report/ContractExpiryReport";
+import Contractrate from "./pages/report/Contractrate";
+import UserReport from "./pages/report/UserReport";
+import Stopsalereport from "./pages/report/Stopsalereport";
+import UserLogins from "./pages/report/UserLogins";
+import OfflineBookingDailySalesStatement from "./pages/report/OfflineBookingDailySalesStatement";
+import OnlineDailySalesReport from "./pages/report/OnlineDailySalesReport";
+import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDailySalesReport";
+
 
 export default function App() {
   return (
@@ -184,6 +203,25 @@ export default function App() {
         <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
      
+        {/* :bar_chart: Reports */}
+        <Route path="/report/booking" element={<ReportBooking />} />
+        <Route path="/report/cancellation" element={<CancellationReport />} />
+        <Route path="/report/inventory-status" element={<InventoryStatus />} />
+        <Route path="/report/hotel-wise" element={<HotelWise />} />
+        <Route path="/report/accounts" element={<Accounts />} />
+        <Route path="/report/day-wise" element={<DayWise />} />
+        <Route path="/report/monthly-wise" element={<MonthlyWise />} />
+        <Route path="/report/comparison" element={<Comparison />} />
+        <Route path="/report/agent-wise" element={<AgentWise />} />
+        <Route path="/report/contract-expiry" element={<ContractExpiryReport />} />
+        <Route path="/report/contract-rate" element={<Contractrate />} />
+        <Route path="/report/user-report" element={<UserReport />} />
+        <Route path="/report/stop-sale" element={<Stopsalereport />} />
+        <Route path="/report/user-logins" element={<UserLogins />} />
+        <Route path="/report/offline-daily-sales" element={<OfflineBookingDailySalesStatement />} />
+        <Route path="/report/online-daily-sales" element={<OnlineDailySalesReport />} />
+        <Route path="/report/time-limit-daily-sales" element={<TimeLimitOnlineDailySalesReport />} />
+
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />

@@ -4,6 +4,11 @@
   padding: 0;
 }
 
+.amenitiesname{
+  font-weight: 500;
+  font-size: 13px;
+}
+
 /* Header Styles */
 .page-header {
   margin-bottom: 30px;
@@ -90,7 +95,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background-color: #1976d2;
+  background-color: transparent;
 }
 
 /* Main Content Area */
@@ -117,6 +122,7 @@
   padding: 24px;
   height: 100%;
   overflow-y: auto;
+  background-color: #ffffff;
 }
 
 /* Actions Wrapper */
@@ -207,8 +213,9 @@
 
 /* Content Panel */
 .content-panel {
-  padding: 0;
+  padding: 20px;
   margin-bottom: 0;
+  background: #fff;
 }
 
 .content-card {
@@ -316,7 +323,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  padding: 0px 24px;
   border-bottom: 1px solid #e9ecef;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -335,6 +342,7 @@
   align-items: center;
   gap: 12px;
   flex: 1;
+  padding-top: 15px;
 }
 
 .action-icon {

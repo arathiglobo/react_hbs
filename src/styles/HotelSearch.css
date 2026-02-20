@@ -1,7 +1,58 @@
 /* --- Modern Search Form --- */
+
+/* Normal card */
+.search-card-modern {
+  transition: all 0.3s ease;
+}
+
+/* Sticky compressed state */
+.search-card-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1050;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* Reduce padding */
+.search-card-sticky .card-body {
+  padding: 12px 16px;
+}
+
+/* Hide heading when sticky */
+.search-card-sticky h2 {
+  display: none;
+}
+
+/* Hide form labels */
+.search-card-sticky .form-label {
+  display: none;
+}
+
+/* Reduce input height */
+.search-card-sticky .form-control,
+.search-card-sticky .modern-select__control {
+  min-height: 36px !important;
+  height: 36px;
+  font-size: 14px;
+}
+
+/* Reduce row gaps */
+.search-card-sticky .row {
+  --bs-gutter-y: 0.5rem;
+}
+
+/* Hide Room selector dropdown when sticky */
+.search-card-sticky .rooms-summary-btn-modern {
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+
 .search-card-modern {
   max-width: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #fff;
   border: none;
   border-radius: 20px;
   overflow: hidden;
@@ -13,7 +64,7 @@
 }
 
 .search-card-modern .form-label {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: #2d3748;
   margin-bottom: 0.5rem;
@@ -21,7 +72,7 @@
 
 .search-card-modern h2 {
   color: #4a5568;
-  font-size: 2.2rem;
+  font-size: 2.0rem;
 }
 
 .search-card-modern p {
@@ -238,6 +289,52 @@
   object-fit: cover;
   transition: transform 0.3s ease;
 }
+
+.sort-pill {
+  height: 36px;
+  background: #f2f2f296 !important;
+  color: #333 !important; 
+  border: 1px solid #e0e4eb !important;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  min-width: 150px; /* 👈 controls width */
+  transition: all 0.2s ease;
+  width: 200px;
+}
+
+.sort-pill .active{
+   background: #f5f7fa !important;
+  color: #333 !important; 
+  border: 1px solid #e0e4eb !important;
+  font-size: 0.82rem;
+}
+.sort-pill .hover{
+   background: #f5f7fa !important;
+  color: #333 !important; 
+  border: 1px solid #e0e4eb !important;
+  font-size: 0.82rem;
+}
+
+
+.clear-pill {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+   border-color: #dbe3ff;
+  color: #2d6ecf;
+      width: 150px;
+}
+.clear-pill:hover {
+  background: #f5f8ff;
+  color: #2d6ecf;
+}
+.leftside{
+    top: 90px;
+  max-height: calc(100vh - 110px);
+}
+
+
 
 .hotel-card-modern:hover .hotel-image-container img {
   transform: scale(1.05);
@@ -732,7 +829,7 @@
 }
 
 .search-card .form-label {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 500;
 }
 
@@ -817,5 +914,43 @@
 .react-select__menu-list {
   max-height: 300px;
   overflow-y: auto;
+}
+
+
+.map-preview-wrapper {
+  position: relative;
+  width: 100%;
+  height: 110px;
+  border-radius: 12px;
+  background: #e9eef3;
+}
+
+.map-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.1);
+}
+
+.map-overlay-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  background: #ffffff;
+  border: 2px solid #0d6efd;
+  color: #0d6efd;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.map-overlay-btn:hover {
+  background: #0d6efd;
+  color: #fff;
 }
 

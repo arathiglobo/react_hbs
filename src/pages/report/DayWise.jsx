@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useMemo} from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { Row, Col, Card, Form,Button,Table,Modal, Pagination } from "react-bootstrap";
@@ -6,18 +6,52 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import HotelTypefilters from "../../components/filters/HotelTypefilters";
+import RoomCategory from "../../components/filters/RoomCategory";
+import HotelFilter from "../../components/filters/Hotelfilters";
+
 
 function DayWise() {
  
+   
+   const [inhouseBookings, setInhouseBookings]=useState([]);
+
    const [inhousecurrentPage,setInhouseCurrentPage]= useState(1);
    const [inhouseitemsPerPage,setInhouseItemsPerPage]= useState(10);
    const [apicurrentPage,setApiCurrentPage]= useState(1);
    const [apiitemsPerPage,setApiItemsPerPage]= useState(10);
+
    const [inHouseSearchQuery,setInHouseSearchQuery]= useState(""); 
    const[apiSearchQuery,setApiSearchQuery]=useState("");
+
    const [showMailModal, setShowMailModal] = useState(false);
    const [emailAddress, setEmailAddress] = useState("");
    const [isSending, setIsSending] = useState(false);
+   const [reportType,setReportType] = useState(null);
+
+   const [tempSearchQuery, setTempSearchQuery] = useState("");
+const [searchQuery, setSearchQuery] = useState("");
+
+    // Temporary filter states (what user sees/edits)
+     const [tempSelectedhotel,setTempSelectedHotel]= useState("");
+     const [tempSelectedhoteltype,setTempSelectedHoteltype]= useState("");
+     const [tempRoomCategory,setTempRoomCategory]=useState("");
+
+    // Applied filter states (used for actual filtering)
+     const [selectedhotel,setSelectedHotel]= useState("");
+     const [selectedhoteltype,setSelectedHoteltype]= useState("");
+     const [roomCategory,setRoomCategory]=useState("");
+
+     // Store filter options to map IDs to names
+     const [hotelOptions, setHotelOptions] = useState([]);
+     const [hotelTypeOptions, setHotelTypeOptions] = useState([]);
+     const [roomCategoryOptions, setRoomCategoryOptions] = useState([]);
+
+   const[tempFromDate,setTempFromDate]=useState("");
+   const[tempToDate,setTempToDate] = useState("");
+
+   const[fromDate,setFromDate]=useState("");
+   const[toDate,setToDate]=useState("");
 
    useEffect(()=>{
     setApiCurrentPage(1);
@@ -26,6 +60,36 @@ function DayWise() {
    useEffect(()=>{
     setInhouseCurrentPage(1);
    },[inHouseSearchQuery])
+
+   useEffect(()=>{
+    const fetchInhouse = async ()=>{
+      try{
+      const response = await axiosInstance.get("/api/report/daywise");
+      setInhouseBookings(response.data);
+      }catch(error){
+        console.error("Error Fetching Data", error);
+        toast.error("Fetching Data Failed")
+      }
+    };fetchInhouse();
+   },[])
+
+   useEffect(()=>{
+    const fetchFilteroptions = async ()=>{
+      try{
+        const [hotelRes,hotelTypeRes,roomCategoriesRes]= await Promise.all([
+          axiosInstance.get("/api/hotels").catch(()=>({data:[]})),
+          axiosInstance.get("/api/hotelType").catch(()=>({data:[]})),
+          axiosInstance.get("/api/roomCategory").catch(()=>({data:[]}))
+        ]);
+        setHotelOptions(Array.isArray(hotelRes.data) ? hotelRes.data.map(h=>({ id:h.id, name:h.hotelName})):[]);
+        setHotelTypeOptions(Array.isArray(hotelTypeRes.data) ? hotelTypeRes.data.map(ht=>({id:ht.hotelTypeId,name:ht.name})):[]);
+        setRoomCategoryOptions(Array.isArray(roomCategoriesRes.data) ? roomCategoriesRes.data.map(rc=>({id:rc.roomCategoryId,name:rc.roomCategory})):[]);
+      }catch(error){
+        console.error("error fetching filter option",error);
+      }
+    };fetchFilteroptions();
+   },[])
+   
 
 const handleSendEmail = async () => {
   // Validate email
@@ -36,25 +100,30 @@ const handleSendEmail = async () => {
 
   setIsSending(true);
   try {
+    // Get the filtered bookings count to include in the email
+    const filteredCount = reportType === 'inhouse' 
+      ? filteredinhouseBookings.length 
+      : filteredapiBookings.length;
+    
     // API call to send email
     const response = await axiosInstance.post('/api/reports/send-email', {
       email: emailAddress,
       reportType: 'daywise',
       subType: reportType, // 'inhouse' or 'api'
       filters: {
-        fromDate: fromDate,
-        toDate: toDate,
-        // ... other filters
-      }
+        searchQuery: reportType === 'inhouse' ? inHouseSearchQuery : apiSearchQuery,
+      },
+      recordCount: filteredCount
     });
 
     if (response.data) {
-      toast.success("Report sent successfully!");
+      toast.success(`Report with ${filteredCount} record(s) sent successfully!`);
       setShowMailModal(false);
       setEmailAddress("");
     }
   } catch (error) {
-    toast.error("Failed to send email");
+    console.error("Email send error:", error);
+    toast.error(error.response?.data?.message || "Failed to send email");
   } finally {
     setIsSending(false);
   }
@@ -90,30 +159,30 @@ const handlePrint = () => {
             </tr>
           </thead>
           <tbody>
-            ${currentData.map((booking) => {
+            ${currentData.map((booking,index) => {
               if (reportType === 'inhouse') {
                 return `
                   <tr>
-                    <td>${booking.slNo}</td>
+                    <td>${index+1}</td>
                     <td>${booking.hotelName}</td>
                     <td>${booking.checkIn}</td>
                     <td>${booking.checkOut}</td>
                     <td>${booking.hotelType}</td>
                     <td>${booking.roomCategory}</td>
-                    <td>${booking.noOfRooms}</td>
+                    <td>${booking.roomNo}</td>
                     <td>${booking.customerName}</td>
                   </tr>
                 `;
               } else {
                 return `
                   <tr>
-                    <td>${booking.slNo}</td>
+                    <td>${index+1}</td>
                     <td>${booking.hotelName}</td>
                     <td>${booking.platform}</td>
                     <td>${booking.checkIn}</td>
                     <td>${booking.checkOut}</td>
                     <td>${booking.hotelType}</td>
-                    <td>${booking.noOfRooms}</td>
+                    <td>${booking.roomNo}</td>
                     <td>${booking.customerName}</td>
                   </tr>
                 `;
@@ -139,14 +208,14 @@ const handlePDF = () => {
   if (reportType === 'inhouse') {
     autoTable(doc, {
       head: [['Sl.No', 'Hotel Name', 'Check In', 'Check Out', 'Hotel Type', 'Room Category', 'No of Rooms', 'Customer Name']],
-      body: currentData.map((booking) => [
-        booking.slNo,
+      body: currentData.map((booking,index) => [
+        index + 1,
         booking.hotelName,
         booking.checkIn,
         booking.checkOut,
         booking.hotelType,
         booking.roomCategory,
-        booking.noOfRooms,
+        booking.roomNo,
         booking.customerName
       ]),
       startY: 30,
@@ -154,14 +223,14 @@ const handlePDF = () => {
   } else {
     autoTable(doc, {
       head: [['Sl.No', 'Hotel Name', 'Platform', 'Check In', 'Check Out', 'Hotel Type', 'No of Rooms', 'Customer Name']],
-      body: currentData.map((booking) => [
-        booking.slNo,
+      body: currentData.map((booking,index) => [
+        index + 1,
         booking.hotelName,
         booking.platform,
         booking.checkIn,
         booking.checkOut,
         booking.hotelType,
-        booking.noOfRooms,
+        booking.roomNo,
         booking.customerName
       ]),
       startY: 30,
@@ -190,27 +259,27 @@ const handleExcel = () => {
   
   const csvContent = [
     headers.map(escapeCSV).join(','),
-    ...currentData.map((booking) => {
+    ...currentData.map((booking,index) => {
       if (reportType === 'inhouse') {
         return [
-          booking.slNo,
+         index + 1,
           booking.hotelName,
           booking.checkIn,
           booking.checkOut,
           booking.hotelType,
           booking.roomCategory,
-          booking.noOfRooms,
+          booking.roomNo,
           booking.customerName
         ].map(escapeCSV).join(',');
       } else {
         return [
-          booking.slNo,
+          index + 1,
           booking.hotelName,
           booking.platform,
           booking.checkIn,
           booking.checkOut,
           booking.hotelType,
-          booking.noOfRooms,
+          booking.roomNo,
           booking.customerName
         ].map(escapeCSV).join(',');
       }
@@ -227,48 +296,18 @@ const handleExcel = () => {
   window.URL.revokeObjectURL(url);
 };
 
-  const inhouseBookings = [
-  {
-    slNo: 1,
-    hotelName: "Test Hotel",
-    checkIn: "07/12/2023",
-    checkOut: "12/12/2023",
-    hotelType: "Hotel",
-    roomCategory: "Deluxe Room",
-    noOfRooms: 1,
-    customerName: "Norling Trevor Mason"
-  },
-  {
-    slNo: 2,
-    hotelName: "Jumairah Hotel",
-    checkIn: "16/10/2023",
-    checkOut: "21/10/2023",
-    hotelType: "Hotel",
-    roomCategory: "Deluxe Room",
-    noOfRooms: 1,
-    customerName: "KUSHAL JAIN"
-  },
-  {
-    slNo: 3,
-    hotelName: "Direct Hotel",
-    checkIn: "14/10/2023",
-    checkOut: "20/10/2023",
-    hotelType: "Hotel",
-    roomCategory: "Deluxe Room, Deluxe Room",
-    noOfRooms: 2,
-    customerName: "Balaji Veeraraghavan"
-  },
-  {
-    slNo: 4,
-    hotelName: "Globo Hotel",
-    checkIn: "01/09/2024",
-    checkOut: "02/09/2024",
-    hotelType: "Hotel",
-    roomCategory: "Deluxe Room",
-    noOfRooms: 1,
-    customerName: "Rupali test"
-  }
-];
+const handleSearch = () => {
+  // Apply temporary filter values to actual filter values
+  setSelectedHotel(tempSelectedhotel);
+  setSelectedHoteltype(tempSelectedhoteltype);
+  setRoomCategory(tempRoomCategory);
+  setSearchQuery(tempSearchQuery);
+  setFromDate(tempFromDate);
+setToDate(tempToDate);
+setInhouseCurrentPage(1);
+setApiCurrentPage(1);
+ };
+
 
 const apiBookings = [
   {
@@ -313,43 +352,151 @@ const apiBookings = [
   }
 ];
 
-const filteredapiBookings = apiBookings.filter(a=>{
-  const search=apiSearchQuery.toLowerCase();
-  return(
-    a.hotelName.toLowerCase().includes(search)||
-    a.platform.toLowerCase().includes(search)||
-    String(a.checkIn).toLowerCase().includes(search)||
-    String(a.checkOut).toLowerCase().includes(search)||
-    a.hotelType.toLowerCase().includes(search)||
-    String(a.noOfRooms).toLowerCase().includes(search)||
-    a.customerName.toLowerCase().includes(search)
-  )}
-)
+   // Move filter logic inside component using useMemo to make it reactive
+   const filteredapiBookings = useMemo(() => {
+     if (!apiSearchQuery || !apiSearchQuery.trim()) {
+       return apiBookings;
+     }
+     const search = apiSearchQuery.toLowerCase().trim();
+     return apiBookings.filter(a => {
+       if (!a) return false;
+       return (
+         (a.hotelName && String(a.hotelName).toLowerCase().includes(search)) ||
+         (a.platform && String(a.platform).toLowerCase().includes(search)) ||
+         (a.checkIn && String(a.checkIn).toLowerCase().includes(search)) ||
+         (a.checkOut && String(a.checkOut).toLowerCase().includes(search)) ||
+         (a.hotelType && String(a.hotelType).toLowerCase().includes(search)) ||
+         (a.noOfRooms && String(a.noOfRooms).toLowerCase().includes(search)) ||
+         (a.customerName && String(a.customerName).toLowerCase().includes(search))
+       );
+     });
+   }, [apiSearchQuery]);
 
-const filteredinhouseBookings = inhouseBookings.filter(a=>{
-  const search=inHouseSearchQuery.toLowerCase();
-  return(
-    a.hotelName.toLowerCase().includes(search)||
-    String(a.checkIn).toLowerCase().includes(search)||
-    String(a.checkOut).toLowerCase().includes(search)||
-    a.hotelType.toLowerCase().includes(search)||
-    a.roomCategory.toLowerCase().includes(search)||
-    String(a.noOfRooms).toLowerCase().includes(search)||
-    a.customerName.toLowerCase().includes(search)
-  )}
-)
 
-const Inhousetotalpages = Math.ceil(filteredinhouseBookings.length / inhouseitemsPerPage);
-const inhouseStartIndex = (inhousecurrentPage -1)* inhouseitemsPerPage;
-const inhouseEndIndex = inhouseStartIndex + inhouseitemsPerPage;
-const currentInhousebooking = filteredinhouseBookings.slice(inhouseStartIndex,inhouseEndIndex);
 
-const Apitotalpages = Math.ceil(filteredapiBookings.length / apiitemsPerPage);
-const apiStartIndex = (apicurrentPage -1) * apiitemsPerPage;
-const apiEndIndex  = apiStartIndex + apiitemsPerPage;
-const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
+const filteredinhouseBookings = useMemo(() => {
+  return inhouseBookings.filter(a => {
+    if (!a) return false;
 
-const [reportType,setReportType] = useState(null);
+    // Filter 1: Date Range (From Date to To Date)
+    if (fromDate || toDate) {
+      // Get the booking date - adjust field name if different (checkIn, bookingDate, etc.)
+      const bookingDateStr = a.checkIn ? a.checkIn.split('T')[0] : '';
+      
+      // Check if booking date is before fromDate
+      if (fromDate && bookingDateStr < fromDate) {
+        return false;
+      }
+      
+      // Check if booking date is after toDate
+      if (toDate && bookingDateStr > toDate) {
+        return false;
+      }
+    }
+
+    // Filter 2: Hotel Filter
+    if (selectedhotel) {
+      let matches = false;
+      
+      // First try to match by ID (most reliable)
+      if (a.hotelId && String(a.hotelId) === String(selectedhotel)) {
+        matches = true;
+      } else {
+        // If ID doesn't match, try matching by name
+        const selectedHotelName = hotelOptions.find(opt => String(opt.id) === String(selectedhotel))?.name;
+        if (selectedHotelName) {
+          const hotelNameStr = String(a.hotelName || '').trim();
+          const selectedHotelNameStr = String(selectedHotelName || '').trim();
+          matches = hotelNameStr === selectedHotelNameStr;
+        }
+      }
+      
+      if (!matches) return false;
+    }
+
+    // Filter 3: Hotel Type Filter
+    if (selectedhoteltype) {
+      let matches = false;
+      
+      // First try to match by ID
+      if (a.hotelTypeId && String(a.hotelTypeId) === String(selectedhoteltype)) {
+        matches = true;
+      } else {
+        // If ID doesn't match, try matching by name
+        const selectedTypeName = hotelTypeOptions.find(opt => String(opt.id) === String(selectedhoteltype))?.name;
+        if (selectedTypeName) {
+          const hotelTypeStr = String(a.hotelType || '').trim();
+          const selectedTypeStr = String(selectedTypeName || '').trim();
+          matches = hotelTypeStr === selectedTypeStr;
+        }
+      }
+      
+      if (!matches) return false;
+    }
+
+    // Filter 4: Room Category Filter
+    if (roomCategory) {
+      let matches = false;
+      
+      // First try to match by ID
+      if (a.roomCategoryId && String(a.roomCategoryId) === String(roomCategory)) {
+        matches = true;
+      } else {
+        // If ID doesn't match, try matching by name
+        const selectedRoomCatName = roomCategoryOptions.find(opt => String(opt.id) === String(roomCategory))?.name;
+        if (selectedRoomCatName) {
+          const hotelRoomCatStr = String(a.roomCategory || '').trim().toLowerCase();
+          const selectedRoomCatStr = String(selectedRoomCatName || '').trim().toLowerCase();
+          
+          // Check exact match first
+          if (hotelRoomCatStr === selectedRoomCatStr) {
+            matches = true;
+          } else {
+            // Handle multiple room categories (comma-separated)
+            const hotelCategories = hotelRoomCatStr.split(',').map(cat => cat.trim());
+            matches = hotelCategories.some(cat => cat === selectedRoomCatStr);
+            
+            // Also check if hotel's room category string contains the selected category
+            if (!matches) {
+              matches = hotelRoomCatStr.includes(selectedRoomCatStr);
+            }
+          }
+        }
+      }
+      
+      if (!matches) return false;
+    }
+
+    // Filter 5: Text Search (using searchQuery - the applied one)
+    if (searchQuery && searchQuery.trim()) {
+      const search = searchQuery.trim().toLowerCase();
+      const matchesSearch =
+        (a.hotelName && String(a.hotelName).toLowerCase().includes(search)) ||
+        (a.checkIn && String(a.checkIn).toLowerCase().includes(search)) ||
+        (a.checkOut && String(a.checkOut).toLowerCase().includes(search)) ||
+        (a.hotelType && String(a.hotelType).toLowerCase().includes(search)) ||
+        (a.roomCategory && String(a.roomCategory).toLowerCase().includes(search)) ||
+        (a.roomNo && String(a.roomNo).toLowerCase().includes(search)) ||
+        (a.customerName && String(a.customerName).toLowerCase().includes(search));
+
+      if (!matchesSearch) return false;
+    }
+
+    return true; // If all filters pass, include this booking
+  });
+}, [inhouseBookings, fromDate, toDate, selectedhotel, selectedhoteltype, roomCategory, searchQuery, hotelOptions, hotelTypeOptions, roomCategoryOptions]);
+
+
+
+   const Inhousetotalpages = useMemo(() => Math.ceil(filteredinhouseBookings.length / inhouseitemsPerPage), [filteredinhouseBookings.length, inhouseitemsPerPage]);
+   const inhouseStartIndex = useMemo(() => (inhousecurrentPage -1)* inhouseitemsPerPage, [inhousecurrentPage, inhouseitemsPerPage]);
+   const inhouseEndIndex = useMemo(() => inhouseStartIndex + inhouseitemsPerPage, [inhouseStartIndex, inhouseitemsPerPage]);
+   const currentInhousebooking = useMemo(() => filteredinhouseBookings.slice(inhouseStartIndex,inhouseEndIndex), [filteredinhouseBookings, inhouseStartIndex, inhouseEndIndex]);
+
+   const Apitotalpages = useMemo(() => Math.ceil(filteredapiBookings.length / apiitemsPerPage), [filteredapiBookings.length, apiitemsPerPage]);
+   const apiStartIndex = useMemo(() => (apicurrentPage -1) * apiitemsPerPage, [apicurrentPage, apiitemsPerPage]);
+   const apiEndIndex = useMemo(() => apiStartIndex + apiitemsPerPage, [apiStartIndex, apiitemsPerPage]);
+   const currentApibooking = useMemo(() => filteredapiBookings.slice(apiStartIndex,apiEndIndex), [filteredapiBookings, apiStartIndex, apiEndIndex]);
 
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
@@ -379,6 +526,7 @@ const [reportType,setReportType] = useState(null);
                       type="radio"
                       label="API"
                       name="reportType"
+                     style={{display:"none"}}
                       onChange={() => setReportType('api')}
                     />
                   </div>
@@ -399,7 +547,9 @@ const [reportType,setReportType] = useState(null);
       <Col md={3}>
         <Form.Group className="mb-0">
           <Form.Label className="small mb-2">From Date</Form.Label>
-          <Form.Control type="date" size="sm" />
+          <Form.Control type="date" size="sm" 
+           value={tempFromDate}  
+                    onChange={(e)=>setTempFromDate(e.target.value)} />
         </Form.Group>
       </Col>
 
@@ -407,46 +557,39 @@ const [reportType,setReportType] = useState(null);
       <Col md={3}>
         <Form.Group className="mb-0">
           <Form.Label className="small mb-2">To Date</Form.Label>
-          <Form.Control type="date" size="sm" />
+          <Form.Control type="date" size="sm" 
+           value={tempToDate}
+                    onChange={(e)=>setTempToDate(e.target.value)}/>
         </Form.Group>
       </Col>
 
       {/* Hotel - Dropdown */}
       <Col md={2}>
-        <Form.Group className="mb-0">
-          <Form.Label className="small mb-2">Hotel</Form.Label>
-          <Form.Select size="sm">
-            <option>Select</option>
-            <option>Test Hotel</option>
-          </Form.Select>
-        </Form.Group>
+        <HotelFilter
+         value={tempSelectedhotel}
+                  onChange={setTempSelectedHotel}/>
+        
       </Col>
 
       {/* Room Category */}
       <Col md={2}>
-        <Form.Group className="mb-0">
-          <Form.Label className="small mb-2">Room Category</Form.Label>
-          <Form.Select size="sm">
-            <option>Select</option>
-            <option>Deluxe Room</option>
-          </Form.Select>
-        </Form.Group>
+        <RoomCategory
+         value={tempRoomCategory}
+                  onChange={setTempRoomCategory}
+        />
       </Col>
 
       {/* Hotel Type */}
       <Col md={2}>
-        <Form.Group className="mb-0">
-          <Form.Label className="small mb-2">Hotel Type</Form.Label>
-          <Form.Select size="sm">
-            <option>Select</option>
-            <option>Hotel</option>
-          </Form.Select>
-        </Form.Group>
+        <HotelTypefilters
+          value={tempSelectedhoteltype}
+                  onChange={setTempSelectedHoteltype}
+                  />
       </Col>
 
       {/* Search Button */}
       <Col md={3}>
-        <Button variant="success" className="w-100" size="sm">
+        <Button variant="success" className="w-100" size="sm" onClick={handleSearch}>
           <i className="fas fa-search me-1"></i>Search
         </Button>
       </Col>
@@ -507,7 +650,7 @@ const [reportType,setReportType] = useState(null);
 
       {/* Search Button */}
       <Col md={4}>
-        <Button variant="success" className="w-100" size="sm">
+        <Button variant="success" className="w-100" size="sm" onClick={handleSearch}>
           <i className="fas fa-search me-1"></i>Search
         </Button>
       </Col>
@@ -618,7 +761,7 @@ const [reportType,setReportType] = useState(null);
             <td>{booking.checkOut}</td>
             <td>{booking.hotelType}</td>
             <td>{booking.roomCategory}</td>
-            <td>{booking.noOfRooms}</td>
+            <td>{booking.roomNo}</td>
             <td>{booking.customerName}</td>
           </tr>
         ))}

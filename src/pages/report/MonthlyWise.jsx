@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState,useMemo} from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { Row, Col, Card, Form,Button,Table,Modal, Pagination } from "react-bootstrap";
@@ -6,8 +6,14 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import HotelFilter from "../../components/filters/Hotelfilters";
+import HotelTypefilters from "../../components/filters/HotelTypefilters";
+import HotelCategory from "../../components/filters/HotelCategory";
+import MonthFilter from "../../components/filters/MonthFilter";
 
 function MonthlyWise() {
+
+  const [inhouseBookings,setInhouseBookings]=useState([]);
 
 const [inhousecurrentPage,setInhouseCurrentPage]=useState(1);
 const [inhouseitemsPerPage,setInhouseItemsPerPage]=useState(10);
@@ -20,6 +26,27 @@ const [emailAddress, setEmailAddress] = useState("");
 const [isSending, setIsSending] = useState(false);
 const [reportType,setReportType] = useState(null);
 
+const [tempSearchQuery, setTempSearchQuery] = useState("");
+
+ // Temporary filter states (what user sees/edits)
+     const [tempmonth,setTempmonth]= useState("");
+     const [tempSelectedhotelfilter,setTempSelectedHotelfilter]= useState("");
+     const [temphoteltype,setTemphoteltype]=useState("");
+     const [temphotelCategories,settempHotelCategories]=useState("");
+
+    // Applied filter states (used for actual filtering)
+     const [selectedmonth,setSelectedmonth]= useState("");
+     const [selectedhotelfilter,setSelectedHotelfilter]= useState("");
+     const [hoteltype,setHotelType]=useState("");
+     const [hotelcategories,setHotelCategories]=useState("");
+
+     // Store filter options to map IDs to names
+    //  const [monthOptions,setMonthOptions] = useState([]);
+     const [hotelfilterOption,setHotelfilterOption]=useState([]);
+     const [hotelTypeOptions,setHotelTypeOptions]=useState([]);
+     const [hotelCategoriesOptions,setHotelCategoriesOptions]=useState([]);
+
+
 useEffect(()=>{
 setInhouseCurrentPage(1);
 },[searchInhouseQuery]);
@@ -27,6 +54,67 @@ setInhouseCurrentPage(1);
 useEffect(()=>{
 setApiCurrentPage(1);
 },[searchApiQuery]);
+
+// Helper function to convert month name to number (1-12)
+const getMonthNumber = (monthName) => {
+  const months = {
+    "January": 1, "February": 2, "March": 3, "April": 4,
+    "May": 5, "June": 6, "July": 7, "August": 8,
+    "September": 9, "October": 10, "November": 11, "December": 12
+  };
+  return months[monthName] || null;
+};
+
+// Fetch data on initial load and when month filter changes
+useEffect(()=>{
+  const fetchInhouse = async ()=>{
+    try{
+      // Build query parameters
+      const params = {};
+      
+      // Only add month parameter if a month is actually selected by user
+      if (selectedmonth && selectedmonth !== "Select" && selectedmonth !== "") {
+        const monthNum = getMonthNumber(selectedmonth);
+        if (monthNum) {
+          params.month = monthNum;
+        }
+      }
+      // If no month is selected, don't add month param - backend will return all data
+      
+      // Build URL with query parameters
+      const queryString = new URLSearchParams(params).toString();
+      const url = `/api/reports/monthly-wise-bookings${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await axiosInstance.get(url);
+      setInhouseBookings(response.data || []);
+    }catch(error){
+      console.error("Error Loading data",error);
+      toast.error("Failed to load booking data");
+    }
+  };
+  
+  // Fetch data immediately on mount and when month changes
+  fetchInhouse();
+},[selectedmonth])
+
+
+useEffect(()=>{
+  const fetchFilterOptions = async ()=>{
+    try{
+      const [hotelRes,hotelFilterRes,hotelCategoriesRes] = await Promise.all([
+        axiosInstance.get("/api/hotels").catch(()=>({data:[]})),
+       axiosInstance.get("/api/hotelType").catch(()=>({data:[]})),
+        axiosInstance.get("/api/hotelcategory").catch(()=>({data:[]}))
+      ]);
+      setHotelfilterOption(Array.isArray(hotelRes.data) ? hotelRes.data.map(h=>({id:h.id,name:h.hotelName})):[]);
+      setHotelTypeOptions(Array.isArray(hotelFilterRes.data) ? hotelFilterRes.data.map(ht=>({id:ht.hotelTypeId,name:ht.name})):[]);
+      setHotelCategoriesOptions(Array.isArray(hotelCategoriesRes.data) ? hotelCategoriesRes.data.map(hc=>({id:hc.hotelCategoryId,name:hc})):[]);
+    }catch(error){
+      console.error("failed to fetch",error);
+    }
+  };fetchFilterOptions();
+},[])
+
 
 const handleSendEmail = async () => {
   // Validate email
@@ -43,9 +131,10 @@ const handleSendEmail = async () => {
       reportType: 'Monthlywise',
       subType: reportType, // 'inhouse' or 'api'
       filters: {
-        fromDate: fromDate,
-        toDate: toDate,
-        // ... other filters
+        month: selectedmonth,
+        hotelId: selectedhotelfilter,
+        hotelTypeId: hoteltype,
+        hotelCategoryId: hotelcategories,
       }
     });
 
@@ -64,8 +153,8 @@ const handleSendEmail = async () => {
 const handlePrint = () => {
   const printWindow = window.open('', '_blank');
   
-  // Get current data based on report type
-  const currentData = reportType === 'inhouse' ? inhouseBookings : apiBookings;
+  // Get current filtered data based on report type
+  const currentData = reportType === 'inhouse' ? filteredinhousebookings : filteredapiBookings;
   const columns = reportType === 'inhouse' 
     ? ['Sl.No', 'Hotel Name', 'Hotel Type', 'Hotel Category', 'No of Bookings', 'No Of Cancelling']
     : ['Sl.No', 'Hotel Name', 'Platform', 'No Of Booking',"No Of Cancelled Booking"];
@@ -91,26 +180,26 @@ const handlePrint = () => {
             </tr>
           </thead>
           <tbody>
-            ${currentData.map((booking) => {
+            ${currentData.map((booking, index) => {
               if (reportType === 'inhouse') {
                 return `
                   <tr>
-                    <td>${booking.slNo}</td>
-              <td>${booking.hotelName}</td>
-              <td>${booking.hotelType}</td>
-              <td>${booking.hotelCategory}</td>
-              <td>${booking.noofbooking}</td>
-              <td>${booking.noofcancelledbooking}</td>
+                    <td>${index + 1}</td>
+                    <td>${booking.hotelName || ''}</td>
+                    <td>${booking.hotelType || ''}</td>
+                    <td>${booking.hotelCategory || ''}</td>
+                    <td>${booking.noOfBooking || booking.noofbooking || 0}</td>
+                    <td>${booking.noOfBookingCancelled || booking.noofCancelledbooking || 0}</td>
                   </tr>
                 `;
               } else {
                 return `
                   <tr>
-                    <td>${booking.slNo}</td>
-              <td>${booking.hotelName}</td>
-              <td>${booking.platform}</td>
-              <td>${booking.noofbooking}</td>
-              <td>${booking.noofCancelledbooking}</td>
+                    <td>${index + 1}</td>
+                    <td>${booking.hotelName || ''}</td>
+                    <td>${booking.platform || ''}</td>
+                    <td>${booking.noofbooking || 0}</td>
+                    <td>${booking.noofCancelledbooking || 0}</td>
                   </tr>
                 `;
               }
@@ -127,33 +216,33 @@ const handlePrint = () => {
 const handlePDF = () => {
   const doc = new jsPDF();
   
-  // Get current data
-  const currentData = reportType === 'inhouse' ? inhouseBookings : apiBookings;
+  // Get current filtered data
+  const currentData = reportType === 'inhouse' ? filteredinhousebookings : filteredapiBookings;
   
   doc.text(`Monthly Wise Report - ${reportType === 'inhouse' ? 'Inhouse' : 'API'}`, 20, 20);
   
   if (reportType === 'inhouse') {
     autoTable(doc, {
       head: [['Sl.No', 'Hotel Name', 'Hotel Type', 'Hotel Category', 'No of Bookings', 'No Of Cancelling']],
-      body: currentData.map((booking) => [
-        booking.slNo,
-        booking.hotelName,
-        booking.hotelType,
-        booking.hotelCategory,
-        booking.noofbooking,
-        booking.noofcancelledbooking,
+      body: currentData.map((booking, index) => [
+        index + 1,
+        booking.hotelName || '',
+        booking.hotelType || '',
+        booking.hotelCategory || '',
+        booking.noOfBooking || booking.noofbooking || 0,
+        booking.noOfBookingCancelled || booking.noofCancelledbooking || 0,
       ]),
       startY: 30,
     });
   } else {
     autoTable(doc, {
       head: [['Sl.No', 'Hotel Name', 'Platform', 'No Of Booking',"No Of Cancelled Booking"]],
-      body: currentData.map((booking) => [
-        booking.slNo,
-        booking.hotelName,
-        booking.platform,
-        booking.noofbooking,
-        booking.noofCancelledbooking,
+      body: currentData.map((booking, index) => [
+        index + 1,
+        booking.hotelName || '',
+        booking.platform || '',
+        booking.noofbooking || 0,
+        booking.noofCancelledbooking || 0,
       ]),
       startY: 30,
     });
@@ -163,8 +252,8 @@ const handlePDF = () => {
 };
 
 const handleExcel = () => {
-  // Get current data
-  const currentData = reportType === 'inhouse' ? inhouseBookings : apiBookings;
+  // Get current filtered data
+  const currentData = reportType === 'inhouse' ? filteredinhousebookings : filteredapiBookings;
   const headers = reportType === 'inhouse'
     ? ['Sl.No', 'Hotel Name', 'Hotel Type', 'Hotel Category', 'No of Bookings', 'No Of Cancelling']
     : ['Sl.No', 'Hotel Name', 'Platform', 'No Of Booking',"No Of Cancelled Booking"];
@@ -181,23 +270,23 @@ const handleExcel = () => {
   
   const csvContent = [
     headers.map(escapeCSV).join(','),
-    ...currentData.map((booking) => {
+    ...currentData.map((booking, index) => {
       if (reportType === 'inhouse') {
         return [
-          booking.slNo,
-        booking.hotelName,
-        booking.hotelType,
-        booking.hotelCategory,
-        booking.noofbooking,
-        booking.noofcancelledbooking,
+          index + 1,
+          booking.hotelName || '',
+          booking.hotelType || '',
+          booking.hotelCategory || '',
+          booking.noOfBooking || booking.noofbooking || 0,
+          booking.noOfBookingCancelled || booking.noofCancelledbooking || 0,
         ].map(escapeCSV).join(',');
       } else {
         return [
-          booking.slNo,
-        booking.hotelName,
-        booking.platform,
-        booking.noofbooking,
-        booking.noofCancelledbooking,
+          index + 1,
+          booking.hotelName || '',
+          booking.platform || '',
+          booking.noofbooking || 0,
+          booking.noofCancelledbooking || 0,
         ].map(escapeCSV).join(',');
       }
     })
@@ -213,162 +302,20 @@ const handleExcel = () => {
   window.URL.revokeObjectURL(url);
 };
 
- const inhouseBookings = [
-  {
-    slNo: 1,
-    hotelName: "Test Hotel",
-    hotelType: "07/12/2023",
-    hotelCategory: "6 star",
-    noofbooking: "11",
-    noofcancelledbooking: "5",
-  },
-  {
-   slNo: 2,
-    hotelName: "Jumeirah Hotel",
-    hotelType: "villa",
-    hotelCategory: "5 star",
-    noofbooking: "4",
-    noofcancelledbooking: "10",
-  },
-  {
-    slNo: 3,
-    hotelName: "Direct Hotel",
-    hotelType: "beach",
-    hotelCategory: "4 star",
-    noofbooking: "1",
-    noofcancelledbooking: "2",
-  },
-  {
-    slNo: 4,
-    hotelName: "Test Hotel",
-    hotelType: "resort",
-    hotelCategory: "3 star",
-    noofbooking: "9",
-    noofcancelledbooking: "7",
-  },
-   {
-    slNo: 1,
-    hotelName: "Test Hotel",
-    hotelType: "07/12/2023",
-    hotelCategory: "6 star",
-    noofbooking: "11",
-    noofcancelledbooking: "5",
-  },
-  {
-   slNo: 2,
-    hotelName: "Jumeirah Hotel",
-    hotelType: "villa",
-    hotelCategory: "5 star",
-    noofbooking: "4",
-    noofcancelledbooking: "10",
-  },
-  {
-    slNo: 3,
-    hotelName: "Direct Hotel",
-    hotelType: "beach",
-    hotelCategory: "4 star",
-    noofbooking: "1",
-    noofcancelledbooking: "2",
-  },
-  {
-    slNo: 4,
-    hotelName: "Test Hotel",
-    hotelType: "resort",
-    hotelCategory: "3 star",
-    noofbooking: "9",
-    noofcancelledbooking: "7",
-  },
-  {
-    slNo: 1,
-    hotelName: "Test Hotel",
-    hotelType: "07/12/2023",
-    hotelCategory: "6 star",
-    noofbooking: "11",
-    noofcancelledbooking: "5",
-  },
-  {
-   slNo: 2,
-    hotelName: "Jumeirah Hotel",
-    hotelType: "villa",
-    hotelCategory: "5 star",
-    noofbooking: "4",
-    noofcancelledbooking: "10",
-  },
-  {
-    slNo: 3,
-    hotelName: "Direct Hotel",
-    hotelType: "beach",
-    hotelCategory: "4 star",
-    noofbooking: "1",
-    noofcancelledbooking: "2",
-  },
-  {
-    slNo: 4,
-    hotelName: "Test Hotel",
-    hotelType: "resort",
-    hotelCategory: "3 star",
-    noofbooking: "9",
-    noofcancelledbooking: "7",
-  }
-];
+const handleSearch = () => {
+  // Apply temporary filter values to actual filter values
+  setSelectedmonth(tempmonth);
+  setSelectedHotelfilter(tempSelectedhotelfilter);
+  setHotelType(temphoteltype);
+  setHotelCategories(temphotelCategories);
+  setSearchInhouseQuery(tempSearchQuery);
+  setSearchApiQuery(tempSearchQuery);
+  setInhouseCurrentPage(1);
+  setApiCurrentPage(1);
+};
+
 
 const apiBookings = [
-  {
-    slNo: 1,
-    hotelName: "Jumeirah Beach Hotel",
-    platform: "jumeirah",
-    noofbooking: "20",
-    noofCancelledbooking: 12,
-  },
-  {
-    slNo: 2,
-    hotelName: "Jumeirah Beach Hotel",
-    platform: "Direct Client",
-    noofbooking: "24",
-    noofCancelledbooking: 1,
-  },
-  {
-   slNo: 3,
-    hotelName: "Jumeirah Beach Hotel",
-    platform: "Globo",
-    noofbooking: "24",
-    noofCancelledbooking: 8,
-  },
-  {
-    slNo: 4,
-    hotelName: "Jumeirah Beach Hotel",
-    platform: "jumeirah",
-    noofbooking: "14",
-    noofCancelledbooking: 5,
-  },
-  {
-    slNo: 1,
-    hotelName: "Jumeirah Beach Hotel",
-    platform: "jumeirah",
-    noofbooking: "20",
-    noofCancelledbooking: 12,
-  },
-  {
-    slNo: 2,
-    hotelName: "Jumeirah Beach Hotel",
-    platform: "Direct Client",
-    noofbooking: "24",
-    noofCancelledbooking: 1,
-  },
-  {
-   slNo: 3,
-    hotelName: "Jumeirah Beach Hotel",
-    platform: "Globo",
-    noofbooking: "24",
-    noofCancelledbooking: 8,
-  },
-  {
-    slNo: 4,
-    hotelName: "Jumeirah Beach Hotel",
-    platform: "jumeirah",
-    noofbooking: "14",
-    noofCancelledbooking: 5,
-  },
   {
     slNo: 1,
     hotelName: "Jumeirah Beach Hotel",
@@ -410,21 +357,111 @@ const filteredapiBookings = apiBookings.filter(a=>{
 
 })
 
-const filteredinhousebookings=inhouseBookings.filter(a=>{
-  const search=searchInhouseQuery.toLowerCase();
-  return(
-    a.hotelName.toLowerCase().includes(search)||
-    a.hotelType.toLowerCase().includes(search)||
-    String(a.hotelCategory).toLowerCase().includes(search)||
-    String(a.noofbooking).toLowerCase().includes(search)||
-    String(a.noofcancelledbooking).toLowerCase().includes(search)
-  )
-})
+// const filteredinhousebookings=inhouseBookings.filter(a=>{
+//   const search=searchInhouseQuery.toLowerCase();
+//   return(
+//     a.hotelName.toLowerCase().includes(search)||
+//     a.hotelType.toLowerCase().includes(search)||
+//     String(a.hotelCategory).toLowerCase().includes(search)||
+//     String(a.noofbooking).toLowerCase().includes(search)||
+//     String(a.noofcancelledbooking).toLowerCase().includes(search)
+//   )
+// })
 
-const Inhousetotalpages = Math.ceil(filteredinhousebookings.length / inhouseitemsPerPage);
-const inhouseStartIndex =(inhousecurrentPage -1) * inhouseitemsPerPage;
-const inhouseEndIndex = inhouseStartIndex + inhouseitemsPerPage;
-const currentInhousebooking = filteredinhousebookings.slice(inhouseStartIndex,inhouseEndIndex);
+const filteredinhousebookings = useMemo(() => {
+  return inhouseBookings.filter(a => {
+    if (!a) return false;
+
+    // Filter 1: Month Filter - Note: Month filtering is primarily done on backend via API
+    // This check ensures data consistency (backend should handle the actual filtering)
+    // If backend doesn't filter properly, we can add client-side date filtering here
+    // For now, we rely on backend filtering via API parameters
+
+    // Filter 2: Hotel Filter
+    if (selectedhotelfilter) {
+      let matches = false;
+      
+      // First try to match by ID (most reliable)
+      if (a.hotelId && String(a.hotelId) === String(selectedhotelfilter)) {
+        matches = true;
+      } else {
+        // If ID doesn't match, try matching by name
+        const selectedHotelName = hotelfilterOption.find(opt => String(opt.id) === String(selectedhotelfilter))?.name;
+        if (selectedHotelName) {
+          const hotelNameStr = String(a.hotelName || '').trim();
+          const selectedHotelNameStr = String(selectedHotelName || '').trim();
+          matches = hotelNameStr === selectedHotelNameStr;
+        }
+      }
+      
+      if (!matches) return false;
+    }
+
+    // Filter 3: Hotel Type Filter
+    if (hoteltype) {
+      let matches = false;
+      
+      // First try to match by ID
+      if (a.hotelTypeId && String(a.hotelTypeId) === String(hoteltype)) {
+        matches = true;
+      } else {
+        // If ID doesn't match, try matching by name
+        const selectedTypeName = hotelTypeOptions.find(opt => String(opt.id) === String(hoteltype))?.name;
+        if (selectedTypeName) {
+          const hotelTypeStr = String(a.hotelType || '').trim();
+          const selectedTypeStr = String(selectedTypeName || '').trim();
+          matches = hotelTypeStr === selectedTypeStr;
+        }
+      }
+      
+      if (!matches) return false;
+    }
+
+    // Filter 4: Hotel Category Filter
+    if (hotelcategories) {
+      let matches = false;
+      
+      // First try to match by ID
+      if (a.hotelCategoryId && String(a.hotelCategoryId) === String(hotelcategories)) {
+        matches = true;
+      } else {
+        // If ID doesn't match, try matching by category name/value
+        const selectedCategory = hotelCategoriesOptions.find(opt => String(opt.id) === String(hotelcategories));
+        if (selectedCategory) {
+          const categoryValue = selectedCategory.name?.hotelCategory || selectedCategory.name;
+          const bookingCategoryStr = String(a.hotelCategory || '').trim();
+          const selectedCategoryStr = String(categoryValue || '').trim();
+          matches = bookingCategoryStr === selectedCategoryStr || 
+                   bookingCategoryStr.includes(selectedCategoryStr) ||
+                   selectedCategoryStr.includes(bookingCategoryStr);
+        }
+      }
+      
+      if (!matches) return false;
+    }
+
+    // Filter 5: Text Search (using searchInhouseQuery - the applied one)
+    if (searchInhouseQuery && searchInhouseQuery.trim()) {
+      const search = searchInhouseQuery.trim().toLowerCase();
+      const matchesSearch =
+        (a.hotelName && String(a.hotelName).toLowerCase().includes(search)) ||
+        (a.hotelType && String(a.hotelType).toLowerCase().includes(search)) ||
+        (a.hotelCategory && String(a.hotelCategory).toLowerCase().includes(search)) ||
+        (a.noOfBooking && String(a.noOfBooking).toLowerCase().includes(search)) ||
+        (a.noOfBookingCancelled && String(a.noOfBookingCancelled).toLowerCase().includes(search));
+      
+      if (!matchesSearch) return false;
+    }
+
+    return true; // If all filters pass, include this booking
+  });
+}, [inhouseBookings, selectedmonth, selectedhotelfilter, hoteltype, hotelcategories, searchInhouseQuery, hotelfilterOption, hotelTypeOptions, hotelCategoriesOptions]);
+
+
+ const Inhousetotalpages = useMemo(() => Math.ceil(filteredinhousebookings.length / inhouseitemsPerPage), [filteredinhousebookings.length, inhouseitemsPerPage]);
+ const inhouseStartIndex = useMemo(() => (inhousecurrentPage -1)* inhouseitemsPerPage, [inhousecurrentPage, inhouseitemsPerPage]);
+ const inhouseEndIndex = useMemo(() => inhouseStartIndex + inhouseitemsPerPage, [inhouseStartIndex, inhouseitemsPerPage]);
+ const currentInhousebooking = useMemo(() => filteredinhousebookings.slice(inhouseStartIndex,inhouseEndIndex), [filteredinhousebookings, inhouseStartIndex, inhouseEndIndex]);
 
 
 const Apitotalpages = Math.ceil(filteredapiBookings.length / apiitemsPerPage);
@@ -460,6 +497,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                       type="radio"
                       label="API"
                       name="reportType"
+                      style={{display:"none"}}
                       onChange={() => setReportType('api')}
                     />
                   </div>
@@ -478,63 +516,39 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                 <>
                   <Row className="align-items-end g-4 mt-3">
                     {/* Month */}
-                    <Col md={3}>
-                      <Form.Group className="mb-0">
-                        <Form.Label className="small mb-2">Month</Form.Label>
-                        <Form.Select size="sm">
-                          <option>Select</option>
-                          <option>January</option>
-                          <option>February</option>
-                          <option>March</option>
-                          <option>April</option>
-                          <option>May</option>
-                          <option>June</option>
-                          <option>July</option>
-                          <option>August</option>
-                          <option>September</option>
-                          <option>October</option>
-                          <option>November</option>
-                          <option>December</option>
-                        </Form.Select>
-                      </Form.Group>
-                    </Col>
-
-                    {/* Hotel */}
                     <Col md={2}>
-                      <Form.Group className="mb-0">
-                        <Form.Label className="small mb-2">Hotel</Form.Label>
-                        <Form.Select size="sm">
-                          <option>Select</option>
-                          <option>Test Hotel</option>
-                        </Form.Select>
-                      </Form.Group>
+                      <MonthFilter
+                        value={tempmonth}
+                        onChange={setTempmonth}
+                      />
                     </Col>
 
-                    {/* Hotel Type */}
-                    <Col md={2}>
-                      <Form.Group className="mb-0">
-                        <Form.Label className="small mb-2">Hotel Type</Form.Label>
-                        <Form.Select size="sm">
-                          <option>Select</option>
-                          <option>Deluxe Room</option>
-                        </Form.Select>
-                      </Form.Group>
-                    </Col>
+                  {/* Hotel */}
+<Col md={2}>
+  <HotelFilter
+    value={tempSelectedhotelfilter}
+    onChange={setTempSelectedHotelfilter}
+  />
+</Col>
 
-                    {/* Hotel Category */}
-                    <Col md={2}>
-                      <Form.Group className="mb-0">
-                        <Form.Label className="small mb-2">Hotel Category</Form.Label>
-                        <Form.Select size="sm">
-                          <option>Select</option>
-                          <option>Hotel</option>
-                        </Form.Select>
-                      </Form.Group>
-                    </Col>
+{/* Hotel Type */}
+<Col md={2}>
+  <HotelTypefilters
+    value={temphoteltype}
+    onChange={setTemphoteltype}
+  />
+</Col>
 
+{/* Hotel Category */}
+<Col md={2}>
+  <HotelCategory
+    value={temphotelCategories}
+    onChange={settempHotelCategories}
+  />
+</Col>
                     {/* Search Button */}
                     <Col md={3}>
-                      <Button variant="success" className="w-100" size="sm">
+                      <Button variant="success" className="w-100" size="sm" onClick={handleSearch}>
                         <i className="fas fa-search me-1"></i>Search
                       </Button>
                     </Col>
@@ -563,8 +577,8 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                     <Col className="d-flex justify-content-end">
                       <input
                         type="text"
-                        value={searchInhouseQuery}
-                        onChange={(e)=>setSearchInhouseQuery(e.target.value)}
+                        value={tempSearchQuery}
+                        onChange={(e)=>setTempSearchQuery(e.target.value)}
                         placeholder="search here"
                         className="form-control form-control-sm w-auto"
                       />
@@ -578,30 +592,16 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                 <>
                   <Row className="align-items-end g-4 mt-3">
                     {/* Month */}
-                    <Col md={4}>
-                      <Form.Group className="mb-0">
-                        <Form.Label className="small mb-2">Month</Form.Label>
-                        <Form.Select size="sm">
-                          <option>Select</option>
-                          <option>January</option>
-                          <option>February</option>
-                          <option>March</option>
-                          <option>April</option>
-                          <option>May</option>
-                          <option>June</option>
-                          <option>July</option>
-                          <option>August</option>
-                          <option>September</option>
-                          <option>October</option>
-                          <option>November</option>
-                          <option>December</option>
-                        </Form.Select>
-                      </Form.Group>
+                    <Col md={3}>
+                      <MonthFilter
+                        value={tempmonth}
+                        onChange={setTempmonth}
+                      />
                     </Col>
 
                     {/* Search Button */}
-                    <Col md={4}>
-                      <Button variant="success" className="w-100" size="sm">
+                    <Col md={3}>
+                      <Button variant="success" className="w-100" size="sm" onClick={handleSearch}>
                         <i className="fas fa-search me-1"></i>Search
                       </Button>
                     </Col>
@@ -630,8 +630,8 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                     <Col className="d-flex justify-content-end">
                       <input
                         type="text"
-                        value={searchApiQuery}
-                        onChange={(e)=>setSearchApiQuery(e.target.value)}
+                        value={tempSearchQuery}
+                        onChange={(e)=>setTempSearchQuery(e.target.value)}
                         placeholder="search here"
                         className="form-control form-control-sm w-auto"
                       />
@@ -707,9 +707,9 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                           <td>{inhouseStartIndex + index + 1}</td>
                           <td>{booking.hotelName}</td>
                           <td>{booking.hotelType}</td>
-                          <td>{booking.hotelCategory}</td>
-                          <td>{booking.noofbooking}</td>
-                          <td>{booking.noofcancelledbooking}</td>
+                          <td>{booking.hotelCategory} Star</td>
+                          <td>{booking.noOfBooking}</td>
+                          <td>{booking.noOfBookingCancelled}</td>
                         </tr>
                       ))}
                     </tbody>

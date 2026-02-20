@@ -93,6 +93,25 @@ const HotelBookingPage = () => {
       return updatedRooms;
     });
 
+    // Auto-populate Primary Guest if Room 1 Adult 1
+    if (roomIndex === 0 && guestIndex === 0) {
+      if (['salutation', 'firstName', 'lastName'].includes(field)) {
+        setPrimaryGuest((prev) => ({
+          ...prev,
+          [field]: value,
+        }));
+
+        // Clear validation error for primary guest field
+        if (validationErrors[field]) {
+          setValidationErrors((prev) => {
+            const updated = { ...prev };
+            delete updated[field];
+            return updated;
+          });
+        }
+      }
+    }
+
     // Clear validation error when user starts typing
     const guestKey = `room_${roomIndex}_guest_${guestIndex}_${field}`;
     if (validationErrors[guestKey]) {
@@ -261,18 +280,18 @@ const HotelBookingPage = () => {
         checkOutDate: bookingData.payload.checkOutDate,
         nights: nights,
         employeeId: primaryGuest.employeeId || null,
-        roomStatus : bookingData.selectedRate.roomStatus,
+        roomStatus: bookingData.selectedRate.roomStatus,
         cancellationPolicy:
           bookingData.selectedRate.cancellationPolicy?.map(
             (p) => p.policyText
           ) || [],
-        
+
         // Calculate deadlineDate based on nonRefundable and cancellationPolicy
         deadlineDate: (() => {
-          const nonRefundable = 
+          const nonRefundable =
             bookingData.selectedRate.nonRefundable === true ||
             bookingData.selectedRate.nonRefundable === "true";
-          
+
           if (nonRefundable === true) {
             // 2 days before current date
             const today = new Date();
@@ -289,16 +308,16 @@ const HotelBookingPage = () => {
             if (policies.length === 0) {
               return null;
             }
-            
+
             // Find earliest fromDate
             const dates = policies
               .map(p => p.fromDate ? new Date(p.fromDate) : null)
               .filter(date => date !== null && !isNaN(date.getTime()));
-            
+
             if (dates.length === 0) {
               return null;
             }
-            
+
             const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
             const deadline = new Date(earliestDate);
             deadline.setDate(earliestDate.getDate() - 2);
@@ -339,7 +358,7 @@ const HotelBookingPage = () => {
           mealPlan: bookingData.selectedRate.mealPlan,
           nonRefundable:
             bookingData.selectedRate.nonRefundable === true ||
-            bookingData.selectedRate.nonRefundable === "true"
+              bookingData.selectedRate.nonRefundable === "true"
               ? true
               : false,
           currency: bookingData.selectedRate.currency || "AED",
@@ -391,7 +410,7 @@ const HotelBookingPage = () => {
         0
       );
 
-      console.log("🔍 Checking credit for Agent:",agentId,"Amount:", requiredAmount);
+      console.log("🔍 Checking credit for Agent:", agentId, "Amount:", requiredAmount);
 
       const creditResponse = await axiosInstance.get(
         `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`
@@ -560,7 +579,7 @@ const HotelBookingPage = () => {
                         <div className="d-flex justify-content-between align-items-center">
                           <h5 className="mb-0 text-muted">Selling Price</h5>
                           <h4 className="mb-0 text-success fw-bold">
-                            {formatPrice(selectedRate.rate)}
+                            {formatPrice(selectedRate.roomRateBasedOnRoomCount)}
                           </h4>
                         </div>
                       </div>
@@ -570,7 +589,7 @@ const HotelBookingPage = () => {
                       <div className="d-flex justify-content-between align-items-center">
                         <h5 className="mb-0">Total Price</h5>
                         <h4 className="mb-0 fw-bold">
-                          {formatPrice(selectedRate.rate)}
+                          {formatPrice(selectedRate.roomRateBasedOnRoomCount_WithoutMarkup)}
                         </h4>
                       </div>
                     </div>
@@ -615,13 +634,11 @@ const HotelBookingPage = () => {
                                 <Col md={2}>
                                   <span className="fw-semibold text-muted">
                                     {guest.isChild
-                                      ? `Child ${
-                                          guestIndex - room.adults + 1
-                                        } (Age: ${
-                                          room.childAges[
-                                            guestIndex - room.adults
-                                          ]
-                                        })`
+                                      ? `Child ${guestIndex - room.adults + 1
+                                      } (Age: ${room.childAges[
+                                      guestIndex - room.adults
+                                      ]
+                                      })`
                                       : `Adult ${guestIndex + 1}`}{" "}
                                     *
                                   </span>
@@ -640,7 +657,7 @@ const HotelBookingPage = () => {
                                     className="form-control-sm"
                                     isInvalid={
                                       !!validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_salutation`
+                                      `room_${roomIndex}_guest_${guestIndex}_salutation`
                                       ]
                                     }
                                   >
@@ -653,14 +670,14 @@ const HotelBookingPage = () => {
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_salutation`
                                   ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrors[
+                                      <Form.Control.Feedback type="invalid">
+                                        {
+                                          validationErrors[
                                           `room_${roomIndex}_guest_${guestIndex}_salutation`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
+                                          ]
+                                        }
+                                      </Form.Control.Feedback>
+                                    )}
                                 </Col>
                                 <Col md={3}>
                                   <Form.Control
@@ -678,21 +695,21 @@ const HotelBookingPage = () => {
                                     className="form-control-sm"
                                     isInvalid={
                                       !!validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_firstName`
+                                      `room_${roomIndex}_guest_${guestIndex}_firstName`
                                       ]
                                     }
                                   />
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_firstName`
                                   ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrors[
+                                      <Form.Control.Feedback type="invalid">
+                                        {
+                                          validationErrors[
                                           `room_${roomIndex}_guest_${guestIndex}_firstName`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
+                                          ]
+                                        }
+                                      </Form.Control.Feedback>
+                                    )}
                                 </Col>
                                 <Col md={3}>
                                   <Form.Control
@@ -710,21 +727,21 @@ const HotelBookingPage = () => {
                                     className="form-control-sm"
                                     isInvalid={
                                       !!validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_lastName`
+                                      `room_${roomIndex}_guest_${guestIndex}_lastName`
                                       ]
                                     }
                                   />
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_lastName`
                                   ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrors[
+                                      <Form.Control.Feedback type="invalid">
+                                        {
+                                          validationErrors[
                                           `room_${roomIndex}_guest_${guestIndex}_lastName`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
+                                          ]
+                                        }
+                                      </Form.Control.Feedback>
+                                    )}
                                 </Col>
                                 <Col md={2}>
                                   <Form.Select
@@ -740,7 +757,7 @@ const HotelBookingPage = () => {
                                     className="form-control-sm"
                                     isInvalid={
                                       !!validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_gender`
+                                      `room_${roomIndex}_guest_${guestIndex}_gender`
                                       ]
                                     }
                                   >
@@ -752,14 +769,14 @@ const HotelBookingPage = () => {
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_gender`
                                   ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrors[
+                                      <Form.Control.Feedback type="invalid">
+                                        {
+                                          validationErrors[
                                           `room_${roomIndex}_guest_${guestIndex}_gender`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
+                                          ]
+                                        }
+                                      </Form.Control.Feedback>
+                                    )}
                                 </Col>
                               </Row>
                               {guestIndex < room.guests.length - 1 && (
@@ -933,7 +950,7 @@ const HotelBookingPage = () => {
                       )}
                     </Form.Group>
                   </Col>
-                </Row>              
+                </Row>
               </Card>
 
               {/* Remarks & Requests */}
@@ -1117,7 +1134,7 @@ const HotelBookingPage = () => {
                           </p>
                           <ul className="mb-0 ps-3">
                             {pendingPayload.cancellationPolicy &&
-                            pendingPayload.cancellationPolicy.length > 0 ? (
+                              pendingPayload.cancellationPolicy.length > 0 ? (
                               pendingPayload.cancellationPolicy.map(
                                 (policy, index) => (
                                   <li key={index} className="text-dark">
@@ -1134,15 +1151,28 @@ const HotelBookingPage = () => {
                         </Col>
 
                         <Col xs={12}>
+                          {/* ✅ Show Selling Price only if ADMIN */}
+                          {activeUserRole === "ADMIN" && (
+                            <div className="p-3 rounded bg-white shadow-sm mt-2 border">
+                              <div className="d-flex justify-content-between align-items-center">
+                                <h6 className="mb-0 text-muted">
+                                  Selling Price
+                                </h6>
+                                <h5 className="mb-0 text-success fw-bold">
+                                  {formatPrice(selectedRate.roomRateBasedOnRoomCount)}
+                                </h5>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
                             <h6 className="mb-0 fw-bold">Total Price</h6>
                             <h4 className="mb-0">
-                              {formatPrice(
-                                pendingPayload.rooms.reduce(
-                                  (sum, r) => sum + (r.rate || 0),
-                                  0
-                                )
-                              )}
+                              {formatPrice(selectedRate.roomRateBasedOnRoomCount)} for{" "}
+                              {pendingPayload.rooms.length}{" "}
+                              {pendingPayload.rooms.length > 1
+                                ? "rooms"
+                                : "room"}
                             </h4>
                           </div>
                         </Col>

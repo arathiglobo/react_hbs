@@ -431,7 +431,7 @@ const HotelRegistrationActions = () => {
                   <div className="col-md-6">
                     <div className="hotel-info">
                       {/* Hotel Name */}
-                      <h3 className="hotel-name mb-3">{hotelData.hotelName}</h3>
+                      <h3 className="hotel-name mb-1">{hotelData.hotelName}</h3>
 
                       {/* Hotel Address */}
                       <div className="hotel-location mb-4">
@@ -468,7 +468,7 @@ const HotelRegistrationActions = () => {
                                   className="amenity-item"
                                 >
                                   <IconComponent className="amenity-icon" />
-                                  <span>{amenity.amenityName}</span>
+                                  <span className="amenitiesname"> {amenity.amenityName}</span>
                                 </div>
                               );
                             })}
@@ -1466,7 +1466,7 @@ const HotelRegistrationActions = () => {
                 >
                   <FaArrowLeft /> Back
                 </Button>
-                <h1 className="page-title ms-3 mb-0">View Hotel</h1>
+                <h1 className="page-title ms-3 mb-0">{hotelData.hotelName}</h1>
               </div>
             </div>
 

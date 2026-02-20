@@ -1,26 +1,64 @@
-import React, {useState} from "react";
+import React, {useEffect, useState, useMemo} from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import { Row, Col, Card, Form,Button,Table,Modal,Pagination } from "react-bootstrap";
 import { toast } from "react-hot-toast";
-import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import HotelFilter from "../../components/filters/Hotelfilters";
+import axiosInstance from "../../components/AxiosInstance";
 
 export default function ContractExpiryReport() {
 
-
+const [contractList,setContractList]=useState([]);
+const [currentPage,setCurrentPage]=useState(1);
+const [itemsPerPage,setItemsPerPage]=useState(10);
 const [tableSearch,setTableSearch]=useState("");
 const [showMailModal, setShowMailModal] = useState(false);
 const [emailAddress, setEmailAddress] = useState("");
 const [isSending, setIsSending] = useState(false);
-const [showData, setShowData] = useState(false);
-const [filteredData, setFilteredData] = useState([]);
-const [filters, setFilters] = useState({
-  fromDate: '',
-  toDate: '',
-  hotelType: ''
-});
+
+// Temporary filter states (what user sees/edits)
+const [tempFromDate,setTempFromDate]=useState("");
+const [tempToDate,setTempToDate]=useState("");
+const [tempSelectedHotel,setTempSelectedHotel]=useState("");
+
+// Applied filter states (used for actual filtering)
+const [fromDate,setFromDate]=useState("");
+const [toDate,setToDate]=useState("");
+const [selectedHotel,setSelectedHotel]=useState("");
+
+// Store filter options to map IDs to names
+const [hotelOptions,setHotelOptions]=useState([]);
+
+
+useEffect(()=>{
+  setCurrentPage(1);
+},[tableSearch]);
+
+useEffect(()=>{
+  const fetchcontract = async ()=>{
+    try{
+      const response = await axiosInstance.get("/api/report/contractrates")
+      setContractList(response.data || [])
+    }catch(error){
+      console.error("error fetching data",error)
+      toast.error("Failed to load contract data");
+    }};
+  fetchcontract();
+},[])
+
+useEffect(()=>{
+  const fetchFilterOptions = async ()=>{
+    try{
+      const hotelRes = await axiosInstance.get("/api/hotels").catch(()=>({data:[]}));
+      setHotelOptions(Array.isArray(hotelRes.data) ? hotelRes.data.map(h=>({id:h.id,name:h.hotelName})):[]);
+    }catch(error){
+      console.error("failed to fetch filter options",error);
+    }
+  };
+  fetchFilterOptions();
+},[])
 
 // Function to calculate status based on expiration date
 const getContractStatus = (expirationDate) => {
@@ -47,118 +85,137 @@ const getContractStatus = (expirationDate) => {
   }
 };
 
-// Dummy data (without status field - it will be calculated dynamically)
-const contracts = [
-  {
-    id: 1,
-    rateCode: "WINTER CONTRACT",
-    day: "All Days",
-    hotel: "Test Hotel One",
-    hotelType: "Hotel",
-    expirationDate: "31/03/2025",
-  },
-  {
-    id: 1,
-    rateCode: "December CONTRACT",
-    day: "All Days",
-    hotel: "Test Hotel One",
-    hotelType: "Hotel",
-    expirationDate: "31/08/2025",
-  },
-   {
-    id: 2,
-    rateCode: "SUMMER CONTRACT",
-    day: "Half",
-    hotel: "Test Hotel Two",
-    hotelType: "Resort",
-    expirationDate: "31/03/2024",
-  },
-  {
-    id: 6,
-    rateCode: "WINTER RESORT CONTRACT",
-    day: "All Days",
-    hotel: "Test Resort Hotel",
-    hotelType: "Resort",
-    expirationDate: "15/11/2024",
-  },
-   {
-    id: 3,
-    rateCode: "MONSOON CONTRACT",
-    day: "All Days",
-    hotel: "Test Hotel Three",
-    hotelType: "Hotel",
-    expirationDate: "31/03/2026",
-  },
-  {
-    id: 4,
-    rateCode: "FALL CONTRACT",
-    day: "All Days",
-    hotel: "Test Hotel Four",
-    hotelType: "Hotel",
-    expirationDate: "15/12/2025",
-  },
-  {
-    id: 5,
-    rateCode: "SPRING CONTRACT",
-    day: "Weekends",
-    hotel: "Test Hotel Five",
-    hotelType: "Hotel",
-    expirationDate: "20/03/2026",
-  },
-];
 
-// Get unique hotel types from contracts data
-const uniqueHotelTypes = [...new Set(contracts.map(contract => contract.hotelType).filter(Boolean))];
 
-// Filter function for Contract data
-const filterContractData = () => {
-  let filtered = [...contracts];
-  
-  // Filter by Hotel Type
-  if (filters.hotelType) {
-    filtered = filtered.filter(item => item.hotelType === filters.hotelType);
-  }
-  
-  // Filter by Date Range (if dates are provided)
-  if (filters.fromDate && filters.toDate) {
-    filtered = filtered.filter(item => {
+const filteredContracts = useMemo(() => {
+  return contractList.filter(item => {
+    if (!item) return false;
+
+    // Filter 1: Hotel Filter
+    if (selectedHotel && selectedHotel.toString().trim()) {
+      let matches = false;
+      
+      // First try to match by ID
+      if (item.hotelId && String(item.hotelId) === String(selectedHotel)) {
+        matches = true;
+      } else {
+        // If ID doesn't match, try matching by name
+        const selectedHotelName = hotelOptions.find(opt => String(opt.id) === String(selectedHotel))?.name;
+        if (selectedHotelName) {
+          const hotelNameStr = String(item.hotelName || item.hotel || '').trim();
+          const selectedHotelNameStr = String(selectedHotelName || '').trim();
+          matches = hotelNameStr === selectedHotelNameStr;
+        }
+      }
+      
+      if (!matches) return false;
+    }
+
+    // Filter 2: Date Range Filter
+    if ((fromDate && fromDate.trim()) || (toDate && toDate.trim())) {
       try {
+        // Check if item has expiration date
+        if (!item.expirationDate) {
+          return false;
+        }
+        
         // Convert expiration date from DD/MM/YYYY to Date object
         const expirationParts = item.expirationDate.split('/');
-        if (expirationParts.length !== 3) return false;
+        if (!expirationParts || expirationParts.length !== 3) {
+          return false;
+        }
         
         const day = parseInt(expirationParts[0], 10);
         const month = parseInt(expirationParts[1], 10);
         const year = parseInt(expirationParts[2], 10);
         
-        if (isNaN(day) || isNaN(month) || isNaN(year)) return false;
+        if (isNaN(day) || isNaN(month) || isNaN(year)) {
+          return false;
+        }
         
         const itemDate = new Date(year, month - 1, day);
-        
-        const fromDate = new Date(filters.fromDate);
-        const toDate = new Date(filters.toDate);
-        
-        // Set time to start of day for accurate comparison
-        fromDate.setHours(0, 0, 0, 0);
-        toDate.setHours(23, 59, 59, 999);
+        if (isNaN(itemDate.getTime())) {
+          return false; // Invalid date
+        }
         itemDate.setHours(0, 0, 0, 0);
         
-        return itemDate >= fromDate && itemDate <= toDate;
+        // Filter by fromDate if provided
+        if (fromDate && fromDate.trim()) {
+          const fromDateObj = new Date(fromDate);
+          if (isNaN(fromDateObj.getTime())) {
+            return false; // Invalid date
+          }
+          fromDateObj.setHours(0, 0, 0, 0);
+          if (itemDate < fromDateObj) {
+            return false;
+          }
+        }
+        
+        // Filter by toDate if provided
+        if (toDate && toDate.trim()) {
+          const toDateObj = new Date(toDate);
+          if (isNaN(toDateObj.getTime())) {
+            return false; // Invalid date
+          }
+          toDateObj.setHours(23, 59, 59, 999);
+          if (itemDate > toDateObj) {
+            return false;
+          }
+        }
       } catch (error) {
-        console.error('Error filtering by date:', error);
+        console.error('Error filtering by date:', error, item);
         return false;
       }
-    });
+    }
+
+    return true; // If all filters pass, include this contract
+  });
+}, [contractList, selectedHotel, fromDate, toDate, hotelOptions]);
+
+// Filter by search query
+const finalFilteredData = useMemo(() => {
+  if (!tableSearch || !tableSearch.trim()) {
+    return filteredContracts;
   }
   
-  return filtered;
-};
+  const searchLower = tableSearch.trim().toLowerCase();
+  return filteredContracts.filter(item => {
+    return (
+      String(item.rateCode || '').toLowerCase().includes(searchLower) ||
+      String(item.hotelType || '').toLowerCase().includes(searchLower) ||
+      String(item.hotelName || '').toLowerCase().includes(searchLower) ||
+      String(item.expirationDate || '').toLowerCase().includes(searchLower)
+    );
+  });
+}, [filteredContracts, tableSearch]);
+
+// Pagination calculations
+const totalPages = useMemo(() => Math.ceil(finalFilteredData.length / itemsPerPage), [finalFilteredData.length, itemsPerPage]);
+const startIndex = useMemo(() => (currentPage - 1) * itemsPerPage, [currentPage, itemsPerPage]);
+const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
+const currentContracts = useMemo(() => finalFilteredData.slice(startIndex, endIndex), [finalFilteredData, startIndex, endIndex]);
 
 // Handle search button click
 const handleSearch = () => {
-  const filtered = filterContractData();
-  setFilteredData(filtered);
-  setShowData(true);
+  // Apply temporary filter values to actual filter values
+  console.log('Applying filters:', { fromDate: tempFromDate, toDate: tempToDate, hotel: tempSelectedHotel });
+  setFromDate(tempFromDate || "");
+  setToDate(tempToDate || "");
+  setSelectedHotel(tempSelectedHotel || "");
+  setTableSearch("");
+  setCurrentPage(1);
+};
+
+// Handle reset/clear filters
+const handleReset = () => {
+  setTempFromDate("");
+  setTempToDate("");
+  setTempSelectedHotel("");
+  setFromDate("");
+  setToDate("");
+  setSelectedHotel("");
+  setTableSearch("");
+  setCurrentPage(1);
 };
 
 const handleSendEmail = async () => {
@@ -175,9 +232,9 @@ const handleSendEmail = async () => {
       email: emailAddress,
       reportType: 'contractexpiry',
       filters: {
-        fromDate: filters.fromDate,
-        toDate: filters.toDate,
-        hotelType: filters.hotelType
+        fromDate: fromDate,
+        toDate: toDate,
+        hotelId: selectedHotel
       }
     });
 
@@ -194,10 +251,10 @@ const handleSendEmail = async () => {
 };
 
  const handlePrint = () => {
-    const currentData = showData && finalFilteredData.length > 0 ? finalFilteredData : [];
+    const currentData = finalFilteredData;
     
     if (currentData.length === 0) {
-      toast.error("No data to print. Please search first.");
+      toast.error("No data to print.");
       return;
     }
     
@@ -233,7 +290,7 @@ const handleSendEmail = async () => {
                   <td>${index + 1}</td>
                   <td>${c.rateCode}</td>
                   <td>${c.day}</td>
-                  <td>${c.hotel}</td>
+                  <td>${c.hotelName}</td>
                   <td>${getContractStatus(c.expirationDate)}</td>
                   <td>${c.expirationDate}</td>
                 </tr>
@@ -248,10 +305,10 @@ const handleSendEmail = async () => {
   };
 
   const handlePDF = () => {
-    const currentData = showData && finalFilteredData.length > 0 ? finalFilteredData : [];
+    const currentData = finalFilteredData;
     
     if (currentData.length === 0) {
-      toast.error("No data to export. Please search first.");
+      toast.error("No data to export.");
       return;
     }
     
@@ -267,7 +324,7 @@ const handleSendEmail = async () => {
         index + 1,
         c.rateCode,
         c.day,
-        c.hotel,
+        c.hotelName,
         getContractStatus(c.expirationDate),
         c.expirationDate
       ]),
@@ -279,10 +336,10 @@ const handleSendEmail = async () => {
   };
 
   const handleExcel = () => {
-    const currentData = showData && finalFilteredData.length > 0 ? finalFilteredData : [];
+    const currentData = finalFilteredData;
     
     if (currentData.length === 0) {
-      toast.error("No data to export. Please search first.");
+      toast.error("No data to export.");
       return;
     }
     
@@ -305,7 +362,7 @@ const handleSendEmail = async () => {
         index + 1,
         c.rateCode,
         c.day,
-        c.hotel,
+        c.hotelName,
         getContractStatus(c.expirationDate),
         c.expirationDate
       ].map(escapeCSV).join(','))
@@ -322,16 +379,6 @@ const handleSendEmail = async () => {
     window.URL.revokeObjectURL(url);
   };
 
-  const searchLower = tableSearch.toLowerCase();
-
-  const finalFilteredData = filteredData.filter(item=>{
-    return(
-    String(item.rateCode).toLowerCase().includes(searchLower)||
-    String(item.hotelType).toLowerCase().includes(searchLower)||
-    String(item.expirationDate).toLowerCase().includes(searchLower)
-    )
-  }
-)
 
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
@@ -348,44 +395,35 @@ const handleSendEmail = async () => {
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
               <Row className="align-items-end g-4">
-                <Col md={3}>
+                <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
                     <Form.Control 
                       type="date" 
                       size="sm" 
-                      value={filters.fromDate}
-                      onChange={(e) => setFilters({...filters, fromDate: e.target.value})}
+                      value={tempFromDate}
+                      onChange={(e) => setTempFromDate(e.target.value)}
                     />
                   </Form.Group>
                 </Col>
-                <Col md={3}>
+                <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
                     <Form.Control 
                       type="date" 
                       size="sm" 
-                      value={filters.toDate}
-                      onChange={(e) => setFilters({...filters, toDate: e.target.value})}
+                      value={tempToDate}
+                      onChange={(e) => setTempToDate(e.target.value)}
                     />
                   </Form.Group>
                 </Col>
-                <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Hotel Type</Form.Label>
-                    <Form.Select 
-                      size="sm"
-                      value={filters.hotelType}
-                      onChange={(e) => setFilters({...filters, hotelType: e.target.value})}
-                    >
-                      <option value="">Select</option>
-                      {uniqueHotelTypes.map((type, index) => (
-                        <option key={index} value={type}>{type}</option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
+                <Col md={2}>
+                  <HotelFilter
+                    value={tempSelectedHotel}
+                    onChange={setTempSelectedHotel}
+                  />
                 </Col>
-                <Col md={3}>
+                <Col md={2}>
                   <Button 
                     variant="success" 
                     size="sm" 
@@ -393,6 +431,16 @@ const handleSendEmail = async () => {
                     onClick={handleSearch}
                   >
                     <i className="fas fa-search me-1"></i>Search
+                  </Button>
+                </Col>
+                <Col md={2}>
+                  <Button 
+                    variant="outline-secondary" 
+                    size="sm" 
+                    className="w-100"
+                    onClick={handleReset}
+                  >
+                    <i className="fas fa-redo me-1"></i>Reset
                   </Button>
                 </Col>
               </Row>
@@ -423,11 +471,20 @@ const handleSendEmail = async () => {
                 <Row className="d-flex justify-content-between align-items-center">
                   <Col md="auto">
                     <span className="text-muted">Display</span>
-                    <Form.Select size="sm" className="d-inline-block ms-2" style={{width: '80px'}}>
-                      <option>10</option>
-                      <option>25</option>
-                      <option>50</option>
-                      <option>100</option>
+                    <Form.Select 
+                      size="sm" 
+                      className="d-inline-block ms-2" 
+                      style={{width: '80px'}}
+                      value={itemsPerPage}
+                      onChange={(e)=>{
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
                     </Form.Select>
                     <span className="text-muted ms-2">records</span>
                   </Col>
@@ -455,13 +512,13 @@ const handleSendEmail = async () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {showData && finalFilteredData.length > 0 ? (
-                    finalFilteredData.map((c, index) => (
-                      <tr key={c.id}>
-                        <td>{index + 1}</td>
+                  {currentContracts.length > 0 ? (
+                    currentContracts.map((c, index) => (
+                      <tr key={c.id || index}>
+                        <td>{startIndex + index + 1}</td>
                         <td>{c.rateCode}</td>
                         <td>{c.day}</td>
-                        <td>{c.hotel}</td>
+                        <td>{c.hotelName}</td>
                         <td>{getContractStatus(c.expirationDate)}</td>
                         <td>{c.expirationDate}</td>
                       </tr>
@@ -469,7 +526,7 @@ const handleSendEmail = async () => {
                   ) : (
                     <tr>
                       <td colSpan="6" className="text-center text-muted py-4">
-                        {showData ? 'No data found matching your criteria.' : 'No data to display.'}
+                        No data found matching your criteria.
                       </td>
                     </tr>
                   )}
@@ -477,22 +534,50 @@ const handleSendEmail = async () => {
               </Table>
 
               {/* Pagination */}
-              {showData && (
-                <div className="d-flex justify-content-between align-items-center p-3 border-top">
-                  <div>
-                    <small className="text-muted">
-                      Showing 1 to {filteredData.length} of {filteredData.length} entries
-                    </small>
-                  </div>
-                  <div>
-                    <Pagination className="mb-0">
-                      <Pagination.Prev />
-                      <Pagination.Item active>{1}</Pagination.Item>
-                      <Pagination.Next />
-                    </Pagination>
-                  </div>
+              <div className="d-flex justify-content-between align-items-center p-3 border-top">
+                <div>
+                  <small className="text-muted">
+                    Showing {finalFilteredData.length > 0 ? startIndex + 1 : 0} to {Math.min(endIndex, finalFilteredData.length)} of {finalFilteredData.length} entries
+                  </small>
                 </div>
-              )}
+                <div>
+                  <Pagination className="mb-0">
+                    <Pagination.Prev 
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    />
+                    
+                    {Array.from({length: totalPages}, (_, i) => i + 1).map((pageNum) => {
+                      if (
+                        pageNum === 1 ||
+                        pageNum === totalPages ||
+                        (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                      ) {
+                        return (
+                          <Pagination.Item
+                            key={pageNum}
+                            active={pageNum === currentPage}
+                            onClick={() => setCurrentPage(pageNum)}
+                          >
+                            {pageNum}
+                          </Pagination.Item>
+                        );
+                      } else if (
+                        pageNum === currentPage - 2 ||
+                        pageNum === currentPage + 2
+                      ) {
+                        return <Pagination.Ellipsis key={pageNum} />;
+                      }
+                      return null;
+                    })}
+
+                    <Pagination.Next 
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                    />
+                  </Pagination>
+                </div>
+              </div>
             </Card.Body>
           </Card>
           <Modal show={showMailModal} onHide={() => setShowMailModal(false)} centered>

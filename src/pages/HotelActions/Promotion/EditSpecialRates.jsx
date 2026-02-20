@@ -55,7 +55,7 @@ export default function EditSpecialRates() {
       const response = await axiosInstance.get(
         `/api/hotelRoomDetailsController/${id}`
       );
-       // console.log("Hotel Rooms Data:", response.data);
+      // console.log("Hotel Rooms Data:", response.data);
       setHotelRoomsData(response.data || []);
     } catch (error) {
       toast.error("Failed to load Hotel Rooms Data");
@@ -69,11 +69,11 @@ export default function EditSpecialRates() {
         axiosInstance.get("/api/country"),
       ]);
 
-        // Add "All" option with value -1 at the beginning
-        const marketsWithAll = [
-          { marketTypeId: 100, name: "All" },
-          ...(marketRes.data || [])
-        ];
+      // Add "All" option with value -1 at the beginning
+      const marketsWithAll = [
+        { marketTypeId: 100, name: "All" },
+        ...(marketRes.data || [])
+      ];
 
       setMarkets(marketsWithAll);
       setCountries(countryRes.data || []);
@@ -100,7 +100,7 @@ export default function EditSpecialRates() {
     try {
       setLoading(true);
       const seasonRes = await axiosInstance.get(`api/seasonType`);
-       // console.log("seasonRes::", seasonRes.data);
+      // console.log("seasonRes::", seasonRes.data);
       if (seasonRes.data) {
         setSeasonData(seasonRes.data);
       }
@@ -139,12 +139,16 @@ export default function EditSpecialRates() {
         `/api/hotelSpecialRate/${editId}`
       );
       const specialData = response.data;
-        console.log("Special Rate Data for Edit:", specialData);
-        console.log("Combined fields from API - combinedPromoId:", specialData.combinedPromoId, "promotype:", specialData.promotype);
+      console.log("Special Rate Data for Edit:", specialData);
+      console.log("Combined fields from API - combinedPromoId:", specialData.combinedPromoId, "promotype:", specialData.promotype);
 
       // Convert date format from DD-MM-YYYY to YYYY-MM-DD for date inputs
+      // Convert date format for date inputs
       const convertDateForInput = (dateStr) => {
         if (!dateStr) return "";
+        if (dateStr.includes("T")) {
+          return dateStr.substring(0, 16);
+        }
         const parts = dateStr.split("-");
         if (parts.length === 3) {
           return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(
@@ -175,8 +179,8 @@ export default function EditSpecialRates() {
           specialData.allDays === 1
             ? "all"
             : specialData.weekDay === 1
-            ? "weekdays"
-            : "weekends",
+              ? "weekdays"
+              : "weekends",
         bookByDate: convertDateForInput(specialData.bookDate) || "",
         bookByPriorDays: specialData.bookDay || "",
         minimumStay: specialData.lengthStay || 0,
@@ -197,7 +201,7 @@ export default function EditSpecialRates() {
         combinedDiscount: specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "",
       });
 
-        console.log("Form data set - combinedStayPay:", specialData.promotype === "SAP" ? specialData.combinedPromoId || "" : "", "combinedDiscount:", specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "");
+      console.log("Form data set - combinedStayPay:", specialData.promotype === "SAP" ? specialData.combinedPromoId || "" : "", "combinedDiscount:", specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "");
 
       // Load existing room rates if available
       if (specialData.specialRateRoomDTO) {
@@ -207,7 +211,7 @@ export default function EditSpecialRates() {
           existingRates[key] = rate.rate;
         });
         setRoomRates(existingRates);
-         // console.log("Loaded existing room rates:", existingRates);
+        // console.log("Loaded existing room rates:", existingRates);
       }
     } catch (err) {
       console.error("Error loading special rate data:", err);
@@ -218,11 +222,11 @@ export default function EditSpecialRates() {
   };
 
   useEffect(() => {
-   if (id && editId) {
-       // console.log("Both id and editId are available, fetching data...");
+    if (id && editId) {
+      // console.log("Both id and editId are available, fetching data...");
       fetchSpecialRateData();
     } else {
-       // console.log("Missing parameters - id:", id, "editId:", editId);
+      // console.log("Missing parameters - id:", id, "editId:", editId);
     }
   }, [id, editId]);
 
@@ -237,9 +241,12 @@ export default function EditSpecialRates() {
         );
         const specialData = response.data;
 
-        // Convert date format from DD-MM-YYYY to YYYY-MM-DD for date inputs
+        // Convert date format for date inputs
         const convertDateForInput = (dateStr) => {
           if (!dateStr) return "";
+          if (dateStr.includes("T")) {
+            return dateStr.substring(0, 16);
+          }
           const parts = dateStr.split("-");
           if (parts.length === 3) {
             return `${parts[2]}-${parts[1].padStart(
@@ -273,8 +280,8 @@ export default function EditSpecialRates() {
             specialData.allDays === 1
               ? "all"
               : specialData.weekDay === 1
-              ? "weekdays"
-              : "weekends",
+                ? "weekdays"
+                : "weekends",
           bookByDate: convertDateForInput(specialData.bookDate) || "",
           bookByPriorDays: specialData.bookDay || "",
           minimumStay: specialData.lengthStay || 0,
@@ -303,7 +310,7 @@ export default function EditSpecialRates() {
             existingRates[key] = rate.rate;
           });
           setRoomRates(existingRates);
-           // console.log("Re-populated existing room rates:", existingRates);
+          // console.log("Re-populated existing room rates:", existingRates);
         }
       } catch (err) {
         console.error("Error re-populating form data:", err);
@@ -315,7 +322,7 @@ export default function EditSpecialRates() {
 
   // ✅ Debug form data changes
   useEffect(() => {
-      console.log("Form data changed - combinedStayPay:", formData.combinedStayPay, "combinedDiscount:", formData.combinedDiscount);
+    console.log("Form data changed - combinedStayPay:", formData.combinedStayPay, "combinedDiscount:", formData.combinedDiscount);
   }, [formData.combinedStayPay, formData.combinedDiscount]);
 
   // ✅ Handlers
@@ -344,6 +351,17 @@ export default function EditSpecialRates() {
     setFormData({ ...formData, [field]: updated });
   };
 
+  // ✅ Helper function to get minimum validity to date (From date + 1 minute)
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    // Add 1 minute to the from date to ensure validityTo is after validityFrom
+    date.setMinutes(date.getMinutes() + 1);
+    // Format to YYYY-MM-DDTHH:MM for datetime-local input
+    const pad = (num) => num.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
   const handleDateChange = (field, index, key, value) => {
     const updated = [...formData[field]];
     updated[index][key] = value;
@@ -356,10 +374,7 @@ export default function EditSpecialRates() {
     try {
       const formatDate = (date) => {
         if (!date) return "";
-        const d = new Date(date);
-        return `${String(d.getDate()).padStart(2, "0")}-${String(
-          d.getMonth() + 1
-        ).padStart(2, "0")}-${d.getFullYear()}`;
+        return `${date}:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? 1 : 0;
@@ -442,10 +457,10 @@ export default function EditSpecialRates() {
         specialRateRoomDTO: allSpecialRateRoomDTO,
       };
 
-       // console.log("Payload specialratesaveReq:", specialratesaveReq);
-       // console.log("Combined fields - StayPay:", formData.combinedStayPay, "Discount:", formData.combinedDiscount);
-       // console.log("Promotype logic - StayPay selected:", !!formData.combinedStayPay, "Discount selected:", !!formData.combinedDiscount);
-       // console.log("Final promotype value:", formData.combinedStayPay ? "SAP" : formData.combinedDiscount ? "DSR" : "");
+      // console.log("Payload specialratesaveReq:", specialratesaveReq);
+      // console.log("Combined fields - StayPay:", formData.combinedStayPay, "Discount:", formData.combinedDiscount);
+      // console.log("Promotype logic - StayPay selected:", !!formData.combinedStayPay, "Discount selected:", !!formData.combinedDiscount);
+      // console.log("Final promotype value:", formData.combinedStayPay ? "SAP" : formData.combinedDiscount ? "DSR" : "");
 
       const response = await axiosInstance.put(
         `/api/hotelSpecialRate/${editId}`,
@@ -689,7 +704,7 @@ export default function EditSpecialRates() {
                           <Row key={i} className="align-items-center mb-2">
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={v.from}
                                 onChange={(e) =>
                                   handleDateChange(
@@ -703,9 +718,9 @@ export default function EditSpecialRates() {
                             </Col>
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={v.to}
-                                min={v.from || ""}
+                                min={getMinValidityToDate(v.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -750,7 +765,7 @@ export default function EditSpecialRates() {
                           <Row key={i} className="align-items-center mb-2">
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={b.from}
                                 onChange={(e) =>
                                   handleDateChange(
@@ -764,9 +779,9 @@ export default function EditSpecialRates() {
                             </Col>
                             <Col>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 value={b.to}
-                                min={b.from || ""}
+                                min={getMinValidityToDate(b.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -937,7 +952,7 @@ export default function EditSpecialRates() {
                                                 placeholder="0"
                                                 value={
                                                   roomRates[
-                                                    `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
+                                                  `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
                                                   ] || ""
                                                 }
                                                 onChange={(e) => {
@@ -997,7 +1012,7 @@ export default function EditSpecialRates() {
                             value={formData.combinedStayPay || ""}
                             onChange={(e) => {
                               const selectedValue = e.target.value;
-                               // console.log("Stay Pay changed to:", selectedValue);
+                              // console.log("Stay Pay changed to:", selectedValue);
                               setFormData({
                                 ...formData,
                                 combinedStayPay: selectedValue,
@@ -1029,7 +1044,7 @@ export default function EditSpecialRates() {
                             value={formData.combinedDiscount || ""}
                             onChange={(e) => {
                               const selectedValue = e.target.value;
-                               // console.log("Discount changed to:", selectedValue);
+                              // console.log("Discount changed to:", selectedValue);
                               setFormData({
                                 ...formData,
                                 combinedDiscount: selectedValue,
