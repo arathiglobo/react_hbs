@@ -34,7 +34,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
-import axios from "axios";
+
 
 function AccordionToggleButton({ eventKey, isActive }) {
   const decoratedOnClick = useAccordionButton(eventKey);
@@ -337,7 +337,7 @@ const RoomList = () => {
           <small>
             {" "}
             This room is Available{" "}
-            
+
           </small>
         );
     }

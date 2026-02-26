@@ -183,13 +183,13 @@ const PackageReg = () => {
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
-   const [isLoading, setIsLoading] = useState(false);
-    const [editing, setEditing] = useState(null);
-    const [items, setItems] = useState([]);
-     const [page, setPage] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [items, setItems] = useState([]);
+  const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
-   const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [currencies, setCurrencies] = useState([]);
   const [formData, setFormData] = useState({
     packageName: "",
@@ -238,37 +238,37 @@ const PackageReg = () => {
   // Helper function to get image URL from path
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '';
-    
+
     // If it's already a URL, return as is
     if (imagePath.startsWith('http')) {
       return imagePath;
     }
-    
+
     // If it's a local Windows path, extract filename and convert to web URL
     if (imagePath.includes('\\') || imagePath.includes(':')) {
       // Extract just the filename from the Windows path
       const filename = imagePath.split('\\').pop();
-      
+
       // Try different possible endpoints - prioritize the most likely ones
       const possibleUrls = [
-        `http://localhost:8081/api/files/${filename}`, // Most common Spring Boot pattern
-        `http://localhost:8081/filesSave/details/imageDir/${filename}`, // Based on your path
-        `http://localhost:8081/details/imageDir/${filename}`,
-        `http://localhost:8081/api/TravelPackage/image/${filename}`,
-        `http://localhost:8081/images/${filename}`,
-        `http://localhost:8081/static/images/${filename}`,
-        `http://localhost:8081/uploads/${filename}`,
-        `http://localhost:8081/file/${filename}`, // Alternative pattern
-        `http://localhost:8081/download/${filename}`, // Download pattern
+        `${process.env.REACT_APP_API_BASE_URL}/api/files/${filename}`,
+        `${process.env.REACT_APP_API_BASE_URL}/filesSave/details/imageDir/${filename}`,
+        `${process.env.REACT_APP_API_BASE_URL}/details/imageDir/${filename}`,
+        `${process.env.REACT_APP_API_BASE_URL}/api/TravelPackage/image/${filename}`,
+        `${process.env.REACT_APP_API_BASE_URL}/images/${filename}`,
+        `${process.env.REACT_APP_API_BASE_URL}/static/images/${filename}`,
+        `${process.env.REACT_APP_API_BASE_URL}/uploads/${filename}`,
+        `${process.env.REACT_APP_API_BASE_URL}/file/${filename}`,
+        `${process.env.REACT_APP_API_BASE_URL}/download/${filename}`,
       ];
-      
+
       // Log for debugging
       console.log('🔍 Image Debug Info:');
       console.log('📁 Original path:', imagePath);
       console.log('📄 Extracted filename:', filename);
       console.log('🌐 Trying URL:', possibleUrls[0]);
       console.log('📋 All possible URLs:', possibleUrls);
-      
+
       // Test if the URL is accessible
       fetch(possibleUrls[0])
         .then(response => {
@@ -278,13 +278,13 @@ const PackageReg = () => {
         .catch(error => {
           console.log('❌ URL Fetch Error:', error);
         });
-      
+
       // Return the first URL - this is the most common pattern
       return possibleUrls[0];
     }
-    
+
     // If it's not a Windows path, treat it as a filename
-    return `http://localhost:8081/api/files/${imagePath}`;
+    return `${process.env.REACT_APP_API_BASE_URL}/api/files/${imagePath}`;
   };
 
   // Helper function to get form control props based on view mode
@@ -297,16 +297,15 @@ const PackageReg = () => {
       ...additionalProps,
       readOnly: isViewMode,
       onChange: isViewMode ? undefined : onChangeHandler,
-      className: `${additionalProps.className || ""} ${
-        isViewMode ? "bg-light" : ""
-      }`.trim(),
+      className: `${additionalProps.className || ""} ${isViewMode ? "bg-light" : ""
+        }`.trim(),
       autoFocus: isViewMode ? false : additionalProps.autoFocus,
     };
   };
 
   const validateForm = (data) => {
     const errors = {};
-    
+
     // Basic field validations
     if (!data.packageName?.trim())
       errors.packageName = "Package Name is required";
@@ -314,15 +313,15 @@ const PackageReg = () => {
       errors.packageCode = "Package Code is required";
     if (!data.packageBasicRate?.trim())
       errors.packageBasicRate = "Package Basic Rate is required";
-    if (!data.currencyId || (typeof data.currencyId === 'string' && !data.currencyId.trim())) 
+    if (!data.currencyId || (typeof data.currencyId === 'string' && !data.currencyId.trim()))
       errors.currencyId = "Currency is required";
     if (!data.packageType?.trim())
       errors.packageType = "Package Type is required";
     if (!data.packageCategory?.length)
       errors.packageCategory = "Package Category is required";
-    if (!data.countryId || (typeof data.countryId === 'string' && !data.countryId.trim())) 
+    if (!data.countryId || (typeof data.countryId === 'string' && !data.countryId.trim()))
       errors.countryId = "Country is required";
-    if (!data.placeId || (typeof data.placeId === 'string' && !data.placeId.trim())) 
+    if (!data.placeId || (typeof data.placeId === 'string' && !data.placeId.trim()))
       errors.placeId = "Place is required";
     if (!data.noOfNights?.trim())
       errors.noOfNights = "No of nights is required";
@@ -330,8 +329,8 @@ const PackageReg = () => {
     // Itinerary validation - at least one day must have data
     const hasItineraryData = packageItinearyDTOList.some(
       (day) =>
-        day.heading?.trim() || 
-        (day.placeId && (typeof day.placeId === 'string' ? day.placeId.trim() : day.placeId)) || 
+        day.heading?.trim() ||
+        (day.placeId && (typeof day.placeId === 'string' ? day.placeId.trim() : day.placeId)) ||
         day.dayActivities?.trim()
     );
     if (!hasItineraryData) {
@@ -347,7 +346,7 @@ const PackageReg = () => {
       errors.others =
         "Please select at least one item in Inclusion, Exclusion, or Terms & Conditions";
     }
-    
+
     return errors;
   };
 
@@ -398,53 +397,53 @@ const PackageReg = () => {
   };
 
   const fetchPackageList = async (pageNum = 0, searchTerm = search) => {
-      setIsLoading(true);
-      try {
-        const params = new URLSearchParams({
-          page: pageNum.toString(),
-          limit: "10",
-        });
-  
-        if (searchTerm && searchTerm.trim()) {
-          params.append("search", searchTerm.trim());
-        }
-  
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: "10",
+      });
+
+      if (searchTerm && searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+
       const res = await axiosInstance.get(
         `/api/TravelPackage?${params.toString()}`
       );
       console.log("package  list :::", res);
-  
-        if (res.data && Array.isArray(res.data)) {
-          setItems(res.data);
-          if (res.data.length < 10) {
-            setTotalPages(pageNum + 1);
-          } else {
-            setTotalPages(Math.max(totalPages, pageNum + 2));
-          }
-          setPage(pageNum);
+
+      if (res.data && Array.isArray(res.data)) {
+        setItems(res.data);
+        if (res.data.length < 10) {
+          setTotalPages(pageNum + 1);
         } else {
-          setItems([]);
-          setTotalPages(0);
-          setPage(0);
+          setTotalPages(Math.max(totalPages, pageNum + 2));
         }
-      } catch (err) {
-        toast.error("Failed to load cab providers");
+        setPage(pageNum);
+      } else {
         setItems([]);
         setTotalPages(0);
         setPage(0);
-      } finally {
-        setIsLoading(false);
       }
-    };
-  
-    useEffect(() => {
-      fetchPackageList();
+    } catch (err) {
+      toast.error("Failed to load cab providers");
+      setItems([]);
+      setTotalPages(0);
+      setPage(0);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPackageList();
     countryList();
     loadCurrencies();
     loadAllDestinations();
     loadTermsAndConditions();
     packageCategoryList();
-    }, []);
+  }, []);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -453,7 +452,7 @@ const PackageReg = () => {
       setValidationErrors(errors);
       return;
     }
-    
+
     // Prepare form data payload according to the backend DTO structure
     const formDataPayload = new FormData();
 
@@ -476,7 +475,7 @@ const PackageReg = () => {
     formDataPayload.append("containHotel", formData.containHotel ? 1 : 0);
     formDataPayload.append("containCab", formData.containCab ? 1 : 0);
     formDataPayload.append("containActivity", formData.containActivity ? 1 : 0);
-    
+
     // Package categories as array with proper indexing
     formData.packageCategory.forEach((category, index) => {
       formDataPayload.append(`packageCategory[${index}]`, String(category));
@@ -532,7 +531,7 @@ const PackageReg = () => {
     }
 
     try {
-        setIsLoading(true);
+      setIsLoading(true);
       console.log("package save payload::", formDataPayload);
 
       let packageSaveRes;
@@ -560,7 +559,7 @@ const PackageReg = () => {
         );
       }
 
-        if (packageSaveRes.data) {
+      if (packageSaveRes.data) {
         toast.success(
           editing
             ? "Package updated successfully!"
@@ -575,8 +574,7 @@ const PackageReg = () => {
       }
     } catch (error) {
       toast.error(
-        `Error!! Something went wrong: ${
-          error.response?.data?.message || error.message
+        `Error!! Something went wrong: ${error.response?.data?.message || error.message
         }`
       );
     } finally {
@@ -586,7 +584,7 @@ const PackageReg = () => {
 
   const countryList = async () => {
     try {
-      const response = await axios.get("/api/country");
+      const response = await axiosInstance.get("/api/country");
       setCountries(response.data);
     } catch (error) {
       console.log("error for country list :", error);
@@ -611,10 +609,10 @@ const PackageReg = () => {
   const loadCurrencies = async () => {
     try {
       const response = await axiosInstance.get("/api/currency");
-     
+
       setCurrencies(response.data || []);
     } catch (error) {
-     
+
       toast.error("Failed to load currencies");
     }
   };
@@ -966,8 +964,7 @@ const PackageReg = () => {
         }
       } catch (error) {
         toast.error(
-          `Failed to delete package: ${
-            error.response?.data?.message || error.message
+          `Failed to delete package: ${error.response?.data?.message || error.message
           }`
         );
       } finally {
@@ -1111,8 +1108,7 @@ const PackageReg = () => {
       }
     } catch (error) {
       toast.error(
-        `Error!! Something went wrong: ${
-          error.response?.data?.message || error.message
+        `Error!! Something went wrong: ${error.response?.data?.message || error.message
         }`
       );
     } finally {
@@ -1224,61 +1220,60 @@ const PackageReg = () => {
                 </thead>
                 <tbody>
                   {console.log("items list:::package cat::", items)}
-                {items.map((item, index) => (
-                                    <tr key={item.id}>
-                                      <td>{index + 1 + page * 10}</td>
+                  {items.map((item, index) => (
+                    <tr key={item.id}>
+                      <td>{index + 1 + page * 10}</td>
                       <td>{item.packageName || "N/A"}</td>
                       <td>{item.packageCode || "N/A"}</td>
                       <td>{item.packageBasicRate || "N/A"}</td>
                       <td>{item.noOfNights || "N/A"}</td>
                       <td>
                         <span
-                          className={`badge ${
-                            item.liveStatus === false
+                          className={`badge ${item.liveStatus === false
                               ? "bg-success"
                               : "bg-danger"
-                          }`}
+                            }`}
                         >
                           {item.liveStatus === false ? "Active" : "InActive"}
                         </span>
                       </td>
-                                      <td>
-                                        <div className="d-flex gap-2">
-                                          <FaEdit
-                                            className="text-primary edit"
-                                            style={{ cursor: "pointer", fontSize: "18px" }}
-                                            onClick={() => openEdit(item)}
-                                            title="Edit"
-                                          />
-                                          <FaEye
-                                            className="text-info view"
-                                            style={{ cursor: "pointer", fontSize: "18px" }}
-                                            onClick={() => handleView(item)}
-                                            title="View"
-                                          />
+                      <td>
+                        <div className="d-flex gap-2">
+                          <FaEdit
+                            className="text-primary edit"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => openEdit(item)}
+                            title="Edit"
+                          />
+                          <FaEye
+                            className="text-info view"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleView(item)}
+                            title="View"
+                          />
                           <FaCopy
                             className="text-warning copy"
                             style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => handleCopy(item)}
                             title="Copy"
-                                          />
-                                          <FaDollarSign
-                                            className="text-success"
-                                            style={{ cursor: "pointer", fontSize: "18px" }}
+                          />
+                          <FaDollarSign
+                            className="text-success"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
                             onClick={() => handlePackageRates(item)}
                             title="Package Rates"
-                                          />
-                                          <FaTrash
-                                            className="text-danger delete"
-                                            style={{ cursor: "pointer", fontSize: "18px" }}
-                                            onClick={() => handleDelete(item)}
-                                            title="Delete"
-                                          />
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                      {isLoading && (
+                          />
+                          <FaTrash
+                            className="text-danger delete"
+                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            onClick={() => handleDelete(item)}
+                            title="Delete"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {isLoading && (
                     <tr>
                       <td colSpan={7} className="text-center text-muted py-4">
                         <div
@@ -1300,7 +1295,7 @@ const PackageReg = () => {
                   )}
                 </tbody>
               </Table>
-                   {totalPages > 1 && (
+              {totalPages > 1 && (
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
                   <div>
                     <small className="text-muted">
@@ -1346,8 +1341,8 @@ const PackageReg = () => {
                 {isViewMode
                   ? "View Package Details"
                   : editing
-                  ? "Edit Package"
-                  : "Create Package"}
+                    ? "Edit Package"
+                    : "Create Package"}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -1360,8 +1355,8 @@ const PackageReg = () => {
                           <Form.Label>
                             Package Name <span className="text-danger">*</span>
                           </Form.Label>
-                          <Form.Control 
-                            type="text" 
+                          <Form.Control
+                            type="text"
                             placeholder="Enter package name"
                             value={formData.packageName}
                             isInvalid={!!validationErrors.packageName}
@@ -1380,11 +1375,10 @@ const PackageReg = () => {
                                 }
                               },
                               {
-                                className: `form-input ${
-                                  validationErrors.packageName
+                                className: `form-input ${validationErrors.packageName
                                     ? "is-invalid"
                                     : ""
-                                }`,
+                                  }`,
                                 autoFocus: true,
                               }
                             )}
@@ -1399,8 +1393,8 @@ const PackageReg = () => {
                           <Form.Label>
                             Package Code <span className="text-danger">*</span>
                           </Form.Label>
-                          <Form.Control 
-                            type="text" 
+                          <Form.Control
+                            type="text"
                             placeholder="Enter package code"
                             value={formData.packageCode}
                             onChange={(e) => {
@@ -1428,8 +1422,8 @@ const PackageReg = () => {
                             Package Basic Rate{" "}
                             <span className="text-danger">*</span>
                           </Form.Label>
-                          <Form.Control 
-                            type="number" 
+                          <Form.Control
+                            type="number"
                             placeholder="Enter basic rate"
                             value={formData.packageBasicRate}
                             onChange={(e) => {
@@ -1541,7 +1535,7 @@ const PackageReg = () => {
                               style={{ cursor: isViewMode ? "default" : "pointer" }}
                               placeholder="Select Package Categories"
                             />
-                            
+
                             {packageCategoryDropdownOpen && !isViewMode && (
                               <div
                                 className="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-lg"
@@ -1579,13 +1573,13 @@ const PackageReg = () => {
                                             const newCategories = isSelected
                                               ? prev.packageCategory.filter(id => id !== pkgCat.packageCategoryId)
                                               : [...prev.packageCategory, pkgCat.packageCategoryId];
-                                            
+
                                             return {
                                               ...prev,
                                               packageCategory: newCategories,
                                             };
                                           });
-                                          
+
                                           // Clear validation error when user makes selection
                                           if (validationErrors.packageCategory) {
                                             setValidationErrors((prev) => ({
@@ -1609,7 +1603,7 @@ const PackageReg = () => {
                                 )}
                               </div>
                             )}
-                            
+
                             {/* Overlay to close dropdown when clicking outside */}
                             {packageCategoryDropdownOpen && (
                               <div
@@ -1645,8 +1639,8 @@ const PackageReg = () => {
                       <Col md={6}>
                         <Form.Group className="mb-3">
                           <Form.Label>Package Image</Form.Label>
-                          <Form.Control 
-                            type="file" 
+                          <Form.Control
+                            type="file"
                             accept="image/*"
                             onChange={(e) =>
                               setFormData((prev) => ({
@@ -1663,28 +1657,28 @@ const PackageReg = () => {
                                 <small className="text-muted">
                                   Current Image:
                                 </small>
-                                  <div className="mt-1">
-                                    <img
-                                      src={getImageUrl(formData.packageImage)}
-                                      alt="Package preview"
-                                      style={{
-                                        maxWidth: "200px",
-                                        maxHeight: "150px",
-                                        objectFit: "cover",
-                                      }}
-                                      className="border rounded"
-                                      onLoad={(e) => {
-                                        console.log("Package image loaded successfully:", e.target.src);
-                                      }}
-                                      onError={(e) => {
-                                        console.log("Package image load error:");
-                                        console.log("Original path:", formData.packageImage);
-                                        console.log("Constructed URL:", e.target.src);
-                                        console.log("Error details:", e);
-                                        e.target.style.display = "none";
-                                      }}
-                                    />
-                                  </div>
+                                <div className="mt-1">
+                                  <img
+                                    src={getImageUrl(formData.packageImage)}
+                                    alt="Package preview"
+                                    style={{
+                                      maxWidth: "200px",
+                                      maxHeight: "150px",
+                                      objectFit: "cover",
+                                    }}
+                                    className="border rounded"
+                                    onLoad={(e) => {
+                                      console.log("Package image loaded successfully:", e.target.src);
+                                    }}
+                                    onError={(e) => {
+                                      console.log("Package image load error:");
+                                      console.log("Original path:", formData.packageImage);
+                                      console.log("Constructed URL:", e.target.src);
+                                      console.log("Error details:", e);
+                                      e.target.style.display = "none";
+                                    }}
+                                  />
+                                </div>
                               </div>
                             )}
                           {/* Show new image preview when file is selected */}
@@ -1713,35 +1707,35 @@ const PackageReg = () => {
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label>Include</Form.Label>
-                          <FormCheck 
-                            type="checkbox" 
-                            label="Hotel" 
+                          <FormCheck
+                            type="checkbox"
+                            label="Hotel"
                             checked={formData.containHotel}
                             onChange={(e) =>
                               setFormData((prev) => ({
-                              ...prev,
+                                ...prev,
                                 containHotel: e.target.checked,
                               }))
                             }
                           />
-                          <FormCheck 
-                            type="checkbox" 
-                            label="Cab" 
+                          <FormCheck
+                            type="checkbox"
+                            label="Cab"
                             checked={formData.containCab}
                             onChange={(e) =>
                               setFormData((prev) => ({
-                              ...prev,
+                                ...prev,
                                 containCab: e.target.checked,
                               }))
                             }
                           />
-                          <FormCheck 
-                            type="checkbox" 
-                            label="Activity" 
+                          <FormCheck
+                            type="checkbox"
+                            label="Activity"
                             checked={formData.containActivity}
                             onChange={(e) =>
                               setFormData((prev) => ({
-                              ...prev,
+                                ...prev,
                                 containActivity: e.target.checked,
                               }))
                             }
@@ -1799,9 +1793,9 @@ const PackageReg = () => {
                               options={
                                 Array.isArray(places)
                                   ? places.map((place) => ({
-                                      id: place.id,
-                                      name: place.name,
-                                    }))
+                                    id: place.id,
+                                    name: place.name,
+                                  }))
                                   : []
                               }
                               isInvalid={!!validationErrors.placeId}
@@ -1813,18 +1807,18 @@ const PackageReg = () => {
                               isLoading={isLoadingPlaces}
                             />
                             {validationErrors.placeId && (
-                            <Form.Control.Feedback type="invalid">
+                              <Form.Control.Feedback type="invalid">
                                 {validationErrors.placeId}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
+                              </Form.Control.Feedback>
+                            )}
+                          </Form.Group>
                         </Form.Group>
 
                         <Form.Group className="mb-3">
                           <Form.Label>Overview</Form.Label>
-                          <Form.Control 
-                            as="textarea" 
-                            rows={4} 
+                          <Form.Control
+                            as="textarea"
+                            rows={4}
                             placeholder="Enter package overview"
                             value={formData.overview}
                             onChange={(e) =>
@@ -1904,11 +1898,11 @@ const PackageReg = () => {
                             Remove
                           </Button>
                         )}
-                    </Card.Header>
-                    <Card.Body>
-                      <Row>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
+                      </Card.Header>
+                      <Card.Body>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
                               <Form.Label>Place</Form.Label>
                               <SearchableSelect
                                 name={`placeId_${index}`}
@@ -1928,18 +1922,18 @@ const PackageReg = () => {
                                 options={
                                   Array.isArray(allDestinations)
                                     ? allDestinations.map((dest) => ({
-                                        id: dest.id,
-                                        name: dest.name,
-                                      }))
+                                      id: dest.id,
+                                      name: dest.name,
+                                    }))
                                     : []
                                 }
                                 disabled={isViewMode || isLoadingDestinations}
                                 isLoading={isLoadingDestinations}
                               />
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
                               <Form.Label>Heading</Form.Label>
                               <Form.Control
                                 type="text"
@@ -1953,12 +1947,12 @@ const PackageReg = () => {
                                   )
                                 }
                               />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                      <Row>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
                               <Form.Label>Day Activities</Form.Label>
                               <Form.Control
                                 as="textarea"
@@ -1973,10 +1967,10 @@ const PackageReg = () => {
                                   )
                                 }
                               />
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
                               <Form.Label>Day Image</Form.Label>
                               <Form.Control
                                 type="file"
@@ -1993,7 +1987,7 @@ const PackageReg = () => {
                                 <div className="mt-2">
                                   <small className="text-muted">
                                     {typeof day.packageItinearyImage ===
-                                    "object"
+                                      "object"
                                       ? `Selected: ${day.packageItinearyImage.name}`
                                       : "Current Image:"}
                                   </small>
@@ -2025,11 +2019,11 @@ const PackageReg = () => {
                                   </div>
                                 </div>
                               )}
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                    </Card.Body>
-                  </Card>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                      </Card.Body>
+                    </Card>
                   ))}
                 </Tab>
 
@@ -2062,9 +2056,9 @@ const PackageReg = () => {
                                     packageOthersDTOList.map((item) =>
                                       item.otherId === other.otherId
                                         ? {
-                                            ...item,
-                                            isDeleted: !e.target.checked,
-                                          }
+                                          ...item,
+                                          isDeleted: !e.target.checked,
+                                        }
                                         : item
                                     );
                                   setPackageOthersDTOList(updatedOthers);
@@ -2104,9 +2098,9 @@ const PackageReg = () => {
                                     packageOthersDTOList.map((item) =>
                                       item.otherId === other.otherId
                                         ? {
-                                            ...item,
-                                            isDeleted: !e.target.checked,
-                                          }
+                                          ...item,
+                                          isDeleted: !e.target.checked,
+                                        }
                                         : item
                                     );
                                   setPackageOthersDTOList(updatedOthers);
@@ -2146,9 +2140,9 @@ const PackageReg = () => {
                                     packageOthersDTOList.map((item) =>
                                       item.otherId === other.otherId
                                         ? {
-                                            ...item,
-                                            isDeleted: !e.target.checked,
-                                          }
+                                          ...item,
+                                          isDeleted: !e.target.checked,
+                                        }
                                         : item
                                     );
                                   setPackageOthersDTOList(updatedOthers);
@@ -2177,10 +2171,10 @@ const PackageReg = () => {
                 {isViewMode ? "Close" : "Cancel"}
               </Button>
               {!isViewMode && (
-              <Button variant="success" onClick={handleSave}>
-                <i className="fas fa-arrow-right me-2"></i>
+                <Button variant="success" onClick={handleSave}>
+                  <i className="fas fa-arrow-right me-2"></i>
                   {editing ? "Update" : "Create"}
-              </Button>
+                </Button>
               )}
             </Modal.Footer>
           </Modal>

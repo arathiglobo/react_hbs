@@ -25,6 +25,7 @@ import {
   FaTrash,
   FaSearch
 } from "react-icons/fa";
+import "../../styles/HotelList.css"
 
 const HotelList = () => {
   const [hotels, setHotels] = useState([]);
@@ -135,57 +136,44 @@ const HotelList = () => {
               </div>
             </div>
 
-            {/* Search Section */}
-            <Card className="shadow-sm border-0 rounded-4 mb-4">
-              <Card.Body className="p-4">
-                {/* <div className="row align-items-center"> */}
-                  {/* <div className="col-md-6">
-                    <h5 className="mb-0 text-primary">
-                      <FaSearch className="me-2" />
-                      Search Hotels
-                    </h5>
-                    <p className="text-muted mb-0">Find hotels by name</p>
-                  </div> */}
-                  <div className="col-md-6">
-                    <Form.Group>
-                      <div className="position-relative">
-                        <Form.Control
-                          type="text"
-                          placeholder="Search hotel names..."
-                          value={searchTerm}
-                          onChange={handleSearchChange}
-                          className="ps-5 border-0 shadow-sm rounded-pill"
-                          style={{ height: "45px" }}
-                        />
-                        <FaSearch 
-                          className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"
-                          style={{ left: "15px" }}
-                        />
-                      </div>
-                    </Form.Group>
-                  </div>
-                {/* </div> */}
-              </Card.Body>
-            </Card>
-
             {/* Content Section */}
             <Card className="shadow-lg border-0 rounded-4">
-              <Card.Header className="bg-gradient-primary text-white border-0 rounded-top-4">
-                <div className="d-flex justify-content-between align-items-center">
-                  <h4 className="mb-0">
-                    <FaHotel className="me-2" />
-                    Hotel List
-                  </h4>
-                  <Badge bg="light" text="dark" className="fs-6 px-3 py-2">
-                    {filteredHotels.length} Hotel{filteredHotels.length !== 1 ? 's' : ''}
-                    {searchTerm && (
-                      <span className="ms-2 text-muted">
-                        (filtered from {hotels.length})
-                      </span>
-                    )}
-                  </Badge>
-                </div>
-              </Card.Header>
+            <Card.Header className="bg-gradient-primary text-white border-0 rounded-top-4">
+  <div className="d-flex align-items-center justify-content-between">
+
+    {/* LEFT: Title */}
+    <h4 className="mb-0 d-flex align-items-center">
+      <FaHotel className="me-2" />
+      Hotel List
+    </h4>
+
+    {/* RIGHT: Search + Badge */}
+    <div className="d-flex align-items-center gap-3">
+
+      {/* <Badge bg="light" text="dark" className="fs-6 px-3 py-2">
+        {filteredHotels.length} Hotel{filteredHotels.length !== 1 ? "s" : ""}
+        {searchTerm && (
+          <span className="ms-2 text-muted">
+            (filtered from {hotels.length})
+          </span>
+        )}
+      </Badge> */}
+
+      <div className="search-wrapper">
+        <i className="bi bi-search search-icon"></i>
+        <input
+          type="text"
+          placeholder="Search hotel names..."
+          value={searchTerm}
+          onChange={handleSearchChange}
+          className="modern-search-input"
+        />
+      </div>
+
+    </div>
+
+  </div>
+</Card.Header>
               <Card.Body className="p-4">
                 {isLoading ? (
                   <div className="text-center py-5">
@@ -254,7 +242,7 @@ const HotelList = () => {
                               src={hotel.image360 || "/images/not-available.jpg"}
                               alt={hotel.hotelName}
                               style={{
-                                height: '200px',
+                                height: '170px',
                                 objectFit: 'cover',
                                 borderRadius: '1rem 1rem 0 0'
                               }}
@@ -270,7 +258,7 @@ const HotelList = () => {
                           </div>
                           
                           <Card.Body className="d-flex flex-column">
-                            <div className="mb-3">
+                            <div className="mb-0">
                               <h5 className="card-title text-primary mb-2">
                                 <FaHotel className="me-2" />
                                 {hotel.hotelName}
@@ -284,7 +272,7 @@ const HotelList = () => {
                               </p>
                             </div>
 
-                            <div className="mt-auto">
+                            <div className="mt-1">
                               <div className="d-flex gap-2">
                                 <Button
                                   variant="outline-primary"

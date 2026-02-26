@@ -22,7 +22,7 @@ import {
   FaChild,
   FaPlus,
 } from "react-icons/fa";
-import axios from "axios";
+
 import { useNavigate } from "react-router-dom";
 
 export default function MakeUrOwnPackage() {
@@ -86,13 +86,13 @@ export default function MakeUrOwnPackage() {
 
   const countryList = async () => {
     try {
-      const response = await axios.get("/api/country");
+      const response = await axiosInstance.get("/api/country");
       const options = Array.isArray(response.data)
         ? response.data.map((country) => ({
-            value: country.id,
-            label: country.name,
-            code: country.countryCode,
-          }))
+          value: country.id,
+          label: country.name,
+          code: country.countryCode,
+        }))
         : [];
       setNationalityList(options);
     } catch (error) {
@@ -194,38 +194,38 @@ export default function MakeUrOwnPackage() {
   };
 
   const handleSearchSubmit = async (e) => {
-  e.preventDefault();
-  const formErrors = validateForm();
-  if (Object.keys(formErrors).length > 0) {
-    setErrors(formErrors);
-    return;
-  }
+    e.preventDefault();
+    const formErrors = validateForm();
+    if (Object.keys(formErrors).length > 0) {
+      setErrors(formErrors);
+      return;
+    }
 
-  if (agent) {
-    sessionStorage.setItem("makeYourOwnPackageAgentId", agent);
-    localStorage.setItem("makeYourOwnPackageAgentId", agent);
-  }
+    if (agent) {
+      sessionStorage.setItem("makeYourOwnPackageAgentId", agent);
+      localStorage.setItem("makeYourOwnPackageAgentId", agent);
+    }
 
-  // Store travel date in sessionStorage for use in booking page
-  if (travelDate) {
-    sessionStorage.setItem("makePkgTravelDate", travelDate);
-  }
+    // Store travel date in sessionStorage for use in booking page
+    if (travelDate) {
+      sessionStorage.setItem("makePkgTravelDate", travelDate);
+    }
 
-  // Navigate to new Package Generation page
- navigate("/new-booking/make-your-own-package/search", {
-  state: {
-    travelDate,
-    agent,
-    nationality: selectedNationality,
-    destination: selectedDestination,
-    adults,
-    children,
-    childAges: childAges.map(age => parseInt(age) || 0),
-    nights,
-  },
-});
+    // Navigate to new Package Generation page
+    navigate("/new-booking/make-your-own-package/search", {
+      state: {
+        travelDate,
+        agent,
+        nationality: selectedNationality,
+        destination: selectedDestination,
+        adults,
+        children,
+        childAges: childAges.map(age => parseInt(age) || 0),
+        nights,
+      },
+    });
 
-};
+  };
 
 
   // const handleSearchSubmit = async (e) => {
@@ -252,7 +252,7 @@ export default function MakeUrOwnPackage() {
 
   //     // Simulate API call
   //     await new Promise(resolve => setTimeout(resolve, 2000));
-      
+
   //     // Navigate to results or show success message
   //     alert("Package search completed! (This is a demo)");
   //   } catch (err) {
@@ -421,7 +421,7 @@ export default function MakeUrOwnPackage() {
                           setChildren(newChildren);
                           // Initialize or adjust child ages array
                           if (newChildren > 0) {
-                            const newChildAges = Array.from({ length: newChildren }, (_, i) => 
+                            const newChildAges = Array.from({ length: newChildren }, (_, i) =>
                               childAges[i] || ""
                             );
                             setChildAges(newChildAges);

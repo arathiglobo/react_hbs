@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Nav, Button, Offcanvas } from "react-bootstrap";
 import { Link } from "react-router-dom";
 
@@ -23,12 +23,37 @@ import {
   
 let labelForDashboard = " ";
 
+
+
 export default function Sidebar() {
   const [show, setShow] = useState(false);
   const handleClose = () => setShow(false);
   const handleShow = () => setShow(true);
   const [openGroups, setOpenGroups] = useState({});
+  const sidebarRef = useRef(null);
+const offcanvasRef = useRef(null);
 
+  useEffect(() => {
+  const handleClickOutside = (event) => {
+    const sidebarEl = sidebarRef.current;
+    const offcanvasEl = offcanvasRef.current;
+
+    // If click is outside both sidebar and offcanvas
+    if (
+      sidebarEl &&
+      !sidebarEl.contains(event.target) &&
+      (!offcanvasEl || !offcanvasEl.contains(event.target))
+    ) {
+      setOpenGroups({}); // 👈 close all dropdowns
+    }
+  };
+
+  document.addEventListener("mousedown", handleClickOutside);
+
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+  };
+}, []);
 
   // Get roles as an array
   const storedRoles = (localStorage.getItem("userRole") || "")
@@ -420,6 +445,7 @@ export default function Sidebar() {
 
       {/* Sidebar for large screens */}
       <aside className="sidebar d-none d-lg-block"
+      ref={sidebarRef}
        style={{
     position: "sticky",
     top: "60px",                     // 👈 height of top bar
@@ -550,7 +576,7 @@ export default function Sidebar() {
         <Offcanvas.Header closeButton>
           <Offcanvas.Title>Globosoft</Offcanvas.Title>
         </Offcanvas.Header>
-        <Offcanvas.Body>
+        <Offcanvas.Body ref={offcanvasRef}>
           <Nav className="flex-column">
             {filteredItems.map((item) => {
               const hasChildren = Array.isArray(item.children) && item.children.length > 0;

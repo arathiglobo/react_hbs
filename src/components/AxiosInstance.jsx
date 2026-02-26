@@ -3,7 +3,7 @@ import { showSessionExpiredAlert } from "./SessionExpired";
 
 
 const axiosInstance = axios.create({
-  baseURL: "http://localhost:8081",
+  baseURL: process.env.REACT_APP_API_BASE_URL,
   timeout: 10000,
 });
 
@@ -25,13 +25,13 @@ axiosInstance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("authToken");
     if (token) {
-      
+
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     } else {
       console.warn("No token found in localStorage");
     }
-    
+
     // if (!token) {
     //   showSessionExpiredAlert();
     //   return Promise.reject(new Error("No token found. Redirecting to login..."));
@@ -46,10 +46,10 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
 
- console.log("error in axiosInstance::" ,  error)
+    console.log("error in axiosInstance::", error)
     const originalRequest = error.config;
 
-    if (error.response && error.response.status === 403 && !originalRequest._retry) {
+    if (error.response && (error.response.status === 401 || error.response.status === 403) && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -66,16 +66,16 @@ axiosInstance.interceptors.response.use(
 
       try {
 
-        
+
         const response = await axios.post(
-          "/auth/refresh-token",
+          `${process.env.REACT_APP_API_BASE_URL}/auth/refresh-token`,
           {},
           {
             withCredentials: true, // Send HTTP-only refresh token cookie
           }
         );
 
-        
+
 
         const newAccessToken = response.data.accessToken;
         localStorage.setItem("authToken", newAccessToken);

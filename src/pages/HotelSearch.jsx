@@ -50,13 +50,13 @@ function RoomGuestSelector({ value, onChange }) {
     const next = rooms.map((r, i) =>
       i === index
         ? {
-            ...r,
-            children,
-            childAges: Array.from(
-              { length: children },
-              (_, j) => r.childAges[j] || 5
-            ),
-          }
+          ...r,
+          children,
+          childAges: Array.from(
+            { length: children },
+            (_, j) => r.childAges[j] || 5
+          ),
+        }
         : r
     );
     update(next);
@@ -191,9 +191,8 @@ function LazyImage({ src, alt, className }) {
   return (
     <div
       ref={containerRef}
-      className={`ratio  rounded-xl overflow-hidden ${
-        className || ""
-      }`}
+      className={`ratio  rounded-xl overflow-hidden ${className || ""
+        }`}
       style={{ "--bs-aspect-ratio": "66.25%" }}
     >
       {!loaded && <div className="skeleton w-100 h-100" />}
@@ -237,7 +236,7 @@ export default function HotelSearch() {
   const [roomsOpen, setRoomsOpen] = useState(false);
 
   // Filter states
-  const [starRating, setStarRating] = useState([]);
+  const [starRating, setStarRating] = useState(null);
   const [hotelType, setHotelType] = useState([]);
   const [channelType, setChannelType] = useState([]);
   const [sortBy, setSortBy] = useState("priceAsc");
@@ -287,15 +286,15 @@ export default function HotelSearch() {
   ];
 
   useEffect(() => {
-  const handleScroll = () => {
-    setIsSticky(window.scrollY > 120); // adjust threshold
-  };
+    const handleScroll = () => {
+      setIsSticky(window.scrollY > 120); // adjust threshold
+    };
 
-  window.addEventListener("scroll", handleScroll);
-  return () => window.removeEventListener("scroll", handleScroll);
-}, []);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
-    useEffect(() => {
+  useEffect(() => {
     let index = 0;
     let isDeleting = false;
 
@@ -390,7 +389,7 @@ export default function HotelSearch() {
 
   const filteredResults = useMemo(() => {
     let results = allResults;
-    
+
     // Debug: Log all hotel names
     if (results.length > 0) {
       // console.log('All hotel names:', results.map(hotel => hotel.name || hotel.hotelName || 'NO NAME'));
@@ -410,10 +409,16 @@ export default function HotelSearch() {
     }
 
     // Filter by star rating
-    if (starRating.length > 0) {
-      const selectedStars = starRating.map((s) => s.value);
-      results = results.filter((hotel) => selectedStars.includes(hotel.rating));
+    // if (starRating.length > 0) {
+    //   const selectedStars = starRating.map((s) => s.value);
+    //   results = results.filter((hotel) => selectedStars.includes(hotel.rating));
+    // }
+    if (starRating) {
+      results = results.filter(
+        (hotel) => Number(hotel.rating) === Number(starRating.value)
+      );
     }
+
 
     // Filter by hotel type
     if (hotelType.length > 0) {
@@ -438,7 +443,7 @@ export default function HotelSearch() {
   //   return filteredResults;
   // }, [filteredResults, pageIndex]);
 
-    const pageItems = useMemo(() => {
+  const pageItems = useMemo(() => {
     // console.log("Page items:", filteredResults.length);
     return filteredResults;
   }, [filteredResults]);
@@ -482,13 +487,13 @@ export default function HotelSearch() {
 
   const countryList = async () => {
     try {
-      const response = await axios.get("/api/country");
+      const response = await axiosInstance.get("/api/country");
       const options = Array.isArray(response.data)
         ? response.data.map((country) => ({
-            value: country.id,
-            label: country.name,
-            code: country.countryCode,
-          }))
+          value: country.id,
+          label: country.name,
+          code: country.countryCode,
+        }))
         : [];
       setNationalityList(options);
     } catch (error) {
@@ -521,10 +526,10 @@ export default function HotelSearch() {
     }
   };
 
-   const agentList = async () => {
+  const agentList = async () => {
     try {
       const response = await axiosInstance.get("/api/agent");
-     
+
       setAgents(response.data);
     } catch (error) {
       // console.log("error for agent axios list:", error);
@@ -595,7 +600,7 @@ export default function HotelSearch() {
     });
   };
 
-   const fetchHotels = async (page, searchId, agentId) => {
+  const fetchHotels = async (page, searchId, agentId) => {
     try {
       const params = {
         agentId: agentId || agent || 1, // Use passed agentId, or state agent, or default to 1
@@ -605,40 +610,41 @@ export default function HotelSearch() {
           sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
         sortOrder:
           sortBy === "priceAsc" ||
-          sortBy === "ratingAsc" ||
-          sortBy === "nameAsc"
+            sortBy === "ratingAsc" ||
+            sortBy === "nameAsc"
             ? "asc"
             : "desc",
-        starRating: starRating.map((s) => s.value).join(",") || undefined,
+        // starRating: starRating.map((s) => s.value).join(",") || undefined,
+        starRating: starRating ? starRating.value : undefined,
         apiType:
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
 
-      const res = await axiosInstance.get(`/hotel-search/results/${searchId}`, {
+      const res = await axiosInstance.get(`/api/hotel-search/results/${searchId}`, {
         params,
       });
 
       const mappedResults = Array.isArray(res.data.result)
         ? res.data.result.map((hotel, index) => ({
-            id: hotel.hotelCode
-              ? `${searchId}-${hotel.hotelCode}`
-              : `${searchId}-h${index + 1}`,
-            searchId,
-            hotelCode: hotel.hotelCode || null,
-            name: hotel.hotelName || "Unknown Hotel",
-            address: hotel.hotelAddress || "",
-            city: hotel.hotelAddress
-              ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-              : "Unknown City",
-            price: hotel.baseRate || null,
-            // badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-            image:
-              hotel.hotelImage ||
-              "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-            rating: hotel.starRating || 0,
-            hotelType: "hotel",
-            channelType: hotel.apiType?.toLowerCase() || "inhouse",
-          }))
+          id: hotel.hotelCode
+            ? `${searchId}-${hotel.hotelCode}`
+            : `${searchId}-h${index + 1}`,
+          searchId,
+          hotelCode: hotel.hotelCode || null,
+          name: hotel.hotelName || "Unknown Hotel",
+          address: hotel.hotelAddress || "",
+          city: hotel.hotelAddress
+            ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+            : "Unknown City",
+          price: hotel.baseRate || null,
+          // badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+          image:
+            hotel.hotelImage ||
+            "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+          rating: hotel.starRating || 0,
+          hotelType: "hotel",
+          channelType: hotel.apiType?.toLowerCase() || "inhouse",
+        }))
         : [];
 
       // Clear previous results and set new results for the current page
@@ -657,8 +663,8 @@ export default function HotelSearch() {
       return res.data;
     } catch (err) {
       console.error("Fetch hotels failed:", err);
-console.log("hotelType:", hotelType);
-console.log("channelType:", channelType);
+      console.log("hotelType:", hotelType);
+      console.log("channelType:", channelType);
       setPollStatus("ERROR");
       throw err;
     }
@@ -728,7 +734,7 @@ console.log("channelType:", channelType);
   //         channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
   //     };
 
-  //     const res = await axiosInstance.get(`/hotel-search/results/${searchId}`, {
+  //     const res = await axiosInstance.get(`/api/hotel-search/results/${searchId}`, {
   //       params,
   //     });
 
@@ -845,7 +851,7 @@ console.log("channelType:", channelType);
     setAgent("");
     setRooms([{ adults: 1, children: 0, childAges: [] }]);
     setRoomsOpen(false);
-    setStarRating([]);
+    setStarRating(null);
     setHotelType([]);
     setChannelType([]);
     setSortBy("priceAsc");
@@ -862,7 +868,7 @@ console.log("channelType:", channelType);
     setCompletedChannels(new Set());
   };
 
-   const handleSearchSubmit = async (e) => {
+  const handleSearchSubmit = async (e) => {
     e.preventDefault();
     const formErrors = validateForm();
     if (Object.keys(formErrors).length > 0) {
@@ -911,7 +917,7 @@ console.log("channelType:", channelType);
       };
 
       const searchKeyRes = await axiosInstance.post(
-        "/hotel-search/search",
+        "/api/hotel-search/search",
         searchPayloadReq
       );
       const searchId = searchKeyRes.data.searchId;
@@ -926,11 +932,12 @@ console.log("channelType:", channelType);
           sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
         sortOrder:
           sortBy === "priceAsc" ||
-          sortBy === "ratingAsc" ||
-          sortBy === "nameAsc"
+            sortBy === "ratingAsc" ||
+            sortBy === "nameAsc"
             ? "asc"
             : "desc",
-        starRating: starRating.map((s) => s.value).join(",") || undefined,
+        // starRating: starRating.map((s) => s.value).join(",") || undefined,
+        starRating: starRating ? starRating.value : undefined,
         apiType:
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
@@ -938,7 +945,7 @@ console.log("channelType:", channelType);
       const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
 
       await pollUntilComplete(
-        `/hotel-search/results/${searchId}`,
+        `/api/hotel-search/results/${searchId}`,
         params,
         (data) => {
           // Check if any individual API is completed OR if finalStatus is completed
@@ -947,28 +954,28 @@ console.log("channelType:", channelType);
           return hasAnyCompleted || data.finalStatus === "COMPLETED";
         },
         (data, pollCount) => {
-         
+
           const mappedResults = Array.isArray(data.result)
             ? data.result.map((hotel, index) => ({
-                id: hotel.hotelCode
-                  ? `${searchId}-${hotel.hotelCode}`
-                  : `${searchId}-h${index + 1}`,
-                searchId,
-                hotelCode: hotel.hotelCode || null,
-                name: hotel.hotelName || "Unknown Hotel",
-                address: hotel.hotelAddress || "",
-                city: hotel.hotelAddress
-                  ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-                  : "Unknown City",
-                price: hotel.baseRate || null,
-                badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-                image:
-                  hotel.hotelImage ||
-                  "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-                rating: hotel.starRating || 0,
-                hotelType: "hotel",
-                channelType: hotel.apiType?.toLowerCase() ,
-              }))
+              id: hotel.hotelCode
+                ? `${searchId}-${hotel.hotelCode}`
+                : `${searchId}-h${index + 1}`,
+              searchId,
+              hotelCode: hotel.hotelCode || null,
+              name: hotel.hotelName || "Unknown Hotel",
+              address: hotel.hotelAddress || "",
+              city: hotel.hotelAddress
+                ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+                : "Unknown City",
+              price: hotel.baseRate || null,
+              badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+              image:
+                hotel.hotelImage ||
+                "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+              rating: hotel.starRating || 0,
+              hotelType: "hotel",
+              channelType: hotel.apiType?.toLowerCase(),
+            }))
             : [];
 
           // Update results for the current page
@@ -1069,7 +1076,7 @@ console.log("channelType:", channelType);
   //     };
 
   //     const searchKeyRes = await axiosInstance.post(
-  //       "/hotel-search/search",
+  //       "/api/hotel-search/search",
   //       searchPayloadReq
   //     );
   //     const searchId = searchKeyRes.data.searchId;
@@ -1097,7 +1104,7 @@ console.log("channelType:", channelType);
   //     const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
 
   //     await pollUntilComplete(
-  //       `/hotel-search/results/${searchId}`,
+  //       `/api/hotel-search/results/${searchId}`,
   //       params,
   //       (data) => data.finalStatus === "COMPLETED", // Stop when all channels complete
   //       (data, pollCount) => {
@@ -1243,24 +1250,23 @@ console.log("channelType:", channelType);
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
+
         <main className="flex-grow-1 p-4">
-          <Card className={`shadow-sm rounded-xl mb-4 search-card-modern bg-white ${
-    isSticky ? "search-card-sticky" : ""
-  }`}>
+          <Card className={`shadow-sm rounded-xl mb-4 search-card-modern bg-white ${isSticky ? "search-card-sticky" : ""}`}>
             <Card.Body className="p-4">
-              <div className="text-center mb-4">
+              <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1">
                   Find Your Perfect Stay
                 </h2>
-                {/* <p className="text-muted">
+                <p className="text-muted">
                   Discover amazing hotels and exclusive deals
-                </p> */}
+                </p>
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
                 <Row className="g-4">
 
-                   <Col lg={4} md={6}>
+                  <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Destination
@@ -1292,10 +1298,10 @@ console.log("channelType:", channelType);
                             cityList(inputValue);
                           }
                         }}
-                         menuPortalTarget={document.body}   // 👈 force portal
-                       styles={{
-                           menuPortal: base => ({ ...base, zIndex: 9999 }), 
-                          control: (base ) => ({
+                        menuPortalTarget={document.body}   // 👈 force portal
+                        styles={{
+                          menuPortal: base => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
                             ...base,
                             minHeight: "42px",
                             border: "1px solid #dee2e6",
@@ -1338,7 +1344,7 @@ console.log("channelType:", channelType);
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        
+
                         Nationality
                       </Form.Label>
                       <Select
@@ -1353,16 +1359,16 @@ console.log("channelType:", channelType);
                         isClearable
                         className="modern-select"
                         menuPortalTarget={document.body}   // 👈 force portal
-  styles={{
-    menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
-    control: (base) => ({
-      ...base,
-      minHeight: "42px",
-      border: "1px solid #dee2e6",
-      "&:hover": { borderColor: "#86b7fe" },
-    }),
-  }}
-               
+                        styles={{
+                          menuPortal: base => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "42px",
+                            border: "1px solid #dee2e6",
+                            "&:hover": { borderColor: "#86b7fe" },
+                          }),
+                        }}
+
                       />
                       {errors.nationality && (
                         <div className="text-danger small mt-1">
@@ -1372,33 +1378,34 @@ console.log("channelType:", channelType);
                     </Form.Group>
                   </Col>
 
-                 
+
 
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                       Check-in
+                        Check-in
                       </Form.Label>
-                     <Form.Control
-  className="form-control-modern"
-  type="date"
-  value={checkIn}
-  min={today}
-  onClick={(e) => {
-    e.target.showPicker && e.target.showPicker();
-  }}
-  onChange={(e) => {
-    const newCheckIn = e.target.value;
-    setCheckIn(newCheckIn);
-    if (newCheckIn) clearError("checkIn");
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="date"
+                        value={checkIn}
+                        min={today}
+                        onClick={(e) => {
+                          e.target.showPicker && e.target.showPicker();
+                        }}
+                        onChange={(e) => {
+                          const newCheckIn = e.target.value;
+                          setCheckIn(newCheckIn);
+                          if (newCheckIn) clearError("checkIn");
 
-    if (newCheckIn) {
-      const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
-      setCheckOut(nextDay);
-      clearError("checkOut");
-    }
-  }}
-/>
+                          if (newCheckIn) {
+                            const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
+                            setCheckOut(nextDay);
+                            clearError("checkOut");
+                          }
+                        }}
+                      />
 
                       {errors.checkIn && (
                         <div className="text-danger small mt-1">
@@ -1407,33 +1414,34 @@ console.log("channelType:", channelType);
                       )}
                     </Form.Group>
                   </Col>
-<Col lg={3} md={6}>
-  <Form.Group>
-    <Form.Label className="fw-semibold text-dark">
-      Check-out
-    </Form.Label>
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Check-out
+                      </Form.Label>
 
-    <Form.Control
-      className="form-control-modern"
-      type="date"
-      value={checkOut}
-      min={minCheckOutDate}
-      onClick={(e) => {
-        e.target.showPicker && e.target.showPicker();
-      }}
-      onChange={(e) => {
-        setCheckOut(e.target.value);
-        if (e.target.value) clearError("checkOut");
-      }}
-    />
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="date"
+                        value={checkOut}
+                        min={minCheckOutDate}
+                        onClick={(e) => {
+                          e.target.showPicker && e.target.showPicker();
+                        }}
+                        onChange={(e) => {
+                          setCheckOut(e.target.value);
+                          if (e.target.value) clearError("checkOut");
+                        }}
+                      />
 
-    {errors.checkOut && (
-      <div className="text-danger small mt-1">
-        {errors.checkOut}
-      </div>
-    )}
-  </Form.Group>
-</Col>
+                      {errors.checkOut && (
+                        <div className="text-danger small mt-1">
+                          {errors.checkOut}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
 
 
                   <Col lg={2} md={6}>
@@ -1442,6 +1450,7 @@ console.log("channelType:", channelType);
                         Nights
                       </Form.Label>
                       <Form.Control
+                        style={{ height: "42px" }}
                         className="form-control-modern"
                         type="number"
                         min={1}
@@ -1454,7 +1463,7 @@ console.log("channelType:", channelType);
 
                   <Col lg={4} md={6}>
                     <Form.Label className="fw-semibold text-dark">
-                     Rooms & Guests
+                      Rooms & Guests
                     </Form.Label>
                     <Button
                       variant="outline-primary"
@@ -1474,9 +1483,10 @@ console.log("channelType:", channelType);
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                         Agent
+                        Agent
                       </Form.Label>
                       <Form.Select
+                        style={{ height: "42px" }}
                         className="form-control-modern"
                         value={agent}
                         onChange={(e) => {
@@ -1485,12 +1495,12 @@ console.log("channelType:", channelType);
                         }}
                       >
                         <option value="">Select Agent</option>
-                       
-                         {agents.map((agent) => (
-                              <option key={agent.id} value={agent.id}>
-                                {agent.companyName}
-                              </option>
-                            ))}
+
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.companyName}
+                          </option>
+                        ))}
                       </Form.Select>
                       {errors.agent && (
                         <div className="text-danger small mt-1">
@@ -1593,530 +1603,529 @@ console.log("channelType:", channelType);
                 </Card>
               )} */}
 
-              <Row className="g-4">
+              <div className="search-layout">
+                <Row className="g-4">
 
-  {/* ================= LEFT SIDEBAR ================= */}
-  <Col lg={3} className="leftside d-none d-lg-block sticky-top">
-  <div  style={{ maxWidth: "250px" }} >
-    <Card className=" shadow-sm rounded-xl filtersection " >
-      <Card.Body className=" p-3 ">
+                  {/* ================= LEFT SIDEBAR ================= */}
+                  <Col lg={3} className="leftside  d-none d-lg-block">
+                    <div className="left-fixed" style={{ maxWidth: "250px" }} >
+                      <Card className=" shadow-sm rounded-xl filtersection " >
+                        <Card.Body className=" p-3 ">
 
-        {/* MAP */}
-      <div className="map-preview-wrapper mb-3">
-  <img
-    src="/images/map.jpg"
-    alt="Map preview"
-    className="map-preview-img"
-  />
+                          {/* MAP */}
+                          <div className="map-preview-wrapper mb-3">
+                            <img
+                              src="/images/map.jpg"
+                              alt="Map preview"
+                              className="map-preview-img"
+                            />
 
-  <button className="map-overlay-btn">
-    EXPLORE ON MAP 📍
-  </button>
-</div>
+                            <button className="map-overlay-btn">
+                              EXPLORE ON MAP 📍
+                            </button>
+                          </div>
 
- 
-  <Form.Control
-    type="text"
-    placeholder={placeholder}
-    className="ps-3"
-    value={hotelSearchTerm}
-    onChange={(e) => setHotelSearchTerm(e.target.value)}
-  /><br/>
+                          <Form.Control
+                            type="text"
+                            placeholder={placeholder}
+                            className="ps-3"
+                            value={hotelSearchTerm}
+                            onChange={(e) => setHotelSearchTerm(e.target.value)}
+                          /><br />
 
+                          {/* HOTEL TYPE */}
+                          <Form.Group className="mb-3">
+                            <Form.Label className="fw-semibold small">Hotel Type</Form.Label>
 
-        {/* HOTEL TYPE */}
-        <Form.Group className="mb-3">
-  <Form.Label className="fw-semibold small">Hotel Type</Form.Label>
+                            <div className="filter-checkbox-list">
+                              {hotelTypeOptions.map((item) => {
+                                const isChecked = hotelType.some(
+                                  (t) => t.value === item.value
+                                );
 
-  <div className="filter-checkbox-list">
-    {hotelTypeOptions.map((item) => {
-      const isChecked = hotelType.some(
-        (t) => t.value === item.value
-      );
+                                return (
+                                  <Form.Check
+                                    key={item.value}
+                                    type="checkbox"
+                                    id={`hotel-type-${item.value}`}
+                                    label={item.label}
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setHotelType([...hotelType, item]); // ✅ store object
+                                      } else {
+                                        setHotelType(
+                                          hotelType.filter(
+                                            (t) => t.value !== item.value
+                                          )
+                                        );
+                                      }
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </Form.Group>
 
-      return (
-        <Form.Check
-          key={item.value}
-          type="checkbox"
-          id={`hotel-type-${item.value}`}
-          label={item.label}
-          checked={isChecked}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setHotelType([...hotelType, item]); // ✅ store object
-            } else {
-              setHotelType(
-                hotelType.filter(
-                  (t) => t.value !== item.value
-                )
-              );
-            }
-          }}
-        />
-      );
-    })}
-  </div>
-</Form.Group>
+                          <hr />
 
-<hr/>
+                          {/* CHANNEL */}
+                          <Form.Group>
+                            <Form.Label className="fw-semibold small">Channel</Form.Label>
 
-        {/* CHANNEL */}
-       <Form.Group>
-  <Form.Label className="fw-semibold small">Channel</Form.Label>
+                            <div className="filter-checkbox-list">
+                              {channelTypeOptions.map((item) => {
+                                const isChecked = channelType.some(
+                                  (c) => c.value === item.value
+                                );
 
-  <div className="filter-checkbox-list">
-    {channelTypeOptions.map((item) => {
-      const isChecked = channelType.some(
-        (c) => c.value === item.value
-      );
-
-      return (
-        <Form.Check
-          key={item.value}
-          type="checkbox"
-          id={`channel-${item.value}`}
-          label={item.label}
-          checked={isChecked}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setChannelType([...channelType, item]); // ✅ store object
-            } else {
-              setChannelType(
-                channelType.filter(
-                  (c) => c.value !== item.value
-                )
-              );
-            }
-          }}
-        />
-      );
-    })}
-  </div>
-</Form.Group>
-
+                                return (
+                                  <Form.Check
+                                    key={item.value}
+                                    type="checkbox"
+                                    id={`channel-${item.value}`}
+                                    label={item.label}
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setChannelType([...channelType, item]); // ✅ store object
+                                      } else {
+                                        setChannelType(
+                                          channelType.filter(
+                                            (c) => c.value !== item.value
+                                          )
+                                        );
+                                      }
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </Form.Group>
 
 
-      </Card.Body>
-    </Card>
-    </div>
-  </Col>
-
-  {/* ================= RIGHT CONTENT ================= */}
-  <Col lg={9}>
-
-    {/* ===== HORIZONTAL FILTER / SORT BAR ===== */}
-    <Card className="shadow-sm rounded-xl mb-3 filtersection">
-      <Card.Body className="p-2">
-        <div className="d-flex align-items-center gap-3 flex-wrap">
-
-          {/* STAR RATING */}
-         <Select
-  isMulti
-  options={starOptions}
-  value={starRating}
-  onChange={setStarRating}
-  placeholder="All Stars"
-  className="modern-select-sm"
-  menuPortalTarget={document.body}
-  styles={{
-    control: (base) => ({
-      ...base,
-      height: "36px",
-      minHeight: "36px",
-      width: "160px",
-      background: "#ffffff",
-      color: "#000000",
-      marginLeft: "30px",
-    }),
-    menuPortal: (base) => ({
-      ...base,
-      zIndex: 9999, // 🔥 THIS IS THE KEY
-    }),
-    menu: (base) => ({
-      ...base,
-      zIndex: 9999,
-    }),
-  }}
-/>
-
-
-          {/* SORT */}
-          <div className="d-flex gap-2">
-            <Button
-              size="sm"
-              className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
-              onClick={() => setSortBy("priceAsc")}
-            >
-              Low to High 
-            </Button>
-            <Button
-              size="sm"
-              className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
-              onClick={() => setSortBy("priceDesc")}
-            >
-              High to Low
-            </Button>
-          </div>
-
-          {/* CLEAR */}
-          <Button
-            className="clear-pill"
-            variant="outline-primary"
-            size="sm"
-            onClick={() => {
-              setStarRating([]);
-              setHotelType([]);
-              setChannelType([]);
-              setSortBy("priceAsc");
-              setHotelSearchTerm("");
-            }}
-          >
-            Clear
-          </Button>
-
-        </div>
-      </Card.Body>
-    </Card>
-
-    {/* ===== PAGINATION INFO ===== */}
-    {hasSearched && (
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <small className="text-muted fw-semibold">
-          Showing {filteredResults.length} results
-        </small>
-      </div>
-    )}
-
-    {/* ===== RESULT CARDS ===== */}
-    <Row className="g-4">
-      {filteredResults.map((hotel) => (
-        <Col xs={12} key={hotel.id}>
-           <div
-            style={{
-              backgroundColor: "white",
-              border: "1px solid #dee2e6",
-              borderRadius: "12px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-              overflow: "hidden",
-            }}
-          >
-            <Row className="g-0">
-              {/* ================= LEFT IMAGE ================= */}
-              <Col md={4}>
-                <div
-                  style={{
-                   position: "relative",
-                    height: "100%",
-                      padding: "15px"
-                  }}
-                >
-                  <LazyImage
-                    src={hotel.image}
-                    alt={hotel.name}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      borderRadius:"9px"
-                     
-                    }}
-                  />
-
-                  {/* Rating & Channel */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "25px",
-                      left: "25px",
-                      backgroundColor: "rgba(0,0,0,0.7)",
-                      color: "white",
-                      padding: "5px 10px",
-                      borderRadius: "15px",
-                      fontSize: "12px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "5px",
-                    }}
-                  >
-                    <FaStar className="text-warning" />
-                    {hotel.rating}
-                    <span
-                      style={{
-                        marginLeft: "5px",
-                        backgroundColor: "#6c757d",
-                        padding: "2px 6px",
-                        borderRadius: "10px",
-                      }}
-                    >
-                      {hotel.channelType.toUpperCase()}
-                    </span>
-                  </div>
-                </div>
-              </Col>
-
-              {/* ================= RIGHT CONTENT ================= */}
-              <Col md={8}>
-                <div style={{ padding: "16px" }}>
-                  <h6
-                    style={{
-                      fontSize: "1.0rem",
-                      fontWeight: "600",
-                      marginBottom: "8px",
-                      color: "#333",
-                    }}
-                  >
-                    {hotel.name || "Hotel Name Not Available"}
-                  </h6>
-
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      color: "#666",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    📍 {hotel.address || hotel.city || "Address Not Available"}
-                  </p>
-
-                  {hotel.badge && (
-                    <span
-                      style={{
-                        backgroundColor: "#28a745",
-                        color: "white",
-                        padding: "4px 8px",
-                        borderRadius: "4px",
-                        fontSize: "0.75rem",
-                        display: "inline-block",
-                        marginBottom: "12px",
-                      }}
-                    >
-                      {hotel.badge}
-                    </span>
-                  )}
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginTop: "16px",
-                      paddingTop: "12px",
-                      borderTop: "1px solid #eee",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: "600",
-                        color: "#333",
-                      }}
-                    >
-                      {hotel.price
-                        ? `AED ${hotel.price.toLocaleString()}`
-                        : "Price on request"}
+                        </Card.Body>
+                      </Card>
                     </div>
+                  </Col>
 
-                    <Button
-                      size="sm"
-                      variant={
-                        clickedHotelIds.includes(hotel.id)
-                          ? "secondary"
-                          : "primary"
-                      }
-                      onClick={() => {
-                        setClickedHotelIds((prev) => [...prev, hotel.id]);
+                  {/* ================= RIGHT CONTENT ================= */}
+                  <Col lg={9} className="position:relative">
 
-                        const nationalityCode =
-                          (selectedNationality?.code || "").length === 2
-                            ? selectedNationality.code
-                            : " ";
+                    {/* ===== HORIZONTAL FILTER / SORT BAR ===== */}
+                    <Card className="shadow-sm rounded-xl mb-3 filtersection">
+                      <Card.Body className="p-2">
+                        <div className="d-flex align-items-center gap-3 flex-wrap">
 
-                        const roomsPayload = rooms.map((r) => ({
-                          adults: r.adults || 1,
-                          children: r.children || 0,
-                          childAges: r.childAges || [],
-                          adultAges: Array.from(
-                            { length: r.adults || 1 },
-                            () => 30
-                          ),
-                        }));
+                          {/* STAR RATING */}
+                          <Select
+                            // isMulti
+                            options={starOptions}
+                            value={starRating}
+                            onChange={setStarRating}
+                            placeholder="All Stars"
+                            className="modern-select-sm"
+                            menuPortalTarget={document.body}
+                            styles={{
+                              control: (base) => ({
+                                ...base,
+                                height: "36px",
+                                minHeight: "36px",
+                                width: "180px",
+                                background: "#ffffff",
+                                color: "#000000",
+                                marginLeft: "30px",
+                              }),
+                              menuPortal: (base) => ({
+                                ...base,
+                                zIndex: 9999, // 🔥 THIS IS THE KEY
+                              }),
+                              menu: (base) => ({
+                                ...base,
+                                zIndex: 9999,
+                              }),
+                            }}
+                          />
 
-                        const apiIdMapping = {
-                          jumeirah: 10,
-                          iwtx: 12,
-                          x3: 15,
-                          inhouse: 1,
-                          ratehawk: 14,
-                          darina: 16,
-                        };
 
-                        const apiId =
-                          apiIdMapping[
-                            hotel.channelType?.toLowerCase()
-                          ] || 0;
 
-                        const payload = {
-                          checkInDate: checkIn,
-                          checkOutDate: checkOut,
-                          hotelCode:
-                            hotel.hotelCode ||
-                            hotel.id
-                              ?.split("-")
-                              .slice(1)
-                              .join("-") ||
-                            "",
-                          nationality: nationalityCode,
-                          agentId: String(agent),
-                          apiId,
-                          rooms: roomsPayload,
-                        };
+                          {/* SORT */}
+                          <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
+                              onClick={() => setSortBy("priceAsc")}
+                            >
+                              Low to High
+                            </Button>
+                            <Button
+                              size="sm"
+                              className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
+                              onClick={() => setSortBy("priceDesc")}
+                            >
+                              High to Low
+                            </Button>
+                          </div>
 
-                        const meta = {
-                          hotelName: hotel.name,
-                          address: hotel.address || hotel.city,
-                          starRating: hotel.rating || 0,
-                          phone: "",
-                          hotelImage: hotel.image,
-                        };
-
-                        sessionStorage.setItem(
-                          "roomListPayload",
-                          JSON.stringify({ payload, meta })
-                        );
-
-                        setTimeout(() => {
-                          window.open("/room-list", "_blank");
-                        }, 50);
-                      }}
-                    >
-                      View Rooms
-                    </Button>
-                  </div>
-                </div>
-              </Col>
-            </Row>
-          </div>
-          
-        </Col>
-      ))}
-    </Row>
-
-  </Col>
-
-  
-                  {/* New Pagination Section After Filters */}
-              {hasSearched && (
-                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-                  <small className="text-muted fw-semibold">
-                    {filteredResults.length > 0 ? (
-                      <>
-                       
-                      </>
-                    ) : (
-                      <>
-                        No results found{" "}
-                        {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
-                      </>
-                    )}
-                  </small>
-                  {filteredResults.length > 0 && !(hotelSearchTerm || hotelType.length > 0) && (
-                    <Pagination className="mb-0 pagination-modern">
-                      <Pagination.Prev
-                        disabled={pageIndex === 0}
-                        onClick={() => goToPage(pageIndex - 1)}
-                      />
-                      {pageNumbers.map((n) =>
-                        typeof n === "number" ? (
-                          <Pagination.Item
-                            key={n}
-                            active={n === pageIndex + 1}
-                            onClick={() => goToPage(n - 1)}
+                          {/* CLEAR */}
+                          <Button
+                            className="clear-pill"
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={() => {
+                              setStarRating([]);
+                              setHotelType([]);
+                              setChannelType([]);
+                              setSortBy("priceAsc");
+                              setHotelSearchTerm("");
+                            }}
                           >
-                            {n}
-                          </Pagination.Item>
-                        ) : (
-                          <Pagination.Ellipsis key={n} disabled />
-                        )
+                            Clear
+                          </Button>
+
+                        </div>
+                      </Card.Body>
+                    </Card>
+
+                    {/* ===== PAGINATION INFO ===== */}
+                    {hasSearched && (
+                      <div className="d-flex justify-content-between align-items-center mb-3">
+                        <small className="text-muted fw-semibold">
+                          Showing {filteredResults.length} results
+                        </small>
+                      </div>
+                    )}
+
+                    {isLoading && (
+                      <Card className="shadow-sm rounded-xl mb-4">
+                        <Card.Body className="text-center py-5">
+                          <div className="loading-animation mb-3">
+                            <Spinner animation="border" variant="primary" size="lg" />
+                          </div>
+                          <h4 className="text-primary fw-bold">
+                            Searching the Best Results...
+                          </h4>
+                          <p className="text-muted">
+                            Please wait while we find the perfect hotels for you
+                          </p>
+                        </Card.Body>
+                      </Card>
+                    )}
+
+
+                    <div>
+                      {view === "card" && (
+                        <Row xs={1} sm={1} md={1} lg={1} xl={1} className="">
+                          {filteredResults.length > 0 ? (
+                            filteredResults.map((hotel) => {
+                              return (
+                                <Col key={hotel.id}>
+
+                                </Col>
+                              );
+                            })
+                          ) : (
+                            <Col xs={12}>
+                              <Card className="shadow-sm rounded-xl">
+                                <Card.Body className="text-center text-muted py-5">
+                                  <FaSearch className="display-4 text-muted mb-3" />
+                                  <h5>No results found</h5>
+                                  <p>
+                                    {channelType.length > 0
+                                      ? `No hotels found for selected channel(s): ${channelType
+                                        .map((c) => c.label)
+                                        .join(", ")}`
+                                      : "Try adjusting your filters or search criteria."}
+                                  </p>
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    onClick={() => {
+                                      setStarRating([]);
+                                      setHotelType([]);
+                                      setChannelType([]);
+                                      setSortBy("priceAsc");
+                                      setHotelSearchTerm("");
+                                    }}
+                                  >
+                                    Clear All Filters
+                                  </Button>
+                                </Card.Body>
+                              </Card>
+
+                            </Col>
+                          )}
+                        </Row>
+
                       )}
-                      <Pagination.Next
-                        disabled={pageIndex >= effectiveTotalPages - 1}
-                        onClick={() => goToPage(pageIndex + 1)}
-                      />
-                    </Pagination>
-                  )}
-                </div>
-              )}
-</Row>
 
-
-
-
-
-              {isLoading && (
-                <Card className="shadow-sm rounded-xl mb-4">
-                  <Card.Body className="text-center py-5">
-                    <div className="loading-animation mb-3">
-                      <Spinner animation="border" variant="primary" size="lg" />
                     </div>
-                    <h4 className="text-primary fw-bold">
-                      Searching the Best Results...
-                    </h4>
-                    <p className="text-muted">
-                      Please wait while we find the perfect hotels for you
-                    </p>
-                  </Card.Body>
-                </Card>
-              )}
-
-              <div>
-                {view === "card" && (
-       <Row xs={1} sm={1} md={1} lg={1} xl={1} className="">
-  {filteredResults.length > 0 ? (
-    filteredResults.map((hotel) => {
-      return (
-        <Col key={hotel.id}>
-          
-        </Col>
-      );
-    })
-  ) : (
-    <Col xs={12}>
-      <Card className="shadow-sm rounded-xl">
-        <Card.Body className="text-center text-muted py-5">
-          <FaSearch className="display-4 text-muted mb-3" />
-          <h5>No results found</h5>
-          <p>
-            {channelType.length > 0
-              ? `No hotels found for selected channel(s): ${channelType
-                  .map((c) => c.label)
-                  .join(", ")}`
-              : "Try adjusting your filters or search criteria."}
-          </p>
-          <Button
-            variant="outline-primary"
-            size="sm"
-            onClick={() => {
-              setStarRating([]);
-              setHotelType([]);
-              setChannelType([]);
-              setSortBy("priceAsc");
-              setHotelSearchTerm("");
-            }}
-          >
-            Clear All Filters
-          </Button>
-        </Card.Body>
-      </Card>
-
-    </Col>
-  )}
-</Row>
 
 
-                )}
+                    {/* ===== RESULT CARDS ===== */}
+                    <Row className="g-4">
+                      {filteredResults.map((hotel) => (
+                        <Col xs={12} key={hotel.id}>
+                          <div
+                            style={{
+                              backgroundColor: "white",
+                              border: "1px solid #dee2e6",
+                              borderRadius: "12px",
+                              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <Row className="g-0">
+                              {/* ================= LEFT IMAGE ================= */}
+                              <Col md={4}>
+                                <div
+                                  style={{
+                                    position: "relative",
+                                    height: "100%",
+                                    padding: "15px"
+                                  }}
+                                >
+                                  <LazyImage
+                                    src={hotel.image}
+                                    alt={hotel.name}
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                      borderRadius: "9px"
 
-               
+                                    }}
+                                  />
+
+                                  {/* Rating & Channel */}
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      top: "25px",
+                                      left: "25px",
+                                      backgroundColor: "rgba(0,0,0,0.7)",
+                                      color: "white",
+                                      padding: "5px 10px",
+                                      borderRadius: "15px",
+                                      fontSize: "12px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "5px",
+                                    }}
+                                  >
+                                    <FaStar className="text-warning" />
+                                    {hotel.rating}
+                                    <span
+                                      style={{
+                                        marginLeft: "5px",
+                                        backgroundColor: "#6c757d",
+                                        padding: "2px 6px",
+                                        borderRadius: "10px",
+                                      }}
+                                    >
+                                      {hotel.channelType.toUpperCase()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </Col>
+
+                              {/* ================= RIGHT CONTENT ================= */}
+                              <Col md={8}>
+                                <div style={{ padding: "16px" }}>
+                                  <h6
+                                    style={{
+                                      fontSize: "1.0rem",
+                                      fontWeight: "600",
+                                      marginBottom: "8px",
+                                      color: "#333",
+                                    }}
+                                  >
+                                    {hotel.name || "Hotel Name Not Available"}
+                                  </h6>
+
+                                  <p
+                                    style={{
+                                      fontSize: "0.875rem",
+                                      color: "#666",
+                                      marginBottom: "8px",
+                                    }}
+                                  >
+                                    📍 {hotel.address || hotel.city || "Address Not Available"}
+                                  </p>
+
+                                  {hotel.badge && (
+                                    <span
+                                      style={{
+                                        backgroundColor: "#28a745",
+                                        color: "white",
+                                        padding: "4px 8px",
+                                        borderRadius: "4px",
+                                        fontSize: "0.75rem",
+                                        display: "inline-block",
+                                        marginBottom: "12px",
+                                      }}
+                                    >
+                                      {hotel.badge}
+                                    </span>
+                                  )}
+
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                      marginTop: "16px",
+                                      paddingTop: "12px",
+                                      borderTop: "1px solid #eee",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: "1.1rem",
+                                        fontWeight: "600",
+                                        color: "#333",
+                                      }}
+                                    >
+                                      {hotel.price
+                                        ? `AED ${hotel.price.toLocaleString()}`
+                                        : "Price on request"}
+                                    </div>
+
+                                    <Button
+                                      size="sm"
+                                      variant={
+                                        clickedHotelIds.includes(hotel.id)
+                                          ? "secondary"
+                                          : "primary"
+                                      }
+                                      onClick={() => {
+                                        setClickedHotelIds((prev) => [...prev, hotel.id]);
+
+                                        const nationalityCode =
+                                          (selectedNationality?.code || "").length === 2
+                                            ? selectedNationality.code
+                                            : " ";
+
+                                        const roomsPayload = rooms.map((r) => ({
+                                          adults: r.adults || 1,
+                                          children: r.children || 0,
+                                          childAges: r.childAges || [],
+                                          adultAges: Array.from(
+                                            { length: r.adults || 1 },
+                                            () => 30
+                                          ),
+                                        }));
+
+                                        const apiIdMapping = {
+                                          jumeirah: 10,
+                                          iwtx: 12,
+                                          x3: 15,
+                                          inhouse: 1,
+                                          ratehawk: 14,
+                                          darina: 16,
+                                        };
+
+                                        const apiId =
+                                          apiIdMapping[
+                                          hotel.channelType?.toLowerCase()
+                                          ] || 0;
+
+                                        const payload = {
+                                          checkInDate: checkIn,
+                                          checkOutDate: checkOut,
+                                          hotelCode:
+                                            hotel.hotelCode ||
+                                            hotel.id
+                                              ?.split("-")
+                                              .slice(1)
+                                              .join("-") ||
+                                            "",
+                                          nationality: nationalityCode,
+                                          agentId: String(agent),
+                                          apiId,
+                                          rooms: roomsPayload,
+                                        };
+
+                                        const meta = {
+                                          hotelName: hotel.name,
+                                          address: hotel.address || hotel.city,
+                                          starRating: hotel.rating || 0,
+                                          phone: "",
+                                          hotelImage: hotel.image,
+                                        };
+
+                                        sessionStorage.setItem(
+                                          "roomListPayload",
+                                          JSON.stringify({ payload, meta })
+                                        );
+
+                                        setTimeout(() => {
+                                          window.open("/room-list", "_blank");
+                                        }, 50);
+                                      }}
+                                    >
+                                      View Rooms
+                                    </Button>
+                                  </div>
+                                </div>
+                              </Col>
+                            </Row>
+                          </div>
+
+                        </Col>
+                      ))}
+                    </Row>
+
+                  </Col>
+
+
+                  {/* New Pagination Section After Filters */}
+                  {hasSearched && (
+                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+                      <small className="text-muted fw-semibold">
+                        {filteredResults.length > 0 ? (
+                          <>
+
+                          </>
+                        ) : (
+                          <>
+                            No results found{" "}
+                            {pollStatus === "IN_PROGRESS" ? "(updating...)" : ""}
+                          </>
+                        )}
+                      </small>
+                      {filteredResults.length > 0 && !(hotelSearchTerm || hotelType.length > 0) && (
+                        <Pagination className="mb-0 pagination-modern">
+                          <Pagination.Prev
+                            disabled={pageIndex === 0}
+                            onClick={() => goToPage(pageIndex - 1)}
+                          />
+                          {pageNumbers.map((n) =>
+                            typeof n === "number" ? (
+                              <Pagination.Item
+                                key={n}
+                                active={n === pageIndex + 1}
+                                onClick={() => goToPage(n - 1)}
+                              >
+                                {n}
+                              </Pagination.Item>
+                            ) : (
+                              <Pagination.Ellipsis key={n} disabled />
+                            )
+                          )}
+                          <Pagination.Next
+                            disabled={pageIndex >= effectiveTotalPages - 1}
+                            onClick={() => goToPage(pageIndex + 1)}
+                          />
+                        </Pagination>
+                      )}
+                    </div>
+                  )}
+                </Row>
+
               </div>
+
+
             </div>
           )}
         </main>

@@ -1493,8 +1493,8 @@ const HotelRegistrationActions = () => {
             {/* Main Content Area with Actions */}
             <div className="main-content-area">
               <Card className="content-card">
-                <Card.Body className="p-0">
-                  <Row className="h-100">
+                <Card.Body className="p-0 bg-white">
+                  <Row className="h-100" style={{minHeight:"600px"}}>
                     {/* Left Content Panel */}
                     <Col md={8} className="content-panel">
                       <div className="content-wrapper">{renderContent()}</div>

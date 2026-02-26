@@ -30,7 +30,7 @@ const Login = () => {
         username: `${username}`,
         password: `${password}`,
       };
-      const response = await axios.post("/auth/login", loginRequest, {
+      const response = await axiosInstance.post("/auth/login", loginRequest, {
         withCredentials: true,
       });
 
@@ -89,7 +89,7 @@ const Login = () => {
   const fetchOffers = async () => {
     try {
       setOffersLoading(true);
-      const response = await axios.get("/api/offerDetails");
+      const response = await axiosInstance.get("/api/offerDetails");
       console.log("Offers API response:", response.data);
 
       if (response.data && Array.isArray(response.data)) {
@@ -219,12 +219,11 @@ const Login = () => {
                               ,{" "}
                               <small className="text-white">
                                 {offer.validityFrom && offer.validityTo
-                                  ? `${offer.validityFrom.split("T")[0]} - ${
-                                      offer.validityTo.split("T")[0]
-                                    }`
+                                  ? `${offer.validityFrom.split("T")[0]} - ${offer.validityTo.split("T")[0]
+                                  }`
                                   : offer.validityFrom
-                                  ? offer.validityFrom.split("T")[0]
-                                  : offer.validityTo.split("T")[0]}
+                                    ? offer.validityFrom.split("T")[0]
+                                    : offer.validityTo.split("T")[0]}
                               </small>
                             </>
                           )}

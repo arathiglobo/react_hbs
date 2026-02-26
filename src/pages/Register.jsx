@@ -44,7 +44,7 @@ const Register = () => {
 
   const agentCategoryList = async () => {
     try {
-      const agentCatResponse = await axios.get("/api/agentCategory");
+      const agentCatResponse = await axiosInstance.get("/api/agentCategory");
       setAgentCategoryies(agentCatResponse.data);
     } catch (error) {
       console.log("agent category api call error::", error);
@@ -53,7 +53,7 @@ const Register = () => {
 
   const countryList = async () => {
     try {
-      const response = await axios.get("/api/country");
+      const response = await axiosInstance.get("/api/country");
       setCountries(response.data);
     } catch (error) {
       console.log("error for country list :", error);
@@ -68,7 +68,7 @@ const Register = () => {
 
   const provinceList = async (countryId) => {
     try {
-      const response = await axios.get(
+      const response = await axiosInstance.get(
         `/api/province/getByCountryId/${countryId}`
       );
 
@@ -80,7 +80,7 @@ const Register = () => {
 
   const cityList = async (stateId) => {
     try {
-      const response = await axios.get(`/api/destination/getplaces/${stateId}`);
+      const response = await axiosInstance.get(`/api/destination/getplaces/${stateId}`);
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.log("axios call error for city list : ", error);
@@ -288,7 +288,7 @@ const Register = () => {
     }
 
     try {
-      const registerResponse = await axios.post(
+      const registerResponse = await axiosInstance.post(
         "/api/agent/register",
         formData
       );

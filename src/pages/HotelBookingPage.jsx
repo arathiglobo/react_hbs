@@ -441,7 +441,7 @@ const HotelBookingPage = () => {
       console.log("✅ Credit check passed. Proceeding with booking...");
 
       const response = await axiosInstance.post(
-        "/hotel-booking/create",
+        "/api/hotel-booking/create",
         pendingPayload
       );
 
