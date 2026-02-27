@@ -61,9 +61,8 @@ const ExternalApiRoomList = () => {
   // Per-room selection: [{ roomNo, selectedRate }, ...]
   const [selectedRooms, setSelectedRooms] = useState([]);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  // Track which outer room accordion is open
   const [activeOuterAccordion, setActiveOuterAccordion] = useState("room-0");
-  // Track which inner category accordion is open per room: { 0: "0", 1: "2", ... }
-  const [activeInnerAccordion, setActiveInnerAccordion] = useState({});
   const location = useLocation();
   const navigate = useNavigate();
   const [hotelStaticData, setHotelStaticData] = useState(null);
@@ -502,7 +501,6 @@ const ExternalApiRoomList = () => {
         <Sidebar />
         <main
           className="content-wrapper"
-          style={{ paddingLeft: "250px", marginTop: "-580px" }}
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
             {/* Loader Modal */}
@@ -687,35 +685,43 @@ const ExternalApiRoomList = () => {
                       className="room-category-item mb-3"
                     >
                       <Accordion.Header className="room-category-header">
-                        <div className="d-flex align-items-center gap-3 w-100 pe-3">
-                          <FaBed className="text-primary" />
-                          <span className="fw-bold">{roomLabel}</span>
-                          {roomSelection ? (
-                            <Badge bg="success" className="ms-2">
-                              Selected: {roomSelection.mealPlan} —{" "}
-                              {formatPrice(roomSelection.roomRateBasedOnRoomCount || roomSelection.totalRate || 0)}
-                            </Badge>
-                          ) : (
-                            <Badge bg="warning" text="dark" className="ms-2">
-                              No selection yet
-                            </Badge>
-                          )}
+                        <div className="d-flex align-items-center justify-content-between w-100 pe-3">
+                          <div className="d-flex align-items-center gap-3">
+                            <FaBed className="text-primary" />
+                            <span className="fw-bold">{roomLabel}</span>
+                            {roomSelection ? (
+                              <Badge bg="success" className="ms-2">
+                                Selected: {roomSelection.mealPlan} —{" "}
+                                {formatPrice(roomSelection.roomRateBasedOnRoomCount || roomSelection.totalRate || 0)}
+                              </Badge>
+                            ) : (
+                              <Badge bg="warning" text="dark" className="ms-2">
+                                No selection yet
+                              </Badge>
+                            )}
+                          </div>
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            className="d-flex align-items-center gap-2 px-3 py-2 rounded-pill"
+                            style={{ fontWeight: "600", fontSize: "0.85rem" }}
+                          >
+                            {activeOuterAccordion === roomEventKey ? "Hide Details/Book" : "View Details/Book"}
+                            <FaChevronDown
+                              className="accordion-arrow"
+                              style={{
+                                transform: activeOuterAccordion === roomEventKey ? "rotate(180deg)" : "none",
+                                transition: "transform 0.3s ease"
+                              }}
+                            />
+                          </Button>
                         </div>
                       </Accordion.Header>
 
                       <Accordion.Body className="p-3">
-                        <Accordion
-                          activeKey={activeInnerAccordion[roomIndex]}
-                          onSelect={(key) =>
-                            setActiveInnerAccordion((prev) => ({
-                              ...prev,
-                              [roomIndex]: key,
-                            }))
-                          }
-                        >
+                        <Accordion>
                           {hotel.roomCategories.map((category, catIndex) => {
-                            const innerKey = catIndex.toString();
-                            const isInnerActive = activeInnerAccordion[roomIndex] === innerKey;
+                            const innerKey = `${roomIndex}-${catIndex}`;
                             const minRate = Math.min(
                               ...category.availableRates.map(
                                 (r) => r.roomRateBasedOnRoomCount || r.totalRate || 0
@@ -729,8 +735,8 @@ const ExternalApiRoomList = () => {
                                 className="room-category-item mb-3"
                               >
                                 {/* Inner header — matches original design */}
-                                <Accordion.Header as="div" className="room-category-header">
-                                  <div className="d-flex justify-content-between align-items-center w-100">
+                                <Accordion.Header className="room-category-header">
+                                  <div className="d-flex justify-content-between align-items-center w-100 pe-3">
                                     <div className="room-category-info">
                                       <h5 className="mb-1">{category.roomCategory}</h5>
                                       <p className="mb-0 text-muted small">
@@ -738,100 +744,51 @@ const ExternalApiRoomList = () => {
                                       </p>
                                     </div>
                                     <div className="d-flex align-items-center gap-3">
-                                      <div className="room-category-price text-end">
+                                      <div className="room-category-price text-end me-3">
                                         <div className="price-range">From {formatPrice(minRate)}</div>
                                         <div className="rates-count small text-muted">
                                           {category.availableRates.length} rate
                                           {category.availableRates.length !== 1 ? "s" : ""} available
                                         </div>
                                       </div>
-                                      <CategoryToggleButton eventKey={innerKey} isActive={isInnerActive} />
+                                      <Button
+                                        variant="outline-primary"
+                                        size="sm"
+                                        className="d-flex align-items-center gap-2 px-3 py-2 rounded-pill"
+                                        style={{ fontWeight: "600", fontSize: "0.85rem" }}
+                                      >
+                                        {/* Since inner is uncontrolled, we'll use a simpler approach or CSS to toggle text if possible, but let's stick to simple arrow text for now as uncontrolled doesn't easily expose state to parent without extra hooks */}
+                                        View Details/Book
+                                        <FaChevronDown className="accordion-arrow" />
+                                      </Button>
                                     </div>
                                   </div>
                                 </Accordion.Header>
 
-                                {/* Inner body — rate cards with radio buttons */}
-                                <Accordion.Body className="room-rates-section">
-                                  <Row>
+                                {/* Inner body — rate rows with radio buttons */}
+                                <Accordion.Body className="room-rates-section p-3">
+                                  <Row className="g-3">
                                     {category.availableRates.map((rate, rateIndex) => {
                                       const radioId = `room${roomIndex}_cat${catIndex}_rate${rateIndex}`;
                                       const isChecked = selectedRooms[roomIndex]?.selectedRate === rate;
 
                                       return (
-                                        <Col key={rateIndex} lg={6} xl={4} className="mb-3">
+                                        <Col md={6} key={rateIndex}>
                                           <Card
-                                            className={`rate-card h-100 ${isChecked ? "border-primary shadow-sm" : ""}`}
-                                            style={{
-                                              cursor: "pointer",
-                                              borderWidth: isChecked ? "2px" : undefined,
-                                              background: isChecked ? "#f8faff" : undefined,
-                                            }}
+                                            className={`rate-selection-card h-100 ${isChecked ? "selected-rate-card" : ""}`}
                                             onClick={() => handleRateSelect(roomIndex, rate)}
+                                            style={{ cursor: "pointer", border: "1px solid #e0e0e0", borderRadius: "12px" }}
                                           >
-                                            <Card.Body className="p-3 d-flex flex-column gap-2">
-                                              {/* Header row: meal plan + refund badge */}
-                                              <div className="rate-header d-flex justify-content-between align-items-start">
-                                                <div>
-                                                  <div className="d-flex align-items-center gap-2">
-                                                    {getMealPlanIcon(rate.mealPlan)}
-                                                    <span className="fw-semibold small">
-                                                      {rate.mealPlan}
-                                                    </span>
+                                            <Card.Body className="p-4 d-flex flex-column">
+                                              <div className="d-flex justify-content-between align-items-start mb-3">
+                                                <div className="rate-info-main">
+                                                  <div className="d-flex align-items-center gap-2 mb-2">
+                                                    <FaBed className="text-secondary" />
+                                                    <span className="fw-bold fs-5">{rate.mealPlan}</span>
+                                                    {getRefundStatusBadgeInRoomList(rate.nonRefundable)}
                                                   </div>
-                                                  <div className="mt-1">
-                                                    {getRoomStatusBadge(rate.roomStatus)}
-                                                  </div>
+                                                  <p className="text-muted small mb-0">This room can be booked On Request</p>
                                                 </div>
-                                                {getRefundStatusBadgeInRoomList(rate.nonRefundable)}
-                                              </div>
-
-                                              {/* Pricing */}
-                                              <div className="rate-pricing text-center py-2">
-                                                <div className="current-price text-success fw-bold fs-5">
-                                                  {formatPrice(rate.roomRateBasedOnRoomCount)}
-                                                </div>
-                                                <div className="indivial-price-per-room-noofroom">
-                                                  <div className="text-muted small">
-                                                    {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
-                                                  </div>
-                                                </div>
-                                                <div className="price-per-night small text-muted">
-                                                  per night
-                                                </div>
-                                              </div>
-
-                                              {/* Features */}
-                                              <div className="rate-features small mt-auto">
-                                                <div className="feature-item">
-                                                  <FaInfoCircle className="me-2 text-muted" />
-                                                  {rate.contractLabel}
-                                                </div>
-                                                {rate.cancellationPolicies?.length > 0 && (
-                                                  <div className="feature-item">
-                                                    <FaShieldAlt className="me-2 text-muted" />
-                                                    {rate.cancellationPolicies[0].policyText}
-                                                  </div>
-                                                )}
-                                              </div>
-
-                                              {/* Radio select button — replacing View Details btn */}
-                                              <div
-                                                className={`w-100 mt-2 d-flex align-items-center justify-content-center gap-2 py-2 rounded ${
-                                                  isChecked ? "bg-primary text-white" : "book-now-btn"
-                                                }`}
-                                                style={{
-                                                  border: isChecked ? "none" : undefined,
-                                                  background: isChecked ? undefined : "#0d6efd",
-                                                  color: "white",
-                                                  cursor: "pointer",
-                                                  fontSize: "0.875rem",
-                                                  fontWeight: "500",
-                                                }}
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleRateSelect(roomIndex, rate);
-                                                }}
-                                              >
                                                 <input
                                                   type="radio"
                                                   name={`roomSelection_${roomIndex}`}
@@ -839,16 +796,34 @@ const ExternalApiRoomList = () => {
                                                   checked={isChecked}
                                                   onChange={() => handleRateSelect(roomIndex, rate)}
                                                   onClick={(e) => e.stopPropagation()}
-                                                  style={{ accentColor: "white", width: "16px", height: "16px" }}
+                                                  className="rate-radio-input"
+                                                  style={{ transform: "scale(1.2)" }}
                                                 />
-                                                <FaMoneyBillWave />
-                                                <label
-                                                  htmlFor={radioId}
-                                                  style={{ cursor: "pointer", marginBottom: 0 }}
-                                                  onClick={(e) => e.stopPropagation()}
+                                              </div>
+
+                                              <div className="rate-price-section mt-auto pt-4">
+                                                <div className="price-display mb-2">
+                                                  <span className="text-success fw-bold fs-3">
+                                                    {formatPrice(rate.roomRateBasedOnRoomCount)}
+                                                  </span>
+                                                  <div className="text-muted extra-small">
+                                                    {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms} rooms
+                                                  </div>
+                                                  <div className="price-label small text-muted">per night</div>
+                                                </div>
+
+                                                <div className="contract-preview mb-3 small text-muted mt-3">
+                                                  <FaInfoCircle className="me-1" />
+                                                  {rate.contractLabel}
+                                                </div>
+
+                                                <Button
+                                                  variant={isChecked ? "primary" : "outline-primary"}
+                                                  className="w-100 py-2 fw-bold"
+                                                  style={{ borderRadius: "8px" }}
                                                 >
-                                                  {isChecked ? "Selected ✓" : "View Details / Select"}
-                                                </label>
+                                                  {isChecked ? "Selected" : "View Details / Select"}
+                                                </Button>
                                               </div>
                                             </Card.Body>
                                           </Card>

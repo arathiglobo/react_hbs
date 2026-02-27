@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Nav, Button, Offcanvas } from "react-bootstrap";
 import { Link } from "react-router-dom";
-
+import "./Sidebar.css"
 import {
   LayoutDashboard,
   Puzzle,
@@ -32,6 +32,7 @@ export default function Sidebar() {
   const [openGroups, setOpenGroups] = useState({});
   const sidebarRef = useRef(null);
 const offcanvasRef = useRef(null);
+
 
   useEffect(() => {
   const handleClickOutside = (event) => {
@@ -439,9 +440,24 @@ const offcanvasRef = useRef(null);
   return (
     <>
       {/* Hamburger for small screens */}
-      <Button variant="link" className="hamburger d-lg-none" onClick={handleShow}>
-        ☰
-      </Button>
+
+     <header className="top-navbar d-flex align-items-center">
+  {!show && (   // ✅ hide when offcanvas is open
+    <Button
+      variant="link"
+      className="hamburger d-lg-none"
+      onClick={handleShow}
+      aria-label="Open menu"
+      style={{
+        position: "fixed",
+        
+        zIndex: 4000
+      }}
+    >
+      ☰
+    </Button>
+  )}
+</header>
 
       {/* Sidebar for large screens */}
       <aside className="sidebar d-none d-lg-block"

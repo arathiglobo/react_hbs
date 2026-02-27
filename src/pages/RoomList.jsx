@@ -397,77 +397,92 @@ const RoomList = () => {
 
   if (loading) {
     return (
-      <div className="d-flex" style={{ minHeight: "100vh" }}>
-        <Sidebar />
-        <div className="flex-grow-1 d-flex flex-column">
-          <TopBar style={{ marginLeft: "-200px" }} />
+     <div className="min-vh-100 bg-light d-flex flex-column">
+  {/* TopBar ALWAYS on top */}
+  <TopBar />
 
-          <main className="flex-grow-1 d-flex justify-content-center align-items-center">
-            <div className="text-center results-loader">
-              <div className="loader-ring">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <h4 className="text-primary fw-bold mt-3 mb-1">
-                Fetching Best Room Options...
-              </h4>
-              <p className="text-muted small mb-0">
-                Comparing rates across providers
-              </p>
-            </div>
-          </main>
+  {/* Sidebar + Content */}
+  <div className="d-flex flex-grow-1">
+    <Sidebar />
+
+    <main className="flex-grow-1 d-flex justify-content-center align-items-center">
+      <div className="text-center results-loader">
+        <div className="loader-ring">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
         </div>
+
+        <h4 className="text-primary fw-bold mt-3 mb-1">
+          Fetching Best Room Options...
+        </h4>
+
+        <p className="text-muted small mb-0">
+          Comparing rates across providers
+        </p>
       </div>
+    </main>
+  </div>
+</div>
     );
   }
 
   if (error) {
     return (
-      <div className="d-flex" style={{ minHeight: "100vh" }}>
-        <Sidebar />
-        <div className="flex-grow-1 d-flex flex-column">
-          <TopBar style={{ marginLeft: "-200px" }} />
-          <main className="flex-grow-1 d-flex justify-content-center align-items-center p-3">
-            <div className="w-100" style={{ maxWidth: 480 }}>
-              <Alert variant="danger" className="mb-3">
-                <Alert.Heading>Error</Alert.Heading>
-                <p className="mb-0">{error}</p>
-              </Alert>
-              <Button
-                variant="primary"
-                onClick={() => navigate("/new-booking/hotel")}
-              >
-                Back to Search
-              </Button>
-            </div>
-          </main>
-        </div>
+     <div className="min-vh-100 bg-light d-flex flex-column">
+  {/* TopBar always full width */}
+  <TopBar />
+
+  {/* Sidebar + content */}
+  <div className="d-flex flex-grow-1">
+    <Sidebar />
+
+    <main className="flex-grow-1 d-flex justify-content-center align-items-center p-3">
+      <div className="w-100" style={{ maxWidth: 480 }}>
+        <Alert variant="danger" className="mb-3">
+          <Alert.Heading>Error</Alert.Heading>
+          <p className="mb-0">{error}</p>
+        </Alert>
+
+        <Button
+          variant="primary"
+          onClick={() => navigate("/new-booking/hotel")}
+        >
+          Back to Search
+        </Button>
       </div>
+    </main>
+  </div>
+</div>
     );
   }
 
   if (!roomData || !roomData.hotels || roomData.hotels.length === 0) {
     return (
-      <div className="d-flex" style={{ minHeight: "100vh" }}>
-        <Sidebar />
-        <div className="flex-grow-1 d-flex flex-column">
-          <TopBar style={{ marginLeft: "-200px" }} />
-          <main className="flex-grow-1 d-flex justify-content-center align-items-center p-3">
-            <Alert variant="info">
-              <Alert.Heading>No Rooms Available</Alert.Heading>
-              <p>No room data found for this hotel.</p>
-              <Button
-                variant="primary"
-                onClick={() => navigate("/new-booking/hotel")}
-              >
-                Back to Search
-              </Button>
-            </Alert>
-          </main>
-        </div>
-      </div>
+      <div className="min-vh-100 bg-light d-flex flex-column">
+  {/* TopBar – always full width */}
+  <TopBar />
+
+  {/* Sidebar + Content */}
+  <div className="d-flex flex-grow-1">
+    <Sidebar />
+
+    <main className="flex-grow-1 d-flex justify-content-center align-items-center p-3">
+      <Alert variant="info" className="text-center" style={{ maxWidth: 480 }}>
+        <Alert.Heading>No Rooms Available</Alert.Heading>
+        <p>No room data found for this hotel.</p>
+
+        <Button
+          variant="primary"
+          onClick={() => navigate("/new-booking/hotel")}
+        >
+          Back to Search
+        </Button>
+      </Alert>
+    </main>
+  </div>
+</div>
     );
   }
 
@@ -477,13 +492,13 @@ const RoomList = () => {
   // console.log("selectedRate before bookingmodal:::", selectedRate);
 
   return (
-    <div className="room-list-container">
+    <div className= "min-vh-100 bg-light d-flex flex-column room-list-container">
+      <TopBar />
       <div className="main-content">
-        <TopBar className="toproomlist" />
+        
         <Sidebar />
         <main
           className="content-wrapper"
-          style={{ paddingLeft: "250px", marginTop: "-580px" }}
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
             {/* Loader Modal */}

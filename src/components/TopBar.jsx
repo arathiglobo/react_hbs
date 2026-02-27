@@ -36,6 +36,7 @@ export default function TopBar() {
   const [cartItems, setCartItems] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+  
 
   const getCartAgentId = () =>
     sessionStorage.getItem("makeYourOwnPackageAgentId") ||
@@ -607,48 +608,62 @@ export default function TopBar() {
   return (
     <Navbar bg="white" className="topbar shadow-sm" expand="lg" sticky="top">
       <Container fluid className="px-3">
-        <Navbar.Brand href="#" className="d-flex align-items-center gap-2">
-          <div className="logo-placeholder">GS</div>
-          <span className="fw-semibold">Globosoft</span>
-        </Navbar.Brand>
-        <Nav className="ms-auto d-flex align-items-center gap-3">
-          <Button
-            variant="link"
-            className="position-relative text-dark text-decoration-none p-0"
-            onClick={handleCartClick}
-            style={{ border: "none", background: "none" }}
-          >
-            <FaShoppingCart size={20} />
-            {cartCount > 0 && (
-              <Badge
-                bg="danger"
-                className="position-absolute top-0 start-100 translate-middle rounded-pill"
-                style={{ fontSize: "0.65rem", padding: "2px 6px" }}
-              >
-                {cartCount}
-              </Badge>
-            )}
-          </Button>
-          <Dropdown align="end">
-            <Dropdown.Toggle as={ProfileToggle} id="profile-dropdown" />
-            <Dropdown.Menu className="shadow-sm">
-              <Dropdown.Item href="change-password">
-                <FaKey className="me-2" />
-                Change Password
-              </Dropdown.Item>
-              <Dropdown.Divider />
-              <Dropdown.Item href="view-profile">
-                <FaUser className="me-2" />
-                View Profile
-              </Dropdown.Item>
-              <Dropdown.Divider />
-              <Dropdown.Item onClick={handleLogout}>
-                <FaSignOutAlt className="me-2" />
-                Logout
-              </Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown>
-        </Nav>
+       <Navbar.Brand
+  href="#"
+  className="d-flex align-items-center gap-2"
+  style={{
+    marginLeft: window.innerWidth <= 991 ? "40px" : "0px"
+  }}
+>
+  <div className="logo-placeholder">GS</div>
+  <span className="fw-semibold">Globosoft</span>
+</Navbar.Brand>
+        <Nav className="ms-auto d-flex flex-row align-items-center gap-2 gap-md-3 flex-nowrap">
+  {/* Cart Button */}
+  <Button
+    variant="link"
+    className="position-relative text-dark text-decoration-none p-0 d-flex align-items-center"
+    onClick={handleCartClick}
+    style={{ border: "none", background: "none", minWidth: "auto" }}
+  >
+    <FaShoppingCart size={20} />
+    {cartCount > 0 && (
+      <Badge
+        bg="danger"
+        className="position-absolute top-0 start-100 translate-middle rounded-pill"
+        style={{ fontSize: "0.65rem", padding: "2px 6px" }}
+      >
+        {cartCount}
+      </Badge>
+    )}
+  </Button>
+
+  {/* Profile Dropdown */}
+  <Dropdown align="end">
+    <Dropdown.Toggle
+      as={ProfileToggle}
+      id="profile-dropdown"
+      className="p-0"
+      style={{ minWidth: "auto" }}
+    />
+    <Dropdown.Menu className="shadow-sm">
+      <Dropdown.Item href="change-password">
+        <FaKey className="me-2" />
+        Change Password
+      </Dropdown.Item>
+      <Dropdown.Divider />
+      <Dropdown.Item href="view-profile">
+        <FaUser className="me-2" />
+        View Profile
+      </Dropdown.Item>
+      <Dropdown.Divider />
+      <Dropdown.Item onClick={handleLogout}>
+        <FaSignOutAlt className="me-2" />
+        Logout
+      </Dropdown.Item>
+    </Dropdown.Menu>
+  </Dropdown>
+</Nav>
       </Container>
 
       {/* Cart Modal */}

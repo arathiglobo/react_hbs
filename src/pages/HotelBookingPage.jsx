@@ -328,13 +328,15 @@ const HotelBookingPage = () => {
             return `${year}-${month}-${day}T00:00:00`;
           }
         })(),
+        // New Payload Mapping Logic (Around line 331)
         isBookandVoucher: (() => {
-          if (selectedRate.roomStatus === "On Request") {
-            // User selects from radio buttons
+          if (selectedRate.roomStatus === "Available") {
+            // User selects from radio buttons when available
             return bookingConfirmation === "Book & Voucher" ? true : false;
           } else {
-            // For "Available" or any other status, automatically set to true
-            return true;
+            // For "On Request" or any other status, avoid pushing inappropriate voucher flags
+            // Adjust this fallback to what's expected by the backend for "On Request"
+            return false;
           }
         })(),
 
@@ -478,11 +480,12 @@ const HotelBookingPage = () => {
   const { hotelStaticData, payload, selectedRate } = bookingData;
   console.log("bookingData:::", bookingData);
 
+
   return (
-    <div className="hotel-booking-container">
-      <Sidebar />
+    <div className="min-vh-100 bg-light d-flex flex-column  hotel-booking-container">
+      <TopBar />
       <div className="main-content">
-        <TopBar />
+        <Sidebar />
         <main className="content-wrapper py-4">
           <Container maxWidth="xl">
             {/* Booking Summary */}
@@ -630,7 +633,7 @@ const HotelBookingPage = () => {
                         <Accordion.Body className="p-4">
                           {room.guests.map((guest, guestIndex) => (
                             <div key={guestIndex} className="guest-row mb-3">
-                              <Row className="align-items-center">
+                              <Row className="align-items-center g-2">
                                 <Col md={2}>
                                   <span className="fw-semibold text-muted">
                                     {guest.isChild
@@ -994,7 +997,7 @@ const HotelBookingPage = () => {
                       />
                     </Form.Group>
                   </Col>
-                  {selectedRate?.roomStatus === "On Request" && (
+                  {selectedRate?.roomStatus !== "On Request" && (
                     <Col md={12}>
                       <Form.Group className="mb-3">
                         <Form.Label className="mb-2 fw-semibold">Are you sure to continue booking?</Form.Label>
