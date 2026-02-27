@@ -113,6 +113,7 @@ import UserLogins from "./pages/report/UserLogins";
 import OfflineBookingDailySalesStatement from "./pages/report/OfflineBookingDailySalesStatement";
 import OnlineDailySalesReport from "./pages/report/OnlineDailySalesReport";
 import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDailySalesReport";
+import ExternalApiRoomList from "./pages/ExternalApiRoomList";
 
 
 export default function App() {
@@ -227,6 +228,7 @@ export default function App() {
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/booking-page" element={<PrivateRoute><MakePkgBookingPage /></PrivateRoute>} />
         <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
+        <Route path="/api-room-list" element={<PrivateRoute><ExternalApiRoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
         <Route path="/booking-details/custom-booking-list" element={<PrivateRoute><CustomBookingList /> </PrivateRoute>}/>

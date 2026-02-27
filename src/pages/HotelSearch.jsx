@@ -2060,7 +2060,8 @@ export default function HotelSearch() {
                                         );
 
                                         setTimeout(() => {
-                                          window.open("/room-list", "_blank");
+                                          const route = apiId === 1 ? "/room-list" : "/api-room-list";
+                                          window.open(route, "_blank");
                                         }, 50);
                                       }}
                                     >

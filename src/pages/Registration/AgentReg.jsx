@@ -1294,13 +1294,12 @@ const AgentReg = () => {
           ? "Add Credit Limit is required"
           : "Add-on Credit Limit is required";
     } else if (
-      isNaN(data.addCreditLimit) ||
-      parseFloat(data.addCreditLimit) <= 0
+      isNaN(data.addCreditLimit)
     ) {
       newErrors.addCreditLimit =
         type === "initial"
-          ? "Add Credit Limit must be a positive number"
-          : "Add-on Credit Limit must be a positive number";
+          ? "Add Credit Limit must be a number"
+          : "Add-on Credit Limit must be a number";
     }
 
     // Only require remarks for update type
@@ -1348,13 +1347,17 @@ const AgentReg = () => {
           agentId: editing.id,
           additionalCredit: addAmount,
           remarks: creditLimitFormData.remarks,
+          totalCreditLimit: creditLimitFormData.totalCreditLimit,
+          availableCreditLimit: creditLimitFormData.availableCreditLimit
+         
         };
 
-       // console.log("Adding credit:", addCreditPayload);
-        response = await axiosInstance.post(
-          "/api/agent-credit-limit/add-credit",
+       console.log("Adding credit:", addCreditPayload);
+        response = await axiosInstance.put(
+          "/api/agent-credit-limit/update",
           addCreditPayload
         );
+        
       }
 
       if (response.data) {
