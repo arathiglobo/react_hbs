@@ -281,6 +281,8 @@ export default function HotelSearch() {
     { value: "inhouse", label: "Inhouse" },
     { value: "iwtx", label: "Iwtx" },
     { value: "x3", label: "x3" },
+    { value: "atharva", label: "Atharva" },
+    { value: "jumeirah", label: "Jumeirah" },
     { value: "ratehawk", label: "Ratehawk" },
     { value: "darina", label: "Darina" },
   ];
