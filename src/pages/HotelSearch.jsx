@@ -676,12 +676,7 @@ export default function HotelSearch() {
         : [];
 
       // Clear previous results and set new results for the current page
-      // setAllResults(mappedResults);
-      setAllResults(prev => {
-  const map = new Map(prev.map(h => [h.id, h]));
-  mappedResults.forEach(h => map.set(h.id, h));
-  return Array.from(map.values());
-});
+      setAllResults(mappedResults);
 
       setTotalElements(Number(res.data.totalResults) || mappedResults.length);
       setTotalPages(

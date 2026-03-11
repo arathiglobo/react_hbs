@@ -61,10 +61,22 @@ const CityMapping = () => {
 
   // Generic form input handler
   const handleChange = (e) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    const { name, value } = e.target;
+    if (name === "apiProvider") {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+        apiCountryId: "",
+        apiCityId: "",
+      }));
+      setselectedPlatformCountryOption(null);
+      setSelectedPlatformCityOption(null);
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   // Load countries dynamically for AsyncSelect
@@ -86,7 +98,7 @@ const CityMapping = () => {
     try {
       const response = await axiosInstance.get(
         `/api/province/getByCountryId/${formData.masterCountryId}`,
-        { params: { search: inputValue } }
+        { params: { search: inputValue } },
       );
       return response.data.map((c) => ({
         value: c.id,
@@ -98,13 +110,58 @@ const CityMapping = () => {
     }
   };
 
+  const platformCountryApis = {
+    Iwtx: {
+      countries: "/api/iwtx/countries",
+    },
+    Darina: {
+      countries: "/api/darina/countrylist",
+    },
+    Jumeirah: {
+      countries: "/api/country",
+    },
+    X3: {
+      countries: "/api/x3/countries",
+    },
+    Ratehawk: {
+      countries: "/api/ratehawk/countries",
+    },
+  };
+
+  const platformCityApis = {
+    Iwtx: {
+      cities: "/api/iwtx/cities",
+    },
+    Darina: {
+      cities: "/api/darina/citylist",
+    },
+    Jumeirah: {
+      cities: "/api/jumeirah/cities",
+    },
+    X3: {
+      cities: "/api/x3/cities",
+    },
+    Ratehawk: {
+      cities: "/api/ratehawk/cities",
+    },
+  };
+
   // Load platform country
-  const loadPlatformCountry = async (inputValue) => {
+  const loadPlatformCountry = (platform) => async (inputValue) => {
+    if (!platform) return [];
+
     try {
-      const response = await axiosInstance.get("/api/country", {
+      const apiUrl = platformCountryApis[platform]?.countries;
+      if (!apiUrl) return [];
+
+      const response = await axiosInstance.get(apiUrl, {
         params: { search: inputValue },
       });
-      return response.data.map((c) => ({ value: c.id, label: c.name }));
+
+      return response.data.map((c) => ({
+        value: c.id || c.countryId,
+        label: c.name || c.countryName,
+      }));
     } catch (error) {
       console.error("Error loading platform countries:", error);
       return [];
@@ -112,34 +169,26 @@ const CityMapping = () => {
   };
 
   // Load platform city
-  const loadPlatformCity = async (inputValue) => {
-    if (!formData.masterCountryId) return [];
-    try {
-      const response = await axiosInstance.get(
-        `/api/destination/getCitiesByCountryId/${formData.masterCountryId}`,
-        { params: { search: inputValue } }
-      );
-      return response.data.map((c) => ({ value: c.id, label: c.name }));
-    } catch (error) {
-      console.error("Error loading platform cities:", error);
-      return [];
-    }
-  };
+  const loadPlatformCity = (platform, countryId) => async (inputValue) => {
+    if (!platform || !countryId) return [];
 
-  // Row: load cities by selected platform country for that row
-  const loadPlatformCityByCountry = (countryId) => async (inputValue) => {
-    if (!countryId) return [];
     try {
-      const response = await axiosInstance.get(
-        `/api/province/getByCountryId/${countryId}`,
-        { params: { search: inputValue } }
-      );
+      const apiUrl = platformCityApis[platform]?.cities;
+      if (!apiUrl) return [];
+
+      const response = await axiosInstance.get(apiUrl, {
+        params: {
+          search: inputValue,
+          countryId: countryId,
+        },
+      });
+
       return response.data.map((c) => ({
-        value: c.id,
-        label: `${c.stateName}, ${c.country}`,
+        value: c.cityId || c.id,
+        label: c.cityName || c.name,
       }));
     } catch (error) {
-      console.error("Error loading platform cities (row):", error);
+      console.error("Error loading platform cities:", error);
       return [];
     }
   };
@@ -211,13 +260,13 @@ const CityMapping = () => {
 
     try {
       let searchReq = {
-        apiProvider: platform,
+        apiProvider: platform.toLowerCase(),
         apiCountryId,
         apiCityId,
       };
       const response = await axiosInstance.post(
         "/api/cityMapping/search",
-        searchReq
+        searchReq,
       );
 
       const data = response?.data;
@@ -368,7 +417,7 @@ const CityMapping = () => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
-                          placeholder="Search & select city..."
+                          placeholder="Search  here & select city..."
                           value={selectedCityOption}
                           loadOptions={loadCities}
                           onChange={handleCitySelect}
@@ -427,11 +476,14 @@ const CityMapping = () => {
                         <Form.Group>
                           <Form.Label>Platform Country</Form.Label>
                           <AsyncSelect
+                            key={`country-${formData.apiProvider}`}
                             cacheOptions
                             defaultOptions
                             placeholder="Search country..."
                             value={selectedPlatformCountryOption}
-                            loadOptions={loadPlatformCountry}
+                            loadOptions={loadPlatformCountry(
+                              formData.apiProvider,
+                            )}
                             onChange={handlePlatformCountrySelect}
                             menuPortalTarget={document.body} // 👈 force portal
                             styles={{
@@ -466,13 +518,17 @@ const CityMapping = () => {
                         <Form.Group>
                           <Form.Label>Platform City</Form.Label>
                           <AsyncSelect
+                            key={`city-${formData.apiProvider}-${formData.apiCountryId}`}
                             cacheOptions
                             defaultOptions
                             placeholder="Search & select city..."
                             value={selectedPlatformCityOption}
-                            loadOptions={loadPlatformCity}
+                            loadOptions={loadPlatformCity(
+                              formData.apiProvider,
+                              formData.apiCountryId,
+                            )}
                             onChange={handlePlatformCitySelect}
-                            isDisabled={!formData.apiProvider}
+                            isDisabled={!formData.apiCountryId}
                             menuPortalTarget={document.body} // 👈 force portal
                             styles={{
                               menuPortal: (base) => ({ ...base, zIndex: 9999 }), // 👈 keep menu on top
@@ -542,11 +598,12 @@ const CityMapping = () => {
                             <td>
                               <div style={{ width: "100%", maxWidth: 360 }}>
                                 <AsyncSelect
+                                  key={`table-country-${p}`}
                                   cacheOptions
                                   defaultOptions
                                   placeholder="Search country..."
                                   value={state.countryOption}
-                                  loadOptions={loadPlatformCountry}
+                                  loadOptions={loadPlatformCountry(p)}
                                   onChange={(opt) =>
                                     handleRowCountryChange(p, opt)
                                   }
@@ -566,12 +623,14 @@ const CityMapping = () => {
                             <td>
                               <div style={{ width: "100%", maxWidth: 380 }}>
                                 <AsyncSelect
+                                  key={`table-city-${p}-${state.countryOption?.value}`}
                                   cacheOptions
                                   defaultOptions
                                   placeholder="Search & select city..."
                                   value={state.cityOption}
-                                  loadOptions={loadPlatformCityByCountry(
-                                    state.countryOption?.value
+                                  loadOptions={loadPlatformCity(
+                                    p,
+                                    state.countryOption?.value,
                                   )}
                                   onChange={(opt) =>
                                     handleRowCityChange(p, opt)
