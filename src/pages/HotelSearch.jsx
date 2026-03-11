@@ -75,65 +75,91 @@ function RoomGuestSelector({ value, onChange }) {
     <div className="room-guest-selector">
       {rooms.map((room, i) => (
         <Card key={i} className="mb-2 shadow-sm">
-          <Card.Body className="py-2">
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <div className="fw-semibold">Room {i + 1}</div>
-              {rooms.length > 1 && (
-                <Button
-                  variant="outline-danger"
-                  size="sm"
-                  onClick={() => removeRoom(i)}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-            <div className="d-flex flex-wrap gap-3 align-items-end">
-              <Form.Group>
-                <Form.Label>Adults</Form.Label>
-                <Form.Select
-                  value={room.adults}
-                  onChange={(e) => setAdults(i, parseInt(e.target.value))}
-                >
-                  {[1, 2, 3, 4].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-              <Form.Group>
-                <Form.Label>Children</Form.Label>
-                <Form.Select
-                  value={room.children}
-                  onChange={(e) => setChildren(i, parseInt(e.target.value))}
-                >
-                  {[0, 1, 2, 3, 4].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-              {Array.from({ length: room.children }).map((_, idx) => (
-                <Form.Group key={idx}>
-                  <Form.Label>Child {idx + 1} Age</Form.Label>
-                  <Form.Select
-                    value={room.childAges[idx] || 5}
-                    onChange={(e) =>
-                      setChildAge(i, idx, parseInt(e.target.value))
-                    }
-                  >
-                    {Array.from({ length: 17 }).map((__, age) => (
-                      <option key={age} value={age}>
-                        {age}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-              ))}
-            </div>
-          </Card.Body>
+          <Card.Body className="py-2 px-2">
+
+  <div className="d-flex align-items-start gap-3 flex-wrap">
+
+    {/* Room Number */}
+    <div
+      className="fw-semibold small flex-shrink-0"
+      style={{ marginTop: "20px", minWidth: "70px" }}
+    >
+      Room {i + 1}
+    </div>
+
+    {/* Adults */}
+    <Form.Group className="mb-0 flex-shrink-0">
+      <Form.Label className="small mb-1">Adults</Form.Label>
+      <Form.Select
+        size="sm"
+        style={{ minWidth: "70px" }}
+        value={room.adults}
+        onChange={(e) => setAdults(i, parseInt(e.target.value))}
+      >
+        {[1, 2, 3, 4].map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </Form.Select>
+    </Form.Group>
+
+    {/* Children */}
+    <Form.Group className="mb-0 flex-shrink-0">
+      <Form.Label className="small mb-1">Children</Form.Label>
+      <Form.Select
+        size="sm"
+        style={{ minWidth: "70px" }}
+        value={room.children}
+        onChange={(e) => setChildren(i, parseInt(e.target.value))}
+      >
+        {[0, 1, 2, 3, 4].map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </Form.Select>
+    </Form.Group>
+
+    {/* Child Ages */}
+    {Array.from({ length: room.children }).map((_, idx) => (
+      <Form.Group key={idx} className="mb-0 flex-shrink-0">
+        <Form.Label className="small mb-1">
+          Child {idx + 1} Age
+        </Form.Label>
+        <Form.Select
+          size="sm"
+          style={{ minWidth: "70px" }}
+          value={room.childAges[idx] || 5}
+          onChange={(e) =>
+            setChildAge(i, idx, parseInt(e.target.value))
+          }
+        >
+          {Array.from({ length: 17 }).map((__, age) => (
+            <option key={age} value={age}>
+              {age}
+            </option>
+          ))}
+        </Form.Select>
+      </Form.Group>
+    ))}
+
+    {/* Remove Button */}
+    {rooms.length > 1 && (
+      <Button
+        variant="outline-danger"
+        size="sm"
+        className="ms-auto flex-shrink-0"
+        style={{ marginTop: "22px" }}
+        onClick={() => removeRoom(i)}
+      >
+        Remove
+      </Button>
+    )}
+
+  </div>
+
+</Card.Body>
         </Card>
       ))}
       <Button variant="outline-primary" size="sm" onClick={addRoom}>
@@ -650,7 +676,12 @@ export default function HotelSearch() {
         : [];
 
       // Clear previous results and set new results for the current page
-      setAllResults(mappedResults);
+      // setAllResults(mappedResults);
+      setAllResults(prev => {
+  const map = new Map(prev.map(h => [h.id, h]));
+  mappedResults.forEach(h => map.set(h.id, h));
+  return Array.from(map.values());
+});
 
       setTotalElements(Number(res.data.totalResults) || mappedResults.length);
       setTotalPages(
@@ -944,17 +975,24 @@ export default function HotelSearch() {
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
 
-      const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
+      const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk","darina","atharva","jumeirah",];
 
-      await pollUntilComplete(
-        `/api/hotel-search/results/${searchId}`,
-        params,
-        (data) => {
-          // Check if any individual API is completed OR if finalStatus is completed
-          const currentStatuses = data.status || {};
-          const hasAnyCompleted = expectedChannels.some(ch => currentStatuses[ch] === "COMPLETED");
-          return hasAnyCompleted || data.finalStatus === "COMPLETED";
-        },
+      // await pollUntilComplete(
+      //   `/api/hotel-search/results/${searchId}`,
+      //   params,
+      //   (data) => {
+      //     // Check if any individual API is completed OR if finalStatus is completed
+      //     const currentStatuses = data.status || {};
+      //     const hasAnyCompleted = expectedChannels.some(ch => currentStatuses[ch] === "COMPLETED");
+      //     return hasAnyCompleted || data.finalStatus === "COMPLETED";
+      //   },
+
+        await pollUntilComplete(
+  `/api/hotel-search/results/${searchId}`,
+  params,
+  (data) => {
+    return data.finalStatus === "COMPLETED";
+  },
         (data, pollCount) => {
 
           const mappedResults = Array.isArray(data.result)
@@ -981,7 +1019,12 @@ export default function HotelSearch() {
             : [];
 
           // Update results for the current page
-          setAllResults(mappedResults);
+          // setAllResults(mappedResults);
+          setAllResults(prev => {
+  const map = new Map(prev.map(h => [h.id, h]));
+  mappedResults.forEach(h => map.set(h.id, h));
+  return Array.from(map.values());
+});
 
           const currentStatuses = data.status || {};
           const newCompleted = new Set(completedChannels);
@@ -1214,6 +1257,7 @@ export default function HotelSearch() {
 
   useEffect(() => {
     if (!searchId || !hasSearched) return;
+    if (pollStatus === "IN_PROGRESS") return;
 
     setIsLoading(true);
     fetchHotels(pageIndex, searchId, agent).finally(() => setIsLoading(false));

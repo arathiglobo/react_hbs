@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaHotel, FaCalendarAlt, FaUsers, FaUtensils, FaUserTie } from "react-icons/fa";
-import Sidebar from "../components/Sidebar";
-import TopBar from "../components/TopBar";
-import "../styles/HotelBookingPage.css";
+import Sidebar from "../../components/Sidebar";
+import TopBar from "../../components/TopBar";
+import "../../styles/HotelBookingPage.css";
 import {
   Container,
   Row,
@@ -16,10 +16,10 @@ import {
   Alert,
   Modal,
 } from "react-bootstrap";
-import axiosInstance from "../components/AxiosInstance";
+import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 
-const HotelBookingPage = () => {
+const ApiBookingPageForHotels = () => {
   const navigate = useNavigate();
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
@@ -1229,4 +1229,4 @@ const HotelBookingPage = () => {
   );
 };
 
-export default HotelBookingPage;
+export default ApiBookingPageForHotels;

@@ -28,7 +28,7 @@ import MarketType from "./pages/master/MarketType";
 import Region from "./pages/master/Region";
 import Province from "./pages/master/Province";
 import CityMapping from "./pages/master/CityMapping";
-import HotelBookingPage from "./pages/HotelBookingPage";
+
 import AgentReg from "./pages/Registration/AgentReg";
 import HotelReg from "./pages/Registration/HotelReg";
 import HotelList from "./pages/Registration/HotelList";
@@ -114,6 +114,8 @@ import OfflineBookingDailySalesStatement from "./pages/report/OfflineBookingDail
 import OnlineDailySalesReport from "./pages/report/OnlineDailySalesReport";
 import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDailySalesReport";
 import ExternalApiRoomList from "./pages/ExternalApiRoomList";
+import HotelBookingPage from "./pages/booking/HotelBookingPage";
+import ApiBookingPageForHotels from "./pages/booking/ApiBookingPageForHotels";
 
 
 export default function App() {
@@ -225,6 +227,8 @@ export default function App() {
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
+        <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
+        <Route path="/api-booking-page-hotels" element={<PrivateRoute><ApiBookingPageForHotels /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/booking-page" element={<PrivateRoute><MakePkgBookingPage /></PrivateRoute>} />
         <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
@@ -241,7 +245,6 @@ export default function App() {
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
 
         {/* Registration */}
-        <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
         <Route path="/registration/agent" element={<PrivateRoute><AgentReg /></PrivateRoute>} />
         <Route path="/registration/employee" element={<PrivateRoute><EmployeeReg /></PrivateRoute>} />
         <Route path="/registration/cabProvider" element={<PrivateRoute><CabProviderReg /></PrivateRoute>} />

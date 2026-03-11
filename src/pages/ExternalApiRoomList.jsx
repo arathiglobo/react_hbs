@@ -187,8 +187,26 @@ const ExternalApiRoomList = () => {
       setLoadingRate(true);
       setTimeout(async () => {
         try {
+          // Build one room entry per selected room
+          // console.log("selectedRooms::", selectedRooms);
+          // const roomsArray = selectedRooms.map((r, i) => ({
+          //   adult: {
+          //     age: (payload.rooms[i]?.adultAges?.[0] ?? payload.rooms[0]?.adultAges?.[0] ?? 30).toString(),
+          //   },
+          //   roomTypeCode: r.selectedRate?.roomTypeCode,
+          //   mealPlanCode: r.selectedRate?.mealPlanCode,
+          //   contractTokenId: r.selectedRate?.contractTokenId || "0",
+          //   roomConfigurationId: i + 1,
+          // }));
+
+          // Always send `room` as an array — required by the backend for both single and multiple rooms
+          // const roomConfiguration = { room: roomsArray };
+
+
+
           let priceCheckReq = {
             searchCriteria: {
+              // roomConfiguration,
               roomConfiguration: {
                 room: {
                   adult: {
@@ -209,6 +227,8 @@ const ExternalApiRoomList = () => {
               groupByRooms: "Y",
             },
           };
+
+          console.log("priceCheckReq (multi-room):", JSON.stringify(priceCheckReq, null, 2));
 
           let endpoint = "";
           switch (payload.apiId) {
@@ -251,23 +271,23 @@ const ExternalApiRoomList = () => {
       // All other API IDs — store all selected rooms and redirect
       try {
         const bookingData = {
-          selectedRate: {
-            hotelId: hotelsdetail.hotelId,
-            hotelName: hotelsdetail.hotelName,
-            roomCategory: primaryRate.roomCategory,
-            mealPlan: primaryRate.mealPlan,
-            contractLabel: primaryRate.contractLabel,
-            nonRefundable: primaryRate.nonRefundable,
-            rate: primaryRate.totalRate,
-            rateWithoutMarkup: primaryRate.totalRateWithoutMarkup,
-            currency: "AED",
-            cancellationPolicy: hotelsdetail.cancellationPolicies,
-            roomStatus: primaryRate.roomStatus,
-            roomRateBasedOnRoomCount: primaryRate.roomRateBasedOnRoomCount,
-            roomRateBasedOnRoomCount_WithoutMarkup: primaryRate.roomRateBasedOnRoomCount_WithoutMarkup,
-          },
+          // selectedRate: {
+          //   hotelId: hotelsdetail.hotelId,
+          //   hotelName: hotelsdetail.hotelName,
+          //   roomCategory: primaryRate.roomCategory,
+          //   mealPlan: primaryRate.mealPlan,
+          //   contractLabel: primaryRate.contractLabel,
+          //   nonRefundable: primaryRate.nonRefundable,
+          //   rate: primaryRate.totalRate,
+          //   rateWithoutMarkup: primaryRate.totalRateWithoutMarkup,
+          //   currency: "AED",
+          //   cancellationPolicy: hotelsdetail.cancellationPolicies,
+          //   roomStatus: primaryRate.roomStatus,
+          //   roomRateBasedOnRoomCount: primaryRate.roomRateBasedOnRoomCount,
+          //   roomRateBasedOnRoomCount_WithoutMarkup: primaryRate.roomRateBasedOnRoomCount_WithoutMarkup,
+          // },
           // Full per-room selections for multi-room booking
-          selectedRooms: selectedRooms.map((r, i) => ({
+          selectedRate: selectedRooms.map((r, i) => ({
             roomNo: i + 1,
             roomCategory: r.selectedRate?.roomCategory,
             mealPlan: r.selectedRate?.mealPlan,
@@ -276,13 +296,18 @@ const ExternalApiRoomList = () => {
             rate: r.selectedRate?.totalRate,
             rateWithoutMarkup: r.selectedRate?.totalRateWithoutMarkup,
             roomRateBasedOnRoomCount: r.selectedRate?.roomRateBasedOnRoomCount,
+            roomRateBasedOnRoomCount_WithoutMarkup: primaryRate.roomRateBasedOnRoomCount_WithoutMarkup,
             roomStatus: r.selectedRate?.roomStatus,
             currency: "AED",
+            hotelId: hotelsdetail.hotelId,
+            hotelName: hotelsdetail.hotelName,
+            cancellationPolicy: hotelsdetail.cancellationPolicies,
           })),
           hotelStaticData: roomData.meta,
           payload: payload,
         };
 
+        console.log("bookingData::", bookingData);
         sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
         window.open("/hotel-booking-page", "_blank");
       } catch (err) {
@@ -1186,7 +1211,7 @@ const ExternalApiRoomList = () => {
               } catch (e) {
                 console.error("Error storing bookingData:", e);
               }
-              window.open("/hotel-booking-page", "_blank");
+              window.open("/api-booking-page-hotels", "_blank");
             }}
           >
             Confirm Booking
