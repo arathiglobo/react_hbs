@@ -32,6 +32,7 @@ const CityMapping = () => {
     "Jumeirah",
     "X3",
     "Ratehawk",
+    "Atharva",
   ]);
 
   // Row-wise selections and status per platform in the overview table
@@ -124,7 +125,10 @@ const CityMapping = () => {
       countries: "/api/x3/countries",
     },
     Ratehawk: {
-      countries: "/api/ratehawk/countries",
+      countries: "/api/ratehawk/countrylist",
+    },
+    Atharva: {
+      countries: "/api/atharva/countrylist",
     },
   };
 
@@ -142,7 +146,10 @@ const CityMapping = () => {
       cities: "/api/x3/cities",
     },
     Ratehawk: {
-      cities: "/api/ratehawk/cities",
+      cities: "/api/ratehawk/citylist",
+    },
+    Atharva: {
+      cities: "/api/atharva/citylist",
     },
   };
 
