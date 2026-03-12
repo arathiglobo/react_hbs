@@ -95,7 +95,7 @@ const ExternalApiRoomList = () => {
               meta = parsed.meta;
               setHotelStaticData(meta);
               setSearchPayload(payload);
-              // console.log("Retrieved payload from sessionStorage:", payload);
+               console.log("Retrieved payload from sessionStorage:", payload);
               // console.log("Retrieved meta from sessionStorage:", meta);
             }
           } catch (e) {
@@ -837,10 +837,25 @@ const ExternalApiRoomList = () => {
                                                   <div className="price-label small text-muted">per night</div>
                                                 </div>
 
-                                                <div className="contract-preview mb-3 small text-muted mt-3">
-                                                  <FaInfoCircle className="me-1" />
-                                                  {rate.contractLabel}
-                                                </div>
+                                               
+
+                                                  {/* Features */}
+                                  <div className="rate-features small">
+                                    <div className="feature-item">
+                                      <FaInfoCircle className="me-2 text-muted" />
+                                      {"External"}
+                                    </div>
+
+                                    {rate.cancellationPolicies?.length > 0 && (
+                                      <div className="feature-item">
+                                        <FaShieldAlt className="me-2 text-muted" />
+                                        {
+                                          rate.cancellationPolicies[0]
+                                            .policyText
+                                        }
+                                      </div>
+                                    )}
+                                  </div>
 
                                                 <Button
                                                   variant={isChecked ? "primary" : "outline-primary"}

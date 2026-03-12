@@ -1,61 +1,19 @@
-/* --- Modern Search Form --- */
+/* ============================================================
+   SEARCH FORM CARD
+   ============================================================ */
 
-/* Normal card */
-.search-card-modern {
-  transition: all 0.3s ease;
-}
-
-/* Sticky compressed state */
-.search-card-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 1050;
-  border-radius: 0;
-  padding: 0;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-}
-
-/* Reduce padding */
-.search-card-sticky .card-body {
-  padding: 12px 16px;
-}
-
-/* Hide heading when sticky */
-.search-card-sticky h2 {
-  display: none;
-}
-
-/* Hide form labels */
-.search-card-sticky .form-label {
-  display: none;
-}
-
-/* Reduce input height */
-.search-card-sticky .form-control,
-.search-card-sticky .modern-select__control {
-  min-height: 36px !important;
-  height: 36px;
-  font-size: 14px;
-}
-
-/* Reduce row gaps */
-.search-card-sticky .row {
-  --bs-gutter-y: 0.5rem;
-}
-
-/* Hide Room selector dropdown when sticky */
-.search-card-sticky .rooms-summary-btn-modern {
-  padding: 6px 10px;
-  font-size: 14px;
-}
-
+   
 
 .search-card-modern {
   max-width: 100%;
   background: #fff;
   border: none;
   border-radius: 20px;
-  overflow: hidden;
+  /* FIX #7 — overflow must be visible so react-select portals work */
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s ease;
 }
 
 .search-card-modern .card-body {
@@ -72,7 +30,7 @@
 
 .search-card-modern h2 {
   color: #4a5568;
-  font-size: 2.0rem;
+  font-size: 2rem;
 }
 
 .search-card-modern p {
@@ -80,7 +38,12 @@
   font-size: 1.1rem;
 }
 
-/* Modern Form Controls */
+
+
+/* ============================================================
+   FORM CONTROLS
+   ============================================================ */
+
 .form-control-modern {
   border: 2px solid #e2e8f0;
   border-radius: 12px;
@@ -96,39 +59,10 @@
   outline: none;
 }
 
-.form-control-modern-sm {
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 0.9rem;
-  transition: all 0.3s ease;
-  background: #ffffff;
-}
+/* ============================================================
+   REACT SELECT
+   ============================================================ */
 
-.form-control-modern-sm:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
-  outline: none;
-}
-
-/* Hotel Search Bar Specific Styling */
-.hotel-search-bar {
-  position: relative;
-}
-
-.hotel-search-bar .form-control {
-  padding-left: 2.5rem;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0z'/%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: 0.75rem center;
-  background-size: 1rem;
-}
-
-.hotel-search-bar .form-control:focus {
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23667eea' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0z'/%3e%3c/svg%3e");
-}
-
-/* Modern Select Styling */
 .modern-select .css-13cymwt-control,
 .modern-select .css-t3ipsp-control {
   border: 2px solid #e2e8f0;
@@ -155,64 +89,19 @@
   font-size: 0.9rem;
 }
 
-/* React Select Custom Styling */
-.modern-select .css-1dimb5e-singleValue,
-.modern-select-sm .css-1dimb5e-singleValue {
-  color: #2d3748;
-  font-weight: 500;
+.react-select__menu {
+  z-index: 9999;
 }
 
-.modern-select .css-1jqq78o-placeholder,
-.modern-select-sm .css-1jqq78o-placeholder {
-  color: #a0aec0;
+.react-select__menu-list {
+  max-height: 300px;
+  overflow-y: auto;
 }
 
-.modern-select .css-1fdsijx-ValueContainer,
-.modern-select-sm .css-1fdsijx-ValueContainer {
-  padding: 0 12px;
-}
+/* ============================================================
+   BUTTONS
+   ============================================================ */
 
-.modern-select .css-1fdsijx-ValueContainer {
-  padding: 0 16px;
-}
-
-.modern-select .css-1hb7zxy-IndicatorsContainer,
-.modern-select-sm .css-1hb7zxy-IndicatorsContainer {
-  padding-right: 8px;
-}
-
-.modern-select .css-1hb7zxy-IndicatorsContainer {
-  padding-right: 12px;
-}
-
-/* Multi-select styling */
-.modern-select .css-1p3m7a8-multiValue,
-.modern-select-sm .css-1p3m7a8-multiValue {
-  background: #667eea;
-  border-radius: 16px;
-  color: white;
-  font-size: 0.8rem;
-}
-
-.modern-select .css-1p3m7a8-multiValue .css-12jo7m5,
-.modern-select-sm .css-1p3m7a8-multiValue .css-12jo7m5 {
-  color: white;
-  font-weight: 500;
-}
-
-.modern-select .css-1p3m7a8-multiValue .css-xb56g8,
-.modern-select-sm .css-1p3m7a8-multiValue .css-xb56g8 {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  color: white;
-}
-
-.modern-select .css-1p3m7a8-multiValue .css-xb56g8:hover,
-.modern-select-sm .css-1p3m7a8-multiValue .css-xb56g8:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-/* Modern Button Styling */
 .btn-search-modern {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
@@ -238,7 +127,6 @@
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
 }
 
-/* Rooms Summary Button */
 .rooms-summary-btn-modern {
   border: 2px solid #667eea;
   border-radius: 12px;
@@ -254,674 +142,199 @@
   border-color: #667eea;
 }
 
-/* --- Modern Hotel Cards --- */
-.hotel-card-modern {
-  transition: all 0.3s ease;
-  border: none;
-  overflow: hidden;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  border-radius: 16px;
-  aspect-ratio: 1;
-  max-height: 320px;
-  min-height: 280px;
-  margin-bottom: 1rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.hotel-card-modern:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
-
-.hotel-image-container {
-  position: relative;
-  height: 180px;
-  overflow: hidden;
-  border-radius: 16px 16px 0 0;
-  flex-shrink: 0;
-}
-
-.hotel-image-container img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s ease;
-}
+/* ============================================================
+   SORT / FILTER BAR
+   ============================================================ */
 
 .sort-pill {
   height: 36px;
-  background: #f2f2f296 !important;
-  color: #333 !important; 
+  background: #f2f2f2 !important;
+  color: #333 !important;
   border: 1px solid #e0e4eb !important;
   font-size: 0.82rem;
   font-weight: 500;
   padding: 6px 12px;
-  min-width: 150px; /* 👈 controls width */
+  min-width: 120px;
   transition: all 0.2s ease;
-  width: 200px;
+  border-radius: 8px !important;
 }
 
-.sort-pill .active{
-   background: #f5f7fa !important;
-  color: #333 !important; 
-  border: 1px solid #e0e4eb !important;
-  font-size: 0.82rem;
+/* FIX #3 side effect — active sort pill now visually distinct */
+.sort-pill.active {
+  background: #667eea !important;
+  color: #fff !important;
+  border-color: #667eea !important;
 }
-.sort-pill .hover{
-   background: #f5f7fa !important;
-  color: #333 !important; 
-  border: 1px solid #e0e4eb !important;
-  font-size: 0.82rem;
-}
-
 
 .clear-pill {
   height: 36px;
   padding: 0 14px;
   border-radius: 10px;
-   border-color: #dbe3ff;
+  border-color: #dbe3ff;
   color: #2d6ecf;
-      width: 150px;
+  width: 100px;
 }
+
 .clear-pill:hover {
   background: #f5f8ff;
   color: #2d6ecf;
 }
-.leftside{
-    top: 90px;
-  max-height: calc(100vh - 110px);
-}
 
+/* ============================================================
+   LEFT SIDEBAR
+   ============================================================ */
 
-
-.hotel-card-modern:hover .hotel-image-container img {
-  transform: scale(1.05);
-}
-
-.hotel-rating-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #f59e0b;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.hotel-card-modern .card-body {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-  justify-content: space-between;
-  border-radius: 0 0 16px 16px;
-  min-height: 140px;
-  background: white;
-  position: relative;
-  z-index: 1;
-  gap: 8px;
-  overflow: visible;
-}
-
-.hotel-name {
-  font-size: 1.15rem !important;
-  line-height: 1.3;
-  color: #2d3748 !important;
-  height: 2.6rem;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  margin-bottom: 0;
-  font-weight: 700;
-  visibility: visible;
-  opacity: 1;
-}
-
-/* Ensure strong contrast for hotel names inside cards */
-.hotel-card-modern .hotel-name {
-  color: #212529 !important;
-}
-
-.hotel-location {
-  color: #718096 !important;
-  font-size: 0.82rem;
-  margin-bottom: 0;
-  line-height: 1.4;
-  height: 1.4rem;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  visibility: visible;
-  opacity: 1;
-  font-weight: 500;
-}
-
-.hotel-badge {
-  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%) !important;
-  border: none;
-  padding: 5px 10px;
-  border-radius: 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  margin-bottom: 0;
-  display: inline-block;
-  width: fit-content;
-  visibility: visible;
-  opacity: 1;
-  color: white !important;
-}
-
-.hotel-price-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: auto;
-  gap: 10px;
-  visibility: visible;
-  opacity: 1;
-  padding-top: 6px;
-  border-top: 1px solid #f1f5f9;
-}
-
-.hotel-price {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #2d3748 !important;
-  flex: 1;
-  line-height: 1.2;
-  visibility: visible;
-  opacity: 1;
-}
-
-.btn-view-rooms {
-  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-  border: none;
-  border-radius: 10px;
-  padding: 7px 14px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: white;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-  flex-shrink: 0;
-  visibility: visible;
-  opacity: 1;
-  min-width: 95px;
-}
-
-/* --- Grid Spacing --- */
-.hotel-search-results .row {
-  margin-left: -0.75rem;
-  margin-right: -0.75rem;
-}
-
-.hotel-search-results .col {
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-
-/* --- FORCE ALL CARD ELEMENTS VISIBLE --- */
-.hotel-card-modern .card-body {
-  visibility: visible !important;
-  opacity: 1 !important;
-  display: flex !important;
-  background: #f8f9fa !important;
-  position: relative !important;
-  z-index: 10 !important;
-  padding: 16px !important;
-  min-height: 140px !important;
-  border: 2px solid #007bff !important;
-}
-
-.hotel-card-modern .card-body * {
-  visibility: visible !important;
-  opacity: 1 !important;
-  display: block !important;
-  color: inherit !important;
-}
-
-/* Hotel Name */
-.hotel-card-modern .card-body h6.hotel-name {
-  font-size: 1rem !important;
-  line-height: 1.2 !important;
-  color: #000000 !important;
-  font-weight: 600 !important;
-  margin-bottom: 6px !important;
-  height: 2.2rem !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  display: -webkit-box !important;
-  -webkit-line-clamp: 2 !important;
-  -webkit-box-orient: vertical !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  background: yellow !important;
-  border: 1px solid red !important;
-}
-
-/* Hotel Location */
-.hotel-card-modern .card-body p.hotel-location {
-  font-size: 0.75rem !important;
-  color: #000000 !important;
-  margin-bottom: 6px !important;
-  height: 1.2rem !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  background: lightblue !important;
-  border: 1px solid green !important;
-}
-
-/* Hotel Badge */
-.hotel-card-modern .card-body .hotel-badge {
-  background: #48bb78 !important;
-  color: white !important;
-  padding: 4px 8px !important;
-  border-radius: 8px !important;
-  font-size: 0.7rem !important;
-  margin-bottom: 8px !important;
-  align-self: flex-start !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  display: inline-block !important;
-  border: 2px solid orange !important;
-}
-
-/* Hotel Price Section */
-.hotel-card-modern .card-body .hotel-price-section {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 8px !important;
-  padding-top: 4px !important;
-  border-top: 1px solid #f1f5f9 !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  min-height: 40px !important;
-  flex-wrap: nowrap !important;
-  background: lightgreen !important;
-  border: 2px solid purple !important;
-}
-
-/* Hotel Price */
-.hotel-card-modern .card-body .hotel-price {
-  font-size: 0.85rem !important;
-  font-weight: 600 !important;
-  color: #2d3748 !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  flex: 1 !important;
-  min-width: 0 !important;
-}
-
-/* View Rooms Button */
-.hotel-card-modern .card-body .btn-view-rooms {
-  background: #667eea !important;
-  border-color: #667eea !important;
-  color: white !important;
-  border-radius: 8px !important;
-  padding: 6px 12px !important;
-  font-size: 0.75rem !important;
-  font-weight: 600 !important;
-  min-width: 90px !important;
-  height: 32px !important;
-  transition: all 0.3s ease !important;
-  flex-shrink: 0 !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  display: inline-block !important;
-  text-align: center !important;
-  line-height: 1.2 !important;
-  border: 2px solid #667eea !important;
-  box-shadow: 0 0 0 3px red !important;
-}
-
-.hotel-card-modern .card-body .btn-view-rooms:hover {
-  background: #5a67d8 !important;
-  border-color: #5a67d8 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3) !important;
-}
-
-/* --- Loading Animation --- */
-.loading-animation {
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-/* --- Results Ring Loader (industry standard look) --- */
-.results-loader {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.loader-ring {
-  position: relative;
-  width: 72px;
-  height: 72px;
-}
-
-.loader-ring span {
-  position: absolute;
-  box-sizing: border-box;
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 6px solid transparent;
-  border-radius: 50%;
-  animation: ringSpin 1.2s linear infinite;
-}
-
-.loader-ring span:nth-child(1) {
-  border-top-color: #0d6efd;
-}
-
-.loader-ring span:nth-child(2) {
-  border-right-color: #6f42c1;
-  animation-delay: -0.2s;
-}
-
-.loader-ring span:nth-child(3) {
-  border-bottom-color: #20c997;
-  animation-delay: -0.4s;
-}
-
-.loader-ring span:nth-child(4) {
-  border-left-color: #fd7e14;
-  animation-delay: -0.6s;
-}
-
-@keyframes ringSpin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* --- Filter Section --- */
-.filter-section {
-  background: #ffffff;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-}
-
-/* --- Pagination --- */
-.pagination-modern .page-link {
-  border: none;
-  color: #667eea;
-  padding: 8px 12px;
-  margin: 0 6px; /* add gaps between pagination numbers */
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-.pagination-modern .page-link:hover {
-  background: #667eea;
-  color: white;
-  transform: translateY(-1px);
-}
-
-.pagination-modern .page-item.active .page-link {
-  background: #667eea;
-  border-color: #667eea;
-  color: white;
-}
-
-/* --- Responsive Design --- */
-@media (max-width: 1200px) {
-  .hotel-card-modern {
-    max-height: 300px;
-    min-height: 260px;
-  }
-  
-  .hotel-image-container {
-    height: 160px;
-  }
-  
-  .hotel-card-modern .card-body {
-    min-height: 120px;
-  }
-}
-
-@media (max-width: 992px) {
-  .hotel-card-modern {
-    max-height: 280px;
-    min-height: 240px;
-  }
-  
-  .hotel-image-container {
-    height: 140px;
-  }
-  
-  .hotel-name {
-    font-size: 0.95rem !important;
-    height: 2rem;
-  }
-  
-  .hotel-card-modern .card-body {
-    min-height: 110px;
-  }
-}
-
-@media (max-width: 768px) {
-  .search-card-modern h2 {
-    font-size: 1.8rem;
-  }
-  
-  .search-card-modern p {
-    font-size: 1rem;
-  }
-  
-  .btn-search-modern {
-    padding: 14px 30px;
-    font-size: 1rem;
-  }
-  
-  .hotel-card-modern {
-    margin-bottom: 1rem;
-    max-height: 260px;
-    min-height: 220px;
-  }
-  
-  .hotel-image-container {
-    height: 120px;
-  }
-  
-  .hotel-name {
-    font-size: 0.9rem !important;
-    height: 1.8rem;
-  }
-  
-  .hotel-card-modern .card-body {
-    min-height: 100px;
-  }
-  
-  .hotel-price-section {
-    flex-direction: column;
-    gap: 6px;
-    align-items: stretch;
-    min-height: 50px;
-  }
-  
-  .btn-view-rooms {
-    width: 100%;
-    padding: 6px 10px;
-    font-size: 0.7rem;
-    height: 30px;
-  }
-}
-
-@media (max-width: 576px) {
-  .search-card-modern .card-body {
-    padding: 1.5rem;
-  }
-  
-  .btn-search-modern {
-    width: 100%;
-    padding: 16px 20px;
-  }
-  
-  .hotel-card-modern {
-    max-height: 240px;
-    min-height: 200px;
-  }
-  
-  .hotel-image-container {
-    height: 100px;
-  }
-  
-  .hotel-name {
-    font-size: 0.85rem !important;
-    height: 1.6rem;
-  }
-  
-  .hotel-location {
-    font-size: 0.7rem;
-    height: 1rem;
-  }
-  
-  .hotel-price {
-    font-size: 0.8rem;
-  }
-  
-  .hotel-badge {
-    font-size: 0.65rem;
-    padding: 3px 6px;
-  }
-  
-  .hotel-card-modern .card-body {
-    min-height: 90px;
-  }
-}
-
-/* --- Legacy Styles (keeping for compatibility) --- */
-.search-card {
-  max-width: 100%;
-  padding: 15px;
-  background: #fff;
-  border-radius: 12px;
-}
-
-.search-card .form-label {
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-.search-card input,
-.search-card select,
-.search-card button {
-  font-size: 0.9rem;
-  padding: 6px 10px;
-}
-
-.btn-search-large {
-  padding: 8px 20px;
-  font-size: 0.95rem;
-  border-radius: 8px;
-}
-
-.search-card .row {
-  margin-bottom: 0.6rem;
-}
-
-.lazy-card {
-  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-}
-
-.lazy-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 6px 18px rgba(0,0,0,0.1);
-}
-
-.lazy-card .card-body {
-  padding: 12px;
-}
-
-.lazy-card .h5 {
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.lazy-card img {
-  height: 180px;
-  object-fit: cover;
-}
-
-.lazy-card .d-flex {
-  margin-top: 8px;
-}
-
-.btn-green {
-  background: #198754;
-  border: none;
-  padding: 6px 12px;
-  font-size: 0.85rem;
-}
-
-.btn-green:hover {
-  background: #146c43;
-}
-
-/* Responsive tweaks */
-@media (max-width: 768px) {
-  .search-card {
-    padding: 10px;
-  }
-  .lazy-card img {
-    height: 150px;
-  }
-}
-
-/* allow menu to overflow outside the form card */
-.search-card-modern {
-  overflow: visible; /* instead of hidden/auto */
-  position: relative; /* keep layout consistent */
-  z-index: 1; /* keep card under the portal menu if needed */
-}
-
-/* if you use react-select without portal and classNamePrefix 'react-select' */
-.react-select__menu {
-  z-index: 9999;
-}
-
-/* restrict dropdown height and show scrollbar */
-.react-select__menu-list {
-  max-height: 300px;
+.leftside {
+  position: sticky;
+  top: 60px;
+  max-height: calc(100vh - 80px);
   overflow-y: auto;
+  align-self: flex-start;
+  padding-right: 0;
+  margin-right: 0;
 }
 
+/* 4px minimal scrollbar — visible but unobtrusive */
+.leftside::-webkit-scrollbar {
+  width: 4px;
+}
+.leftside::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 99px;
+}
+.leftside::-webkit-scrollbar-thumb {
+  background: #c8cbd0;
+  border-radius: 99px;
+}
+.leftside::-webkit-scrollbar-thumb:hover {
+  background: #a0a4ab;
+}
+/* Firefox */
+.leftside { scrollbar-width: thin; scrollbar-color: #c8cbd0 #f0f0f0; }
+
+/* full width — no gap on right */
+.left-fixed {
+  width: 100%;
+}
+
+.filtersection {
+  border-radius: 14px;
+  border: 1px solid #e9ecef;
+  width: 100%;
+}
+
+/* ── Section headings: HOTEL TYPE, CHANNEL ── */
+.filtersection .fw-semibold.small {
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9ca3af;
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* ── Search input ── */
+.filtersection .form-control {
+  font-size: 0.92rem;
+  border-radius: 10px;
+  border: 1.5px solid #e2e8f0;
+  padding: 8px 14px;
+  color: #374151;
+  background: #f9fafb;
+  text-align: center;
+}
+.filtersection .form-control:focus {
+  border-color: #667eea;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+  outline: none;
+}
+.filtersection .form-control::placeholder {
+  color: #adb5bd;
+  text-align: left;
+}
+
+/* ── Checkbox rows ── */
+.filter-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.filter-checkbox-list .form-check {
+  display: flex;
+  align-items: center;
+  padding: 5px 6px;
+  margin: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.filter-checkbox-list .form-check:hover {
+  background: #f0f4ff;
+}
+
+.filter-checkbox-list .form-check-input {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 0;
+  margin-right: 10px;
+  margin-left: 2px;
+  border: 1.5px solid #c5cfe8;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-checkbox-list .form-check-input:checked {
+  background-color: #667eea;
+  border-color: #667eea;
+}
+
+.filter-checkbox-list .form-check-input:focus {
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+  border-color: #667eea;
+  outline: none;
+}
+
+/* ── Label — bigger and readable ── */
+.filter-checkbox-list .form-check-label {
+  font-size: 0.95rem;
+  color: #374151;
+  cursor: pointer;
+  line-height: 1.4;
+  font-weight: 400;
+  user-select: none;
+}
+
+/* Checked row highlight */
+.filter-checkbox-list .form-check:has(.form-check-input:checked) {
+  background: #eef2ff;
+}
+.filter-checkbox-list .form-check:has(.form-check-input:checked) .form-check-label {
+  color: #4338ca;
+  font-weight: 600;
+}
+
+/* Divider */
+.filtersection hr {
+  margin: 10px 0;
+  border-color: #f0f0f0;
+}
+
+/* ============================================================
+   MAP PREVIEW
+   ============================================================ */
 
 .map-preview-wrapper {
   position: relative;
   width: 100%;
-  height: 110px;
+  height: 90px;
   border-radius: 12px;
+  overflow: hidden;
   background: #e9eef3;
 }
 
@@ -954,3 +367,551 @@
   color: #fff;
 }
 
+/* ============================================================
+   HOTEL RESULT CARDS
+   FIX #7 — all debug colours (yellow, lightblue, red, lightgreen,
+   purple borders, red box-shadow) have been removed
+   ============================================================ */
+
+/* hotel-card-modern kept for any legacy references but debug overrides stripped */
+.hotel-card-modern {
+  transition: all 0.3s ease;
+  border: none;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.hotel-card-modern:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Card body — clean, no debug borders or background colours */
+.hotel-card-modern .card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  justify-content: space-between;
+  border-radius: 0 0 16px 16px;
+  min-height: 140px;
+  background: white;
+  position: relative;
+  z-index: 1;
+  gap: 8px;
+  overflow: visible;
+}
+
+.hotel-name {
+  font-size: 1rem;
+  line-height: 1.3;
+  color: #2d3748;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin-bottom: 0;
+  font-weight: 700;
+}
+
+.hotel-location {
+  color: #718096;
+  font-size: 0.82rem;
+  margin-bottom: 0;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  font-weight: 500;
+}
+
+.hotel-badge {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  border: none;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+  width: fit-content;
+  color: white;
+}
+
+.hotel-price-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.hotel-price {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #2d3748;
+  flex: 1;
+  line-height: 1.2;
+}
+
+.btn-view-rooms {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  border: none;
+  border-radius: 10px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 95px;
+}
+
+.btn-view-rooms:hover {
+  background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+
+/* ============================================================
+   LOADER
+   ============================================================ */
+
+.results-loader {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader-ring {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+.loader-ring span {
+  position: absolute;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 6px solid transparent;
+  border-radius: 50%;
+  animation: ringSpin 1.2s linear infinite;
+}
+
+.loader-ring span:nth-child(1) { border-top-color: #0d6efd; }
+.loader-ring span:nth-child(2) { border-right-color: #6f42c1; animation-delay: -0.2s; }
+.loader-ring span:nth-child(3) { border-bottom-color: #20c997; animation-delay: -0.4s; }
+.loader-ring span:nth-child(4) { border-left-color: #fd7e14;  animation-delay: -0.6s; }
+
+@keyframes ringSpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   PAGINATION
+   ============================================================ */
+
+.pagination-modern .page-link {
+  border: none;
+  color: #667eea;
+  padding: 8px 12px;
+  margin: 0 4px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.pagination-modern .page-link:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.pagination-modern .page-item.active .page-link {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
+}
+
+/* ============================================================
+   LAZY IMAGE
+   ============================================================ */
+
+.img-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.img-loading {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.img-loaded {
+  opacity: 1;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .search-card-modern h2 { font-size: 1.6rem; }
+  .search-card-modern p  { font-size: 0.95rem; }
+  .btn-search-modern { padding: 14px 30px; font-size: 1rem; }
+  .sort-pill { min-width: 100px; font-size: 0.78rem; }
+}
+
+@media (max-width: 576px) {
+  .search-card-modern .card-body { padding: 1.5rem; }
+  .btn-search-modern { width: 100%; padding: 16px 20px; }
+}
+
+/* ============================================================
+   SEARCH PROGRESS BAR
+   ============================================================ */
+
+.search-progress-bar-wrap {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.search-progress-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.search-progress-percent {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #667eea;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* Track */
+.search-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #eef0f4;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+/* Animated fill */
+.search-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+  background-size: 200% 100%;
+  animation: progressShimmer 1.6s linear infinite;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes progressShimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* Channel pills row */
+.search-progress-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.channel-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  transition: all 0.25s ease;
+}
+
+/* Pending — grey with pulsing dot */
+.channel-pill.pending {
+  background: #f3f4f6;
+  color: #9ca3af;
+  border: 1px solid #e5e7eb;
+}
+
+.pill-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9ca3af;
+  animation: pillPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pillPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50%       { opacity: 1;   transform: scale(1.2); }
+}
+
+/* Done — green */
+.channel-pill.done {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  font-weight: 600;
+}
+
+/* ============================================================
+   ROOM GUEST SELECTOR — grid card layout
+   ============================================================ */
+
+.rgs-wrap {
+  width: 100%;
+}
+
+/* 2-column grid; single column when only 1 card */
+.rgs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* Each room card */
+.rgs-room-card {
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rgs-room-card:hover {
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.1);
+  border-color: #c7d2fe;
+}
+
+/* Header */
+.rgs-room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rgs-room-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rgs-remove-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #fca5a5;
+  background: none;
+  color: #ef4444;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.rgs-remove-btn:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+/* Stacked counter rows inside each card */
+.rgs-counters-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rgs-counter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rgs-counter-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.rgs-counter-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.3;
+}
+
+.rgs-counter-sub {
+  font-size: 0.7rem;
+  color: #9ca3af;
+}
+
+/* +/- counter */
+.rgs-counter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rgs-counter-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid #667eea;
+  background: #fff;
+  color: #667eea;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.rgs-counter-btn:hover:not(:disabled) {
+  background: #667eea;
+  color: #fff;
+}
+
+.rgs-counter-btn:disabled {
+  border-color: #e5e7eb;
+  color: #d1d5db;
+  cursor: not-allowed;
+}
+
+.rgs-counter-val {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Child ages */
+.rgs-child-ages {
+  padding-top: 8px;
+  border-top: 1px dashed #e9ecef;
+}
+
+.rgs-child-ages-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.rgs-child-ages-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rgs-child-age-select {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rgs-child-age-label {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.rgs-age-dropdown {
+  width: 80px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  font-size: 0.82rem;
+  color: #374151;
+  padding: 4px 6px;
+}
+
+.rgs-age-dropdown:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+  outline: none;
+}
+
+/* Add room tile — same size as a room card */
+.rgs-add-room-btn {
+  border: 2px dashed #c7d2fe;
+  border-radius: 14px;
+  background: #f5f7ff;
+  color: #667eea;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 80px;
+}
+
+.rgs-add-room-btn:hover {
+  background: #eef2ff;
+  border-color: #667eea;
+}
+
+.rgs-add-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  font-weight: 300;
+}
+
+@media (max-width: 768px) {
+
+  .rgs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rgs-room-card {
+    padding: 12px;
+  }
+
+  .rgs-counter-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+}
