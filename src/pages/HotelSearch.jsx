@@ -20,7 +20,15 @@ import "../styles/HotelSearch.css";
 // Search Progress Bar
 // ─────────────────────────────────────────────
 function SearchProgressBar({ pollStatus, completedChannels }) {
-  const channels = ["inhouse", "iwtx", "x3", "ratehawk", "darina", "atharva", "jumeirah"];
+  const channels = [
+    "inhouse",
+    "iwtx",
+    "x3",
+    "ratehawk",
+    "darina",
+    "atharva",
+    "jumeirah",
+  ];
   const [progress, setProgress] = useState(0);
   const [visible, setVisible] = useState(false);
 
@@ -28,7 +36,8 @@ function SearchProgressBar({ pollStatus, completedChannels }) {
     if (pollStatus === "IN_PROGRESS") {
       setVisible(true);
       const done = completedChannels.size;
-      const target = done === 0 ? 12 : Math.min(90, 12 + (done / channels.length) * 78);
+      const target =
+        done === 0 ? 12 : Math.min(90, 12 + (done / channels.length) * 78);
       setProgress(target);
     } else if (pollStatus === "COMPLETED") {
       setProgress(100);
@@ -85,14 +94,18 @@ function Counter({ value, min, max, onChange }) {
         className="rgs-counter-btn"
         onClick={() => onChange(Math.max(min, value - 1))}
         disabled={value <= min}
-      >−</button>
+      >
+        −
+      </button>
       <span className="rgs-counter-val">{value}</span>
       <button
         type="button"
         className="rgs-counter-btn"
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
-      >+</button>
+      >
+        +
+      </button>
     </div>
   );
 }
@@ -103,28 +116,43 @@ function Counter({ value, min, max, onChange }) {
 function RoomGuestSelector({ value, onChange }) {
   const [rooms, setRooms] = useState(value);
 
-  const update = (next) => { setRooms(next); onChange && onChange(next); };
+  const update = (next) => {
+    setRooms(next);
+    onChange && onChange(next);
+  };
 
-  const addRoom = () => update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  const addRoom = () =>
+    update([...rooms, { adults: 1, children: 0, childAges: [] }]);
   const removeRoom = (index) => update(rooms.filter((_, i) => i !== index));
 
   const setAdults = (index, adults) =>
     update(rooms.map((r, i) => (i === index ? { ...r, adults } : r)));
 
   const setChildren = (index, children) =>
-    update(rooms.map((r, i) =>
-      i === index
-        ? { ...r, children, childAges: Array.from({ length: children }, (_, j) => r.childAges[j] || 5) }
-        : r
-    ));
+    update(
+      rooms.map((r, i) =>
+        i === index
+          ? {
+              ...r,
+              children,
+              childAges: Array.from(
+                { length: children },
+                (_, j) => r.childAges[j] || 5,
+              ),
+            }
+          : r,
+      ),
+    );
 
   const setChildAge = (roomIdx, childIdx, age) =>
-    update(rooms.map((r, i) => {
-      if (i !== roomIdx) return r;
-      const ages = [...r.childAges];
-      ages[childIdx] = age;
-      return { ...r, childAges: ages };
-    }));
+    update(
+      rooms.map((r, i) => {
+        if (i !== roomIdx) return r;
+        const ages = [...r.childAges];
+        ages[childIdx] = age;
+        return { ...r, childAges: ages };
+      }),
+    );
 
   return (
     <div className="rgs-wrap">
@@ -134,7 +162,13 @@ function RoomGuestSelector({ value, onChange }) {
             <div className="rgs-room-header">
               <span className="rgs-room-label">🛏 Room {i + 1}</span>
               {rooms.length > 1 && (
-                <button type="button" className="rgs-remove-btn" onClick={() => removeRoom(i)}>✕</button>
+                <button
+                  type="button"
+                  className="rgs-remove-btn"
+                  onClick={() => removeRoom(i)}
+                >
+                  ✕
+                </button>
               )}
             </div>
 
@@ -144,14 +178,24 @@ function RoomGuestSelector({ value, onChange }) {
                   <span className="rgs-counter-title">Adults</span>
                   <span className="rgs-counter-sub">Age 18+</span>
                 </div>
-                <Counter value={room.adults} min={1} max={6} onChange={(v) => setAdults(i, v)} />
+                <Counter
+                  value={room.adults}
+                  min={1}
+                  max={6}
+                  onChange={(v) => setAdults(i, v)}
+                />
               </div>
               <div className="rgs-counter-row">
                 <div className="rgs-counter-info">
                   <span className="rgs-counter-title">Children</span>
                   <span className="rgs-counter-sub">Age 0–17</span>
                 </div>
-                <Counter value={room.children} min={0} max={4} onChange={(v) => setChildren(i, v)} />
+                <Counter
+                  value={room.children}
+                  min={0}
+                  max={4}
+                  onChange={(v) => setChildren(i, v)}
+                />
               </div>
             </div>
 
@@ -161,15 +205,21 @@ function RoomGuestSelector({ value, onChange }) {
                 <div className="rgs-child-ages-row">
                   {Array.from({ length: room.children }).map((_, idx) => (
                     <div key={idx} className="rgs-child-age-select">
-                      <label className="rgs-child-age-label">Child {idx + 1}</label>
+                      <label className="rgs-child-age-label">
+                        Child {idx + 1}
+                      </label>
                       <Form.Select
                         size="sm"
                         value={room.childAges[idx] || 5}
-                        onChange={(e) => setChildAge(i, idx, parseInt(e.target.value))}
+                        onChange={(e) =>
+                          setChildAge(i, idx, parseInt(e.target.value))
+                        }
                         className="rgs-age-dropdown"
                       >
                         {Array.from({ length: 18 }).map((__, age) => (
-                          <option key={age} value={age}>{age} {age === 1 ? "yr" : "yrs"}</option>
+                          <option key={age} value={age}>
+                            {age} {age === 1 ? "yr" : "yrs"}
+                          </option>
                         ))}
                       </Form.Select>
                     </div>
@@ -267,7 +317,6 @@ const fullText = "Search Hotel Name...";
 // Main Component
 // ─────────────────────────────────────────────
 export default function HotelSearch() {
-
   const [placeholder, setPlaceholder] = useState("");
   const navigate = useNavigate();
   const [nationalityList, setNationalityList] = useState([]);
@@ -278,7 +327,9 @@ export default function HotelSearch() {
   const [checkOut, setCheckOut] = useState("");
   const [nights, setNights] = useState(1);
   const [agent, setAgent] = useState("");
-  const [rooms, setRooms] = useState([{ adults: 1, children: 0, childAges: [] }]);
+  const [rooms, setRooms] = useState([
+    { adults: 1, children: 0, childAges: [] },
+  ]);
   const [roomsOpen, setRoomsOpen] = useState(false);
 
   const [starRating, setStarRating] = useState(null);
@@ -338,7 +389,8 @@ export default function HotelSearch() {
       if (!isDeleting) {
         setPlaceholder(fullText.slice(0, index + 1));
         index++;
-        if (index === fullText.length) setTimeout(() => (isDeleting = true), 900);
+        if (index === fullText.length)
+          setTimeout(() => (isDeleting = true), 900);
       } else {
         setPlaceholder(fullText.slice(0, index - 1));
         index--;
@@ -351,7 +403,10 @@ export default function HotelSearch() {
   function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
-      const later = () => { clearTimeout(timeout); func(...args); };
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
     };
@@ -365,7 +420,9 @@ export default function HotelSearch() {
       }
       setIsDestinationLoading(true);
       try {
-        const response = await axiosInstance.get(`/api/province?search=${searchText}`);
+        const response = await axiosInstance.get(
+          `/api/province?search=${searchText}`,
+        );
         const cityApiRes = Array.isArray(response.data) ? response.data : [];
         const options = cityApiRes.slice(0, 50).map((city) => ({
           value: city.id,
@@ -378,14 +435,17 @@ export default function HotelSearch() {
       } finally {
         setIsDestinationLoading(false);
       }
-    }, 300)
+    }, 300),
   ).current;
 
   useEffect(() => {
     if (checkIn && checkOut) {
       const start = new Date(checkIn);
       const end = new Date(checkOut);
-      const diff = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+      const diff = Math.max(
+        1,
+        Math.ceil((end - start) / (1000 * 60 * 60 * 24)),
+      );
       setNights(diff);
     }
   }, [checkIn, checkOut]);
@@ -408,27 +468,38 @@ export default function HotelSearch() {
     let results = allResults;
     if (hotelSearchTerm) {
       results = results.filter((hotel) => {
+        console.log("hotel:::#", hotel);
         const hotelName = hotel.name || hotel.hotelName || "";
         return hotelName.toLowerCase().includes(hotelSearchTerm.toLowerCase());
       });
     }
     if (starRating) {
       results = results.filter(
-        (hotel) => Number(hotel.rating) === Number(starRating.value)
+        (hotel) => Number(hotel.rating) === Number(starRating.value),
       );
     }
     if (hotelType.length > 0) {
       const selectedTypes = hotelType.map((t) => t.value);
-      results = results.filter((hotel) => selectedTypes.includes(hotel.hotelType));
+      results = results.filter((hotel) =>
+        selectedTypes.includes(hotel.hotelType),
+      );
     }
     if (channelType.length > 0) {
       const selectedChannels = channelType.map((c) => c.value);
-      results = results.filter((hotel) => selectedChannels.includes(hotel.channelType));
+      results = results.filter((hotel) =>
+        selectedChannels.includes(hotel.channelType),
+      );
     }
     return results;
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType]);
 
-  const effectiveTotalPages = useMemo(() => Math.max(1, totalPages), [totalPages]);
+  const effectiveTotalPages = useMemo(
+    () => Math.max(1, totalPages),
+    [totalPages],
+  );
+
+  const startEntry = totalElements === 0 ? 0 : pageIndex * pageSize + 1;
+  const endEntry = Math.min((pageIndex + 1) * pageSize, totalElements);
 
   const pageNumbers = useMemo(() => {
     const current = pageIndex + 1;
@@ -454,7 +525,10 @@ export default function HotelSearch() {
     setPageIndex(idx);
     setTimeout(() => {
       if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        resultsRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
       }
     }, 0);
   };
@@ -553,20 +627,28 @@ export default function HotelSearch() {
         agentId: agentId || agent || 1,
         page,
         pageSize,
-        sortBy: sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
+        sortBy:
+          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
         sortOrder:
-          sortBy === "priceAsc" || sortBy === "ratingAsc" || sortBy === "nameAsc"
+          sortBy === "priceAsc" ||
+          sortBy === "ratingAsc" ||
+          sortBy === "nameAsc"
             ? "asc"
             : "desc",
         starRating: starRating ? starRating.value : undefined,
-        apiType: channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+        apiType:
+          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
 
-      const res = await axiosInstance.get(`/api/hotel-search/results/${sid}`, { params });
+      const res = await axiosInstance.get(`/api/hotel-search/results/${sid}`, {
+        params,
+      });
 
       const mappedResults = Array.isArray(res.data.result)
         ? res.data.result.map((hotel, index) => ({
-            id: hotel.hotelCode ? `${sid}-${hotel.hotelCode}` : `${sid}-h${index + 1}`,
+            id: hotel.hotelCode
+              ? `${sid}-${hotel.hotelCode}`
+              : `${sid}-h${index + 1}`,
             searchId: sid,
             hotelCode: hotel.hotelCode || null,
             name: hotel.hotelName || "Unknown Hotel",
@@ -584,13 +666,29 @@ export default function HotelSearch() {
           }))
         : [];
 
-      setAllResults(mappedResults);
+      // setAllResults(mappedResults);
+
+      if (mappedResults.length > 0) {
+        // During polling we merge, but during pagination we replace
+        if (pollStatus === "IN_PROGRESS") {
+          setAllResults((prev) => {
+            const map = new Map(prev.map((h) => [h.id, h]));
+            mappedResults.forEach((h) => map.set(h.id, h));
+            return Array.from(map.values());
+          });
+        } else {
+          // For pagination replace results
+          setAllResults(mappedResults);
+        }
+      }
       setTotalElements(Number(res.data.totalResults) || mappedResults.length);
       setTotalPages(
         Math.max(
           1,
-          Math.ceil((Number(res.data.totalResults) || mappedResults.length) / pageSize)
-        )
+          Math.ceil(
+            (Number(res.data.totalResults) || mappedResults.length) / pageSize,
+          ),
+        ),
       );
       setHasSearchResult(true);
       return res.data;
@@ -608,7 +706,7 @@ export default function HotelSearch() {
     onUpdate,
     intervalMs = 4000,
     timeoutMs = 20000,
-    initialDelay = 2000
+    initialDelay = 2000,
   ) => {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
@@ -691,7 +789,10 @@ export default function HotelSearch() {
         agentId,
       };
 
-      const searchKeyRes = await axiosInstance.post("/api/hotel-search/search", searchPayloadReq);
+      const searchKeyRes = await axiosInstance.post(
+        "/api/hotel-search/search",
+        searchPayloadReq,
+      );
       const newSearchId = searchKeyRes.data.searchId;
       if (!newSearchId) throw new Error("No searchId returned");
       setSearchId(newSearchId);
@@ -700,16 +801,28 @@ export default function HotelSearch() {
         agentId,
         page: 0,
         pageSize,
-        sortBy: sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
+        sortBy:
+          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
         sortOrder:
-          sortBy === "priceAsc" || sortBy === "ratingAsc" || sortBy === "nameAsc"
+          sortBy === "priceAsc" ||
+          sortBy === "ratingAsc" ||
+          sortBy === "nameAsc"
             ? "asc"
             : "desc",
         starRating: starRating ? starRating.value : undefined,
-        apiType: channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+        apiType:
+          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
 
-      const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk", "darina", "atharva", "jumeirah"];
+      const expectedChannels = [
+        "inhouse",
+        "iwtx",
+        "x3",
+        "ratehawk",
+        "darina",
+        "atharva",
+        "jumeirah",
+      ];
 
       await pollUntilComplete(
         `/api/hotel-search/results/${newSearchId}`,
@@ -758,7 +871,10 @@ export default function HotelSearch() {
 
           if (pollCount === 1 || mappedResults.length > 0) {
             setHasSearchResult(true);
-            if (completedChannelsRef.current.size >= 1 || mappedResults.length > 0) {
+            if (
+              completedChannelsRef.current.size >= 1 ||
+              mappedResults.length > 0
+            ) {
               setIsInitialResultsLoaded(true);
             }
           }
@@ -768,14 +884,14 @@ export default function HotelSearch() {
             Math.max(
               1,
               Math.ceil(
-                (Number(data.totalResults) || mappedResults.length) / pageSize
-              )
-            )
+                (Number(data.totalResults) || mappedResults.length) / pageSize,
+              ),
+            ),
           );
         },
         4000,
         20000,
-        2000
+        2000,
       );
     } catch (err) {
       console.error("Search failed:", err);
@@ -786,17 +902,28 @@ export default function HotelSearch() {
     }
   };
 
-  const showResultsDuringPolling =
-    hasSearchResult &&
-    isInitialResultsLoaded &&
-    (pollStatus === "IN_PROGRESS" || pollStatus === "COMPLETED");
+  // const showResultsDuringPolling =
+  //   hasSearchResult &&
+  //   isInitialResultsLoaded &&
+  //   (pollStatus === "IN_PROGRESS" || pollStatus === "COMPLETED");
+
+  const showResultsDuringPolling = hasSearchResult || allResults.length > 0;
 
   useEffect(() => {
     if (!searchId || !hasSearched) return;
     if (pollStatus === "IN_PROGRESS") return;
     setIsLoading(true);
     fetchHotels(pageIndex, searchId, agent).finally(() => setIsLoading(false));
-  }, [pageIndex, sortBy, starRating, channelType, searchId, agent, hasSearched, pollStatus]);
+  }, [
+    pageIndex,
+    sortBy,
+    starRating,
+    channelType,
+    searchId,
+    agent,
+    hasSearched,
+    pollStatus,
+  ]);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -809,15 +936,21 @@ export default function HotelSearch() {
           <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
             <Card.Body className="p-4">
               <div className="mb-4 text-start">
-                <h2 className="fw-semibold text-primary mb-1">Find Your Perfect Stay</h2>
-                <p className="text-muted">Discover amazing hotels and exclusive deals</p>
+                <h2 className="fw-semibold text-primary mb-1">
+                  Find Your Perfect Stay
+                </h2>
+                <p className="text-muted">
+                  Discover amazing hotels and exclusive deals
+                </p>
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
                 <Row className="g-4">
                   <Col lg={4} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Destination</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Destination
+                      </Form.Label>
                       <Select
                         options={destinationOptions}
                         value={selectedDestination}
@@ -836,7 +969,8 @@ export default function HotelSearch() {
                             : "Type to search destinations..."
                         }
                         onMenuOpen={() => {
-                          if (destinationOptions.length === 0) loadPopularDestinations();
+                          if (destinationOptions.length === 0)
+                            loadPopularDestinations();
                         }}
                         onInputChange={(inputValue, { action }) => {
                           if (action === "input-change") cityList(inputValue);
@@ -850,10 +984,16 @@ export default function HotelSearch() {
                             border: "1px solid #dee2e6",
                             "&:hover": { borderColor: "#86b7fe" },
                           }),
-                          menu: (base) => ({ ...base, zIndex: 9999, maxHeight: "200px" }),
+                          menu: (base) => ({
+                            ...base,
+                            zIndex: 9999,
+                            maxHeight: "200px",
+                          }),
                           option: (base, state) => ({
                             ...base,
-                            backgroundColor: state.isFocused ? "#f8f9fa" : "white",
+                            backgroundColor: state.isFocused
+                              ? "#f8f9fa"
+                              : "white",
                             color: state.isSelected ? "white" : "#212529",
                             "&:active": { backgroundColor: "#0d6efd" },
                           }),
@@ -865,14 +1005,18 @@ export default function HotelSearch() {
                         }}
                       />
                       {errors.destination && (
-                        <div className="text-danger small mt-1">{errors.destination}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.destination}
+                        </div>
                       )}
                     </Form.Group>
                   </Col>
 
                   <Col lg={4} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Nationality</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nationality
+                      </Form.Label>
                       <Select
                         options={nationalityList}
                         value={selectedNationality}
@@ -896,61 +1040,79 @@ export default function HotelSearch() {
                         }}
                       />
                       {errors.nationality && (
-                        <div className="text-danger small mt-1">{errors.nationality}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.nationality}
+                        </div>
                       )}
                     </Form.Group>
                   </Col>
 
                   <Col lg={4} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Check-in
+                      </Form.Label>
                       <Form.Control
                         style={{ height: "42px" }}
                         className="form-control-modern"
                         type="date"
                         value={checkIn}
                         min={today}
-                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                        onClick={(e) =>
+                          e.target.showPicker && e.target.showPicker()
+                        }
                         onChange={(e) => {
                           const newCheckIn = e.target.value;
                           setCheckIn(newCheckIn);
                           if (newCheckIn) {
                             clearError("checkIn");
-                            setCheckOut(formatDate(getTomorrow(new Date(newCheckIn))));
+                            setCheckOut(
+                              formatDate(getTomorrow(new Date(newCheckIn))),
+                            );
                             clearError("checkOut");
                           }
                         }}
                       />
                       {errors.checkIn && (
-                        <div className="text-danger small mt-1">{errors.checkIn}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.checkIn}
+                        </div>
                       )}
                     </Form.Group>
                   </Col>
 
                   <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Check-out</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Check-out
+                      </Form.Label>
                       <Form.Control
                         style={{ height: "42px" }}
                         className="form-control-modern"
                         type="date"
                         value={checkOut}
                         min={minCheckOutDate}
-                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                        onClick={(e) =>
+                          e.target.showPicker && e.target.showPicker()
+                        }
                         onChange={(e) => {
                           setCheckOut(e.target.value);
                           if (e.target.value) clearError("checkOut");
                         }}
                       />
                       {errors.checkOut && (
-                        <div className="text-danger small mt-1">{errors.checkOut}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.checkOut}
+                        </div>
                       )}
                     </Form.Group>
                   </Col>
 
                   <Col lg={2} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Nights</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nights
+                      </Form.Label>
                       <Form.Control
                         style={{ height: "42px" }}
                         className="form-control-modern"
@@ -964,7 +1126,9 @@ export default function HotelSearch() {
                   </Col>
 
                   <Col lg={4} md={6}>
-                    <Form.Label className="fw-semibold text-dark">Rooms & Guests</Form.Label>
+                    <Form.Label className="fw-semibold text-dark">
+                      Rooms & Guests
+                    </Form.Label>
                     <Button
                       variant="outline-primary"
                       className="w-100 text-start rooms-summary-btn-modern"
@@ -982,7 +1146,9 @@ export default function HotelSearch() {
 
                   <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Agent</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Agent
+                      </Form.Label>
                       <Form.Select
                         style={{ height: "42px" }}
                         className="form-control-modern"
@@ -994,11 +1160,15 @@ export default function HotelSearch() {
                       >
                         <option value="">Select Agent</option>
                         {agents.map((a) => (
-                          <option key={a.id} value={a.id}>{a.companyName}</option>
+                          <option key={a.id} value={a.id}>
+                            {a.companyName}
+                          </option>
                         ))}
                       </Form.Select>
                       {errors.agent && (
-                        <div className="text-danger small mt-1">{errors.agent}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.agent}
+                        </div>
                       )}
                     </Form.Group>
                   </Col>
@@ -1022,7 +1192,11 @@ export default function HotelSearch() {
                     >
                       {isLoading ? (
                         <>
-                          <Spinner animation="border" size="sm" className="me-2" />
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
                           Searching...
                         </>
                       ) : (
@@ -1069,25 +1243,34 @@ export default function HotelSearch() {
               <Card.Body className="text-center text-muted py-5">
                 <FaSearch className="display-4 text-muted mb-3" />
                 <h4>Ready to Find Your Perfect Stay?</h4>
-                <p>Use the search form above to discover amazing hotels and exclusive deals.</p>
+                <p>
+                  Use the search form above to discover amazing hotels and
+                  exclusive deals.
+                </p>
               </Card.Body>
             </Card>
           )}
 
           {/* ── Results section ── */}
-          {hasSearched && (
+          {/* {hasSearched && ( */}
+          {(hasSearchResult || allResults.length > 0) && (
             <div ref={resultsRef}>
               <div className="search-layout">
                 <Row className="g-4">
-
                   {/* Left Sidebar */}
                   <Col lg={3} className="leftside d-none d-lg-block">
                     <div className="left-fixed">
                       <Card className="shadow-sm rounded-xl filtersection">
                         <Card.Body className="p-2">
                           <div className="map-preview-wrapper mb-2">
-                            <img src="/images/map.jpg" alt="Map preview" className="map-preview-img" />
-                            <button className="map-overlay-btn">EXPLORE ON MAP 📍</button>
+                            <img
+                              src="/images/map.jpg"
+                              alt="Map preview"
+                              className="map-preview-img"
+                            />
+                            <button className="map-overlay-btn">
+                              EXPLORE ON MAP 📍
+                            </button>
                           </div>
 
                           <Form.Control
@@ -1099,7 +1282,9 @@ export default function HotelSearch() {
                           />
 
                           <Form.Group className="mb-2">
-                            <Form.Label className="fw-semibold small">Hotel Type</Form.Label>
+                            <Form.Label className="fw-semibold small">
+                              Hotel Type
+                            </Form.Label>
                             <div className="filter-checkbox-list">
                               {hotelTypeOptions.map((item) => (
                                 <Form.Check
@@ -1107,10 +1292,18 @@ export default function HotelSearch() {
                                   type="checkbox"
                                   id={`hotel-type-${item.value}`}
                                   label={item.label}
-                                  checked={hotelType.some((t) => t.value === item.value)}
+                                  checked={hotelType.some(
+                                    (t) => t.value === item.value,
+                                  )}
                                   onChange={(e) => {
-                                    if (e.target.checked) setHotelType([...hotelType, item]);
-                                    else setHotelType(hotelType.filter((t) => t.value !== item.value));
+                                    if (e.target.checked)
+                                      setHotelType([...hotelType, item]);
+                                    else
+                                      setHotelType(
+                                        hotelType.filter(
+                                          (t) => t.value !== item.value,
+                                        ),
+                                      );
                                   }}
                                 />
                               ))}
@@ -1120,7 +1313,9 @@ export default function HotelSearch() {
                           <hr />
 
                           <Form.Group>
-                            <Form.Label className="fw-semibold small">Channel</Form.Label>
+                            <Form.Label className="fw-semibold small">
+                              Channel
+                            </Form.Label>
                             <div className="filter-checkbox-list">
                               {channelTypeOptions.map((item) => (
                                 <Form.Check
@@ -1128,10 +1323,18 @@ export default function HotelSearch() {
                                   type="checkbox"
                                   id={`channel-${item.value}`}
                                   label={item.label}
-                                  checked={channelType.some((c) => c.value === item.value)}
+                                  checked={channelType.some(
+                                    (c) => c.value === item.value,
+                                  )}
                                   onChange={(e) => {
-                                    if (e.target.checked) setChannelType([...channelType, item]);
-                                    else setChannelType(channelType.filter((c) => c.value !== item.value));
+                                    if (e.target.checked)
+                                      setChannelType([...channelType, item]);
+                                    else
+                                      setChannelType(
+                                        channelType.filter(
+                                          (c) => c.value !== item.value,
+                                        ),
+                                      );
                                   }}
                                 />
                               ))}
@@ -1204,12 +1407,15 @@ export default function HotelSearch() {
                       </Card.Body>
                     </Card>
 
-                    {hasSearched && (
+                    {/* {hasSearched && ( */}
+                    {(hasSearchResult || allResults.length > 0) && (
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <small className="text-muted fw-semibold">
-                          Showing {filteredResults.length} results
+                          Showing {startEntry} to {endEntry} of {totalElements} entries
                           {pollStatus === "IN_PROGRESS" && (
-                            <span className="ms-1 text-primary">(updating…)</span>
+                            <span className="ms-1 text-primary">
+                              (updating…)
+                            </span>
                           )}
                         </small>
                       </div>
@@ -1219,7 +1425,9 @@ export default function HotelSearch() {
                       <Card className="shadow-sm rounded-xl mb-4">
                         <Card.Body className="text-center py-4">
                           <Spinner animation="border" variant="primary" />
-                          <p className="text-muted mt-2 mb-0">Loading results…</p>
+                          <p className="text-muted mt-2 mb-0">
+                            Loading results…
+                          </p>
                         </Card.Body>
                       </Card>
                     )}
@@ -1239,7 +1447,13 @@ export default function HotelSearch() {
                             >
                               <Row className="g-0">
                                 <Col md={4}>
-                                  <div style={{ position: "relative", height: "100%", padding: "15px" }}>
+                                  <div
+                                    style={{
+                                      position: "relative",
+                                      height: "100%",
+                                      padding: "15px",
+                                    }}
+                                  >
                                     <LazyImage
                                       src={hotel.image}
                                       alt={hotel.name}
@@ -1275,7 +1489,9 @@ export default function HotelSearch() {
                                           borderRadius: "10px",
                                         }}
                                       >
-                                        {(hotel.channelType || "").toUpperCase()}
+                                        {(
+                                          hotel.channelType || ""
+                                        ).toUpperCase()}
                                       </span>
                                     </div>
                                   </div>
@@ -1301,7 +1517,10 @@ export default function HotelSearch() {
                                         marginBottom: "8px",
                                       }}
                                     >
-                                      📍 {hotel.address || hotel.city || "Address Not Available"}
+                                      📍{" "}
+                                      {hotel.address ||
+                                        hotel.city ||
+                                        "Address Not Available"}
                                     </p>
 
                                     {hotel.badge && (
@@ -1350,29 +1569,47 @@ export default function HotelSearch() {
                                             : "primary"
                                         }
                                         onClick={() => {
-                                          setClickedHotelIds((prev) => [...prev, hotel.id]);
+                                          setClickedHotelIds((prev) => [
+                                            ...prev,
+                                            hotel.id,
+                                          ]);
                                           const nationalityCode =
-                                            (selectedNationality?.code || "").length === 2
+                                            (selectedNationality?.code || "")
+                                              .length === 2
                                               ? selectedNationality.code
                                               : " ";
-                                          const roomsPayload = rooms.map((r) => ({
-                                            adults: r.adults || 1,
-                                            children: r.children || 0,
-                                            childAges: r.childAges || [],
-                                            adultAges: Array.from({ length: r.adults || 1 }, () => 30),
-                                          }));
+                                          const roomsPayload = rooms.map(
+                                            (r) => ({
+                                              adults: r.adults || 1,
+                                              children: r.children || 0,
+                                              childAges: r.childAges || [],
+                                              adultAges: Array.from(
+                                                { length: r.adults || 1 },
+                                                () => 30,
+                                              ),
+                                            }),
+                                          );
                                           const apiIdMapping = {
-                                            jumeirah: 10, iwtx: 12, x3: 15,
-                                            inhouse: 1, ratehawk: 14, darina: 16,
+                                            jumeirah: 10,
+                                            iwtx: 12,
+                                            x3: 15,
+                                            inhouse: 1,
+                                            ratehawk: 14,
+                                            darina: 16,
                                           };
                                           const apiId =
-                                            apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
+                                            apiIdMapping[
+                                              hotel.channelType?.toLowerCase()
+                                            ] || 0;
                                           const payload = {
                                             checkInDate: checkIn,
                                             checkOutDate: checkOut,
                                             hotelCode:
                                               hotel.hotelCode ||
-                                              hotel.id?.split("-").slice(1).join("-") ||
+                                              hotel.id
+                                                ?.split("-")
+                                                .slice(1)
+                                                .join("-") ||
                                               "",
                                             nationality: nationalityCode,
                                             agentId: String(agent),
@@ -1381,17 +1618,21 @@ export default function HotelSearch() {
                                           };
                                           const meta = {
                                             hotelName: hotel.name,
-                                            address: hotel.address || hotel.city,
+                                            address:
+                                              hotel.address || hotel.city,
                                             starRating: hotel.rating || 0,
                                             phone: "",
                                             hotelImage: hotel.image,
                                           };
                                           sessionStorage.setItem(
                                             "roomListPayload",
-                                            JSON.stringify({ payload, meta })
+                                            JSON.stringify({ payload, meta }),
                                           );
                                           setTimeout(() => {
-                                            const route = apiId === 1 ? "/room-list" : "/api-room-list";
+                                            const route =
+                                              apiId === 1
+                                                ? "/room-list"
+                                                : "/api-room-list";
                                             window.open(route, "_blank");
                                           }, 50);
                                         }}
@@ -1458,7 +1699,7 @@ export default function HotelSearch() {
                                 </Pagination.Item>
                               ) : (
                                 <Pagination.Ellipsis key={n} disabled />
-                              )
+                              ),
                             )}
                             <Pagination.Next
                               disabled={pageIndex >= effectiveTotalPages - 1}
