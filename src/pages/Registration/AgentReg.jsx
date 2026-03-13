@@ -265,11 +265,13 @@ const AgentReg = () => {
 
   // Static data for external APIs
   const externalApis = [
-    { code: "IWTX", name: "IWTX" },
-    { code: "X3", name: "X3" },
-    { code: "INHOUSE", name: "INHOUSE" },
-    { code: "DARINA", name: "DARINA" },
-    { code: "RATEHAWK", name: "RATEHAWK" },
+    { code: "Select", name: "Select" },
+    // { code: "IWTX", name: "IWTX" },
+    // { code: "X3", name: "X3" },
+    // { code: "INHOUSE", name: "INHOUSE" },
+    // { code: "DARINA", name: "DARINA" },
+    // { code: "RATEHAWK", name: "RATEHAWK" },
+    // { code: "ATHARVA", name: "ATHARVA" },
   ];
 
   const nextId = useMemo(
@@ -330,57 +332,59 @@ const AgentReg = () => {
   };
 
   const openEdit = async (item) => {
-   // console.log("edit item:::", item);
-    setEditing(item);
-    setIsViewMode(false); // Set to edit mode
+       setIsViewMode(false); // Set to edit mode
 
+      const getEditData = await axiosInstance.get(`/api/agent/${item.id}`);
+      
+      setEditing(getEditData.data);
+ console.log("editing", editing);
     // Set form data first
     setFormData({
-      companyName: item.companyName || "",
-      shortName: item.shortName || "",
-      businessType: item.businessType || "",
-      agentCategoryId: String(item.agentCategoryId || ""),
-      companyCode: item.companyCode || "",
-      agentUrl: item.agentUrl || "",
-      firstName: item.firstName || "",
-      lastName: item.lastName || "",
-      personalEmail: item.personalEmail || "",
-      zipCode: item.zipCode || "",
-      mobileNumber: item.mobileNumber || "",
-      telephoneNumber: item.telephoneNumber || "",
-      contactPerson: item.contactPerson || "",
-      countryId: String(item.countryId || ""),
-      provinceId: String(item.provinceId || ""),
-      placeId: String(item.placeId || ""),
-      address: item.address || "",
-      markup: String(item.markup || ""),
-      currency: String(item.currency || ""),
-      status: item.status || "",
+      companyName: editing.companyName || "",
+      shortName: editing.shortName || "",
+      businessType: editing.businessType || "",
+      agentCategoryId: String(editing.agentCategoryId || ""),
+      companyCode: editing.companyCode || "",
+      agentUrl: editing.agentUrl || "",
+      firstName: editing.firstName || "",
+      lastName: editing.lastName || "",
+      personalEmail: editing.personalEmail || "",
+      zipCode: editing.zipCode || "",
+      mobileNumber: editing.mobileNumber || "",
+      telephoneNumber: editing.telephoneNumber || "",
+      contactPerson: editing.contactPerson || "",
+      countryId: String(editing.countryId || ""),
+      provinceId: String(editing.provinceId || ""),
+      placeId: String(editing.placeId || ""),
+      address: editing.address || "",
+      markup: String(editing.markup || ""),
+      currency: String(editing.currency || ""),
+      status: editing.status || "",
       agentLogo: null,
       // GST Details as nested object to match AgentGSTDetailsDTO
       agentGSTDetailsDTO: {
         agentClassification:
-          item.agentClassification ||
-          item.agentGSTDetailsDTO?.agentClassification ||
+          editing.agentClassification ||
+          editing.agentGSTDetailsDTO?.agentClassification ||
           "",
         agentGstIn:
-          item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
+          editing.agentGstIn || editing.agentGSTDetailsDTO?.agentGstIn || "",
         agentProvisionalGstno:
-          item.agentProvisionalGstno ||
-          item.agentGSTDetailsDTO?.agentProvisionalGstno ||
+          editing.agentProvisionalGstno ||
+          editing.agentGSTDetailsDTO?.agentProvisionalGstno ||
           "",
         agentCorrespondmail:
-          item.agentCorrespondmail ||
-          item.agentGSTDetailsDTO?.agentCorrespondmail ||
+          getEditData.agentCorrespondmail ||
+          getEditData.agentGSTDetailsDTO?.agentCorrespondmail ||
           "",
         agentRegisterstatus:
-          item.agentRegisterstatus ||
-          item.agentGSTDetailsDTO?.agentRegisterstatus ||
+          editing.agentRegisterstatus ||
+          editing.agentGSTDetailsDTO?.agentRegisterstatus ||
           "",
         agentHsncode:
-          item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
+          editing.agentHsncode || editing.agentGSTDetailsDTO?.agentHsncode || "",
         agentStatus:
-          item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
+          editing.agentStatus || editing.agentGSTDetailsDTO?.agentStatus || "",
       },
     });
 
@@ -389,15 +393,15 @@ const AgentReg = () => {
     setPlaces([]);
 
     // Fetch provinces and cities for the selected country and province
-    if (item.countryId) {
+    if (editing.countryId) {
       try {
        // console.log("Loading provinces for countryId:", item.countryId);
-        await provinceList(item.countryId);
+        await provinceList(editing.countryId);
 
         // After provinces are loaded, fetch cities if provinceId exists
-        if (item.provinceId) {
+        if (editing.provinceId) {
          // console.log("Loading cities for provinceId:", item.provinceId);
-          await cityList(item.provinceId);
+          await cityList(editing.provinceId);
         }
       } catch (error) {
         console.error("Error loading provinces/cities:", error);

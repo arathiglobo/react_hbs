@@ -1904,7 +1904,7 @@ const HotelBookingList = () => {
                     </div>
 
                     {/* PDF URL Display */}
-                    {pdfUrl && selectedVoucherType === "Confirmation" && (
+                    {/* {pdfUrl && selectedVoucherType === "Confirmation" && (
                       <div
                         className="mb-3 p-3"
                         style={{
@@ -1942,7 +1942,41 @@ const HotelBookingList = () => {
                           </Button>
                         </div>
                       </div>
-                    )}
+                    )} */}
+
+                    {pdfUrl && selectedVoucherType === "Confirmation" && (
+  <div
+    className="mb-3"
+    style={{
+      border: "1px solid #dee2e6",
+      borderRadius: "8px",
+      overflow: "hidden",
+      background: "#fff",
+    }}
+  >
+    <div
+      style={{
+        padding: "8px 12px",
+        background: "#f8f9fa",
+        borderBottom: "1px solid #dee2e6",
+        fontWeight: "600",
+        fontSize: "14px",
+      }}
+    >
+      Confirmation PDF Preview
+    </div>
+
+    <iframe
+      src={pdfUrl}
+      title="Confirmation PDF"
+      width="100%"
+      height="500px"
+      style={{
+        border: "none",
+      }}
+    />
+  </div>
+)}
 
                     {/* Table */}
                     <div className="table-responsive">

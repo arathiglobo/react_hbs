@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaHotel, FaCalendarAlt, FaUsers, FaUtensils, FaUserTie } from "react-icons/fa";
+import {
+  FaHotel,
+  FaCalendarAlt,
+  FaUsers,
+  FaUtensils,
+  FaUserTie,
+} from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import "../../styles/HotelBookingPage.css";
@@ -46,7 +52,8 @@ const HotelBookingPage = () => {
   const [tourismDirhams, setTourismDirhams] = useState("0");
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState("");
-  const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
+  const [bookingConfirmation, setBookingConfirmation] =
+    useState("Book & Voucher");
 
   // Fetch employees list
   useEffect(() => {
@@ -95,7 +102,7 @@ const HotelBookingPage = () => {
 
     // Auto-populate Primary Guest if Room 1 Adult 1
     if (roomIndex === 0 && guestIndex === 0) {
-      if (['salutation', 'firstName', 'lastName'].includes(field)) {
+      if (["salutation", "firstName", "lastName"].includes(field)) {
         setPrimaryGuest((prev) => ({
           ...prev,
           [field]: value,
@@ -266,7 +273,7 @@ const HotelBookingPage = () => {
       const checkOut = new Date(bookingData.payload.checkOutDate);
       const nights = Math.max(
         1,
-        Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24))
+        Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24)),
       );
 
       const payload = {
@@ -283,7 +290,7 @@ const HotelBookingPage = () => {
         roomStatus: bookingData.selectedRate.roomStatus,
         cancellationPolicy:
           bookingData.selectedRate.cancellationPolicy?.map(
-            (p) => p.policyText
+            (p) => p.policyText,
           ) || [],
 
         // Calculate deadlineDate based on nonRefundable and cancellationPolicy
@@ -311,14 +318,16 @@ const HotelBookingPage = () => {
 
             // Find earliest fromDate
             const dates = policies
-              .map(p => p.fromDate ? new Date(p.fromDate) : null)
-              .filter(date => date !== null && !isNaN(date.getTime()));
+              .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
+              .filter((date) => date !== null && !isNaN(date.getTime()));
 
             if (dates.length === 0) {
               return null;
             }
 
-            const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
+            const earliestDate = new Date(
+              Math.min(...dates.map((d) => d.getTime())),
+            );
             const deadline = new Date(earliestDate);
             deadline.setDate(earliestDate.getDate() - 2);
             deadline.setHours(0, 0, 0, 0); // Set to midnight
@@ -360,7 +369,7 @@ const HotelBookingPage = () => {
           mealPlan: bookingData.selectedRate.mealPlan,
           nonRefundable:
             bookingData.selectedRate.nonRefundable === true ||
-              bookingData.selectedRate.nonRefundable === "true"
+            bookingData.selectedRate.nonRefundable === "true"
               ? true
               : false,
           currency: bookingData.selectedRate.currency || "AED",
@@ -409,13 +418,18 @@ const HotelBookingPage = () => {
       const agentId = pendingPayload.agentId;
       const requiredAmount = pendingPayload.rooms.reduce(
         (sum, r) => sum + (r.rate || 0),
-        0
+        0,
       );
 
-      console.log("🔍 Checking credit for Agent:", agentId, "Amount:", requiredAmount);
+      console.log(
+        "🔍 Checking credit for Agent:",
+        agentId,
+        "Amount:",
+        requiredAmount,
+      );
 
       const creditResponse = await axiosInstance.get(
-        `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`
+        `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`,
       );
 
       if (creditResponse.data === false) {
@@ -444,7 +458,7 @@ const HotelBookingPage = () => {
 
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
-        pendingPayload
+        pendingPayload,
       );
 
       const bookingResponse = response.data;
@@ -453,7 +467,8 @@ const HotelBookingPage = () => {
 
       if (
         bookingResponse &&
-        bookingResponse.status === "CONFIRMED" &&
+        bookingResponse.status &&
+        bookingResponse.status.toUpperCase() === "CONFIRMED" &&
         bookingResponse.bookingId != 0
       ) {
         toast.success(bookingResponse.message);
@@ -480,14 +495,13 @@ const HotelBookingPage = () => {
   const { hotelStaticData, payload, selectedRate } = bookingData;
   console.log("bookingData:::", bookingData);
 
-
   return (
     <div className="min-vh-100 bg-light d-flex flex-column  hotel-booking-container">
       <TopBar />
       <div className="main-content">
         <Sidebar />
         <main className="content-wrapper py-4">
-          <Container maxWidth="xl">
+          <Container fluid="xl">
             {/* Booking Summary */}
             <Row>
               <Col>
@@ -517,7 +531,7 @@ const HotelBookingPage = () => {
                                 selectedRate.nonRefundable === true ||
                                   selectedRate.nonRefundable === "true"
                                   ? "NON REFUNDABLE"
-                                  : "FLEXIBLE"
+                                  : "FLEXIBLE",
                               )}
                           </div>
                         </div>
@@ -592,7 +606,9 @@ const HotelBookingPage = () => {
                       <div className="d-flex justify-content-between align-items-center">
                         <h5 className="mb-0">Total Price</h5>
                         <h4 className="mb-0 fw-bold">
-                          {formatPrice(selectedRate.roomRateBasedOnRoomCount_WithoutMarkup)}
+                          {formatPrice(
+                            selectedRate.roomRateBasedOnRoomCount_WithoutMarkup,
+                          )}
                         </h4>
                       </div>
                     </div>
@@ -637,11 +653,13 @@ const HotelBookingPage = () => {
                                 <Col md={2}>
                                   <span className="fw-semibold text-muted">
                                     {guest.isChild
-                                      ? `Child ${guestIndex - room.adults + 1
-                                      } (Age: ${room.childAges[
-                                      guestIndex - room.adults
-                                      ]
-                                      })`
+                                      ? `Child ${
+                                          guestIndex - room.adults + 1
+                                        } (Age: ${
+                                          room.childAges[
+                                            guestIndex - room.adults
+                                          ]
+                                        })`
                                       : `Adult ${guestIndex + 1}`}{" "}
                                     *
                                   </span>
@@ -654,13 +672,13 @@ const HotelBookingPage = () => {
                                         roomIndex,
                                         guestIndex,
                                         "salutation",
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     className="form-control-sm"
                                     isInvalid={
                                       !!validationErrors[
-                                      `room_${roomIndex}_guest_${guestIndex}_salutation`
+                                        `room_${roomIndex}_guest_${guestIndex}_salutation`
                                       ]
                                     }
                                   >
@@ -673,14 +691,14 @@ const HotelBookingPage = () => {
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_salutation`
                                   ] && (
-                                      <Form.Control.Feedback type="invalid">
-                                        {
-                                          validationErrors[
+                                    <Form.Control.Feedback type="invalid">
+                                      {
+                                        validationErrors[
                                           `room_${roomIndex}_guest_${guestIndex}_salutation`
-                                          ]
-                                        }
-                                      </Form.Control.Feedback>
-                                    )}
+                                        ]
+                                      }
+                                    </Form.Control.Feedback>
+                                  )}
                                 </Col>
                                 <Col md={3}>
                                   <Form.Control
@@ -692,27 +710,27 @@ const HotelBookingPage = () => {
                                         roomIndex,
                                         guestIndex,
                                         "firstName",
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     className="form-control-sm"
                                     isInvalid={
                                       !!validationErrors[
-                                      `room_${roomIndex}_guest_${guestIndex}_firstName`
+                                        `room_${roomIndex}_guest_${guestIndex}_firstName`
                                       ]
                                     }
                                   />
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_firstName`
                                   ] && (
-                                      <Form.Control.Feedback type="invalid">
-                                        {
-                                          validationErrors[
+                                    <Form.Control.Feedback type="invalid">
+                                      {
+                                        validationErrors[
                                           `room_${roomIndex}_guest_${guestIndex}_firstName`
-                                          ]
-                                        }
-                                      </Form.Control.Feedback>
-                                    )}
+                                        ]
+                                      }
+                                    </Form.Control.Feedback>
+                                  )}
                                 </Col>
                                 <Col md={3}>
                                   <Form.Control
@@ -724,27 +742,27 @@ const HotelBookingPage = () => {
                                         roomIndex,
                                         guestIndex,
                                         "lastName",
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     className="form-control-sm"
                                     isInvalid={
                                       !!validationErrors[
-                                      `room_${roomIndex}_guest_${guestIndex}_lastName`
+                                        `room_${roomIndex}_guest_${guestIndex}_lastName`
                                       ]
                                     }
                                   />
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_lastName`
                                   ] && (
-                                      <Form.Control.Feedback type="invalid">
-                                        {
-                                          validationErrors[
+                                    <Form.Control.Feedback type="invalid">
+                                      {
+                                        validationErrors[
                                           `room_${roomIndex}_guest_${guestIndex}_lastName`
-                                          ]
-                                        }
-                                      </Form.Control.Feedback>
-                                    )}
+                                        ]
+                                      }
+                                    </Form.Control.Feedback>
+                                  )}
                                 </Col>
                                 <Col md={2}>
                                   <Form.Select
@@ -754,13 +772,13 @@ const HotelBookingPage = () => {
                                         roomIndex,
                                         guestIndex,
                                         "gender",
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     className="form-control-sm"
                                     isInvalid={
                                       !!validationErrors[
-                                      `room_${roomIndex}_guest_${guestIndex}_gender`
+                                        `room_${roomIndex}_guest_${guestIndex}_gender`
                                       ]
                                     }
                                   >
@@ -772,14 +790,14 @@ const HotelBookingPage = () => {
                                   {validationErrors[
                                     `room_${roomIndex}_guest_${guestIndex}_gender`
                                   ] && (
-                                      <Form.Control.Feedback type="invalid">
-                                        {
-                                          validationErrors[
+                                    <Form.Control.Feedback type="invalid">
+                                      {
+                                        validationErrors[
                                           `room_${roomIndex}_guest_${guestIndex}_gender`
-                                          ]
-                                        }
-                                      </Form.Control.Feedback>
-                                    )}
+                                        ]
+                                      }
+                                    </Form.Control.Feedback>
+                                  )}
                                 </Col>
                               </Row>
                               {guestIndex < room.guests.length - 1 && (
@@ -1000,7 +1018,9 @@ const HotelBookingPage = () => {
                   {selectedRate?.roomStatus !== "On Request" && (
                     <Col md={12}>
                       <Form.Group className="mb-3">
-                        <Form.Label className="mb-2 fw-semibold">Are you sure to continue booking?</Form.Label>
+                        <Form.Label className="mb-2 fw-semibold">
+                          Are you sure to continue booking?
+                        </Form.Label>
                         <div className="mt-2">
                           <Form.Check
                             type="radio"
@@ -1009,7 +1029,9 @@ const HotelBookingPage = () => {
                             label="Book & Voucher"
                             value="Book & Voucher"
                             checked={bookingConfirmation === "Book & Voucher"}
-                            onChange={(e) => setBookingConfirmation(e.target.value)}
+                            onChange={(e) =>
+                              setBookingConfirmation(e.target.value)
+                            }
                             className="mb-2"
                           />
                           <Form.Check
@@ -1018,8 +1040,12 @@ const HotelBookingPage = () => {
                             name="bookingConfirmation"
                             label="Book Now & Voucher later"
                             value="Book Now & Voucher later"
-                            checked={bookingConfirmation === "Book Now & Voucher later"}
-                            onChange={(e) => setBookingConfirmation(e.target.value)}
+                            checked={
+                              bookingConfirmation === "Book Now & Voucher later"
+                            }
+                            onChange={(e) =>
+                              setBookingConfirmation(e.target.value)
+                            }
                           />
                         </div>
                       </Form.Group>
@@ -1046,7 +1072,10 @@ const HotelBookingPage = () => {
                       >
                         <option value="">Select Employee</option>
                         {employees.map((employee) => (
-                          <option key={employee.employeeId} value={employee.employeeId}>
+                          <option
+                            key={employee.employeeId}
+                            value={employee.employeeId}
+                          >
                             {employee.firstName} {employee.lastName}
                           </option>
                         ))}
@@ -1085,7 +1114,7 @@ const HotelBookingPage = () => {
 
                 {console.log(
                   "pendingPayload::inside :order modal:::",
-                  pendingPayload
+                  pendingPayload,
                 )}
                 <Modal.Body className="px-4 py-3 bg-light">
                   {pendingPayload && (
@@ -1137,13 +1166,13 @@ const HotelBookingPage = () => {
                           </p>
                           <ul className="mb-0 ps-3">
                             {pendingPayload.cancellationPolicy &&
-                              pendingPayload.cancellationPolicy.length > 0 ? (
+                            pendingPayload.cancellationPolicy.length > 0 ? (
                               pendingPayload.cancellationPolicy.map(
                                 (policy, index) => (
                                   <li key={index} className="text-dark">
                                     {policy}
                                   </li>
-                                )
+                                ),
                               )
                             ) : (
                               <li className="text-muted">
@@ -1162,7 +1191,9 @@ const HotelBookingPage = () => {
                                   Selling Price
                                 </h6>
                                 <h5 className="mb-0 text-success fw-bold">
-                                  {formatPrice(selectedRate.roomRateBasedOnRoomCount)}
+                                  {formatPrice(
+                                    selectedRate.roomRateBasedOnRoomCount,
+                                  )}
                                 </h5>
                               </div>
                             </div>
@@ -1171,8 +1202,10 @@ const HotelBookingPage = () => {
                           <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
                             <h6 className="mb-0 fw-bold">Total Price</h6>
                             <h4 className="mb-0">
-                              {formatPrice(selectedRate.roomRateBasedOnRoomCount)} for{" "}
-                              {pendingPayload.rooms.length}{" "}
+                              {formatPrice(
+                                selectedRate.roomRateBasedOnRoomCount,
+                              )}{" "}
+                              for {pendingPayload.rooms.length}{" "}
                               {pendingPayload.rooms.length > 1
                                 ? "rooms"
                                 : "room"}

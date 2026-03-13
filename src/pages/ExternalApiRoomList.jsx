@@ -51,9 +51,6 @@ function CategoryToggleButton({ eventKey, isActive }) {
   );
 }
 
-
-
-
 const ExternalApiRoomList = () => {
   const [roomData, setRoomData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -70,7 +67,7 @@ const ExternalApiRoomList = () => {
   const [loadingRate, setLoadingRate] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
   const [policyList, setPolicyList] = useState(null);
-  const [selectedRate, setSelectedRate] = useState(null);
+  const [selectedRate, setSelectedRate] = useState([]);
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
   // console.log("currentActiveRole::", activeUserRole);
@@ -95,7 +92,7 @@ const ExternalApiRoomList = () => {
               meta = parsed.meta;
               setHotelStaticData(meta);
               setSearchPayload(payload);
-               console.log("Retrieved payload from sessionStorage:", payload);
+              console.log("Retrieved payload from sessionStorage:", payload);
               // console.log("Retrieved meta from sessionStorage:", meta);
             }
           } catch (e) {
@@ -152,7 +149,10 @@ const ExternalApiRoomList = () => {
         // Initialise per-room selection array based on number of rooms requested
         const numRooms = (payload?.rooms || []).length || 1;
         setSelectedRooms(
-          Array.from({ length: numRooms }, (_, i) => ({ roomNo: i + 1, selectedRate: null }))
+          Array.from({ length: numRooms }, (_, i) => ({
+            roomNo: i + 1,
+            selectedRate: null,
+          })),
         );
         setRoomData(enriched);
       } catch (err) {
@@ -169,12 +169,14 @@ const ExternalApiRoomList = () => {
   // Handle per-room rate radio selection
   const handleRateSelect = (roomIndex, rate) => {
     setSelectedRooms((prev) =>
-      prev.map((r, i) => (i === roomIndex ? { ...r, selectedRate: rate } : r))
+      prev.map((r, i) => (i === roomIndex ? { ...r, selectedRate: rate } : r)),
     );
   };
 
   // All rooms have a selection?
-  const allRoomsSelected = selectedRooms.length > 0 && selectedRooms.every((r) => r.selectedRate !== null);
+  const allRoomsSelected =
+    selectedRooms.length > 0 &&
+    selectedRooms.every((r) => r.selectedRate !== null);
 
   const handleBooking = async () => {
     const { payload, hotels } = roomData;
@@ -189,35 +191,37 @@ const ExternalApiRoomList = () => {
         try {
           // Build one room entry per selected room
           // console.log("selectedRooms::", selectedRooms);
-          // const roomsArray = selectedRooms.map((r, i) => ({
-          //   adult: {
-          //     age: (payload.rooms[i]?.adultAges?.[0] ?? payload.rooms[0]?.adultAges?.[0] ?? 30).toString(),
-          //   },
-          //   roomTypeCode: r.selectedRate?.roomTypeCode,
-          //   mealPlanCode: r.selectedRate?.mealPlanCode,
-          //   contractTokenId: r.selectedRate?.contractTokenId || "0",
-          //   roomConfigurationId: i + 1,
-          // }));
+          const roomsArray = selectedRooms.map((r, i) => ({
+            adult: {
+              age: (
+                payload.rooms[i]?.adultAges?.[0] ??
+                payload.rooms[0]?.adultAges?.[0] ??
+                30
+              ).toString(),
+            },
+            roomTypeCode: r.selectedRate?.roomTypeCode,
+            mealPlanCode: r.selectedRate?.mealPlanCode,
+            contractTokenId: r.selectedRate?.contractTokenId || "0",
+            roomConfigurationId: i + 1,
+          }));
 
           // Always send `room` as an array — required by the backend for both single and multiple rooms
-          // const roomConfiguration = { room: roomsArray };
-
-
+          const roomConfiguration = { room: roomsArray };
 
           let priceCheckReq = {
             searchCriteria: {
-              // roomConfiguration,
-              roomConfiguration: {
-                room: {
-                  adult: {
-                    age: payload.rooms[0].adultAges[0].toString(),
-                  },
-                  roomTypeCode: primaryRate.roomTypeCode,
-                  mealPlanCode: primaryRate.mealPlanCode,
-                  contractTokenId: primaryRate.contractTokenId || "0",
-                  roomConfigurationId: payload.rooms.length,
-                },
-              },
+              roomConfiguration,
+              // roomConfiguration: {
+              //   room: {
+              //     adult: {
+              //       age: payload.rooms[0].adultAges[0].toString(),
+              //     },
+              //     roomTypeCode: primaryRate.roomTypeCode,
+              //     mealPlanCode: primaryRate.mealPlanCode,
+              //     contractTokenId: primaryRate.contractTokenId || "0",
+              //     roomConfigurationId: payload.rooms.length,
+              //   },
+              // },
               startDate: payload.checkInDate,
               endDate: payload.checkOutDate,
               hotelCode: payload.hotelCode,
@@ -228,7 +232,10 @@ const ExternalApiRoomList = () => {
             },
           };
 
-          console.log("priceCheckReq (multi-room):", JSON.stringify(priceCheckReq, null, 2));
+          console.log(
+            "priceCheckReq (multi-room):",
+            JSON.stringify(priceCheckReq, null, 2),
+          );
 
           let endpoint = "";
           switch (payload.apiId) {
@@ -247,6 +254,7 @@ const ExternalApiRoomList = () => {
           const accurateRates = rooms
             .filter((room) => room != null)
             .map((room) => ({
+              roomConfigurationId: room.roomConfigurationId,
               hotelId: hotel.hotelId,
               hotelName: hotel.hotelName,
               roomCategory: room.roomType,
@@ -258,7 +266,7 @@ const ExternalApiRoomList = () => {
             }));
 
           console.log("accurateRate:", accurateRates);
-          setSelectedRate(accurateRates[0]);
+          setSelectedRate(accurateRates);
           setLoadingRate(false);
           setShowBookingModal(true);
         } catch (err) {
@@ -296,7 +304,8 @@ const ExternalApiRoomList = () => {
             rate: r.selectedRate?.totalRate,
             rateWithoutMarkup: r.selectedRate?.totalRateWithoutMarkup,
             roomRateBasedOnRoomCount: r.selectedRate?.roomRateBasedOnRoomCount,
-            roomRateBasedOnRoomCount_WithoutMarkup: primaryRate.roomRateBasedOnRoomCount_WithoutMarkup,
+            roomRateBasedOnRoomCount_WithoutMarkup:
+              primaryRate.roomRateBasedOnRoomCount_WithoutMarkup,
             roomStatus: r.selectedRate?.roomStatus,
             currency: "AED",
             hotelId: hotelsdetail.hotelId,
@@ -318,16 +327,11 @@ const ExternalApiRoomList = () => {
   };
 
   const sampleGallery = [
-    "/images/01.png",
-    "/images/02.png",
-    "/images/03.png",
-    "/images/04.jpg",
-    "/images/04.png",
-    "/images/05.jpg",
-    "/images/06.png",
-    "/images/07.png",
-    "/images/main-slider.jpg",
-    "/images/small-img.jpg",
+    "/images/hotelrooms/1.jpg",
+    "/images/hotelrooms/2.jpg",
+    "/images/hotelrooms/3.jpg",
+    "/images/hotelrooms/4.jpg",
+    "/images/hotelrooms/5.jpg",
   ];
 
   const getMealPlanIcon = (mealPlan) => {
@@ -376,13 +380,7 @@ const ExternalApiRoomList = () => {
           </small>
         );
       default:
-        return (
-          <small>
-            {" "}
-            This room is Available{" "}
-
-          </small>
-        );
+        return <small> This room is Available </small>;
     }
   };
 
@@ -524,9 +522,7 @@ const ExternalApiRoomList = () => {
       <div className="main-content">
         <TopBar className="toproomlist" />
         <Sidebar />
-        <main
-          className="content-wrapper"
-        >
+        <main className="content-wrapper">
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
             {/* Loader Modal */}
             <Modal
@@ -690,7 +686,8 @@ const ExternalApiRoomList = () => {
             <div className="room-categories-section">
               <h4 className="mb-3">Select Rooms</h4>
               <p className="text-muted small mb-4">
-                Please select one rate for each room. You can choose different meal plans per room.
+                Please select one rate for each room. You can choose different
+                meal plans per room.
               </p>
 
               {/* Outer accordion — one item per requested room */}
@@ -717,7 +714,11 @@ const ExternalApiRoomList = () => {
                             {roomSelection ? (
                               <Badge bg="success" className="ms-2">
                                 Selected: {roomSelection.mealPlan} —{" "}
-                                {formatPrice(roomSelection.roomRateBasedOnRoomCount || roomSelection.totalRate || 0)}
+                                {formatPrice(
+                                  roomSelection.roomRateBasedOnRoomCount ||
+                                    roomSelection.totalRate ||
+                                    0,
+                                )}
                               </Badge>
                             ) : (
                               <Badge bg="warning" text="dark" className="ms-2">
@@ -731,12 +732,17 @@ const ExternalApiRoomList = () => {
                             className="d-flex align-items-center gap-2 px-3 py-2 rounded-pill"
                             style={{ fontWeight: "600", fontSize: "0.85rem" }}
                           >
-                            {activeOuterAccordion === roomEventKey ? "Hide Details/Book" : "View Details/Book"}
+                            {activeOuterAccordion === roomEventKey
+                              ? "Hide Details/Book"
+                              : "View Details/Book"}
                             <FaChevronDown
                               className="accordion-arrow"
                               style={{
-                                transform: activeOuterAccordion === roomEventKey ? "rotate(180deg)" : "none",
-                                transition: "transform 0.3s ease"
+                                transform:
+                                  activeOuterAccordion === roomEventKey
+                                    ? "rotate(180deg)"
+                                    : "none",
+                                transition: "transform 0.3s ease",
                               }}
                             />
                           </Button>
@@ -749,8 +755,8 @@ const ExternalApiRoomList = () => {
                             const innerKey = `${roomIndex}-${catIndex}`;
                             const minRate = Math.min(
                               ...category.availableRates.map(
-                                (r) => r.roomRateBasedOnRoomCount || r.totalRate || 0
-                              )
+                                (r) => r.totalRate || 0,
+                              ),
                             );
 
                             return (
@@ -763,24 +769,34 @@ const ExternalApiRoomList = () => {
                                 <Accordion.Header className="room-category-header">
                                   <div className="d-flex justify-content-between align-items-center w-100 pe-3">
                                     <div className="room-category-info">
-                                      <h5 className="mb-1">{category.roomCategory}</h5>
+                                      <h5 className="mb-1">
+                                        {category.roomCategory}
+                                      </h5>
                                       <p className="mb-0 text-muted small">
                                         {category.baseRoomType}
                                       </p>
                                     </div>
                                     <div className="d-flex align-items-center gap-3">
                                       <div className="room-category-price text-end me-3">
-                                        <div className="price-range">From {formatPrice(minRate)}</div>
+                                        <div className="price-range">
+                                          From {formatPrice(minRate)}
+                                        </div>
                                         <div className="rates-count small text-muted">
                                           {category.availableRates.length} rate
-                                          {category.availableRates.length !== 1 ? "s" : ""} available
+                                          {category.availableRates.length !== 1
+                                            ? "s"
+                                            : ""}{" "}
+                                          available
                                         </div>
                                       </div>
                                       <Button
                                         variant="outline-primary"
                                         size="sm"
                                         className="d-flex align-items-center gap-2 px-3 py-2 rounded-pill"
-                                        style={{ fontWeight: "600", fontSize: "0.85rem" }}
+                                        style={{
+                                          fontWeight: "600",
+                                          fontSize: "0.85rem",
+                                        }}
                                       >
                                         {/* Since inner is uncontrolled, we'll use a simpler approach or CSS to toggle text if possible, but let's stick to simple arrow text for now as uncontrolled doesn't easily expose state to parent without extra hooks */}
                                         View Details/Book
@@ -793,83 +809,127 @@ const ExternalApiRoomList = () => {
                                 {/* Inner body — rate rows with radio buttons */}
                                 <Accordion.Body className="room-rates-section p-3">
                                   <Row className="g-3">
-                                    {category.availableRates.map((rate, rateIndex) => {
-                                      const radioId = `room${roomIndex}_cat${catIndex}_rate${rateIndex}`;
-                                      const isChecked = selectedRooms[roomIndex]?.selectedRate === rate;
+                                    {category.availableRates.map(
+                                      (rate, rateIndex) => {
+                                        const radioId = `room${roomIndex}_cat${catIndex}_rate${rateIndex}`;
+                                        const isChecked =
+                                          selectedRooms[roomIndex]
+                                            ?.selectedRate === rate;
 
-                                      return (
-                                        <Col md={6} key={rateIndex}>
-                                          <Card
-                                            className={`rate-selection-card h-100 ${isChecked ? "selected-rate-card" : ""}`}
-                                            onClick={() => handleRateSelect(roomIndex, rate)}
-                                            style={{ cursor: "pointer", border: "1px solid #e0e0e0", borderRadius: "12px" }}
-                                          >
-                                            <Card.Body className="p-4 d-flex flex-column">
-                                              <div className="d-flex justify-content-between align-items-start mb-3">
-                                                <div className="rate-info-main">
-                                                  <div className="d-flex align-items-center gap-2 mb-2">
-                                                    <FaBed className="text-secondary" />
-                                                    <span className="fw-bold fs-5">{rate.mealPlan}</span>
-                                                    {getRefundStatusBadgeInRoomList(rate.nonRefundable)}
+                                        return (
+                                          <Col md={6} key={rateIndex}>
+                                            <Card
+                                              className={`rate-selection-card h-100 ${isChecked ? "selected-rate-card" : ""}`}
+                                              onClick={() =>
+                                                handleRateSelect(
+                                                  roomIndex,
+                                                  rate,
+                                                )
+                                              }
+                                              style={{
+                                                cursor: "pointer",
+                                                border: "1px solid #e0e0e0",
+                                                borderRadius: "12px",
+                                              }}
+                                            >
+                                              <Card.Body className="p-4 d-flex flex-column">
+                                                <div className="d-flex justify-content-between align-items-start mb-3">
+                                                  <div className="rate-info-main">
+                                                    <div className="d-flex align-items-center gap-2 mb-2">
+                                                      <FaBed className="text-secondary" />
+                                                      <span className="fw-bold fs-5">
+                                                        {rate.mealPlan}
+                                                      </span>
+                                                      {getRefundStatusBadgeInRoomList(
+                                                        rate.nonRefundable,
+                                                      )}
+                                                    </div>
+                                                    <p className="text-muted small mb-0">
+                                                      This room can be booked On
+                                                      Request
+                                                    </p>
                                                   </div>
-                                                  <p className="text-muted small mb-0">This room can be booked On Request</p>
+                                                  <input
+                                                    type="radio"
+                                                    name={`roomSelection_${roomIndex}`}
+                                                    id={radioId}
+                                                    checked={isChecked}
+                                                    onChange={() =>
+                                                      handleRateSelect(
+                                                        roomIndex,
+                                                        rate,
+                                                      )
+                                                    }
+                                                    onClick={(e) =>
+                                                      e.stopPropagation()
+                                                    }
+                                                    className="rate-radio-input"
+                                                    style={{
+                                                      transform: "scale(1.2)",
+                                                    }}
+                                                  />
                                                 </div>
-                                                <input
-                                                  type="radio"
-                                                  name={`roomSelection_${roomIndex}`}
-                                                  id={radioId}
-                                                  checked={isChecked}
-                                                  onChange={() => handleRateSelect(roomIndex, rate)}
-                                                  onClick={(e) => e.stopPropagation()}
-                                                  className="rate-radio-input"
-                                                  style={{ transform: "scale(1.2)" }}
-                                                />
-                                              </div>
 
-                                              <div className="rate-price-section mt-auto pt-4">
-                                                <div className="price-display mb-2">
-                                                  <span className="text-success fw-bold fs-3">
-                                                    {formatPrice(rate.roomRateBasedOnRoomCount)}
-                                                  </span>
-                                                  <div className="text-muted extra-small">
-                                                    {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms} rooms
+                                                <div className="rate-price-section mt-auto pt-4">
+                                                  <div className="price-display mb-2">
+                                                    <span className="text-success fw-bold fs-3">
+                                                      {formatPrice(
+                                                        rate.totalRate,
+                                                      )}
+                                                    </span>
+                                                    <div className="text-muted extra-small">
+                                                      {formatPrice(
+                                                        rate.totalRate || 0,
+                                                      )}{" "}
+                                                      × {1} rooms
+                                                    </div>
+                                                    <div className="price-label small text-muted">
+                                                      per night
+                                                    </div>
                                                   </div>
-                                                  <div className="price-label small text-muted">per night</div>
-                                                </div>
-
-                                               
 
                                                   {/* Features */}
-                                  <div className="rate-features small">
-                                    <div className="feature-item">
-                                      <FaInfoCircle className="me-2 text-muted" />
-                                      {"External"}
-                                    </div>
+                                                  <div className="rate-features small">
+                                                    <div className="feature-item">
+                                                      <FaInfoCircle className="me-2 text-muted" />
+                                                      {"External"}
+                                                    </div>
 
-                                    {rate.cancellationPolicies?.length > 0 && (
-                                      <div className="feature-item">
-                                        <FaShieldAlt className="me-2 text-muted" />
-                                        {
-                                          rate.cancellationPolicies[0]
-                                            .policyText
-                                        }
-                                      </div>
+                                                    {rate.cancellationPolicies
+                                                      ?.length > 0 && (
+                                                      <div className="feature-item">
+                                                        <FaShieldAlt className="me-2 text-muted" />
+                                                        {
+                                                          rate
+                                                            .cancellationPolicies[0]
+                                                            .policyText
+                                                        }
+                                                      </div>
+                                                    )}
+                                                  </div>
+
+                                                  <Button
+                                                    variant={
+                                                      isChecked
+                                                        ? "primary"
+                                                        : "outline-primary"
+                                                    }
+                                                    className="w-100 py-2 fw-bold"
+                                                    style={{
+                                                      borderRadius: "8px",
+                                                    }}
+                                                  >
+                                                    {isChecked
+                                                      ? "Selected"
+                                                      : "View Details / Select"}
+                                                  </Button>
+                                                </div>
+                                              </Card.Body>
+                                            </Card>
+                                          </Col>
+                                        );
+                                      },
                                     )}
-                                  </div>
-
-                                                <Button
-                                                  variant={isChecked ? "primary" : "outline-primary"}
-                                                  className="w-100 py-2 fw-bold"
-                                                  style={{ borderRadius: "8px" }}
-                                                >
-                                                  {isChecked ? "Selected" : "View Details / Select"}
-                                                </Button>
-                                              </div>
-                                            </Card.Body>
-                                          </Card>
-                                        </Col>
-                                      );
-                                    })}
                                   </Row>
                                 </Accordion.Body>
                               </Accordion.Item>
@@ -1110,23 +1170,27 @@ const ExternalApiRoomList = () => {
           <Modal.Title id="room-detail-modal">Room Details</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selectedRate && (
-            <Row className="g-4">
+          {selectedRate?.map((rate, index) => (
+            <Row key={index} className="g-4  mb-4">
               <Col md={6}>
+                <h5>Room {index + 1}</h5>
                 <div
                   id="roomGallery"
-                  className="carousel slide"
+                  className="carousel slide acuurate-rate-details-modal"
                   data-bs-ride="carousel"
                 >
                   <div className="carousel-inner rounded">
-                    {sampleGallery.map((img, idx) => (
-                      <div
-                        key={idx}
-                        className={`carousel-item ${idx === 0 ? "active" : ""}`}
-                      >
-                        <img src={img} className="d-block w-100" alt="Room" />
-                      </div>
-                    ))}
+                    {/* {sampleGallery.map((img, idx) => ( */}
+                    {sampleGallery
+                      .slice(index * 3, index * 3 + 3)
+                      .map((img, idx) => (
+                        <div
+                          key={idx}
+                          className={`carousel-item ${idx === 0 ? "active" : ""}`}
+                        >
+                          <img src={img} className="d-block w-100" alt="Room" />
+                        </div>
+                      ))}
                   </div>
                   <button
                     className="carousel-control-prev"
@@ -1157,8 +1221,8 @@ const ExternalApiRoomList = () => {
                 </div>
               </Col>
               <Col md={6}>
-                <h5 className="mb-2">{selectedRate.roomCategory}</h5>
-                <p className="text-muted">{selectedRate.roomTypeDescription}</p>
+                <h5 className="mb-2">{rate.roomCategory}</h5>
+                <p className="text-muted">{rate.roomTypeDescription}</p>
                 <div className="d-flex flex-wrap gap-2 mb-3">
                   <Badge bg="secondary">High speed internet</Badge>
                   <Badge bg="secondary">Private bathroom</Badge>
@@ -1168,27 +1232,27 @@ const ExternalApiRoomList = () => {
                 <div className="booking-details-modal">
                   <div className="d-flex justify-content-between mb-2">
                     <span>Meal Plan:</span>
-                    <span className="fw-semibold">{selectedRate.mealPlan}</span>
+                    <span className="fw-semibold">{rate.mealPlan}</span>
                   </div>
                   {activeUserRole === "ADMIN" && (
                     <div className="d-flex justify-content-between mb-2">
                       <span>Selling Price:</span>
                       <span className="fw-semibold text-primary">
-                        {formatPrice(selectedRate.rate)}
+                        {formatPrice(rate.rate)}
                       </span>
                     </div>
                   )}
                   <div className="d-flex justify-content-between mb-2">
                     <span>Total Rate:</span>
                     <span className="fw-semibold text-primary">
-                      {formatPrice(selectedRate.rate)}
+                      {formatPrice(rate.rate)}
                     </span>
                   </div>
                   <div className="d-flex justify-content-between mb-2">
                     <span>Refund Status:</span>
                     <span>
                       {getRefundStatusBadge(
-                        selectedRate.nonRefundable === "Y"
+                        rate.nonRefundable === "Y"
                           ? "NON REFUNDABLE"
                           : "FLEXIBLE",
                       )}
@@ -1197,13 +1261,13 @@ const ExternalApiRoomList = () => {
                   <div className="d-flex justify-content-between">
                     <span>Contract:</span>
                     <span className="small text-muted">
-                      {selectedRate.contractLabel}
+                      {rate.contractLabel}
                     </span>
                   </div>
                 </div>
               </Col>
             </Row>
-          )}
+          ))}
         </Modal.Body>
         <Modal.Footer>
           <Button
@@ -1223,9 +1287,11 @@ const ExternalApiRoomList = () => {
                   "bookingData",
                   JSON.stringify({ selectedRate, hotelStaticData, payload }),
                 );
+                
               } catch (e) {
                 console.error("Error storing bookingData:", e);
               }
+              console.log("Booking data passed to bookingpage for SelectedRate{}:", selectedRate,"hotelStaticData{}:", hotelStaticData, "payload{}:",payload);
               window.open("/api-booking-page-hotels", "_blank");
             }}
           >
