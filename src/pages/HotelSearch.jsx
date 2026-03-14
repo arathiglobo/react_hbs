@@ -22,12 +22,12 @@ import "../styles/HotelSearch.css";
 function SearchProgressBar({ pollStatus, completedChannels }) {
   const channels = [
     "inhouse",
-    // "iwtx",
-    // "x3",
-    // "ratehawk",
-    // "darina",
-    // "atharva",
-    // "jumeirah",
+    "iwtx",
+    "x3",
+    "ratehawk",
+    "darina",
+    "atharva",
+    "jumeirah",
   ];
   const [progress, setProgress] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -374,12 +374,12 @@ export default function HotelSearch() {
 
   const channelTypeOptions = [
     { value: "inhouse", label: "Inhouse" },
-    // { value: "iwtx", label: "Iwtx" },
-    // { value: "x3", label: "x3" },
-    // { value: "atharva", label: "Atharva" },
-    // { value: "jumeirah", label: "Jumeirah" },
-    // { value: "ratehawk", label: "Ratehawk" },
-    // { value: "darina", label: "Darina" },
+    { value: "iwtx", label: "Iwtx" },
+    { value: "x3", label: "x3" },
+    { value: "atharva", label: "Atharva" },
+    { value: "jumeirah", label: "Jumeirah" },
+    { value: "ratehawk", label: "Ratehawk" },
+    { value: "darina", label: "Darina" },
   ];
 
   useEffect(() => {
@@ -816,12 +816,12 @@ export default function HotelSearch() {
 
       const expectedChannels = [
         "inhouse",
-        // "iwtx",
-        // "x3",
-        // "ratehawk",
-        // "darina",
-        // "atharva",
-        // "jumeirah",
+        "iwtx",
+        "x3",
+        "ratehawk",
+        "darina",
+        "atharva",
+        "jumeirah",
       ];
 
       await pollUntilComplete(
@@ -1411,7 +1411,8 @@ export default function HotelSearch() {
                     {(hasSearchResult || allResults.length > 0) && (
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <small className="text-muted fw-semibold">
-                          Showing {startEntry} to {endEntry} of {totalElements} entries
+                          Showing {startEntry} to {endEntry} of {totalElements}{" "}
+                          entries
                           {pollStatus === "IN_PROGRESS" && (
                             <span className="ms-1 text-primary">
                               (updating…)
@@ -1596,12 +1597,13 @@ export default function HotelSearch() {
                                             inhouse: 1,
                                             ratehawk: 14,
                                             darina: 16,
-                                            atharva:3,
+                                            atharva: 3,
                                           };
                                           const apiId =
                                             apiIdMapping[
                                               hotel.channelType?.toLowerCase()
                                             ] || 0;
+                                         
                                           const payload = {
                                             checkInDate: checkIn,
                                             checkOutDate: checkOut,
@@ -1679,8 +1681,9 @@ export default function HotelSearch() {
                       )}
                     </Row>
 
-                    {hasSearched &&
-                      filteredResults.length > 0 &&
+                    {/* {hasSearched && */}
+                    {filteredResults.length > 0 &&
+                      totalElements > 0 &&
                       !(hotelSearchTerm || hotelType.length > 0) && (
                         <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4 mt-3">
                           <small className="text-muted fw-semibold"></small>

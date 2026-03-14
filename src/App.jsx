@@ -124,6 +124,7 @@ export default function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/select-userRole" element={<SelectRole />} />
         <Route path="/register" element={<Register />} />
         

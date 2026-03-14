@@ -676,11 +676,17 @@ const ApiBookingPageForHotels = () => {
                         className="mb-3"
                       >
                         <Accordion.Header className="bg-primary text-white">
-                          <h6 className="mb-0 fw-bold">
-                            Room {roomIndex + 1} -{" "}
-                            {selectedRate[roomIndex]?.roomCategory}(
-                            {selectedRate[roomIndex]?.mealPlan})
-                          </h6>
+                          <div className="d-flex justify-content-between w-100 align-items-center">
+                            <h6 className="mb-0 fw-bold">
+                              Room {roomIndex + 1} -{" "}
+                              {selectedRate[roomIndex]?.roomCategory} (
+                              {selectedRate[roomIndex]?.mealPlan})
+                            </h6>
+
+                            <span className="fw-bold">
+                              AED {selectedRate[roomIndex]?.rate}
+                            </span>
+                          </div>
                         </Accordion.Header>
                         <Accordion.Body className="p-4">
                           {room.guests.map((guest, guestIndex) => (

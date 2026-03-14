@@ -318,7 +318,7 @@ const ExternalApiRoomList = () => {
 
         console.log("bookingData::", bookingData);
         sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
-        window.open("/hotel-booking-page", "_blank");
+        window.open("/api-booking-page-hotels", "_blank");
       } catch (err) {
         console.error("Error preparing booking data:", err);
         alert("Unable to proceed with booking. Please try again.");
@@ -512,7 +512,7 @@ const ExternalApiRoomList = () => {
     );
   }
 
-  // console.log("roomdata ::::::::::::::::::", roomData);
+  console.log("roomdata ::::::::::::::::::", roomData);
   const hotel = roomData.hotels[0];
   const payload = roomData.payload || {};
   // console.log("selectedRate before bookingmodal:::", selectedRate);
@@ -624,6 +624,7 @@ const ExternalApiRoomList = () => {
                     </div>
                   </Col>
                   {console.log("hotel::", hotel)}
+                  {console.log("payload::", payload)}
                   <Col md={4}>
                     <Card className="booking-summary">
                       <Card.Body className="p-3">
