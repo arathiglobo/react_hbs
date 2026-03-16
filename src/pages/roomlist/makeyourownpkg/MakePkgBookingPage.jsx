@@ -1057,9 +1057,10 @@ const MakePkgBookingPage = () => {
   if (loading) {
     return (
       <div className="d-flex" style={{ minHeight: "100vh" }}>
-        <Sidebar />
+        
         <div className="flex-grow-1 d-flex flex-column">
           <TopBar />
+          <Sidebar />
           <main className="flex-grow-1 d-flex justify-content-center align-items-center">
             <div className="loading-container text-center">
               <Spinner animation="border" variant="primary" size="lg" />
@@ -1126,9 +1127,10 @@ const MakePkgBookingPage = () => {
 
   return (
     <div className="hotel-booking-container make-pkg-booking-container">
-      <Sidebar />
+      
       <div className="main-content">
         <TopBar />
+        <Sidebar />
         <main className="content-wrapper py-4">
           <Container fluid>
             <div className="booking-page-header mb-3">

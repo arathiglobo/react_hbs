@@ -464,11 +464,11 @@ const HotelBookingPage = () => {
       const bookingResponse = response.data;
       console.log("response:::", response);
       console.log("bookingResponse:::", bookingResponse);
-
       if (
         bookingResponse &&
         bookingResponse.status &&
-        bookingResponse.status.toUpperCase() === "CONFIRMED" &&
+        (bookingResponse.status.toUpperCase() === "CONFIRMED" ||
+          bookingResponse.status.toUpperCase() === "NOT CONFIRMED") &&
         bookingResponse.bookingId != 0
       ) {
         toast.success(bookingResponse.message);
