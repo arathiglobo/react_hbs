@@ -116,6 +116,10 @@ import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDaily
 import ExternalApiRoomList from "./pages/ExternalApiRoomList";
 import HotelBookingPage from "./pages/booking/HotelBookingPage";
 import ApiBookingPageForHotels from "./pages/booking/ApiBookingPageForHotels";
+import { CabSearch } from "./pages/search/cab/CabSearch";
+import CabBookingPage from "./pages/booking/CabBookingPage";
+import ActivitySearch from "./pages/search/activity/ActivitySearch";
+import ActivityBookingPage from "./pages/booking/ActivityBookingPage";
 
 
 export default function App() {
@@ -240,7 +244,12 @@ export default function App() {
         <Route path="/make-your-pkg-room-list" element={<PrivateRoute><AccomodationRoomList /> </PrivateRoute>}/>
         <Route path="/make-your-own-package/generate-quotation-booking" element={<PrivateRoute><GenerateQuotationBooking /> </PrivateRoute>}/>
         <Route path="/make-your-own-package/confirm-quotation-bookingpage" element={<PrivateRoute><QuotationBookingPage /> </PrivateRoute>}/>
-         <Route path="/booking-details/quotation-booking-list" element={<PrivateRoute><QuotationBookingList /> </PrivateRoute>}/>
+        <Route path="/booking-details/quotation-booking-list" element={<PrivateRoute><QuotationBookingList /> </PrivateRoute>}/>
+        <Route path="/new-booking/cab" element={<PrivateRoute><CabSearch /> </PrivateRoute>}/>
+        <Route path="/cab-booking-page" element={<PrivateRoute><CabBookingPage /> </PrivateRoute>}/>
+        <Route path="/new-booking/tours-and-activities" element={<PrivateRoute><ActivitySearch /> </PrivateRoute>}/>
+        <Route path="/new-booking/tours-and-activities/booking" element={<PrivateRoute><ActivityBookingPage /> </PrivateRoute>}/>
+
        
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />

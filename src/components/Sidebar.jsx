@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Nav, Button, Offcanvas } from "react-bootstrap";
 import { Link } from "react-router-dom";
-import "./Sidebar.css"
+import "./Sidebar.css";
 import {
   LayoutDashboard,
   Puzzle,
@@ -13,17 +13,14 @@ import {
   Landmark,
   Users,
   CalendarDays,
- FileSignature,
+  FileSignature,
   BarChart3,
   Tag,
   ImagePlus,
   Dot,
 } from "lucide-react";
 
-  
 let labelForDashboard = " ";
-
-
 
 export default function Sidebar() {
   const [show, setShow] = useState(false);
@@ -31,30 +28,29 @@ export default function Sidebar() {
   const handleShow = () => setShow(true);
   const [openGroups, setOpenGroups] = useState({});
   const sidebarRef = useRef(null);
-const offcanvasRef = useRef(null);
-
+  const offcanvasRef = useRef(null);
 
   useEffect(() => {
-  const handleClickOutside = (event) => {
-    const sidebarEl = sidebarRef.current;
-    const offcanvasEl = offcanvasRef.current;
+    const handleClickOutside = (event) => {
+      const sidebarEl = sidebarRef.current;
+      const offcanvasEl = offcanvasRef.current;
 
-    // If click is outside both sidebar and offcanvas
-    if (
-      sidebarEl &&
-      !sidebarEl.contains(event.target) &&
-      (!offcanvasEl || !offcanvasEl.contains(event.target))
-    ) {
-      setOpenGroups({}); // 👈 close all dropdowns
-    }
-  };
+      // If click is outside both sidebar and offcanvas
+      if (
+        sidebarEl &&
+        !sidebarEl.contains(event.target) &&
+        (!offcanvasEl || !offcanvasEl.contains(event.target))
+      ) {
+        setOpenGroups({}); // 👈 close all dropdowns
+      }
+    };
 
-  document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
 
-  return () => {
-    document.removeEventListener("mousedown", handleClickOutside);
-  };
-}, []);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Get roles as an array
   const storedRoles = (localStorage.getItem("userRole") || "")
@@ -62,29 +58,35 @@ const offcanvasRef = useRef(null);
     .map((role) => role.trim().toLowerCase());
 
   // Get current active role (this could also come from localStorage as "currentActiveRole")
-  const currentRole = localStorage.getItem("currentActiveRole")?.toLowerCase() || storedRoles[0] || "";
+  const currentRole =
+    localStorage.getItem("currentActiveRole")?.toLowerCase() ||
+    storedRoles[0] ||
+    "";
   console.log("currentRole in sidebar::", currentRole);
-   
 
   // Set dashboard path based on current active role
   let dashboardPath = "/";
 
   if (currentRole === "admin") {
     dashboardPath = "/adminDashboard";
-    labelForDashboard = "Admin Dashboard"
+    labelForDashboard = "Admin Dashboard";
   } else if (currentRole === "agent") {
     dashboardPath = "/agentDashboard";
-    labelForDashboard = "Agent Dashboard"
+    labelForDashboard = "Agent Dashboard";
   } else if (currentRole === "staff") {
     dashboardPath = "/staffDashboard";
-    labelForDashboard = "Staff Dashboard"
+    labelForDashboard = "Staff Dashboard";
   } else if (currentRole === "extranet") {
     dashboardPath = "/extranetDashboard";
-    labelForDashboard = "Hotel Dashboard"
+    labelForDashboard = "Hotel Dashboard";
   }
 
   const items = [
-    { label: labelForDashboard, to: dashboardPath , roles: ["admin", "agent", "staff", "extranet"]},
+    {
+      label: labelForDashboard,
+      to: dashboardPath,
+      roles: ["admin", "agent", "staff", "extranet"],
+    },
     {
       label: "Manage Masters",
       // to: "/manage-masters",
@@ -189,19 +191,19 @@ const offcanvasRef = useRef(null);
       children: [
         { label: "Sub User", to: "/agentregistration/sub-user" },
         { label: "Sub Agent", to: "/agentregistration/sub-agent" },
-      
       ],
     },
     {
       label: "New Booking",
-      roles: ["admin","agent"],
+      roles: ["admin", "agent"],
       children: [
         { label: "Hotel Booking", to: "/new-booking/hotel" },
         {
           label: "Make Your Own Package",
           to: "/new-booking/make-your-own-package",
         },
-        { label: "Package Booking", to: "/new-booking/package" },
+        // { label: "Package Booking", to: "/new-booking/package" },
+        { label: "Cab Booking", to: "/new-booking/cab" },
         {
           label: "Tours and Activity",
           to: "/new-booking/tours-and-activities",
@@ -245,7 +247,7 @@ const offcanvasRef = useRef(null);
     },
     {
       label: "Inhouse Accounts",
-      roles: ["admin" ,"agent"],
+      roles: ["admin", "agent"],
       children: [
         {
           label: "Agent Accounts",
@@ -259,7 +261,7 @@ const offcanvasRef = useRef(null);
           label: "Statement of Accounts Online",
           to: "/inhouse-accounts/statement-of-accounts-online",
         },
-         {
+        {
           label: "Statement of Accounts offline",
           to: "/inhouse-accounts/statement-of-accounts-offline",
         },
@@ -270,13 +272,17 @@ const offcanvasRef = useRef(null);
       to: "/assigned-agents",
       roles: ["admin"],
     },
-    { label: "Calendar", to: "/calendar", roles: ["admin", "agent", "staff", "extranet"] },
+    {
+      label: "Calendar",
+      to: "/calendar",
+      roles: ["admin", "agent", "staff", "extranet"],
+    },
     {
       label: "Extranet Contract",
       to: "/extranet-contract",
       roles: ["admin"],
     },
-{
+    {
       label: "Report",
       to: "/report",
       roles: ["admin", "agent"],
@@ -361,7 +367,6 @@ const offcanvasRef = useRef(null);
       to: "/upload-offer-image",
       roles: ["admin"],
     },
-    
   ];
 
   // Filter menu based on allowed roles
@@ -371,33 +376,37 @@ const offcanvasRef = useRef(null);
   });
 
   const toggleGroup = (groupKey, isTopLevelItem = false) => {
-    console.log('Toggling group:', groupKey, 'isTopLevelItem:', isTopLevelItem); // Debug log
+    console.log("Toggling group:", groupKey, "isTopLevelItem:", isTopLevelItem); // Debug log
     setOpenGroups((prev) => {
       const newOpenGroups = {};
-      
+
       // If it's a top-level menu item (like "Registration", "Manage Masters", etc.)
       if (isTopLevelItem) {
         // Get list of all top-level menu item labels that have children or groups
         const topLevelItems = filteredItems
-          .filter(item => (Array.isArray(item.children) && item.children.length > 0) || (Array.isArray(item.groups) && item.groups.length > 0))
-          .map(item => item.label);
-        
+          .filter(
+            (item) =>
+              (Array.isArray(item.children) && item.children.length > 0) ||
+              (Array.isArray(item.groups) && item.groups.length > 0),
+          )
+          .map((item) => item.label);
+
         // Close all other top-level items and their nested groups
         Object.keys(prev).forEach((key) => {
           // Skip the clicked item (we'll handle it separately)
           if (key === groupKey) {
             return;
           }
-          
+
           // If it's a top-level item, don't keep it (close it)
           if (topLevelItems.includes(key)) {
             return; // Close this top-level item
           }
-          
+
           // If it's a nested group, check if it belongs to a closed top-level item
           // Nested groups have format: "ParentItem-GroupName"
-          if (key.includes('-')) {
-            const parentName = key.split('-')[0];
+          if (key.includes("-")) {
+            const parentName = key.split("-")[0];
             // Close nested groups that belong to other top-level items
             if (topLevelItems.includes(parentName) && parentName !== groupKey) {
               return; // Close nested groups of other top-level items
@@ -411,14 +420,14 @@ const offcanvasRef = useRef(null);
             newOpenGroups[key] = prev[key];
           }
         });
-        
+
         // Toggle the clicked top-level item
         newOpenGroups[groupKey] = !prev[groupKey];
-        
+
         // If we're closing the clicked item, also remove its nested groups
         if (!newOpenGroups[groupKey]) {
           Object.keys(newOpenGroups).forEach((key) => {
-            if (key.includes('-') && key.startsWith(groupKey + '-')) {
+            if (key.includes("-") && key.startsWith(groupKey + "-")) {
               delete newOpenGroups[key];
             }
           });
@@ -431,8 +440,8 @@ const offcanvasRef = useRef(null);
         });
         newOpenGroups[groupKey] = !prev[groupKey];
       }
-      
-      console.log('New open groups:', newOpenGroups); // Debug log
+
+      console.log("New open groups:", newOpenGroups); // Debug log
       return newOpenGroups;
     });
   };
@@ -441,58 +450,68 @@ const offcanvasRef = useRef(null);
     <>
       {/* Hamburger for small screens */}
 
-     <header className="top-navbar d-flex align-items-center">
-  {!show && (   // ✅ hide when offcanvas is open
-    <Button
-      variant="link"
-      className="hamburger d-lg-none"
-      onClick={handleShow}
-      aria-label="Open menu"
-      style={{
-        position: "fixed",
-        
-        zIndex: 4000
-      }}
-    >
-      ☰
-    </Button>
-  )}
-</header>
+      <header className="top-navbar d-flex align-items-center">
+        {!show && ( // ✅ hide when offcanvas is open
+          <Button
+            variant="link"
+            className="hamburger d-lg-none"
+            onClick={handleShow}
+            aria-label="Open menu"
+            style={{
+              position: "fixed",
+
+              zIndex: 4000,
+            }}
+          >
+            ☰
+          </Button>
+        )}
+      </header>
 
       {/* Sidebar for large screens */}
-      <aside className="sidebar d-none d-lg-block"
-      ref={sidebarRef}
-       style={{
-    position: "sticky",
-    top: "60px",                     // 👈 height of top bar
-    height: "calc(100vh - 60px)",    // 👈 reserve space
-    background: "#fff",
-    borderRight: "1px solid #e5e7eb",
-    zIndex: 100,
-    // zIndex: 100,
-  }}>
+      <aside
+        className="sidebar d-none d-lg-block"
+        ref={sidebarRef}
+        style={{
+          position: "sticky",
+          top: "60px", // 👈 height of top bar
+          height: "calc(100vh - 60px)", // 👈 reserve space
+          background: "#fff",
+          borderRight: "1px solid #e5e7eb",
+          zIndex: 100,
+          // zIndex: 100,
+        }}
+      >
         <Nav className="flex-column">
           {filteredItems.map((item) => {
-            const hasChildren = Array.isArray(item.children) && item.children.length > 0;
-            const hasGroups = Array.isArray(item.groups) && item.groups.length > 0;
+            const hasChildren =
+              Array.isArray(item.children) && item.children.length > 0;
+            const hasGroups =
+              Array.isArray(item.groups) && item.groups.length > 0;
 
             return (
               <Nav.Item
                 key={item.label}
-                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${(item.label === "Report" || item.label === "Inhouse Accounts") ? "submenu-up" : ""}`}
+                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${item.label === "Report" || item.label === "Inhouse Accounts" ? "submenu-up" : ""}`}
               >
-                <Nav.Link 
-                  as={hasChildren || hasGroups ? "div" : Link} 
-                  to={hasChildren || hasGroups ? undefined : (item.to || "#")} 
+                <Nav.Link
+                  as={hasChildren || hasGroups ? "div" : Link}
+                  to={hasChildren || hasGroups ? undefined : item.to || "#"}
                   className="d-flex align-items-center justify-content-between"
-                  onClick={hasChildren || hasGroups ? (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('Clicked on:', item.label); // Debug log
-                    const groupKey = item.label;
-                    toggleGroup(groupKey, true); // Pass true to indicate it's a top-level item
-                  } : undefined}
-                  style={{ cursor: hasChildren || hasGroups ? "pointer" : "default" }}
+                  onClick={
+                    hasChildren || hasGroups
+                      ? (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log("Clicked on:", item.label); // Debug log
+                          const groupKey = item.label;
+                          toggleGroup(groupKey, true); // Pass true to indicate it's a top-level item
+                        }
+                      : undefined
+                  }
+                  style={{
+                    cursor: hasChildren || hasGroups ? "pointer" : "default",
+                  }}
                 >
                   <span className="d-flex align-items-center">
                     <span className="me-2">{getIcon(item.label)}</span>
@@ -506,24 +525,23 @@ const offcanvasRef = useRef(null);
                 </Nav.Link>
 
                 {(hasChildren || hasGroups) && (
-                  <div 
-                    className={`submenu ${openGroups[item.label] ? 'show' : ''}`}
-                    style={{ 
-                      display: openGroups[item.label] ? 'block' : 'none',
-                      zIndex: 9999 ,
-                       marginLeft: "12px",
-                       marginTop: "6px",
-                       paddingLeft: "8px",
-                       borderLeft: "1px solid #e5e7eb",
+                  <div
+                    className={`submenu ${openGroups[item.label] ? "show" : ""}`}
+                    style={{
+                      display: openGroups[item.label] ? "block" : "none",
+                      zIndex: 9999,
+                      marginLeft: "12px",
+                      marginTop: "6px",
+                      paddingLeft: "8px",
+                      borderLeft: "1px solid #e5e7eb",
 
-    // ⭐ IMPORTANT FIX
-    maxHeight: "380px",     // controls submenu height
-    overflowY: "auto",      // enables scroll
-     scrollbarWidth: "thin",          // Firefox
-    scrollbarColor: "#eeeaea",
+                      // ⭐ IMPORTANT FIX
+                      maxHeight: "380px", // controls submenu height
+                      overflowY: "auto", // enables scroll
+                      scrollbarWidth: "thin", // Firefox
+                      scrollbarColor: "#eeeaea",
                     }}
-
- >
+                  >
                     {hasChildren &&
                       item.children.map((child) => (
                         <Nav.Link
@@ -531,13 +549,13 @@ const offcanvasRef = useRef(null);
                           to={child.to}
                           key={`${item.label}-${child.label}`}
                           className="submenu-link"
-                          style={{ 
-                            display: 'block',
-                            padding: '8px 12px',
-                            color: '#111827',
-                            textDecoration: 'none',
-                            cursor: 'pointer',
-                            fontWeight:450,
+                          style={{
+                            display: "block",
+                            padding: "8px 12px",
+                            color: "#111827",
+                            textDecoration: "none",
+                            cursor: "pointer",
+                            fontWeight: 450,
                           }}
                         >
                           {child.label}
@@ -560,7 +578,9 @@ const offcanvasRef = useRef(null);
                               }}
                             >
                               <span>{group.label}</span>
-                              <span className="caret-small">{isOpen ? "▴" : "▾"}</span>
+                              <span className="caret-small">
+                                {isOpen ? "▴" : "▾"}
+                              </span>
                             </button>
                             {isOpen && (
                               <div className="submenu-children">
@@ -595,20 +615,31 @@ const offcanvasRef = useRef(null);
         <Offcanvas.Body ref={offcanvasRef}>
           <Nav className="flex-column">
             {filteredItems.map((item) => {
-              const hasChildren = Array.isArray(item.children) && item.children.length > 0;
-              const hasGroups = Array.isArray(item.groups) && item.groups.length > 0;
+              const hasChildren =
+                Array.isArray(item.children) && item.children.length > 0;
+              const hasGroups =
+                Array.isArray(item.groups) && item.groups.length > 0;
 
               return (
-                <Nav.Item key={item.label} className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""}`}>
-                  <Nav.Link 
-                    as={hasChildren || hasGroups ? "div" : Link} 
-                    to={hasChildren || hasGroups ? undefined : (item.to || "#")} 
-                    onClick={hasChildren || hasGroups ? (e) => {
-                      e.preventDefault();
-                      const groupKey = item.label;
-                      toggleGroup(groupKey, true); // Pass true to indicate it's a top-level item
-                    } : handleClose}
-                    style={{ cursor: hasChildren || hasGroups ? "pointer" : "default" }}
+                <Nav.Item
+                  key={item.label}
+                  className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""}`}
+                >
+                  <Nav.Link
+                    as={hasChildren || hasGroups ? "div" : Link}
+                    to={hasChildren || hasGroups ? undefined : item.to || "#"}
+                    onClick={
+                      hasChildren || hasGroups
+                        ? (e) => {
+                            e.preventDefault();
+                            const groupKey = item.label;
+                            toggleGroup(groupKey, true); // Pass true to indicate it's a top-level item
+                          }
+                        : handleClose
+                    }
+                    style={{
+                      cursor: hasChildren || hasGroups ? "pointer" : "default",
+                    }}
                   >
                     {getIcon(item.label)} {item.label}
                     {(hasChildren || hasGroups) && (
@@ -619,11 +650,11 @@ const offcanvasRef = useRef(null);
                   </Nav.Link>
 
                   {(hasChildren || hasGroups) && (
-                    <div 
-                      className={`submenu ${openGroups[item.label] ? 'show' : ''}`}
-                      style={{ 
-                        display: openGroups[item.label] ? 'block' : 'none',
-                        zIndex: 9999 
+                    <div
+                      className={`submenu ${openGroups[item.label] ? "show" : ""}`}
+                      style={{
+                        display: openGroups[item.label] ? "block" : "none",
+                        zIndex: 9999,
                       }}
                     >
                       {hasChildren &&
@@ -634,12 +665,12 @@ const offcanvasRef = useRef(null);
                             key={`${item.label}-mobile-${child.label}`}
                             onClick={handleClose}
                             className="submenu-link"
-                            style={{ 
-                              display: 'block',
-                              padding: '8px 12px',
-                              color: '#111827',
-                              textDecoration: 'none',
-                              cursor: 'pointer'
+                            style={{
+                              display: "block",
+                              padding: "8px 12px",
+                              color: "#111827",
+                              textDecoration: "none",
+                              cursor: "pointer",
                             }}
                           >
                             {child.label}
@@ -650,7 +681,10 @@ const offcanvasRef = useRef(null);
                           const groupKey = `${item.label}-${group.label}`;
                           const isOpen = !!openGroups[groupKey];
                           return (
-                            <div key={`${group.label}-mobile`} className="submenu-group">
+                            <div
+                              key={`${group.label}-mobile`}
+                              className="submenu-group"
+                            >
                               <button
                                 type="button"
                                 className={`submenu-accordion-header d-flex justify-content-between align-items-center ${
@@ -662,7 +696,9 @@ const offcanvasRef = useRef(null);
                                 }}
                               >
                                 <span>{group.label}</span>
-                                <span className="caret-small">{isOpen ? "▴" : "▾"}</span>
+                                <span className="caret-small">
+                                  {isOpen ? "▴" : "▾"}
+                                </span>
                               </button>
                               {isOpen && (
                                 <div className="submenu-children">
@@ -697,7 +733,7 @@ const offcanvasRef = useRef(null);
 function getIcon(label) {
   const iconProps = {
     size: 18,
-    strokeWidth: 1.5,   // 👈 thinner (IMPORTANT)
+    strokeWidth: 1.5, // 👈 thinner (IMPORTANT)
     className: "sidebar-icon",
   };
 
@@ -748,4 +784,3 @@ function getIcon(label) {
       return <Dot {...iconProps} />;
   }
 }
-
