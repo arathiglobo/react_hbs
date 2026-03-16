@@ -7,8 +7,10 @@ import {
   Button,
   Spinner,
   Table,
+  Modal,
+  Badge,
 } from "react-bootstrap";
-import { FaTicketAlt, FaSearch, FaStar, FaUsers } from "react-icons/fa";
+import { FaTicketAlt, FaSearch, FaStar, FaUsers, FaEye } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -95,6 +97,8 @@ const ActivitySearch = () => {
   const [tourResults, setTourResults] = useState([]);
   const [tourLoading, setTourLoading] = useState(false);
   const [hasTourSearched, setHasTourSearched] = useState(false);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState(null);
 
   // Country & Destination state
   const [nationalityList, setNationalityList] = useState([]);
@@ -549,13 +553,27 @@ const ActivitySearch = () => {
                                       {activity.duration && <span className="me-3"><i className="bi bi-clock"></i> Duration: {activity.duration} hrs</span>}
                                       <span><FaUsers className="me-1"/> Max: {activity.maxPax || "N/A"}</span>
                                   </div>
-                                  <Button
-                                    variant="primary"
-                                    className="px-4 rounded-pill fw-medium shadow-sm transition-all"
-                                    onClick={() => handleBookNow(activity)}
-                                  >
-                                    Book Now
-                                  </Button>
+                                  <div className="d-flex gap-2">
+                                    <Button
+                                      variant="info"
+                                      className="rounded-pill d-flex align-items-center justify-content-center text-white"
+                                      style={{ width: "40px", height: "40px", padding: 0 }}
+                                      onClick={() => {
+                                        setSelectedActivity(activity);
+                                        setShowActivityModal(true);
+                                      }}
+                                      title="View Details"
+                                    >
+                                      <FaEye size={16} />
+                                    </Button>
+                                    <Button
+                                      variant="primary"
+                                      className="px-4 rounded-pill fw-medium shadow-sm transition-all"
+                                      onClick={() => handleBookNow(activity)}
+                                    >
+                                      Book Now
+                                    </Button>
+                                  </div>
                                 </div>
                               </Col>
                             </Row>
@@ -567,7 +585,6 @@ const ActivitySearch = () => {
                 </div>
               )}
 
-              {/* No Results State */}
               {hasTourSearched && !tourLoading && tourResults.length === 0 && (
                 <div className="text-center text-muted mt-5 py-5 bg-white rounded-4 shadow-sm border-0">
                   <FaTicketAlt className="display-4 text-warning mb-3 opacity-75" />
@@ -577,6 +594,168 @@ const ActivitySearch = () => {
               )}
             </Card.Body>
           </Card>
+
+          {/* Activity Details Modal */}
+          <Modal
+            show={showActivityModal}
+            onHide={() => {
+              setShowActivityModal(false);
+              setSelectedActivity(null);
+            }}
+            size="lg"
+            centered
+          >
+            <Modal.Header closeButton>
+              <Modal.Title>Activity Details</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {selectedActivity && (
+                <>
+                  <div className="mb-4">
+                    <img
+                      src={selectedActivity.activityImage}
+                      alt={selectedActivity.activityName}
+                      style={{
+                        width: "100%",
+                        height: "300px",
+                        objectFit: "cover",
+                        borderRadius: "8px",
+                      }}
+                      onError={(e) => {
+                        e.target.src =
+                          "https://via.placeholder.com/800x300?text=Activity+Image";
+                      }}
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <h4 className="fw-bold">
+                      {selectedActivity.activityName || "Activity Name"}
+                    </h4>
+                    {selectedActivity.starRating > 0 && (
+                      <div className="d-flex align-items-center mb-2">
+                        <FaStar className="text-warning me-1" />
+                        <span>{selectedActivity.starRating} Star Rating</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedActivity.activityDetails && (
+                    <div className="mb-3">
+                      <h6 className="fw-semibold mb-2">Description</h6>
+                      <p
+                        className="text-muted"
+                        style={{ whiteSpace: "pre-wrap" }}
+                        dangerouslySetInnerHTML={{ __html: selectedActivity.activityDetails }}
+                      >
+                      </p>
+                    </div>
+                  )}
+
+                  <Row className="g-3 mb-3">
+                    {selectedActivity.minPaxsic > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Min Pax:</strong> {selectedActivity.minPaxsic}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.maxPax > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Max Pax:</strong> {selectedActivity.maxPax}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.childMin > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Child Age Range:</strong>{" "}
+                          {selectedActivity.childMin} -{" "}
+                          {selectedActivity.childMax} years
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.duration && (
+                      <Col md={6}>
+                        <div>
+                          <FaTicketAlt className="me-2" />
+                          <strong>Duration:</strong> {selectedActivity.duration}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.adultRate > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Adult Rate:</strong>{" "}
+                          {selectedActivity.currency}{" "}
+                          {selectedActivity.adultRate.toLocaleString()}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.childRate > 0 && (
+                      <Col md={6}>
+                        <div>
+                          <strong>Child Rate:</strong>{" "}
+                          {selectedActivity.currency}{" "}
+                          {selectedActivity.childRate.toLocaleString()}
+                        </div>
+                      </Col>
+                    )}
+                    {selectedActivity.apiType && (
+                      <Col md={6}>
+                        <div>
+                          <strong>API Type:</strong> {selectedActivity.apiType}
+                        </div>
+                      </Col>
+                    )}
+                  </Row>
+
+                  <div className="mt-4 p-3 bg-light rounded">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <div>
+                        <h5 className="mb-0">
+                          {selectedActivity.totalRate > 0
+                            ? `${selectedActivity.currency} ${selectedActivity.totalRate.toLocaleString()}`
+                            : "Price on request"}
+                        </h5>
+                        {selectedActivity.totalRateWithoutMrk > 0 &&
+                          selectedActivity.totalRateWithoutMrk !==
+                          selectedActivity.totalRate && (
+                            <small className="text-muted">
+                              Without markup: {selectedActivity.currency}{" "}
+                              {selectedActivity.totalRateWithoutMrk.toLocaleString()}
+                            </small>
+                          )}
+                      </div>
+                      <Badge
+                        bg={
+                          selectedActivity.totalRate > 0
+                            ? "success"
+                            : "secondary"
+                        }
+                      >
+                        {selectedActivity.totalRate > 0
+                          ? "Rate Available"
+                          : "Rate on Request"}
+                      </Badge>
+                    </div>
+                  </div>
+                </>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowActivityModal(false);
+                  setSelectedActivity(null);
+                }}
+              >
+                Close
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>

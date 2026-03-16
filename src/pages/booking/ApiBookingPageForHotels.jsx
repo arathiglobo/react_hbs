@@ -1057,7 +1057,7 @@ const ApiBookingPageForHotels = () => {
                       />
                     </Form.Group>
                   </Col>
-                  {selectedRate?.roomStatus !== "On Request" && (
+                  {/* {selectedRate?.roomStatus !== "On Request" && (
                     <Col md={12}>
                       <Form.Group className="mb-3">
                         <Form.Label className="mb-2 fw-semibold">
@@ -1092,7 +1092,7 @@ const ApiBookingPageForHotels = () => {
                         </div>
                       </Form.Group>
                     </Col>
-                  )}
+                  )} */}
                 </Row>
               </Card>
 
