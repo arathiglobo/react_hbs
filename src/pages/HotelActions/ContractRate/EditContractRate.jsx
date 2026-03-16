@@ -9,6 +9,8 @@ import {
   Card,
   Spinner,
   Table,
+  Overlay,
+  Popover,
 } from "react-bootstrap";
 import { FaArrowLeft, FaSave, FaPlus } from "react-icons/fa";
 import Select from "react-select";
@@ -39,6 +41,11 @@ export default function EditContractRate() {
   const [roomLoading, setRoomLoading] = useState(false);
   const [seasonTypes, setSeasonTypes] = useState([]);
   const [fetchingData, setFetchingData] = useState(true);
+
+  // Cell confirmation popup state
+  const [showCellConfirm, setShowCellConfirm] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [confirmData, setConfirmData] = useState(null);
 
   // ✅ Helper function to get minimum date for Validity To (From date + 1 minute)
   const getMinValidityToDate = (fromDate) => {
@@ -297,6 +304,21 @@ export default function EditContractRate() {
     }
 
     return null;
+  };
+
+  // ✅ Handle onBlur for inline cell confirmation
+  const handleBlur = (e, roomId, occName, roomTypeId, roomTypeName, field, value) => {
+    if (value && Number(value) > 0) {
+      const target = e.target;
+      // Delay to ensure click events that caused the blur don't immediately trigger rootClose
+      setTimeout(() => {
+        setConfirmTarget(target);
+        setConfirmData({ roomId, occName, roomTypeId, roomTypeName, field, value });
+        setShowCellConfirm(true);
+      }, 150);
+    } else {
+      setShowCellConfirm(false);
+    }
   };
 
   // ✅ Handle rate input change
@@ -739,6 +761,17 @@ export default function EditContractRate() {
                                                   e.target.value
                                                 )
                                               }
+                                              onBlur={(e) =>
+                                                handleBlur(
+                                                  e,
+                                                  room.hotelRoomcategoryId,
+                                                  occ.occupanyType,
+                                                  roomType.roomTypeId,
+                                                  roomType.roomTypeName,
+                                                  field,
+                                                  e.target.value
+                                                )
+                                              }
                                             />
                                           </td>
                                         )
@@ -775,6 +808,32 @@ export default function EditContractRate() {
                 </>
               )}
             </Card>
+            {/* ✅ Inline cell confirmation popup */}
+            <Overlay show={showCellConfirm} target={confirmTarget} placement="top" rootClose rootCloseEvent="mousedown" onHide={() => setShowCellConfirm(false)}>
+              <Popover id="popover-confirm-rate-edit">
+                <Popover.Header as="h6" className="py-1 bg-warning text-dark">Confirm Rate</Popover.Header>
+                <Popover.Body className="p-2">
+                  <div className="mb-2 text-center text-dark" style={{ fontSize: "0.9rem" }}>
+                    Verify {confirmData?.field === "rate" ? "Rate" : confirmData?.field === "adultRate" ? "Extra Adult" : "Extra Child"} of <strong>{confirmData?.value}</strong> for {confirmData?.occName} with <strong>{confirmData?.roomTypeName}</strong>?
+                  </div>
+                  <div className="d-flex justify-content-center gap-2">
+                    <Button size="sm" variant="success" onClick={(e) => { e.stopPropagation(); setShowCellConfirm(false); }}>
+                      Yes
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={(e) => {
+                      e.stopPropagation();
+                      const currentRoom = hotelRooms.find(r => r.hotelRoomcategoryId === confirmData.roomId);
+                      const currentOcc = currentRoom?.occupancyDetailsDTOs.find(o => o.occupanyType === confirmData.occName);
+
+                      handleRateChange(confirmData.roomId, currentOcc?.id || "", confirmData.roomTypeId, confirmData.roomTypeName, confirmData.field, "");
+                      setShowCellConfirm(false);
+                    }}>
+                      No
+                    </Button>
+                  </div>
+                </Popover.Body>
+              </Popover>
+            </Overlay>
           </Container>
         </main>
       </div>

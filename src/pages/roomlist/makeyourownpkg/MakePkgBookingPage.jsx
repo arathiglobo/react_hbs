@@ -68,19 +68,16 @@ const MakePkgBookingPage = () => {
   const [hotelBookingConfirmation, setHotelBookingConfirmation] = useState({});
   const [totalPrice, setTotalPrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
-  
+
   // Itinerary state
   const [itineraryList, setItineraryList] = useState([]);
-  const [selectedItineraries, setSelectedItineraries] = useState({
-    day1: [],
-    day2: []
-  });
+  const [selectedItineraries, setSelectedItineraries] = useState({});
   const [loadingItinerary, setLoadingItinerary] = useState(false);
   const [itineraryExpanded, setItineraryExpanded] = useState(false);
-  
+
   // Itinerary modal state
   const [showItineraryModal, setShowItineraryModal] = useState(false);
-  const [currentDay, setCurrentDay] = useState(null); // 'day1' or 'day2'
+  const [currentDay, setCurrentDay] = useState(null); // stores the activity date string
   const [itinerarySearchTerm, setItinerarySearchTerm] = useState("");
   const [filteredItineraryList, setFilteredItineraryList] = useState([]);
   const [expandedDescriptions, setExpandedDescriptions] = useState({});
@@ -109,16 +106,22 @@ const MakePkgBookingPage = () => {
           const adults = parseInt(room.adult || room.adults || 1);
           const children = parseInt(room.child || room.children || 0);
           const totalGuests = adults + children;
-          
+
           const key = `${hotelIndex}-${roomIndex}`;
-          guests[key] = Array.from({ length: totalGuests }, (_, guestIndex) => ({
-            salutation: "",
-            firstName: "",
-            lastName: "",
-            gender: "",
-            isChild: guestIndex >= adults,
-            age: guestIndex >= adults ? (room.childAge?.[guestIndex - adults] || "") : "",
-          }));
+          guests[key] = Array.from(
+            { length: totalGuests },
+            (_, guestIndex) => ({
+              salutation: "",
+              firstName: "",
+              lastName: "",
+              gender: "",
+              isChild: guestIndex >= adults,
+              age:
+                guestIndex >= adults
+                  ? room.childAge?.[guestIndex - adults] || ""
+                  : "",
+            }),
+          );
         });
       }
     });
@@ -133,7 +136,12 @@ const MakePkgBookingPage = () => {
         const cab = item.cab || {};
         const cabDetails = cab.details || {};
         details[index] = {
-          transporterName: cab.transporter || cab.transporterName || cabDetails.transporter || cabDetails.transporterName || "",
+          transporterName:
+            cab.transporter ||
+            cab.transporterName ||
+            cabDetails.transporter ||
+            cabDetails.transporterName ||
+            "",
           contactNumber: cab.contactNumber || cabDetails.contactNumber || "",
           driverName: cab.driverName || cabDetails.driverName || "",
           driverContact: cab.driverContact || cabDetails.driverContact || "",
@@ -149,7 +157,7 @@ const MakePkgBookingPage = () => {
     const remarks = {};
     const specialRequests = {};
     const bookingConfirmations = {};
-    
+
     let hotelIndex = 0;
     cartItems.forEach((item) => {
       if (item.hotel) {
@@ -160,7 +168,7 @@ const MakePkgBookingPage = () => {
         hotelIndex++;
       }
     });
-    
+
     setHotelTourismDirhams(tourismDirhams);
     setHotelRemarks(remarks);
     setHotelSpecialRequests(specialRequests);
@@ -197,7 +205,13 @@ const MakePkgBookingPage = () => {
   }, [navigate]);
 
   // Handle guest detail change
-  const handleGuestChange = (hotelIndex, roomIndex, guestIndex, field, value) => {
+  const handleGuestChange = (
+    hotelIndex,
+    roomIndex,
+    guestIndex,
+    field,
+    value,
+  ) => {
     const key = `${hotelIndex}-${roomIndex}`;
     setRoomGuests((prev) => {
       const updated = { ...prev };
@@ -205,7 +219,7 @@ const MakePkgBookingPage = () => {
         updated[key] = [];
       }
       const guests = [...updated[key]];
-      
+
       // Ensure guest object exists, create if it doesn't
       if (!guests[guestIndex]) {
         guests[guestIndex] = {
@@ -217,13 +231,13 @@ const MakePkgBookingPage = () => {
           age: "",
         };
       }
-      
+
       // Update the guest field
       guests[guestIndex] = {
         ...guests[guestIndex],
         [field]: value,
       };
-      
+
       updated[key] = guests;
       return updated;
     });
@@ -290,7 +304,7 @@ const MakePkgBookingPage = () => {
     }
   };
 
-   useEffect(() => { 
+  useEffect(() => {
     fetchItineraryDetails();
   }, []);
 
@@ -330,18 +344,18 @@ const MakePkgBookingPage = () => {
   // Handle itinerary selection in modal
   const handleItineraryToggle = (itineraryId) => {
     if (!currentDay) return;
-    
+
     setSelectedItineraries((prev) => {
       const dayItineraries = prev[currentDay] || [];
       if (dayItineraries.includes(itineraryId)) {
         return {
           ...prev,
-          [currentDay]: dayItineraries.filter((id) => id !== itineraryId)
+          [currentDay]: dayItineraries.filter((id) => id !== itineraryId),
         };
       } else {
         return {
           ...prev,
-          [currentDay]: [...dayItineraries, itineraryId]
+          [currentDay]: [...dayItineraries, itineraryId],
         };
       }
     });
@@ -358,7 +372,9 @@ const MakePkgBookingPage = () => {
         // Selling Price = totalRate (with markup)
         const sellPrice = parseFloat(hotel.totalRate || 0);
         // Total Price = totalRateWithoutmrk (without markup)
-        const price = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
+        const price = parseFloat(
+          hotel.totalRateWithoutmrk || hotel.totalRate || 0,
+        );
         total += price;
         selling += sellPrice;
       } else if (item.activity) {
@@ -366,7 +382,9 @@ const MakePkgBookingPage = () => {
         // Selling Price = totalRate (with markup)
         const sellPrice = parseFloat(activity.totalRate || 0);
         // Total Price = totalRateWithoutmrk (without markup)
-        const price = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
+        const price = parseFloat(
+          activity.totalRateWithoutmrk || activity.totalRate || 0,
+        );
         total += price;
         selling += sellPrice;
       } else if (item.cab) {
@@ -408,6 +426,28 @@ const MakePkgBookingPage = () => {
       }
       const date = new Date(dateString);
       return date.toLocaleDateString("en-GB");
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Format activity date for accordion header (e.g., 25 Mar 2026)
+  const formatActivityDateHeader = (dateString) => {
+    if (!dateString) return "";
+    try {
+      let date;
+      if (dateString.includes("/")) {
+        const [day, month, year] = dateString.split("/");
+        date = new Date(year, month - 1, day);
+      } else {
+        date = new Date(dateString);
+      }
+      if (isNaN(date.getTime())) return dateString;
+      return date.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
     } catch {
       return dateString;
     }
@@ -467,14 +507,14 @@ const MakePkgBookingPage = () => {
       } else {
         start = new Date(checkIn);
       }
-      
+
       if (checkOut.includes("/")) {
         const [day, month, year] = checkOut.split("/");
         end = new Date(year, month - 1, day);
       } else {
         end = new Date(checkOut);
       }
-      
+
       if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
       const diffTime = Math.abs(end - start);
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -502,7 +542,10 @@ const MakePkgBookingPage = () => {
       errors.primaryGuest_lastName = "Last Name is required";
       hasErrors = true;
     }
-    if (!primaryGuest.contactNumber || primaryGuest.contactNumber.trim() === "") {
+    if (
+      !primaryGuest.contactNumber ||
+      primaryGuest.contactNumber.trim() === ""
+    ) {
       errors.primaryGuest_contactNumber = "Contact Number is required";
       hasErrors = true;
     }
@@ -524,7 +567,7 @@ const MakePkgBookingPage = () => {
       hotels.forEach((item, hotelIndex) => {
         const hotel = item.hotel || {};
         const searchRoomDTOs = hotel.searchRoomDTOs || [];
-        
+
         // Find hotel index in cartData
         let hotelIndexInCart = -1;
         let hotelCount = 0;
@@ -542,24 +585,39 @@ const MakePkgBookingPage = () => {
           searchRoomDTOs.forEach((room, roomIndex) => {
             const guestKey = `${hotelIndexInCart}-${roomIndex}`;
             const guests = roomGuests[guestKey] || [];
-            
+
             guests.forEach((guest, guestIndex) => {
               // Use hotelIndexInCart for error key to match the guestKey used in rendering
               const errorPrefix = `hotel_${hotelIndexInCart}_room_${roomIndex}_guest_${guestIndex}`;
-              
-              if (!guest.salutation || (typeof guest.salutation === 'string' && guest.salutation.trim() === "")) {
+
+              if (
+                !guest.salutation ||
+                (typeof guest.salutation === "string" &&
+                  guest.salutation.trim() === "")
+              ) {
                 errors[`${errorPrefix}_salutation`] = "Salutation is required";
                 hasErrors = true;
               }
-              if (!guest.firstName || (typeof guest.firstName === 'string' && guest.firstName.trim() === "")) {
+              if (
+                !guest.firstName ||
+                (typeof guest.firstName === "string" &&
+                  guest.firstName.trim() === "")
+              ) {
                 errors[`${errorPrefix}_firstName`] = "First Name is required";
                 hasErrors = true;
               }
-              if (!guest.lastName || (typeof guest.lastName === 'string' && guest.lastName.trim() === "")) {
+              if (
+                !guest.lastName ||
+                (typeof guest.lastName === "string" &&
+                  guest.lastName.trim() === "")
+              ) {
                 errors[`${errorPrefix}_lastName`] = "Last Name is required";
                 hasErrors = true;
               }
-              if (!guest.gender || (typeof guest.gender === 'string' && guest.gender.trim() === "")) {
+              if (
+                !guest.gender ||
+                (typeof guest.gender === "string" && guest.gender.trim() === "")
+              ) {
                 errors[`${errorPrefix}_gender`] = "Gender is required";
                 hasErrors = true;
               }
@@ -586,9 +644,12 @@ const MakePkgBookingPage = () => {
       toast.error("Please fill in all required fields correctly.");
       // Scroll to first error
       setTimeout(() => {
-        const firstErrorField = document.querySelector('.is-invalid');
+        const firstErrorField = document.querySelector(".is-invalid");
         if (firstErrorField) {
-          firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstErrorField.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }
       }, 100);
       return;
@@ -608,11 +669,10 @@ const MakePkgBookingPage = () => {
       const hotels = getHotels();
       const activities = getActivities();
       const transfers = getTransfers();
-      
+
       // Find hotel index in cartData
-      const hotelIndexInCart = hotels.length > 0 
-        ? cartData.findIndex((item) => item.hotel)
-        : -1;
+      const hotelIndexInCart =
+        hotels.length > 0 ? cartData.findIndex((item) => item.hotel) : -1;
 
       // Prepare booking payload
       const firstHotel = hotels.length > 0 ? hotels[0].hotel : null;
@@ -621,13 +681,13 @@ const MakePkgBookingPage = () => {
       const nights = calculateNights(checkIn, checkOut);
 
       console.log("firstHotel:", firstHotel);
- 
-      
+
       // Get travel date from sessionStorage (selected in search page)
       // Priority: sessionStorage travelDate > first activity date > hotel checkIn date
       const storedTravelDate = sessionStorage.getItem("makePkgTravelDate");
-      const firstActivity = activities.length > 0 ? activities[0].activity : null;
-      
+      const firstActivity =
+        activities.length > 0 ? activities[0].activity : null;
+
       let tourDate = "";
       if (storedTravelDate) {
         // Use the travel date from sessionStorage (selected in search page)
@@ -649,7 +709,7 @@ const MakePkgBookingPage = () => {
         const checkIn = hotel.checkIn || hotel.checkInDate || "";
         const checkOut = hotel.checkOut || hotel.checkOutDate || "";
         const nights = calculateNights(checkIn, checkOut);
-        
+
         // Find hotel index in cartData to use for per-hotel state and room guests
         let hotelIndexInCart = -1;
         let hotelCount = 0;
@@ -663,8 +723,9 @@ const MakePkgBookingPage = () => {
           }
         }
         // Fallback to hotelIndex if not found in cartData
-        const actualHotelIndexInCart = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
-        
+        const actualHotelIndexInCart =
+          hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
+
         return {
           agentId: String(sessionStorage.getItem("makePkgAgentId") || "0"),
           apiId: String("INHOUSE"),
@@ -675,26 +736,32 @@ const MakePkgBookingPage = () => {
           checkInDate: formatDateToYYYYMMDD(checkIn),
           checkOutDate: formatDateToYYYYMMDD(checkOut),
           nights: nights,
-          employeeId: "1",        
-          roomStatus: (hotel.available === false || 
-                      hotel.available === "False" || 
-                      hotel.available === "false") ? "On Request" : "Available",
+          employeeId: "1",
+          roomStatus:
+            hotel.available === false ||
+            hotel.available === "False" ||
+            hotel.available === "false"
+              ? "On Request"
+              : "Available",
           cancellationPolicy: (() => {
             const policies = hotel.cancellationPolicy || [];
             if (Array.isArray(policies) && policies.length > 0) {
               // If policies are objects, extract policyText; otherwise use as-is
-              return policies.map((p) => 
-                typeof p === 'string' ? p : (p.policyText || p.text || JSON.stringify(p))
+              return policies.map((p) =>
+                typeof p === "string"
+                  ? p
+                  : p.policyText || p.text || JSON.stringify(p),
               );
             }
             return [];
           })(),
           // Calculate deadlineDate based on nonRefundable and cancellationPolicy
           deadlineDate: (() => {
-            const nonRefundable = hotel.refundstatus === "N" || 
-                                 hotel.nonRefundable === true || 
-                                 hotel.nonRefundable === "true";
-            
+            const nonRefundable =
+              hotel.refundstatus === "N" ||
+              hotel.nonRefundable === true ||
+              hotel.nonRefundable === "true";
+
             if (nonRefundable === true || nonRefundable === "true") {
               // Non-refundable: 2 days before current date
               const today = new Date();
@@ -711,23 +778,25 @@ const MakePkgBookingPage = () => {
               if (policies.length === 0) {
                 return null;
               }
-              
+
               // Find earliest fromDate
               const dates = policies
-                .map(p => {
+                .map((p) => {
                   // Handle both object and string formats
-                  if (typeof p === 'object' && p.fromDate) {
+                  if (typeof p === "object" && p.fromDate) {
                     return new Date(p.fromDate);
                   }
                   return null;
                 })
-                .filter(date => date !== null && !isNaN(date.getTime()));
-              
+                .filter((date) => date !== null && !isNaN(date.getTime()));
+
               if (dates.length === 0) {
                 return null;
               }
-              
-              const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
+
+              const earliestDate = new Date(
+                Math.min(...dates.map((d) => d.getTime())),
+              );
               const deadline = new Date(earliestDate);
               deadline.setDate(earliestDate.getDate() - 2);
               deadline.setHours(0, 0, 0, 0); // Set to midnight
@@ -737,7 +806,9 @@ const MakePkgBookingPage = () => {
               return `${year}-${month}-${day}T00:00:00`;
             }
           })(),
-          isBookandVoucher: (hotelBookingConfirmation[hotelIndex] || "Book & Voucher") === "Book & Voucher",
+          isBookandVoucher:
+            (hotelBookingConfirmation[hotelIndex] || "Book & Voucher") ===
+            "Book & Voucher",
           primaryGuest: {
             firstName: primaryGuest.firstName || "",
             middleName: primaryGuest.middleName || "",
@@ -749,46 +820,60 @@ const MakePkgBookingPage = () => {
             salutaion: primaryGuest.salutation || "",
             agentlpo: primaryGuest.lpo || "",
           },
-          rooms: hotel?.searchRoomDTOs?.map((room, idx) => {
-            const guestKey = `${actualHotelIndexInCart}-${idx}`;
-            const guests = roomGuests[guestKey] || [];
-            
-            // Calculate room rate - divide total hotel rate by number of rooms
-            const totalRooms = hotel.searchRoomDTOs?.length || 1;
-            // Selling Price = totalRate (with markup)
-            const hotelTotalRate = parseFloat(hotel.totalRate || 0);
-            const roomRate = totalRooms > 0 ? hotelTotalRate / totalRooms : hotelTotalRate;
-            // Total Price = totalRateWithoutmrk (without markup)
-            const hotelTotalRateWithoutMarkup = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
-            const roomRateWithoutMarkup = totalRooms > 0 ? hotelTotalRateWithoutMarkup / totalRooms : hotelTotalRateWithoutMarkup;
-            
-            return {
-              roomNo: idx + 1,
-              roomCategory: hotel.roomCategory || "",
-              mealPlan: hotel.roomType || "",
-              nonRefundable: hotel.refundstatus === "N" || hotel.nonRefundable === true || hotel.nonRefundable === "true",
-              currency: hotel.currency || "AED",
-              rate: roomRate,
-              rateWithoutMarkup: roomRateWithoutMarkup,
-              adults: parseInt(room.adult || room.adults || 1),
-              children: parseInt(room.child || room.children || 0),
-              childAges: Array.isArray(room.childAge) 
-                ? room.childAge.map(age => parseInt(age) || 0)
-                : (room.childAge ? [parseInt(room.childAge) || 0] : []),
-              guests: guests.map((guest) => ({
-                salutation: guest.salutation || "",
-                firstName: guest.firstName || "",
-                middleName: guest.middleName || "",
-                lastName: guest.lastName || "",
-                gender: guest.gender || "",
-                isChild: guest.isChild || false,
-              })),
-            };
-          }) || [],
+          rooms:
+            hotel?.searchRoomDTOs?.map((room, idx) => {
+              const guestKey = `${actualHotelIndexInCart}-${idx}`;
+              const guests = roomGuests[guestKey] || [];
+
+              // Calculate room rate - divide total hotel rate by number of rooms
+              const totalRooms = hotel.searchRoomDTOs?.length || 1;
+              // Selling Price = totalRate (with markup)
+              const hotelTotalRate = parseFloat(hotel.totalRate || 0);
+              const roomRate =
+                totalRooms > 0 ? hotelTotalRate / totalRooms : hotelTotalRate;
+              // Total Price = totalRateWithoutmrk (without markup)
+              const hotelTotalRateWithoutMarkup = parseFloat(
+                hotel.totalRateWithoutmrk || hotel.totalRate || 0,
+              );
+              const roomRateWithoutMarkup =
+                totalRooms > 0
+                  ? hotelTotalRateWithoutMarkup / totalRooms
+                  : hotelTotalRateWithoutMarkup;
+
+              return {
+                roomNo: idx + 1,
+                roomCategory: hotel.roomCategory || "",
+                mealPlan: hotel.roomType || "",
+                nonRefundable:
+                  hotel.refundstatus === "N" ||
+                  hotel.nonRefundable === true ||
+                  hotel.nonRefundable === "true",
+                currency: hotel.currency || "AED",
+                rate: roomRate,
+                rateWithoutMarkup: roomRateWithoutMarkup,
+                adults: parseInt(room.adult || room.adults || 1),
+                children: parseInt(room.child || room.children || 0),
+                childAges: Array.isArray(room.childAge)
+                  ? room.childAge.map((age) => parseInt(age) || 0)
+                  : room.childAge
+                    ? [parseInt(room.childAge) || 0]
+                    : [],
+                guests: guests.map((guest) => ({
+                  salutation: guest.salutation || "",
+                  firstName: guest.firstName || "",
+                  middleName: guest.middleName || "",
+                  lastName: guest.lastName || "",
+                  gender: guest.gender || "",
+                  isChild: guest.isChild || false,
+                })),
+              };
+            }) || [],
           remarks: hotelRemarks[hotelIndex] || "",
           specialRequests: hotelSpecialRequests[hotelIndex] || "",
-          tourismDirhams: parseFloat(hotelTourismDirhams[hotelIndex] || "0") || 0,
-          bookingConfirmation: hotelBookingConfirmation[hotelIndex] || "Book & Voucher",
+          tourismDirhams:
+            parseFloat(hotelTourismDirhams[hotelIndex] || "0") || 0,
+          bookingConfirmation:
+            hotelBookingConfirmation[hotelIndex] || "Book & Voucher",
         };
       });
 
@@ -805,23 +890,30 @@ const MakePkgBookingPage = () => {
         visaChildRate: parseFloat(visaDetails.visaChildRate || "0") || 0,
         visaInfant: parseInt(visaDetails.visaInfant || "0") || 0,
         visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
-        hotelBookingRequest: hotelBookingRequests.length > 0 ? hotelBookingRequests : [],
+        hotelBookingRequest:
+          hotelBookingRequests.length > 0 ? hotelBookingRequests : [],
         customBookingActivityDTO: activities.map((item) => {
           const activity = item.activity || {};
           const details = activity.details || {};
           // Selling Price = totalRate (with markup)
           const activitySellingPrice = parseFloat(activity.totalRate || 0);
           // Total Price = totalRateWithoutmrk (without markup)
-          const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
-          
+          const activityTotalPrice = parseFloat(
+            activity.totalRateWithoutmrk || activity.totalRate || 0,
+          );
+
           return {
             activityId: parseInt(activity.activityId || "0") || 0,
             tourDate: formatDateToDDMMYYYY(activity.activityDate || ""),
-            noOfAdult: parseInt(activity.adult || activity.noOfAdult || "1") || 1,
-            noOfChild: parseInt(activity.child || activity.noOfChild || "0") || 0,
-            childAgeArray: Array.isArray(activity.childAge) 
-              ? activity.childAge.map(age => String(age))
-              : (activity.childAge ? [String(activity.childAge)] : []),
+            noOfAdult:
+              parseInt(activity.adult || activity.noOfAdult || "1") || 1,
+            noOfChild:
+              parseInt(activity.child || activity.noOfChild || "0") || 0,
+            childAgeArray: Array.isArray(activity.childAge)
+              ? activity.childAge.map((age) => String(age))
+              : activity.childAge
+                ? [String(activity.childAge)]
+                : [],
             sellingPrice: String(activitySellingPrice.toFixed(2)),
             totalPrice: String(activityTotalPrice.toFixed(2)),
           };
@@ -839,49 +931,90 @@ const MakePkgBookingPage = () => {
               cabCount++;
             }
           }
-          const actualIndex = transferIndexInCart >= 0 ? transferIndexInCart : 0;
+          const actualIndex =
+            transferIndexInCart >= 0 ? transferIndexInCart : 0;
           const transferDetail = transferDetails[actualIndex] || {};
           const cab = item.cab || {};
           const details = cab.details || {};
           // Selling Price = totalRate (with markup)
           const cabTotalRate = parseFloat(cab.totalRate || 0);
           // Total Price = totalRateWithoutmrk (without markup)
-          const cabTotalRateWithoutMrk = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
+          const cabTotalRateWithoutMrk = parseFloat(
+            cab.totalRateWithoutmrk || cab.totalRate || 0,
+          );
 
           return {
             cabId: parseInt(cab.cabId || "0") || 0,
             noOfCabs: parseInt(cab.noOfCabs || "1") || 1,
             pickupDate: formatDateToDDMMYYYY(cab.pickupDate || ""),
-            dropOffDate: formatDateToDDMMYYYY(cab.dropDate || cab.dropOffDate || ""),
+            dropOffDate: formatDateToDDMMYYYY(
+              cab.dropDate || cab.dropOffDate || "",
+            ),
             travelType: parseInt(cab.travelType || "1") || 1,
-            hourDetails: parseInt(cab.hourDetails || cab.timeDetails || "0") || 0,
+            hourDetails:
+              parseInt(cab.hourDetails || cab.timeDetails || "0") || 0,
             dropDetails: parseInt(cab.dropDetails || "1") || 1,
             paxDetails: parseInt(cab.paxDetails || "1") || 1,
-            luggage: cab.luggage === true || cab.luggage === "true" || String(cab.luggage).toLowerCase() === "true",
+            luggage:
+              cab.luggage === true ||
+              cab.luggage === "true" ||
+              String(cab.luggage).toLowerCase() === "true",
             locationId: parseInt(cab.locationId || "0") || 0,
             noOfAdult: parseInt(cab.adult || cab.noOfAdult || "1") || 1,
             noOfChild: parseInt(cab.child || cab.noOfChild || "0") || 0,
-            childAgeArray: Array.isArray(cab.childAge) 
-              ? cab.childAge.map(age => parseInt(age) || 0)
-              : (cab.childAge ? [parseInt(cab.childAge) || 0] : []),
+            childAgeArray: Array.isArray(cab.childAge)
+              ? cab.childAge.map((age) => parseInt(age) || 0)
+              : cab.childAge
+                ? [parseInt(cab.childAge) || 0]
+                : [],
             totalRate: cabTotalRate || 0,
             totalRateWithoutmrk: cabTotalRateWithoutMrk || 0,
-            transporter: transferDetail.transporterName || cab.transporter || "",
-            contactNumber: transferDetail.contactNumber || cab.contactNumber || "",
+            transporter:
+              transferDetail.transporterName || cab.transporter || "",
+            contactNumber:
+              transferDetail.contactNumber || cab.contactNumber || "",
             driverName: transferDetail.driverName || cab.driverName || "",
-            driverContact: transferDetail.driverContact || cab.driverContact || "",
+            driverContact:
+              transferDetail.driverContact || cab.driverContact || "",
           };
         }),
-        customBookingItinearyDTO: [
-          ...selectedItineraries.day1.map((itineraryId) => ({
-            itinearyId: parseInt(itineraryId) || 0,
-            days: 1,
-          })),
-          ...selectedItineraries.day2.map((itineraryId) => ({
-            itinearyId: parseInt(itineraryId) || 0,
-            days: 2,
-          })),
-        ],
+        customBookingItinearyDTO: (function () {
+          const uniqueDates = [
+            ...new Set(
+              activities
+                .map((item) => {
+                  const act = item.activity || {};
+                  return (
+                    act.activityDate ||
+                    (act.details && act.details.activityDate) ||
+                    ""
+                  );
+                })
+                .filter(Boolean),
+            ),
+          ].sort((a, b) => {
+            const parse = (d) =>
+              d.includes("/")
+                ? new Date(
+                    d.split("/")[2],
+                    d.split("/")[1] - 1,
+                    d.split("/")[0],
+                  )
+                : new Date(d);
+            return parse(a) - parse(b);
+          });
+          const dtos = [];
+          uniqueDates.forEach((date, index) => {
+            const itins = selectedItineraries[date] || [];
+            itins.forEach((itineraryId) => {
+              dtos.push({
+                itinearyId: parseInt(itineraryId) || 0,
+                days: index + 1,
+              });
+            });
+          });
+          return dtos;
+        })(),
         paymentApiId: null,
         agentId: parseInt(sessionStorage.getItem("makePkgAgentId") || "0"),
         isCartBooking: true,
@@ -891,7 +1024,7 @@ const MakePkgBookingPage = () => {
 
       const response = await axiosInstance.post(
         "/api/makeYourOwnPackage/saveMakeYourOwnPackageBooking",
-        bookingPayload
+        bookingPayload,
       );
 
       // Check booking response structure
@@ -906,7 +1039,9 @@ const MakePkgBookingPage = () => {
           sessionStorage.removeItem("makePkgQuoteId");
         }
         setShowOrderSummaryModal(false);
-        toast.success(response.data.message || "Booking submitted successfully!");
+        toast.success(
+          response.data.message || "Booking submitted successfully!",
+        );
         navigate("/booking-details/custom-booking-list");
       } else {
         toast.error(response.data?.message || "Failed to submit booking.");
@@ -928,7 +1063,9 @@ const MakePkgBookingPage = () => {
           <main className="flex-grow-1 d-flex justify-content-center align-items-center">
             <div className="loading-container text-center">
               <Spinner animation="border" variant="primary" size="lg" />
-              <p className="mt-3 text-muted fw-semibold">Loading booking details...</p>
+              <p className="mt-3 text-muted fw-semibold">
+                Loading booking details...
+              </p>
             </div>
           </main>
         </div>
@@ -946,7 +1083,9 @@ const MakePkgBookingPage = () => {
             <div className="empty-state">
               <FaShoppingCart size={64} className="text-muted mb-3" />
               <Alert.Heading className="mb-3">No Items in Cart</Alert.Heading>
-              <p className="text-muted mb-4">Your cart is empty. Please add items to cart first.</p>
+              <p className="text-muted mb-4">
+                Your cart is empty. Please add items to cart first.
+              </p>
               <Button
                 variant="primary"
                 size="lg"
@@ -966,6 +1105,25 @@ const MakePkgBookingPage = () => {
   const activities = getActivities();
   const transfers = getTransfers();
 
+  const uniqueActivityDates = [
+    ...new Set(
+      activities
+        .map((item) => {
+          const act = item.activity || {};
+          return (
+            act.activityDate || (act.details && act.details.activityDate) || ""
+          );
+        })
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => {
+    const parse = (d) =>
+      d.includes("/")
+        ? new Date(d.split("/")[2], d.split("/")[1] - 1, d.split("/")[0])
+        : new Date(d);
+    return parse(a) - parse(b);
+  });
+
   return (
     <div className="hotel-booking-container make-pkg-booking-container">
       <Sidebar />
@@ -981,11 +1139,15 @@ const MakePkgBookingPage = () => {
                 <div className="d-flex align-items-center gap-4">
                   <div className="text-end">
                     <div className="text-muted small mb-1">Selling Price</div>
-                    <div className="h4 mb-0 fw-bold text-primary">{sellingPrice.toFixed(2)}</div>
+                    <div className="h4 mb-0 fw-bold text-primary">
+                      {sellingPrice.toFixed(2)}
+                    </div>
                   </div>
                   <div className="text-end">
                     <div className="text-muted small mb-1">Total Price</div>
-                    <div className="h4 mb-0 fw-bold text-primary">{totalPrice.toFixed(2)}</div>
+                    <div className="h4 mb-0 fw-bold text-primary">
+                      {totalPrice.toFixed(2)}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -993,7 +1155,11 @@ const MakePkgBookingPage = () => {
 
             <Row>
               <Col lg={12}>
-                <Accordion defaultActiveKey={["0", "5"]} alwaysOpen className="booking-accordion">
+                <Accordion
+                  defaultActiveKey={["0", "5"]}
+                  alwaysOpen
+                  className="booking-accordion"
+                >
                   {/* Itinerary Option Section */}
                   <Accordion.Item eventKey="0" className="mb-2">
                     <Accordion.Header>
@@ -1001,97 +1167,86 @@ const MakePkgBookingPage = () => {
                     </Accordion.Header>
                     <Accordion.Body>
                       <div className="itinerary-days-container">
-                        {/* Day 1 Section */}
-                        <div className="itinerary-day-box mb-3">
-                          <div className="d-flex justify-content-between align-items-center">
-                            <h6 className="mb-0 fw-bold">Day 1:</h6>
-                            <Button
-                              variant="outline-danger"
-                              size="sm"
-                              className="rounded-circle itinerary-plus-btn"
-                              onClick={() => handleOpenItineraryModal("day1")}
-                            >
-                              <FaPlus />
-                            </Button>
-                          </div>
-                          {/* Selected Itineraries Preview for Day 1 */}
-                          {selectedItineraries.day1.length > 0 && (
-                            <div className="mt-3 pt-3 border-top">
-                              {selectedItineraries.day1.map((itineraryId) => {
-                                const itinerary = itineraryList.find(item => item.itineraryId === itineraryId);
-                                if (!itinerary) return null;
-                                return (
-                                  <div key={itineraryId} className="d-flex justify-content-between align-items-center mb-2 itinerary-preview-item">
-                                    <div className="d-flex align-items-center flex-grow-1">
-                                      <FaCheckCircle className="text-success me-2" size={14} />
-                                      <span className="small">{itinerary.itineraryHeading || "Untitled"}</span>
-                                    </div>
-                                    <Button
-                                      variant="link"
-                                      size="sm"
-                                      className="text-danger p-0 ms-2"
-                                      style={{ fontSize: "0.75rem", minWidth: "auto" }}
-                                      onClick={() => {
-                                        setSelectedItineraries(prev => ({
-                                          ...prev,
-                                          day1: prev.day1.filter(id => id !== itineraryId)
-                                        }));
-                                      }}
-                                    >
-                                      ×
-                                    </Button>
-                                  </div>
-                                );
-                              })}
+                        {uniqueActivityDates.map((dateString, index) => (
+                          <div className="itinerary-day-box mb-3" key={index}>
+                            <div className="d-flex justify-content-between align-items-center">
+                               <h6 className="mb-0 fw-bold">
+                                <small className="fw-normal text-muted">
+                                  Itinerary for activity on
+                                </small>{" "}
+                                {formatActivityDateHeader(dateString)}
+                              </h6>
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                className="rounded-circle itinerary-plus-btn"
+                                onClick={() =>
+                                  handleOpenItineraryModal(dateString)
+                                }
+                              >
+                                <FaPlus />
+                              </Button>
                             </div>
-                          )}
-                        </div>
-
-                        {/* Day 2 Section */}
-                        <div className="itinerary-day-box mb-3">
-                          <div className="d-flex justify-content-between align-items-center">
-                            <h6 className="mb-0 fw-bold">Day 2:</h6>
-                            <Button
-                              variant="outline-danger"
-                              size="sm"
-                              className="rounded-circle itinerary-plus-btn"
-                              onClick={() => handleOpenItineraryModal("day2")}
-                            >
-                              <FaPlus />
-                            </Button>
+                            {/* Selected Itineraries Preview */}
+                            {(selectedItineraries[dateString] || []).length >
+                              0 && (
+                              <div className="mt-3 pt-3 border-top">
+                                {(selectedItineraries[dateString] || []).map(
+                                  (itineraryId) => {
+                                    const itinerary = itineraryList.find(
+                                      (item) =>
+                                        item.itineraryId === itineraryId,
+                                    );
+                                    if (!itinerary) return null;
+                                    return (
+                                      <div
+                                        key={itineraryId}
+                                        className="d-flex justify-content-between align-items-center mb-2 itinerary-preview-item"
+                                      >
+                                        <div className="d-flex align-items-center flex-grow-1">
+                                          <FaCheckCircle
+                                            className="text-success me-2"
+                                            size={14}
+                                          />
+                                          <span className="small">
+                                            {itinerary.itineraryHeading ||
+                                              "Untitled"}
+                                          </span>
+                                        </div>
+                                        <Button
+                                          variant="link"
+                                          size="sm"
+                                          className="text-danger p-0 ms-2"
+                                          style={{
+                                            fontSize: "0.75rem",
+                                            minWidth: "auto",
+                                          }}
+                                          onClick={() => {
+                                            setSelectedItineraries((prev) => ({
+                                              ...prev,
+                                              [dateString]: prev[
+                                                dateString
+                                              ].filter(
+                                                (id) => id !== itineraryId,
+                                              ),
+                                            }));
+                                          }}
+                                        >
+                                          ×
+                                        </Button>
+                                      </div>
+                                    );
+                                  },
+                                )}
+                              </div>
+                            )}
                           </div>
-                          {/* Selected Itineraries Preview for Day 2 */}
-                          {selectedItineraries.day2.length > 0 && (
-                            <div className="mt-3 pt-3 border-top">
-                              {selectedItineraries.day2.map((itineraryId) => {
-                                const itinerary = itineraryList.find(item => item.itineraryId === itineraryId);
-                                if (!itinerary) return null;
-                                return (
-                                  <div key={itineraryId} className="d-flex justify-content-between align-items-center mb-2 itinerary-preview-item">
-                                    <div className="d-flex align-items-center flex-grow-1">
-                                      <FaCheckCircle className="text-success me-2" size={14} />
-                                      <span className="small">{itinerary.itineraryHeading || "Untitled"}</span>
-                                    </div>
-                                    <Button
-                                      variant="link"
-                                      size="sm"
-                                      className="text-danger p-0 ms-2"
-                                      style={{ fontSize: "0.75rem", minWidth: "auto" }}
-                                      onClick={() => {
-                                        setSelectedItineraries(prev => ({
-                                          ...prev,
-                                          day2: prev.day2.filter(id => id !== itineraryId)
-                                        }));
-                                      }}
-                                    >
-                                      ×
-                                    </Button>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
+                        ))}
+                        {uniqueActivityDates.length === 0 && (
+                          <div className="text-muted small">
+                            No activities found to generate itinerary days.
+                          </div>
+                        )}
                       </div>
                     </Accordion.Body>
                   </Accordion.Item>
@@ -1106,10 +1261,21 @@ const MakePkgBookingPage = () => {
                         {hotels.map((item, hotelIndex) => {
                           const hotel = item.hotel || {};
                           const details = hotel.details || {};
-                          const checkIn = hotel.checkIn || hotel.checkInDate || details.checkInDate || "";
-                          const checkOut = hotel.checkOut || hotel.checkOutDate || details.checkOutDate || "";
-                          const searchRoomDTOs = hotel.searchRoomDTOs || details.searchRoomDTOs || [];
-                          
+                          const checkIn =
+                            hotel.checkIn ||
+                            hotel.checkInDate ||
+                            details.checkInDate ||
+                            "";
+                          const checkOut =
+                            hotel.checkOut ||
+                            hotel.checkOutDate ||
+                            details.checkOutDate ||
+                            "";
+                          const searchRoomDTOs =
+                            hotel.searchRoomDTOs ||
+                            details.searchRoomDTOs ||
+                            [];
+
                           // Calculate date range for pricing table
                           const getDateRange = (startDate, endDate) => {
                             if (!startDate || !endDate) return [];
@@ -1122,14 +1288,14 @@ const MakePkgBookingPage = () => {
                               } else {
                                 start = new Date(startDate);
                               }
-                              
+
                               if (endDate.includes("/")) {
                                 const [day, month, year] = endDate.split("/");
                                 end = new Date(year, month - 1, day);
                               } else {
                                 end = new Date(endDate);
                               }
-                              
+
                               const dates = [];
                               const current = new Date(start);
                               while (current < end) {
@@ -1144,284 +1310,439 @@ const MakePkgBookingPage = () => {
 
                           const dateRange = getDateRange(checkIn, checkOut);
                           // Total Price = totalRateWithoutmrk (without markup)
-                          const hotelTotalPrice = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
+                          const hotelTotalPrice = parseFloat(
+                            hotel.totalRateWithoutmrk || hotel.totalRate || 0,
+                          );
                           // Selling Price = totalRate (with markup)
-                          const hotelSellingPrice = parseFloat(hotel.totalRate || 0);
-                          const pricePerNight = dateRange.length > 0 ? hotelTotalPrice / dateRange.length : hotelTotalPrice;
+                          const hotelSellingPrice = parseFloat(
+                            hotel.totalRate || 0,
+                          );
+                          const pricePerNight =
+                            dateRange.length > 0
+                              ? hotelTotalPrice / dateRange.length
+                              : hotelTotalPrice;
 
                           return (
-                            <Card key={hotelIndex} className="mb-3 hotel-item-card">
+                            <Card
+                              key={hotelIndex}
+                              className="mb-3 hotel-item-card"
+                            >
                               <Card.Header className="hotel-section-header">
                                 <div className="d-flex align-items-center gap-2">
                                   <FaBed className="text-primary" size={20} />
                                   <h6 className="mb-0 fw-bold">
-                                    {hotels.length > 1 ? `Hotel ${hotelIndex + 1}: ` : ""}
+                                    {hotels.length > 1
+                                      ? `Hotel ${hotelIndex + 1}: `
+                                      : ""}
                                     {hotel.hotelName || "Hotel"}
                                   </h6>
                                 </div>
                               </Card.Header>
                               <Card.Body>
-                              
-                              <div className="date-display">
-                                <FaCalendarAlt className="text-primary me-2" />
-                                <strong>Checkin :</strong> {formatDate(checkIn)} <strong className="ms-3">Checkout :</strong> {formatDate(checkOut)}
-                              </div>
+                                <div className="date-display">
+                                  <FaCalendarAlt className="text-primary me-2" />
+                                  <strong>Checkin :</strong>{" "}
+                                  {formatDate(checkIn)}{" "}
+                                  <strong className="ms-3">Checkout :</strong>{" "}
+                                  {formatDate(checkOut)}
+                                </div>
 
-                              {searchRoomDTOs.length > 0 && (
-                                <>
-                                  <Table striped bordered hover responsive size="sm" className="mb-3 room-table">
+                                {searchRoomDTOs.length > 0 && (
+                                  <>
+                                    <Table
+                                      striped
+                                      bordered
+                                      hover
+                                      responsive
+                                      size="sm"
+                                      className="mb-3 room-table"
+                                    >
+                                      <thead>
+                                        <tr>
+                                          <th>No.</th>
+                                          <th>Room Category</th>
+                                          <th>Adult Count</th>
+                                          <th>Child Count</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {searchRoomDTOs.map(
+                                          (room, roomIndex) => {
+                                            let childAges = [];
+                                            if (room.childAge) {
+                                              childAges = Array.isArray(
+                                                room.childAge,
+                                              )
+                                                ? room.childAge
+                                                : [room.childAge];
+                                            } else if (room.childAges) {
+                                              childAges = Array.isArray(
+                                                room.childAges,
+                                              )
+                                                ? room.childAges
+                                                : [room.childAges];
+                                            }
+
+                                            const childCount = parseInt(
+                                              room.child || room.children || 0,
+                                            );
+
+                                            return (
+                                              <tr key={roomIndex}>
+                                                <td>{roomIndex + 1}</td>
+                                                <td>
+                                                  {hotel.roomCategory || "-"}
+                                                  {hotel.roomType &&
+                                                    ` - ${hotel.roomType}`}
+                                                </td>
+                                                <td>
+                                                  {room.adult ||
+                                                    room.adults ||
+                                                    "-"}
+                                                </td>
+                                                <td>
+                                                  {childCount > 0 ? (
+                                                    <>
+                                                      {childCount}
+                                                      {childAges.length > 0 &&
+                                                        childAges.length ===
+                                                          1 && (
+                                                          <small className="text-muted d-block mt-1">
+                                                            {childCount} Child :{" "}
+                                                            {childAges[0]} Age
+                                                          </small>
+                                                        )}
+                                                      {childAges.length > 1 && (
+                                                        <small className="text-muted d-block mt-1">
+                                                          {childAges.map(
+                                                            (age, idx) => (
+                                                              <span key={idx}>
+                                                                {idx + 1} Child
+                                                                : {age} Age
+                                                                {idx <
+                                                                childAges.length -
+                                                                  1
+                                                                  ? ", "
+                                                                  : ""}
+                                                              </span>
+                                                            ),
+                                                          )}
+                                                        </small>
+                                                      )}
+                                                    </>
+                                                  ) : (
+                                                    "-"
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            );
+                                          },
+                                        )}
+                                      </tbody>
+                                    </Table>
+
+                                    {/* Guest Details for each room */}
+                                    {searchRoomDTOs.map((room, roomIndex) => {
+                                      const adults = parseInt(
+                                        room.adult || room.adults || 1,
+                                      );
+                                      const children = parseInt(
+                                        room.child || room.children || 0,
+                                      );
+                                      const totalGuests = adults + children;
+
+                                      // Find hotel index in cartData to match validation
+                                      let hotelIndexInCart = -1;
+                                      let hotelCount = 0;
+                                      for (
+                                        let i = 0;
+                                        i < cartData.length;
+                                        i++
+                                      ) {
+                                        if (cartData[i].hotel) {
+                                          if (hotelCount === hotelIndex) {
+                                            hotelIndexInCart = i;
+                                            break;
+                                          }
+                                          hotelCount++;
+                                        }
+                                      }
+
+                                      const guestKey =
+                                        hotelIndexInCart >= 0
+                                          ? `${hotelIndexInCart}-${roomIndex}`
+                                          : `${hotelIndex}-${roomIndex}`;
+                                      const guests = roomGuests[guestKey] || [];
+                                      const actualHotelIndex =
+                                        hotelIndexInCart >= 0
+                                          ? hotelIndexInCart
+                                          : hotelIndex;
+
+                                      if (totalGuests === 0) return null;
+
+                                      return (
+                                        <Card
+                                          key={`guest-${roomIndex}`}
+                                          className="mb-2 guest-details-card"
+                                        >
+                                          <Card.Header>
+                                            <h6 className="mb-0">
+                                              Room {roomIndex + 1} - Guest
+                                              Details
+                                            </h6>
+                                          </Card.Header>
+                                          <Card.Body>
+                                            {Array.from(
+                                              { length: totalGuests },
+                                              (_, guestIndex) => {
+                                                const isChild =
+                                                  guestIndex >= adults;
+                                                const guest = guests[
+                                                  guestIndex
+                                                ] || {
+                                                  salutation: "",
+                                                  firstName: "",
+                                                  lastName: "",
+                                                  gender: "",
+                                                  isChild: isChild,
+                                                };
+
+                                                return (
+                                                  <div
+                                                    key={guestIndex}
+                                                    className="guest-row-item"
+                                                  >
+                                                    <h6 className="mb-2">
+                                                      {isChild
+                                                        ? `Child ${guestIndex - adults + 1}${guest.age ? ` (Age: ${guest.age})` : ""}`
+                                                        : `Adult ${guestIndex + 1}`}
+                                                    </h6>
+                                                    <Row className="g-2">
+                                                      <Col md={3}>
+                                                        <Form.Label className="small">
+                                                          Salutation{" "}
+                                                          <span className="text-danger">
+                                                            *
+                                                          </span>
+                                                        </Form.Label>
+                                                        <Form.Select
+                                                          size="sm"
+                                                          value={
+                                                            guest.salutation
+                                                          }
+                                                          onChange={(e) =>
+                                                            handleGuestChange(
+                                                              actualHotelIndex,
+                                                              roomIndex,
+                                                              guestIndex,
+                                                              "salutation",
+                                                              e.target.value,
+                                                            )
+                                                          }
+                                                          required
+                                                          isInvalid={
+                                                            !!validationErrors[
+                                                              `hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_salutation`
+                                                            ]
+                                                          }
+                                                        >
+                                                          <option value="">
+                                                            Select
+                                                          </option>
+                                                          <option value="Mr">
+                                                            Mr
+                                                          </option>
+                                                          <option value="Mrs">
+                                                            Mrs
+                                                          </option>
+                                                          <option value="Ms">
+                                                            Ms
+                                                          </option>
+                                                          <option value="Miss">
+                                                            Miss
+                                                          </option>
+                                                          <option value="Dr">
+                                                            Dr
+                                                          </option>
+                                                        </Form.Select>
+                                                        <Form.Control.Feedback type="invalid">
+                                                          {
+                                                            validationErrors[
+                                                              `hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_salutation`
+                                                            ]
+                                                          }
+                                                        </Form.Control.Feedback>
+                                                      </Col>
+                                                      <Col md={4}>
+                                                        <Form.Label className="small">
+                                                          First Name{" "}
+                                                          <span className="text-danger">
+                                                            *
+                                                          </span>
+                                                        </Form.Label>
+                                                        <Form.Control
+                                                          type="text"
+                                                          size="sm"
+                                                          value={
+                                                            guest.firstName ||
+                                                            ""
+                                                          }
+                                                          onChange={(e) =>
+                                                            handleGuestChange(
+                                                              actualHotelIndex,
+                                                              roomIndex,
+                                                              guestIndex,
+                                                              "firstName",
+                                                              e.target.value,
+                                                            )
+                                                          }
+                                                          required
+                                                          placeholder="First Name"
+                                                          isInvalid={
+                                                            !!validationErrors[
+                                                              `hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_firstName`
+                                                            ]
+                                                          }
+                                                        />
+                                                        <Form.Control.Feedback type="invalid">
+                                                          {
+                                                            validationErrors[
+                                                              `hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_firstName`
+                                                            ]
+                                                          }
+                                                        </Form.Control.Feedback>
+                                                      </Col>
+                                                      <Col md={5}>
+                                                        <Form.Label className="small">
+                                                          Last Name{" "}
+                                                          <span className="text-danger">
+                                                            *
+                                                          </span>
+                                                        </Form.Label>
+                                                        <Form.Control
+                                                          type="text"
+                                                          size="sm"
+                                                          value={
+                                                            guest.lastName || ""
+                                                          }
+                                                          onChange={(e) =>
+                                                            handleGuestChange(
+                                                              actualHotelIndex,
+                                                              roomIndex,
+                                                              guestIndex,
+                                                              "lastName",
+                                                              e.target.value,
+                                                            )
+                                                          }
+                                                          required
+                                                          placeholder="Last Name"
+                                                          isInvalid={
+                                                            !!validationErrors[
+                                                              `hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_lastName`
+                                                            ]
+                                                          }
+                                                        />
+                                                        <Form.Control.Feedback type="invalid">
+                                                          {
+                                                            validationErrors[
+                                                              `hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_lastName`
+                                                            ]
+                                                          }
+                                                        </Form.Control.Feedback>
+                                                      </Col>
+                                                      <Col md={4}>
+                                                        <Form.Label className="small">
+                                                          Gender{" "}
+                                                          <span className="text-danger">
+                                                            *
+                                                          </span>
+                                                        </Form.Label>
+                                                        <Form.Select
+                                                          size="sm"
+                                                          value={
+                                                            guest.gender || ""
+                                                          }
+                                                          onChange={(e) =>
+                                                            handleGuestChange(
+                                                              actualHotelIndex,
+                                                              roomIndex,
+                                                              guestIndex,
+                                                              "gender",
+                                                              e.target.value,
+                                                            )
+                                                          }
+                                                          required
+                                                          isInvalid={
+                                                            !!validationErrors[
+                                                              `hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_gender`
+                                                            ]
+                                                          }
+                                                        >
+                                                          <option value="">
+                                                            Select
+                                                          </option>
+                                                          <option value="Male">
+                                                            Male
+                                                          </option>
+                                                          <option value="Female">
+                                                            Female
+                                                          </option>
+                                                        </Form.Select>
+                                                        <Form.Control.Feedback type="invalid">
+                                                          {
+                                                            validationErrors[
+                                                              `hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_gender`
+                                                            ]
+                                                          }
+                                                        </Form.Control.Feedback>
+                                                      </Col>
+                                                    </Row>
+                                                  </div>
+                                                );
+                                              },
+                                            )}
+                                          </Card.Body>
+                                        </Card>
+                                      );
+                                    })}
+                                  </>
+                                )}
+
+                                {/* Date-wise Pricing Table */}
+                                {dateRange.length > 0 && (
+                                  <Table
+                                    striped
+                                    bordered
+                                    hover
+                                    responsive
+                                    size="sm"
+                                    className="mb-2 date-pricing-table"
+                                  >
                                     <thead>
                                       <tr>
-                                        <th>No.</th>
-                                        <th>Room Category</th>
-                                        <th>Adult Count</th>
-                                        <th>Child Count</th>
+                                        <th>Date</th>
+                                        <th>Total Price</th>
+                                        <th>Selling Price</th>
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {searchRoomDTOs.map((room, roomIndex) => {
-                                        let childAges = [];
-                                        if (room.childAge) {
-                                          childAges = Array.isArray(room.childAge) ? room.childAge : [room.childAge];
-                                        } else if (room.childAges) {
-                                          childAges = Array.isArray(room.childAges) ? room.childAges : [room.childAges];
-                                        }
-
-                                        const childCount = parseInt(room.child || room.children || 0);
-
+                                      {dateRange.map((date, dateIndex) => {
+                                        const dateStr =
+                                          date.toLocaleDateString("en-GB");
                                         return (
-                                          <tr key={roomIndex}>
-                                            <td>{roomIndex + 1}</td>
-                                            <td>
-                                              {hotel.roomCategory || "-"}
-                                              {hotel.roomType && ` - ${hotel.roomType}`}
-                                            </td>
-                                            <td>{room.adult || room.adults || "-"}</td>
-                                            <td>
-                                              {childCount > 0 ? (
-                                                <>
-                                                  {childCount}
-                                                  {childAges.length > 0 && childAges.length === 1 && (
-                                                    <small className="text-muted d-block mt-1">
-                                                      {childCount} Child : {childAges[0]} Age
-                                                    </small>
-                                                  )}
-                                                  {childAges.length > 1 && (
-                                                    <small className="text-muted d-block mt-1">
-                                                      {childAges.map((age, idx) => (
-                                                        <span key={idx}>
-                                                          {idx + 1} Child : {age} Age{idx < childAges.length - 1 ? ", " : ""}
-                                                        </span>
-                                                      ))}
-                                                    </small>
-                                                  )}
-                                                </>
-                                              ) : (
-                                                "-"
-                                              )}
-                                            </td>
+                                          <tr key={dateIndex}>
+                                            <td>{dateStr}</td>
+                                            <td>{pricePerNight.toFixed(2)}</td>
+                                            <td>{pricePerNight.toFixed(2)}</td>
                                           </tr>
                                         );
                                       })}
                                     </tbody>
                                   </Table>
+                                )}
 
-                                  {/* Guest Details for each room */}
-                                  {searchRoomDTOs.map((room, roomIndex) => {
-                                    const adults = parseInt(room.adult || room.adults || 1);
-                                    const children = parseInt(room.child || room.children || 0);
-                                    const totalGuests = adults + children;
-                                    
-                                    // Find hotel index in cartData to match validation
-                                    let hotelIndexInCart = -1;
-                                    let hotelCount = 0;
-                                    for (let i = 0; i < cartData.length; i++) {
-                                      if (cartData[i].hotel) {
-                                        if (hotelCount === hotelIndex) {
-                                          hotelIndexInCart = i;
-                                          break;
-                                        }
-                                        hotelCount++;
-                                      }
-                                    }
-                                    
-                                    const guestKey = hotelIndexInCart >= 0 ? `${hotelIndexInCart}-${roomIndex}` : `${hotelIndex}-${roomIndex}`;
-                                    const guests = roomGuests[guestKey] || [];
-                                    const actualHotelIndex = hotelIndexInCart >= 0 ? hotelIndexInCart : hotelIndex;
-
-                                    if (totalGuests === 0) return null;
-
-                                    return (
-                                      <Card key={`guest-${roomIndex}`} className="mb-2 guest-details-card">
-                                        <Card.Header>
-                                          <h6 className="mb-0">
-                                            Room {roomIndex + 1} - Guest Details
-                                          </h6>
-                                        </Card.Header>
-                                        <Card.Body>
-                                          {Array.from({ length: totalGuests }, (_, guestIndex) => {
-                                            const isChild = guestIndex >= adults;
-                                            const guest = guests[guestIndex] || {
-                                              salutation: "",
-                                              firstName: "",
-                                              lastName: "",
-                                              gender: "",
-                                              isChild: isChild,
-                                            };
-
-                                            return (
-                                              <div key={guestIndex} className="guest-row-item">
-                                                <h6 className="mb-2">
-                                                  {isChild
-                                                    ? `Child ${guestIndex - adults + 1}${guest.age ? ` (Age: ${guest.age})` : ""}`
-                                                    : `Adult ${guestIndex + 1}`}
-                                                </h6>
-                                                <Row className="g-2">
-                                                  <Col md={3}>
-                                                    <Form.Label className="small">
-                                                      Salutation <span className="text-danger">*</span>
-                                                    </Form.Label>
-                                                    <Form.Select
-                                                      size="sm"
-                                                      value={guest.salutation}
-                                                      onChange={(e) =>
-                                                        handleGuestChange(
-                                                          actualHotelIndex,
-                                                          roomIndex,
-                                                          guestIndex,
-                                                          "salutation",
-                                                          e.target.value
-                                                        )
-                                                      }
-                                                      required
-                                                      isInvalid={!!validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_salutation`]}
-                                                    >
-                                                      <option value="">Select</option>
-                                                      <option value="Mr">Mr</option>
-                                                      <option value="Mrs">Mrs</option>
-                                                      <option value="Ms">Ms</option>
-                                                      <option value="Miss">Miss</option>
-                                                      <option value="Dr">Dr</option>
-                                                    </Form.Select>
-                                                    <Form.Control.Feedback type="invalid">
-                                                      {validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_salutation`]}
-                                                    </Form.Control.Feedback>
-                                                  </Col>
-                                                  <Col md={4}>
-                                                    <Form.Label className="small">
-                                                      First Name <span className="text-danger">*</span>
-                                                    </Form.Label>
-                                                    <Form.Control
-                                                      type="text"
-                                                      size="sm"
-                                                      value={guest.firstName || ""}
-                                                      onChange={(e) =>
-                                                        handleGuestChange(
-                                                          actualHotelIndex,
-                                                          roomIndex,
-                                                          guestIndex,
-                                                          "firstName",
-                                                          e.target.value
-                                                        )
-                                                      }
-                                                      required
-                                                      placeholder="First Name"
-                                                      isInvalid={!!validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_firstName`]}
-                                                    />
-                                                    <Form.Control.Feedback type="invalid">
-                                                      {validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_firstName`]}
-                                                    </Form.Control.Feedback>
-                                                  </Col>
-                                                  <Col md={5}>
-                                                    <Form.Label className="small">
-                                                      Last Name <span className="text-danger">*</span>
-                                                    </Form.Label>
-                                                    <Form.Control
-                                                      type="text"
-                                                      size="sm"
-                                                      value={guest.lastName || ""}
-                                                      onChange={(e) =>
-                                                        handleGuestChange(
-                                                          actualHotelIndex,
-                                                          roomIndex,
-                                                          guestIndex,
-                                                          "lastName",
-                                                          e.target.value
-                                                        )
-                                                      }
-                                                      required
-                                                      placeholder="Last Name"
-                                                      isInvalid={!!validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_lastName`]}
-                                                    />
-                                                    <Form.Control.Feedback type="invalid">
-                                                      {validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_lastName`]}
-                                                    </Form.Control.Feedback>
-                                                  </Col>
-                                                  <Col md={4}>
-                                                    <Form.Label className="small">
-                                                      Gender <span className="text-danger">*</span>
-                                                    </Form.Label>
-                                                    <Form.Select
-                                                      size="sm"
-                                                      value={guest.gender || ""}
-                                                      onChange={(e) =>
-                                                        handleGuestChange(
-                                                          actualHotelIndex,
-                                                          roomIndex,
-                                                          guestIndex,
-                                                          "gender",
-                                                          e.target.value
-                                                        )
-                                                      }
-                                                      required
-                                                      isInvalid={!!validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_gender`]}
-                                                    >
-                                                      <option value="">Select</option>
-                                                      <option value="Male">Male</option>
-                                                      <option value="Female">Female</option>
-                                                    </Form.Select>
-                                                    <Form.Control.Feedback type="invalid">
-                                                      {validationErrors[`hotel_${actualHotelIndex}_room_${roomIndex}_guest_${guestIndex}_gender`]}
-                                                    </Form.Control.Feedback>
-                                                  </Col>
-                                                </Row>
-                                              </div>
-                                            );
-                                          })}
-                                        </Card.Body>
-                                      </Card>
-                                    );
-                                  })}
-                                </>
-                              )}
-
-                              {/* Date-wise Pricing Table */}
-                              {dateRange.length > 0 && (
-                                <Table striped bordered hover responsive size="sm" className="mb-2 date-pricing-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Date</th>
-                                      <th>Total Price</th>
-                                      <th>Selling Price</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {dateRange.map((date, dateIndex) => {
-                                      const dateStr = date.toLocaleDateString("en-GB");
-                                      return (
-                                        <tr key={dateIndex}>
-                                          <td>{dateStr}</td>
-                                          <td>{pricePerNight.toFixed(2)}</td>
-                                          <td>{pricePerNight.toFixed(2)}</td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </Table>
-                              )}
-
-                              {/* Selling Price and Total Price */}
-                              {/* <div className="mb-3">
+                                {/* Selling Price and Total Price */}
+                                {/* <div className="mb-3">
                                 <Row className="g-2">
                                   <Col sm={6}>
                                     <div className="d-flex justify-content-between align-items-center">
@@ -1442,89 +1763,111 @@ const MakePkgBookingPage = () => {
                                 </Row>
                               </div> */}
 
-                              {/* Tourism Dirhams */}
-                              <Row className="mb-2">
-                                <Col md={6}>
-                                  <Form.Label>Tourism Dirhams (AED)</Form.Label>
-                                  <Form.Control
-                                    type="number"
-                                    value={hotelTourismDirhams[hotelIndex] || "0"}
-                                    onChange={(e) => setHotelTourismDirhams({
-                                      ...hotelTourismDirhams,
-                                      [hotelIndex]: e.target.value
-                                    })}
-                                    min="0"
-                                  />
-                                </Col>
-                              </Row>
+                                {/* Tourism Dirhams */}
+                                <Row className="mb-2">
+                                  <Col md={6}>
+                                    <Form.Label>
+                                      Tourism Dirhams (AED)
+                                    </Form.Label>
+                                    <Form.Control
+                                      type="number"
+                                      value={
+                                        hotelTourismDirhams[hotelIndex] || "0"
+                                      }
+                                      onChange={(e) =>
+                                        setHotelTourismDirhams({
+                                          ...hotelTourismDirhams,
+                                          [hotelIndex]: e.target.value,
+                                        })
+                                      }
+                                      min="0"
+                                    />
+                                  </Col>
+                                </Row>
 
-                              {/* Remarks */}
-                              <Row className="mb-2">
-                                <Col>
-                                  <Form.Label>Remarks</Form.Label>
-                                  <Form.Control
-                                    as="textarea"
-                                    rows={3}
-                                    value={hotelRemarks[hotelIndex] || ""}
-                                    onChange={(e) => setHotelRemarks({
-                                      ...hotelRemarks,
-                                      [hotelIndex]: e.target.value
-                                    })}
-                                    placeholder="Enter any remarks..."
-                                  />
-                                </Col>
-                              </Row>
+                                {/* Remarks */}
+                                <Row className="mb-2">
+                                  <Col>
+                                    <Form.Label>Remarks</Form.Label>
+                                    <Form.Control
+                                      as="textarea"
+                                      rows={3}
+                                      value={hotelRemarks[hotelIndex] || ""}
+                                      onChange={(e) =>
+                                        setHotelRemarks({
+                                          ...hotelRemarks,
+                                          [hotelIndex]: e.target.value,
+                                        })
+                                      }
+                                      placeholder="Enter any remarks..."
+                                    />
+                                  </Col>
+                                </Row>
 
-                              {/* Special Request */}
-                              <Row className="mb-2">
-                                <Col>
-                                  <Form.Label>Special Request</Form.Label>
-                                  <Form.Control
-                                    as="textarea"
-                                    rows={3}
-                                    value={hotelSpecialRequests[hotelIndex] || ""}
-                                    onChange={(e) => setHotelSpecialRequests({
-                                      ...hotelSpecialRequests,
-                                      [hotelIndex]: e.target.value
-                                    })}
-                                    placeholder="Enter any special requests..."
-                                  />
-                                </Col>
-                              </Row>
+                                {/* Special Request */}
+                                <Row className="mb-2">
+                                  <Col>
+                                    <Form.Label>Special Request</Form.Label>
+                                    <Form.Control
+                                      as="textarea"
+                                      rows={3}
+                                      value={
+                                        hotelSpecialRequests[hotelIndex] || ""
+                                      }
+                                      onChange={(e) =>
+                                        setHotelSpecialRequests({
+                                          ...hotelSpecialRequests,
+                                          [hotelIndex]: e.target.value,
+                                        })
+                                      }
+                                      placeholder="Enter any special requests..."
+                                    />
+                                  </Col>
+                                </Row>
 
-                              {/* Booking Confirmation */}
-                              <div className="mb-3">
-                                <Form.Label className="mb-2">
-                                  Are you sure to continue booking?
-                                </Form.Label>
-                                <div>
-                                  <Form.Check
-                                    type="radio"
-                                    label="Book & Voucher"
-                                    name={`bookingConfirmation-${hotelIndex}`}
-                                    value="Book & Voucher"
-                                    checked={hotelBookingConfirmation[hotelIndex] === "Book & Voucher"}
-                                    onChange={(e) => setHotelBookingConfirmation({
-                                      ...hotelBookingConfirmation,
-                                      [hotelIndex]: e.target.value
-                                    })}
-                                    inline
-                                    className="me-3"
-                                  />
-                                  <Form.Check
-                                    type="radio"
-                                    label="Book Now & Voucher later"
-                                    name={`bookingConfirmation-${hotelIndex}`}
-                                    value="Book Now & Voucher later"
-                                    checked={hotelBookingConfirmation[hotelIndex] === "Book Now & Voucher later"}
-                                    onChange={(e) => setHotelBookingConfirmation({
-                                      ...hotelBookingConfirmation,
-                                      [hotelIndex]: e.target.value
-                                    })}
-                                    inline
-                                  />
+                                {/* Booking Confirmation */}
+                                <div className="mb-3">
+                                  <Form.Label className="mb-2">
+                                    Are you sure to continue booking?
+                                  </Form.Label>
+                                  <div>
+                                    <Form.Check
+                                      type="radio"
+                                      label="Book & Voucher"
+                                      name={`bookingConfirmation-${hotelIndex}`}
+                                      value="Book & Voucher"
+                                      checked={
+                                        hotelBookingConfirmation[hotelIndex] ===
+                                        "Book & Voucher"
+                                      }
+                                      onChange={(e) =>
+                                        setHotelBookingConfirmation({
+                                          ...hotelBookingConfirmation,
+                                          [hotelIndex]: e.target.value,
+                                        })
+                                      }
+                                      inline
+                                      className="me-3"
+                                    />
+                                    <Form.Check
+                                      type="radio"
+                                      label="Book Now & Voucher later"
+                                      name={`bookingConfirmation-${hotelIndex}`}
+                                      value="Book Now & Voucher later"
+                                      checked={
+                                        hotelBookingConfirmation[hotelIndex] ===
+                                        "Book Now & Voucher later"
+                                      }
+                                      onChange={(e) =>
+                                        setHotelBookingConfirmation({
+                                          ...hotelBookingConfirmation,
+                                          [hotelIndex]: e.target.value,
+                                        })
+                                      }
+                                      inline
+                                    />
+                                  </div>
                                 </div>
-                              </div>
                               </Card.Body>
                             </Card>
                           );
@@ -1543,102 +1886,138 @@ const MakePkgBookingPage = () => {
                         {activities.map((item, activityIndex) => {
                           const activity = item.activity || {};
                           const details = activity.details || {};
-                          const activityName = activity.activityName || details.activityName || "Activity";
-                          const activityDate = activity.activityDate || details.activityDate || "";
-                          const adult = activity.adult || details.adult || activity.noOfAdult || "0";
-                          const child = activity.child || details.child || activity.noOfChild || "0";
+                          const activityName =
+                            activity.activityName ||
+                            details.activityName ||
+                            "Activity";
+                          const activityDate =
+                            activity.activityDate || details.activityDate || "";
+                          const adult =
+                            activity.adult ||
+                            details.adult ||
+                            activity.noOfAdult ||
+                            "0";
+                          const child =
+                            activity.child ||
+                            details.child ||
+                            activity.noOfChild ||
+                            "0";
 
                           let childAges = [];
                           if (activity.childAge) {
-                            childAges = Array.isArray(activity.childAge) ? activity.childAge : [activity.childAge];
-                          } 
+                            childAges = Array.isArray(activity.childAge)
+                              ? activity.childAge
+                              : [activity.childAge];
+                          }
 
                           // Selling Price = totalRate (with markup)
-                          const sellingPrice = parseFloat(activity.totalRate || 0);
+                          const sellingPrice = parseFloat(
+                            activity.totalRate || 0,
+                          );
                           // Total Price = totalRateWithoutmrk (without markup)
-                          const totalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
+                          const totalPrice = parseFloat(
+                            activity.totalRateWithoutmrk ||
+                              activity.totalRate ||
+                              0,
+                          );
 
                           return (
-                            <Card key={activityIndex} className="mb-3 activity-item-card">
+                            <Card
+                              key={activityIndex}
+                              className="mb-3 activity-item-card"
+                            >
                               <Card.Header className="activity-header">
                                 <div className="d-flex align-items-center gap-2">
-                                  <FaTicketAlt className="text-primary" size={20} />
+                                  <FaTicketAlt
+                                    className="text-primary"
+                                    size={20}
+                                  />
                                   <h6 className="mb-0 fw-bold">
-                                    {activities.length > 1 ? `Activity ${activityIndex + 1}: ` : ""}
+                                    {activities.length > 1
+                                      ? `Activity ${activityIndex + 1}: `
+                                      : ""}
                                     {activityName}
                                   </h6>
                                 </div>
                               </Card.Header>
                               <Card.Body>
+                                <div className="date-display">
+                                  <FaCalendarAlt className="text-primary me-2" />
+                                  <strong>Tour date:</strong>{" "}
+                                  {formatDate(activityDate)}
+                                </div>
 
-                              <div className="date-display">
-                                <FaCalendarAlt className="text-primary me-2" />
-                                <strong>Tour date:</strong> {formatDate(activityDate)}
-                              </div>
+                                <Row className="g-3 mb-3">
+                                  <Col md={6}>
+                                    <div>
+                                      <strong>Adult Count</strong>
+                                      <div className="mt-1">
+                                        <Form.Control
+                                          type="text"
+                                          value={adult}
+                                          readOnly
+                                          className="bg-light"
+                                        />
+                                      </div>
+                                    </div>
+                                  </Col>
+                                  <Col md={6}>
+                                    <div>
+                                      <strong>Child Count</strong>
+                                      <div className="mt-1">
+                                        <Form.Control
+                                          type="text"
+                                          value={child}
+                                          readOnly
+                                          className="bg-light"
+                                        />
+                                      </div>
+                                      {childAges.length > 0 &&
+                                        childAges.length === 1 && (
+                                          <small className="text-muted d-block mt-1">
+                                            {child} Child : {childAges[0]} Age
+                                          </small>
+                                        )}
+                                      {childAges.length > 1 && (
+                                        <small className="text-muted d-block mt-1">
+                                          {childAges.map((age, idx) => (
+                                            <span key={idx}>
+                                              {idx + 1} Child : {age} Age
+                                              {idx < childAges.length - 1
+                                                ? ", "
+                                                : ""}
+                                            </span>
+                                          ))}
+                                        </small>
+                                      )}
+                                    </div>
+                                  </Col>
+                                </Row>
 
-                              <Row className="g-3 mb-3">
-                                <Col md={6}>
-                                  <div>
-                                    <strong>Adult Count</strong>
-                                    <div className="mt-1">
-                                      <Form.Control
-                                        type="text"
-                                        value={adult}
-                                        readOnly
-                                        className="bg-light"
-                                      />
+                                <Row className="g-3 mb-3">
+                                  <Col md={6}>
+                                    <div className="d-flex align-items-center justify-content-between">
+                                      <strong>Selling Price</strong>
+                                      <div className="d-flex align-items-center gap-2">
+                                        <span className="text-success fw-bold">
+                                          {sellingPrice.toFixed(2)}
+                                        </span>
+                                        {/* <FaEdit className="text-success" style={{ cursor: "pointer" }} /> */}
+                                      </div>
                                     </div>
-                                  </div>
-                                </Col>
-                                <Col md={6}>
-                                  <div>
-                                    <strong>Child Count</strong>
-                                    <div className="mt-1">
-                                      <Form.Control
-                                        type="text"
-                                        value={child}
-                                        readOnly
-                                        className="bg-light"
-                                      />
+                                  </Col>
+                                  <Col md={6}>
+                                    <div className="d-flex align-items-center justify-content-between">
+                                      <strong>Total Price</strong>
+                                      <div className="d-flex align-items-center gap-2">
+                                        <span className="text-primary fw-bold">
+                                          {totalPrice.toFixed(2)}
+                                        </span>
+                                        {/* <FaEdit className="text-success" style={{ cursor: "pointer" }} /> */}
+                                      </div>
                                     </div>
-                                    {childAges.length > 0 && childAges.length === 1 && (
-                                      <small className="text-muted d-block mt-1">
-                                        {child} Child : {childAges[0]} Age
-                                      </small>
-                                    )}
-                                    {childAges.length > 1 && (
-                                      <small className="text-muted d-block mt-1">
-                                        {childAges.map((age, idx) => (
-                                          <span key={idx}>
-                                            {idx + 1} Child : {age} Age{idx < childAges.length - 1 ? ", " : ""}
-                                          </span>
-                                        ))}
-                                      </small>
-                                    )}
-                                  </div>
-                                </Col>
-                              </Row>
-
-                              <Row className="g-3 mb-3">
-                                <Col md={6}>
-                                  <div className="d-flex align-items-center justify-content-between">
-                                    <strong>Selling Price</strong>
-                                    <div className="d-flex align-items-center gap-2">
-                                      <span className="text-success fw-bold">{sellingPrice.toFixed(2)}</span>
-                                      {/* <FaEdit className="text-success" style={{ cursor: "pointer" }} /> */}
-                                    </div>
-                                  </div>
-                                </Col>
-                                <Col md={6}>
-                                  <div className="d-flex align-items-center justify-content-between">
-                                    <strong>Total Price</strong>
-                                    <div className="d-flex align-items-center gap-2">
-                                      <span className="text-primary fw-bold">{totalPrice.toFixed(2)}</span>
-                                      {/* <FaEdit className="text-success" style={{ cursor: "pointer" }} /> */}
-                                    </div>
-                                  </div>
-                                </Col>
-                              </Row>
+                                  </Col>
+                                </Row>
                               </Card.Body>
                             </Card>
                           );
@@ -1657,34 +2036,55 @@ const MakePkgBookingPage = () => {
                         {transfers.map((item, transferIndex) => {
                           const cab = item.cab || {};
                           const details = cab.details || {};
-                          const vehicleName = cab.vehicleName || details.vehicleName || "Transfer";
-                          const capacity = cab.capacity || details.capacity || "";
+                          const vehicleName =
+                            cab.vehicleName ||
+                            details.vehicleName ||
+                            "Transfer";
+                          const capacity =
+                            cab.capacity || details.capacity || "";
                           const pickupDate = cab.pickupDate || "";
                           const dropDate = cab.dropoffDate || "";
-                          const adult = cab.adult || details.adult || cab.noOfAdult || "0";
-                          const child = cab.child || details.child || cab.noOfChild || "0";
-                          const travelType = cab.travelType || details.travelType || "1";
-                          const shareType = cab.shareType || details.shareType || "Private";
+                          const adult =
+                            cab.adult || details.adult || cab.noOfAdult || "0";
+                          const child =
+                            cab.child || details.child || cab.noOfChild || "0";
+                          const travelType =
+                            cab.travelType || details.travelType || "1";
+                          const shareType =
+                            cab.shareType || details.shareType || "Private";
 
                           // Handle childAge
                           let childAges = [];
                           if (cab.childAge) {
-                            childAges = Array.isArray(cab.childAge) ? cab.childAge : [cab.childAge];
+                            childAges = Array.isArray(cab.childAge)
+                              ? cab.childAge
+                              : [cab.childAge];
                           } else if (cab.childAges) {
-                            childAges = Array.isArray(cab.childAges) ? cab.childAges : [cab.childAges];
+                            childAges = Array.isArray(cab.childAges)
+                              ? cab.childAges
+                              : [cab.childAges];
                           } else if (cab.childAgeArray) {
-                            childAges = Array.isArray(cab.childAgeArray) ? cab.childAgeArray : [cab.childAgeArray];
+                            childAges = Array.isArray(cab.childAgeArray)
+                              ? cab.childAgeArray
+                              : [cab.childAgeArray];
                           } else if (details.childAge) {
-                            childAges = Array.isArray(details.childAge) ? details.childAge : [details.childAge];
+                            childAges = Array.isArray(details.childAge)
+                              ? details.childAge
+                              : [details.childAge];
                           } else if (details.childAgeArray) {
-                            childAges = Array.isArray(details.childAgeArray) ? details.childAgeArray : [details.childAgeArray];
+                            childAges = Array.isArray(details.childAgeArray)
+                              ? details.childAgeArray
+                              : [details.childAgeArray];
                           }
 
-                          const transferDetail = transferDetails[transferIndex] || {};
+                          const transferDetail =
+                            transferDetails[transferIndex] || {};
                           // Selling Price = totalRate (with markup)
                           const sellingPrice = parseFloat(cab.totalRate || 0);
                           // Total Price = totalRateWithoutmrk (without markup)
-                          const totalPrice = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
+                          const totalPrice = parseFloat(
+                            cab.totalRateWithoutmrk || cab.totalRate || 0,
+                          );
 
                           // Get travel type label
                           const getTravelTypeLabel = (type) => {
@@ -1695,153 +2095,188 @@ const MakePkgBookingPage = () => {
                           };
 
                           return (
-                            <Card key={transferIndex} className="mb-3 transfer-item-card">
+                            <Card
+                              key={transferIndex}
+                              className="mb-3 transfer-item-card"
+                            >
                               <Card.Header className="transfer-header">
                                 <div className="d-flex align-items-center gap-2">
                                   <FaCar className="text-primary" size={20} />
                                   <h6 className="mb-0 fw-bold">
-                                    {transfers.length > 1 ? `Transfer ${transferIndex + 1}: ` : ""}
-                                    {capacity ? `${capacity} Seater` : vehicleName}
+                                    {transfers.length > 1
+                                      ? `Transfer ${transferIndex + 1}: `
+                                      : ""}
+                                    {capacity
+                                      ? `${capacity} Seater`
+                                      : vehicleName}
                                   </h6>
                                 </div>
                               </Card.Header>
                               <Card.Body>
+                                <div className="date-display">
+                                  <FaCalendarAlt className="text-primary me-2" />
+                                  <strong>Pickup date :</strong>{" "}
+                                  {formatDate(pickupDate)}{" "}
+                                  <strong className="ms-3">Drop date :</strong>{" "}
+                                  {formatDate(dropDate)}
+                                </div>
 
-                              <div className="date-display">
-                                <FaCalendarAlt className="text-primary me-2" />
-                                <strong>Pickup date :</strong> {formatDate(pickupDate)} <strong className="ms-3">Drop date :</strong> {formatDate(dropDate)}
-                              </div>
+                                {/* Transfer Option/Share type Table */}
+                                <Table
+                                  striped
+                                  bordered
+                                  hover
+                                  responsive
+                                  size="sm"
+                                  className="mb-3 transfer-table"
+                                >
+                                  <thead>
+                                    <tr>
+                                      <th>Transfer Option/Share type</th>
+                                      <th>Adult Count</th>
+                                      <th>Child Count</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr>
+                                      <td>
+                                        {getTravelTypeLabel(travelType)} /{" "}
+                                        {shareType}
+                                      </td>
+                                      <td>{adult}</td>
+                                      <td>
+                                        {child}
+                                        {childAges.length > 0 &&
+                                          childAges.length === 1 && (
+                                            <small className="text-muted d-block">
+                                              {child} Child : {childAges[0]} Age
+                                            </small>
+                                          )}
+                                        {childAges.length > 1 && (
+                                          <small className="text-muted d-block">
+                                            {childAges.map((age, idx) => (
+                                              <span key={idx}>
+                                                {idx + 1} Child : {age} Age
+                                                {idx < childAges.length - 1
+                                                  ? ", "
+                                                  : ""}
+                                              </span>
+                                            ))}
+                                          </small>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </Table>
 
-                              {/* Transfer Option/Share type Table */}
-                              <Table striped bordered hover responsive size="sm" className="mb-3 transfer-table">
-                                <thead>
-                                  <tr>
-                                    <th>Transfer Option/Share type</th>
-                                    <th>Adult Count</th>
-                                    <th>Child Count</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  <tr>
-                                    <td>{getTravelTypeLabel(travelType)} / {shareType}</td>
-                                    <td>{adult}</td>
-                                    <td>
-                                      {child}
-                                      {childAges.length > 0 && childAges.length === 1 && (
-                                        <small className="text-muted d-block">
-                                          {child} Child : {childAges[0]} Age
-                                        </small>
-                                      )}
-                                      {childAges.length > 1 && (
-                                        <small className="text-muted d-block">
-                                          {childAges.map((age, idx) => (
-                                            <span key={idx}>
-                                              {idx + 1} Child : {age} Age{idx < childAges.length - 1 ? ", " : ""}
-                                            </span>
-                                          ))}
-                                        </small>
-                                      )}
-                                    </td>
-                                  </tr>
-                                </tbody>
-                              </Table>
+                                {/* Transporter and Driver Details */}
+                                <div className="mb-3 p-3 bg-light rounded">
+                                  <h6 className="mb-3 fw-bold text-primary">
+                                    Transporter & Driver Details
+                                  </h6>
+                                  <Row className="g-3">
+                                    <Col md={6}>
+                                      <Form.Label>Transporter Name</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={
+                                          transferDetail.transporterName || ""
+                                        }
+                                        onChange={(e) =>
+                                          setTransferDetails({
+                                            ...transferDetails,
+                                            [transferIndex]: {
+                                              ...transferDetail,
+                                              transporterName: e.target.value,
+                                            },
+                                          })
+                                        }
+                                        placeholder="Enter transporter name"
+                                      />
+                                    </Col>
+                                    <Col md={6}>
+                                      <Form.Label>Contact Number</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={
+                                          transferDetail.contactNumber || ""
+                                        }
+                                        onChange={(e) =>
+                                          setTransferDetails({
+                                            ...transferDetails,
+                                            [transferIndex]: {
+                                              ...transferDetail,
+                                              contactNumber: e.target.value,
+                                            },
+                                          })
+                                        }
+                                        placeholder="Enter contact number"
+                                      />
+                                    </Col>
+                                    <Col md={6}>
+                                      <Form.Label>Driver Name</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={transferDetail.driverName || ""}
+                                        onChange={(e) =>
+                                          setTransferDetails({
+                                            ...transferDetails,
+                                            [transferIndex]: {
+                                              ...transferDetail,
+                                              driverName: e.target.value,
+                                            },
+                                          })
+                                        }
+                                        placeholder="Enter driver name"
+                                      />
+                                    </Col>
+                                    <Col md={6}>
+                                      <Form.Label>Driver Contact</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={
+                                          transferDetail.driverContact || ""
+                                        }
+                                        onChange={(e) =>
+                                          setTransferDetails({
+                                            ...transferDetails,
+                                            [transferIndex]: {
+                                              ...transferDetail,
+                                              driverContact: e.target.value,
+                                            },
+                                          })
+                                        }
+                                        placeholder="Enter driver contact"
+                                      />
+                                    </Col>
+                                  </Row>
+                                </div>
 
-                              {/* Transporter and Driver Details */}
-                              <div className="mb-3 p-3 bg-light rounded">
-                                <h6 className="mb-3 fw-bold text-primary">Transporter & Driver Details</h6>
+                                {/* Selling Price and Total Price */}
                                 <Row className="g-3">
-                                <Col md={6}>
-                                  <Form.Label>Transporter Name</Form.Label>
-                                  <Form.Control
-                                    type="text"
-                                    value={transferDetail.transporterName || ""}
-                                    onChange={(e) =>
-                                      setTransferDetails({
-                                        ...transferDetails,
-                                        [transferIndex]: {
-                                          ...transferDetail,
-                                          transporterName: e.target.value,
-                                        },
-                                      })
-                                    }
-                                    placeholder="Enter transporter name"
-                                  />
-                                </Col>
-                                <Col md={6}>
-                                  <Form.Label>Contact Number</Form.Label>
-                                  <Form.Control
-                                    type="text"
-                                    value={transferDetail.contactNumber || ""}
-                                    onChange={(e) =>
-                                      setTransferDetails({
-                                        ...transferDetails,
-                                        [transferIndex]: {
-                                          ...transferDetail,
-                                          contactNumber: e.target.value,
-                                        },
-                                      })
-                                    }
-                                    placeholder="Enter contact number"
-                                  />
-                                </Col>
-                                <Col md={6}>
-                                  <Form.Label>Driver Name</Form.Label>
-                                  <Form.Control
-                                    type="text"
-                                    value={transferDetail.driverName || ""}
-                                    onChange={(e) =>
-                                      setTransferDetails({
-                                        ...transferDetails,
-                                        [transferIndex]: {
-                                          ...transferDetail,
-                                          driverName: e.target.value,
-                                        },
-                                      })
-                                    }
-                                    placeholder="Enter driver name"
-                                  />
-                                </Col>
-                                <Col md={6}>
-                                  <Form.Label>Driver Contact</Form.Label>
-                                  <Form.Control
-                                    type="text"
-                                    value={transferDetail.driverContact || ""}
-                                    onChange={(e) =>
-                                      setTransferDetails({
-                                        ...transferDetails,
-                                        [transferIndex]: {
-                                          ...transferDetail,
-                                          driverContact: e.target.value,
-                                        },
-                                      })
-                                    }
-                                    placeholder="Enter driver contact"
-                                  />
-                                </Col>
+                                  <Col md={6}>
+                                    <div className="d-flex align-items-center justify-content-between">
+                                      <strong>Selling Price</strong>
+                                      <div className="d-flex align-items-center gap-2">
+                                        <span className="text-success fw-bold">
+                                          {sellingPrice.toFixed(2)}
+                                        </span>
+                                        <FaEdit className="text-success edit-icon" />
+                                      </div>
+                                    </div>
+                                  </Col>
+                                  <Col md={6}>
+                                    <div className="d-flex align-items-center justify-content-between">
+                                      <strong>Total Price</strong>
+                                      <div className="d-flex align-items-center gap-2">
+                                        <span className="text-primary fw-bold">
+                                          {totalPrice.toFixed(2)}
+                                        </span>
+                                        <FaEdit className="text-success edit-icon" />
+                                      </div>
+                                    </div>
+                                  </Col>
                                 </Row>
-                              </div>
-
-                              {/* Selling Price and Total Price */}
-                              <Row className="g-3">
-                                <Col md={6}>
-                                  <div className="d-flex align-items-center justify-content-between">
-                                    <strong>Selling Price</strong>
-                                    <div className="d-flex align-items-center gap-2">
-                                      <span className="text-success fw-bold">{sellingPrice.toFixed(2)}</span>
-                                      <FaEdit className="text-success edit-icon" />
-                                    </div>
-                                  </div>
-                                </Col>
-                                <Col md={6}>
-                                  <div className="d-flex align-items-center justify-content-between">
-                                    <strong>Total Price</strong>
-                                    <div className="d-flex align-items-center gap-2">
-                                      <span className="text-primary fw-bold">{totalPrice.toFixed(2)}</span>
-                                      <FaEdit className="text-success edit-icon" />
-                                    </div>
-                                  </div>
-                                </Col>
-                              </Row>
                               </Card.Body>
                             </Card>
                           );
@@ -1863,80 +2298,100 @@ const MakePkgBookingPage = () => {
                         onChange={(e) => setVisaRequired(e.target.checked)}
                         className="mb-2"
                       />
-                      
+
                       {visaRequired && (
                         <div className="visa-section">
-                          <h6 className="mb-3 fw-bold text-warning">Visa Details</h6>
+                          <h6 className="mb-3 fw-bold text-warning">
+                            Visa Details
+                          </h6>
                           <Row className="g-3 visa-form-row">
-                          <Col md={6}>
-                            <Form.Label>Visa Adult</Form.Label>
-                            <Form.Control
-                              type="number"
-                              value={visaDetails.visaAdult}
-                              onChange={(e) =>
-                                setVisaDetails({ ...visaDetails, visaAdult: e.target.value })
-                              }
-                              min="0"
-                            />
-                          </Col>
-                          <Col md={6}>
-                            <Form.Label>Visa Adult Rate</Form.Label>
-                            <Form.Control
-                              type="number"
-                              value={visaDetails.visaAdultRate}
-                              onChange={(e) =>
-                                setVisaDetails({ ...visaDetails, visaAdultRate: e.target.value })
-                              }
-                              min="0"
-                              step="0.01"
-                            />
-                          </Col>
-                          <Col md={6}>
-                            <Form.Label>Visa Child</Form.Label>
-                            <Form.Control
-                              type="number"
-                              value={visaDetails.visaChild}
-                              onChange={(e) =>
-                                setVisaDetails({ ...visaDetails, visaChild: e.target.value })
-                              }
-                              min="0"
-                            />
-                          </Col>
-                          <Col md={6}>
-                            <Form.Label>Visa Child Rate</Form.Label>
-                            <Form.Control
-                              type="number"
-                              value={visaDetails.visaChildRate}
-                              onChange={(e) =>
-                                setVisaDetails({ ...visaDetails, visaChildRate: e.target.value })
-                              }
-                              min="0"
-                              step="0.01"
-                            />
-                          </Col>
-                          <Col md={6}>
-                            <Form.Label>Visa Infant</Form.Label>
-                            <Form.Control
-                              type="number"
-                              value={visaDetails.visaInfant}
-                              onChange={(e) =>
-                                setVisaDetails({ ...visaDetails, visaInfant: e.target.value })
-                              }
-                              min="0"
-                            />
-                          </Col>
-                          <Col md={6}>
-                            <Form.Label>Visa Infant Rate</Form.Label>
-                            <Form.Control
-                              type="number"
-                              value={visaDetails.visaInfantRate}
-                              onChange={(e) =>
-                                setVisaDetails({ ...visaDetails, visaInfantRate: e.target.value })
-                              }
-                              min="0"
-                              step="0.01"
-                            />
-                          </Col>
+                            <Col md={6}>
+                              <Form.Label>Visa Adult</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={visaDetails.visaAdult}
+                                onChange={(e) =>
+                                  setVisaDetails({
+                                    ...visaDetails,
+                                    visaAdult: e.target.value,
+                                  })
+                                }
+                                min="0"
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label>Visa Adult Rate</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={visaDetails.visaAdultRate}
+                                onChange={(e) =>
+                                  setVisaDetails({
+                                    ...visaDetails,
+                                    visaAdultRate: e.target.value,
+                                  })
+                                }
+                                min="0"
+                                step="0.01"
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label>Visa Child</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={visaDetails.visaChild}
+                                onChange={(e) =>
+                                  setVisaDetails({
+                                    ...visaDetails,
+                                    visaChild: e.target.value,
+                                  })
+                                }
+                                min="0"
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label>Visa Child Rate</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={visaDetails.visaChildRate}
+                                onChange={(e) =>
+                                  setVisaDetails({
+                                    ...visaDetails,
+                                    visaChildRate: e.target.value,
+                                  })
+                                }
+                                min="0"
+                                step="0.01"
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label>Visa Infant</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={visaDetails.visaInfant}
+                                onChange={(e) =>
+                                  setVisaDetails({
+                                    ...visaDetails,
+                                    visaInfant: e.target.value,
+                                  })
+                                }
+                                min="0"
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label>Visa Infant Rate</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={visaDetails.visaInfantRate}
+                                onChange={(e) =>
+                                  setVisaDetails({
+                                    ...visaDetails,
+                                    visaInfantRate: e.target.value,
+                                  })
+                                }
+                                min="0"
+                                step="0.01"
+                              />
+                            </Col>
                           </Row>
                         </div>
                       )}
@@ -1945,12 +2400,12 @@ const MakePkgBookingPage = () => {
 
                   {/* Guest Details Section - Always Open */}
                   <Accordion.Item eventKey="5" className="mb-2">
-                    <Accordion.Header 
+                    <Accordion.Header
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      style={{ cursor: 'default' }}
+                      style={{ cursor: "default" }}
                     >
                       <h5 className="mb-0 fw-bold">Guest Details</h5>
                     </Accordion.Header>
@@ -1964,9 +2419,14 @@ const MakePkgBookingPage = () => {
                             <Form.Select
                               value={primaryGuest.salutation}
                               onChange={(e) =>
-                                handlePrimaryGuestChange("salutation", e.target.value)
+                                handlePrimaryGuestChange(
+                                  "salutation",
+                                  e.target.value,
+                                )
                               }
-                              isInvalid={!!validationErrors.primaryGuest_salutation}
+                              isInvalid={
+                                !!validationErrors.primaryGuest_salutation
+                              }
                               required
                             >
                               <option value="">Select</option>
@@ -1987,9 +2447,14 @@ const MakePkgBookingPage = () => {
                               type="text"
                               value={primaryGuest.firstName}
                               onChange={(e) =>
-                                handlePrimaryGuestChange("firstName", e.target.value)
+                                handlePrimaryGuestChange(
+                                  "firstName",
+                                  e.target.value,
+                                )
                               }
-                              isInvalid={!!validationErrors.primaryGuest_firstName}
+                              isInvalid={
+                                !!validationErrors.primaryGuest_firstName
+                              }
                               required
                             />
                             <Form.Control.Feedback type="invalid">
@@ -2017,9 +2482,14 @@ const MakePkgBookingPage = () => {
                               type="text"
                               value={primaryGuest.lastName}
                               onChange={(e) =>
-                                handlePrimaryGuestChange("lastName", e.target.value)
+                                handlePrimaryGuestChange(
+                                  "lastName",
+                                  e.target.value,
+                                )
                               }
-                              isInvalid={!!validationErrors.primaryGuest_lastName}
+                              isInvalid={
+                                !!validationErrors.primaryGuest_lastName
+                              }
                               required
                             />
                             <Form.Control.Feedback type="invalid">
@@ -2028,15 +2498,21 @@ const MakePkgBookingPage = () => {
                           </Col>
                           <Col md={4}>
                             <Form.Label>
-                              Contact Number <span className="text-danger">*</span>
+                              Contact Number{" "}
+                              <span className="text-danger">*</span>
                             </Form.Label>
                             <Form.Control
                               type="tel"
                               value={primaryGuest.contactNumber}
                               onChange={(e) =>
-                                handlePrimaryGuestChange("contactNumber", e.target.value)
+                                handlePrimaryGuestChange(
+                                  "contactNumber",
+                                  e.target.value,
+                                )
                               }
-                              isInvalid={!!validationErrors.primaryGuest_contactNumber}
+                              isInvalid={
+                                !!validationErrors.primaryGuest_contactNumber
+                              }
                               required
                             />
                             <Form.Control.Feedback type="invalid">
@@ -2051,9 +2527,14 @@ const MakePkgBookingPage = () => {
                               type="email"
                               value={primaryGuest.emailId}
                               onChange={(e) =>
-                                handlePrimaryGuestChange("emailId", e.target.value)
+                                handlePrimaryGuestChange(
+                                  "emailId",
+                                  e.target.value,
+                                )
                               }
-                              isInvalid={!!validationErrors.primaryGuest_emailId}
+                              isInvalid={
+                                !!validationErrors.primaryGuest_emailId
+                              }
                               required
                             />
                             <Form.Control.Feedback type="invalid">
@@ -2111,9 +2592,9 @@ const MakePkgBookingPage = () => {
                   >
                     Cancel
                   </Button>
-                  <Button 
-                    type="button" 
-                    variant="primary" 
+                  <Button
+                    type="button"
+                    variant="primary"
                     size="lg"
                     className="btn-booking btn-booking-primary"
                     onClick={handleSubmit}
@@ -2138,65 +2619,98 @@ const MakePkgBookingPage = () => {
         keyboard={false}
         className="order-summary-modal"
       >
-        <Modal.Header 
+        <Modal.Header
           closeButton={!isSubmitting}
-          style={{ 
+          style={{
             borderBottom: "2px solid #e9ecef",
-            padding: "1.25rem 1.5rem"
+            padding: "1.25rem 1.5rem",
           }}
         >
-          <Modal.Title className="d-flex align-items-center" style={{ fontSize: "1.5rem", fontWeight: "600" }}>
-            <div 
+          <Modal.Title
+            className="d-flex align-items-center"
+            style={{ fontSize: "1.5rem", fontWeight: "600" }}
+          >
+            <div
               className="d-flex align-items-center justify-content-center me-3"
               style={{
                 width: "48px",
                 height: "48px",
                 borderRadius: "12px",
                 backgroundColor: "#e7f5ff",
-                color: "#0d6efd"
+                color: "#0d6efd",
               }}
             >
               <FaCheckCircle size={24} />
             </div>
             <div>
-              <div style={{ fontSize: "1.5rem", fontWeight: "600", color: "#212529" }}>
+              <div
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: "600",
+                  color: "#212529",
+                }}
+              >
                 Order Summary
               </div>
-              <div style={{ fontSize: "0.875rem", color: "#6c757d", fontWeight: "400" }}>
+              <div
+                style={{
+                  fontSize: "0.875rem",
+                  color: "#6c757d",
+                  fontWeight: "400",
+                }}
+              >
                 Please review your booking details
               </div>
             </div>
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto", padding: "1.5rem" }}>
+        <Modal.Body
+          style={{ maxHeight: "70vh", overflowY: "auto", padding: "1.5rem" }}
+        >
           <div className="order-summary">
             {/* Guest Information Section */}
             <div className="mb-4">
               <div className="d-flex align-items-center mb-3">
                 <FaUsers className="me-2 text-primary" size={18} />
-                <h6 className="mb-0 fw-bold" style={{ fontSize: "1rem", color: "#212529" }}>
+                <h6
+                  className="mb-0 fw-bold"
+                  style={{ fontSize: "1rem", color: "#212529" }}
+                >
                   Guest Information
                 </h6>
               </div>
-              <div 
+              <div
                 className="p-3 rounded"
-                style={{ 
+                style={{
                   backgroundColor: "#f8f9fa",
-                  border: "1px solid #e9ecef"
+                  border: "1px solid #e9ecef",
                 }}
               >
                 <Row className="g-3">
                   <Col md={6}>
                     <div className="mb-2">
-                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                      <small
+                        className="text-muted d-block mb-1"
+                        style={{ fontSize: "0.75rem", fontWeight: "500" }}
+                      >
                         Full Name
                       </small>
-                      <div style={{ fontSize: "0.9375rem", fontWeight: "500", color: "#212529" }}>
-                        {primaryGuest.salutation} {primaryGuest.firstName} {primaryGuest.lastName}
+                      <div
+                        style={{
+                          fontSize: "0.9375rem",
+                          fontWeight: "500",
+                          color: "#212529",
+                        }}
+                      >
+                        {primaryGuest.salutation} {primaryGuest.firstName}{" "}
+                        {primaryGuest.lastName}
                       </div>
                     </div>
                     <div className="mb-2">
-                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                      <small
+                        className="text-muted d-block mb-1"
+                        style={{ fontSize: "0.75rem", fontWeight: "500" }}
+                      >
                         Email Address
                       </small>
                       <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
@@ -2206,7 +2720,10 @@ const MakePkgBookingPage = () => {
                   </Col>
                   <Col md={6}>
                     <div className="mb-2">
-                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                      <small
+                        className="text-muted d-block mb-1"
+                        style={{ fontSize: "0.75rem", fontWeight: "500" }}
+                      >
                         Contact Number
                       </small>
                       <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
@@ -2214,7 +2731,10 @@ const MakePkgBookingPage = () => {
                       </div>
                     </div>
                     <div className="mb-2">
-                      <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                      <small
+                        className="text-muted d-block mb-1"
+                        style={{ fontSize: "0.75rem", fontWeight: "500" }}
+                      >
                         LPO Number
                       </small>
                       <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
@@ -2225,10 +2745,15 @@ const MakePkgBookingPage = () => {
                   {primaryGuest.passportNumber && (
                     <Col md={12}>
                       <div>
-                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                        <small
+                          className="text-muted d-block mb-1"
+                          style={{ fontSize: "0.75rem", fontWeight: "500" }}
+                        >
                           Passport Number
                         </small>
-                        <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
+                        <div
+                          style={{ fontSize: "0.9375rem", color: "#495057" }}
+                        >
                           {primaryGuest.passportNumber}
                         </div>
                       </div>
@@ -2240,42 +2765,59 @@ const MakePkgBookingPage = () => {
 
             {/* Booking Items Section */}
             <div className="mb-4">
-              <h6 className="mb-3 fw-bold" style={{ fontSize: "1rem", color: "#212529" }}>
+              <h6
+                className="mb-3 fw-bold"
+                style={{ fontSize: "1rem", color: "#212529" }}
+              >
                 Booking Details
               </h6>
-              
+
               {/* Hotel Details */}
               {hotels.length > 0 && (
-                <div 
+                <div
                   className="mb-3 p-3 rounded"
-                  style={{ 
+                  style={{
                     backgroundColor: "#fff",
                     border: "1px solid #e9ecef",
-                    borderLeft: "4px solid #0dcaf0"
+                    borderLeft: "4px solid #0dcaf0",
                   }}
                 >
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <div className="d-flex align-items-center">
                       <FaHotel className="me-2 text-info" size={18} />
-                      <strong style={{ fontSize: "0.9375rem" }}>Accommodation</strong>
+                      <strong style={{ fontSize: "0.9375rem" }}>
+                        Accommodation
+                      </strong>
                     </div>
-                    <Badge bg="info">{hotels.length} {hotels.length === 1 ? 'Hotel' : 'Hotels'}</Badge>
+                    <Badge bg="info">
+                      {hotels.length} {hotels.length === 1 ? "Hotel" : "Hotels"}
+                    </Badge>
                   </div>
                   {hotels.map((item, idx) => {
                     const hotel = item.hotel || {};
                     const checkIn = hotel.checkIn || hotel.checkInDate || "";
                     const checkOut = hotel.checkOut || hotel.checkOutDate || "";
                     const hotelSellingPrice = parseFloat(hotel.totalRate || 0);
-                    const hotelTotalPrice = parseFloat(hotel.totalRateWithoutmrk || hotel.totalRate || 0);
-                    
+                    const hotelTotalPrice = parseFloat(
+                      hotel.totalRateWithoutmrk || hotel.totalRate || 0,
+                    );
+
                     return (
-                      <div key={idx} className={idx > 0 ? "mt-3 pt-3 border-top" : ""}>
+                      <div
+                        key={idx}
+                        className={idx > 0 ? "mt-3 pt-3 border-top" : ""}
+                      >
                         <div className="mb-2">
-                          <strong style={{ fontSize: "0.9375rem", color: "#212529" }}>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#212529" }}
+                          >
                             {hotel.hotelName || "Hotel"}
                           </strong>
                         </div>
-                        <div className="d-flex flex-wrap gap-3 mb-2" style={{ fontSize: "0.8125rem", color: "#6c757d" }}>
+                        <div
+                          className="d-flex flex-wrap gap-3 mb-2"
+                          style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                        >
                           <span>
                             <FaCalendarAlt className="me-1" />
                             Check-in: {formatDate(checkIn)}
@@ -2286,14 +2828,26 @@ const MakePkgBookingPage = () => {
                           </span>
                         </div>
                         <div className="d-flex justify-content-between align-items-center">
-                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Selling Price</span>
-                          <strong style={{ fontSize: "0.9375rem", color: "#198754" }}>
+                          <span
+                            style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                          >
+                            Selling Price
+                          </span>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#198754" }}
+                          >
                             AED {hotelSellingPrice.toFixed(2)}
                           </strong>
                         </div>
                         <div className="d-flex justify-content-between align-items-center">
-                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Total Price</span>
-                          <strong style={{ fontSize: "0.9375rem", color: "#0d6efd" }}>
+                          <span
+                            style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                          >
+                            Total Price
+                          </span>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#0d6efd" }}
+                          >
                             AED {hotelTotalPrice.toFixed(2)}
                           </strong>
                         </div>
@@ -2305,52 +2859,82 @@ const MakePkgBookingPage = () => {
 
               {/* Activity Details */}
               {activities.length > 0 && (
-                <div 
+                <div
                   className="mb-3 p-3 rounded"
-                  style={{ 
+                  style={{
                     backgroundColor: "#fff",
                     border: "1px solid #e9ecef",
-                    borderLeft: "4px solid #198754"
+                    borderLeft: "4px solid #198754",
                   }}
                 >
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <div className="d-flex align-items-center">
                       <FaTicketAlt className="me-2 text-success" size={18} />
-                      <strong style={{ fontSize: "0.9375rem" }}>Tours & Activities</strong>
+                      <strong style={{ fontSize: "0.9375rem" }}>
+                        Tours & Activities
+                      </strong>
                     </div>
-                    <Badge bg="success">{activities.length} {activities.length === 1 ? 'Activity' : 'Activities'}</Badge>
+                    <Badge bg="success">
+                      {activities.length}{" "}
+                      {activities.length === 1 ? "Activity" : "Activities"}
+                    </Badge>
                   </div>
                   {activities.map((item, idx) => {
                     const activity = item.activity || {};
-                    const activitySellingPrice = parseFloat(activity.totalRate || 0);
-                    const activityTotalPrice = parseFloat(activity.totalRateWithoutmrk || activity.totalRate || 0);
-                    
+                    const activitySellingPrice = parseFloat(
+                      activity.totalRate || 0,
+                    );
+                    const activityTotalPrice = parseFloat(
+                      activity.totalRateWithoutmrk || activity.totalRate || 0,
+                    );
+
                     return (
-                      <div key={idx} className={idx > 0 ? "mt-3 pt-3 border-top" : ""}>
+                      <div
+                        key={idx}
+                        className={idx > 0 ? "mt-3 pt-3 border-top" : ""}
+                      >
                         <div className="mb-2">
-                          <strong style={{ fontSize: "0.9375rem", color: "#212529" }}>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#212529" }}
+                          >
                             {activity.activityName || "Activity"}
                           </strong>
                         </div>
-                        <div className="d-flex flex-wrap gap-3 mb-2" style={{ fontSize: "0.8125rem", color: "#6c757d" }}>
+                        <div
+                          className="d-flex flex-wrap gap-3 mb-2"
+                          style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                        >
                           <span>
                             <FaCalendarAlt className="me-1" />
                             Date: {formatDate(activity.activityDate || "")}
                           </span>
                           <span>
                             <FaUsers className="me-1" />
-                            Adults: {activity.adult || 0} | Children: {activity.child || 0}
+                            Adults: {activity.adult || 0} | Children:{" "}
+                            {activity.child || 0}
                           </span>
                         </div>
                         <div className="d-flex justify-content-between align-items-center">
-                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Selling Price</span>
-                          <strong style={{ fontSize: "0.9375rem", color: "#198754" }}>
+                          <span
+                            style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                          >
+                            Selling Price
+                          </span>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#198754" }}
+                          >
                             AED {activitySellingPrice.toFixed(2)}
                           </strong>
                         </div>
                         <div className="d-flex justify-content-between align-items-center">
-                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Total Price</span>
-                          <strong style={{ fontSize: "0.9375rem", color: "#0d6efd" }}>
+                          <span
+                            style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                          >
+                            Total Price
+                          </span>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#0d6efd" }}
+                          >
                             AED {activityTotalPrice.toFixed(2)}
                           </strong>
                         </div>
@@ -2362,34 +2946,49 @@ const MakePkgBookingPage = () => {
 
               {/* Transfer Details */}
               {transfers.length > 0 && (
-                <div 
+                <div
                   className="mb-3 p-3 rounded"
-                  style={{ 
+                  style={{
                     backgroundColor: "#fff",
                     border: "1px solid #e9ecef",
-                    borderLeft: "4px solid #ffc107"
+                    borderLeft: "4px solid #ffc107",
                   }}
                 >
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <div className="d-flex align-items-center">
                       <FaCar className="me-2 text-warning" size={18} />
-                      <strong style={{ fontSize: "0.9375rem" }}>Transfers</strong>
+                      <strong style={{ fontSize: "0.9375rem" }}>
+                        Transfers
+                      </strong>
                     </div>
-                    <Badge bg="warning" text="dark">{transfers.length} {transfers.length === 1 ? 'Transfer' : 'Transfers'}</Badge>
+                    <Badge bg="warning" text="dark">
+                      {transfers.length}{" "}
+                      {transfers.length === 1 ? "Transfer" : "Transfers"}
+                    </Badge>
                   </div>
                   {transfers.map((item, idx) => {
                     const cab = item.cab || {};
                     const cabSellingPrice = parseFloat(cab.totalRate || 0);
-                    const cabTotalPrice = parseFloat(cab.totalRateWithoutmrk || cab.totalRate || 0);
-                    
+                    const cabTotalPrice = parseFloat(
+                      cab.totalRateWithoutmrk || cab.totalRate || 0,
+                    );
+
                     return (
-                      <div key={idx} className={idx > 0 ? "mt-3 pt-3 border-top" : ""}>
+                      <div
+                        key={idx}
+                        className={idx > 0 ? "mt-3 pt-3 border-top" : ""}
+                      >
                         <div className="mb-2">
-                          <strong style={{ fontSize: "0.9375rem", color: "#212529" }}>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#212529" }}
+                          >
                             {cab.cabName || "Transfer"}
                           </strong>
                         </div>
-                        <div className="d-flex flex-wrap gap-3 mb-2" style={{ fontSize: "0.8125rem", color: "#6c757d" }}>
+                        <div
+                          className="d-flex flex-wrap gap-3 mb-2"
+                          style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                        >
                           <span>
                             <FaCalendarAlt className="me-1" />
                             Pickup: {formatDate(cab.pickupDate || "")}
@@ -2400,14 +2999,26 @@ const MakePkgBookingPage = () => {
                           </span>
                         </div>
                         <div className="d-flex justify-content-between align-items-center">
-                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Selling Price</span>
-                          <strong style={{ fontSize: "0.9375rem", color: "#198754" }}>
+                          <span
+                            style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                          >
+                            Selling Price
+                          </span>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#198754" }}
+                          >
                             AED {cabSellingPrice.toFixed(2)}
                           </strong>
                         </div>
                         <div className="d-flex justify-content-between align-items-center">
-                          <span style={{ fontSize: "0.8125rem", color: "#6c757d" }}>Total Price</span>
-                          <strong style={{ fontSize: "0.9375rem", color: "#0d6efd" }}>
+                          <span
+                            style={{ fontSize: "0.8125rem", color: "#6c757d" }}
+                          >
+                            Total Price
+                          </span>
+                          <strong
+                            style={{ fontSize: "0.9375rem", color: "#0d6efd" }}
+                          >
                             AED {cabTotalPrice.toFixed(2)}
                           </strong>
                         </div>
@@ -2419,26 +3030,33 @@ const MakePkgBookingPage = () => {
             </div>
 
             {/* Price Summary Section */}
-            <div 
+            <div
               className="p-4 rounded"
-              style={{ 
+              style={{
                 backgroundColor: "#f8f9fa",
-                border: "2px solid #0d6efd"
+                border: "2px solid #0d6efd",
               }}
             >
-              <h6 className="mb-3 fw-bold" style={{ fontSize: "1rem", color: "#212529" }}>
+              <h6
+                className="mb-3 fw-bold"
+                style={{ fontSize: "1rem", color: "#212529" }}
+              >
                 Price Summary
               </h6>
-              
+
               <div className="mb-3">
                 <div className="d-flex justify-content-between align-items-center mb-2">
-                  <span style={{ fontSize: "0.9375rem", color: "#495057" }}>Subtotal (Selling Price)</span>
+                  <span style={{ fontSize: "0.9375rem", color: "#495057" }}>
+                    Subtotal (Selling Price)
+                  </span>
                   <strong style={{ fontSize: "1.125rem", color: "#198754" }}>
                     AED {sellingPrice.toFixed(2)}
                   </strong>
                 </div>
                 <div className="d-flex justify-content-between align-items-center">
-                  <span style={{ fontSize: "0.9375rem", color: "#495057" }}>Subtotal (Without Markup)</span>
+                  <span style={{ fontSize: "0.9375rem", color: "#495057" }}>
+                    Subtotal (Without Markup)
+                  </span>
                   <strong style={{ fontSize: "1.125rem", color: "#0d6efd" }}>
                     AED {totalPrice.toFixed(2)}
                   </strong>
@@ -2447,42 +3065,78 @@ const MakePkgBookingPage = () => {
 
               {visaRequired && (
                 <div className="pt-3 mt-3 border-top">
-                  <h6 className="mb-2 fw-semibold" style={{ fontSize: "0.875rem", color: "#495057" }}>
+                  <h6
+                    className="mb-2 fw-semibold"
+                    style={{ fontSize: "0.875rem", color: "#495057" }}
+                  >
                     Visa Charges
                   </h6>
                   {parseInt(visaDetails.visaAdult || "0") > 0 && (
-                    <div className="d-flex justify-content-between mb-1" style={{ fontSize: "0.8125rem" }}>
-                      <span className="text-muted">Adults ({visaDetails.visaAdult})</span>
-                      <span>AED {parseFloat(visaDetails.visaAdultRate || "0").toFixed(2)}</span>
+                    <div
+                      className="d-flex justify-content-between mb-1"
+                      style={{ fontSize: "0.8125rem" }}
+                    >
+                      <span className="text-muted">
+                        Adults ({visaDetails.visaAdult})
+                      </span>
+                      <span>
+                        AED{" "}
+                        {parseFloat(visaDetails.visaAdultRate || "0").toFixed(
+                          2,
+                        )}
+                      </span>
                     </div>
                   )}
                   {parseInt(visaDetails.visaChild || "0") > 0 && (
-                    <div className="d-flex justify-content-between mb-1" style={{ fontSize: "0.8125rem" }}>
-                      <span className="text-muted">Children ({visaDetails.visaChild})</span>
-                      <span>AED {parseFloat(visaDetails.visaChildRate || "0").toFixed(2)}</span>
+                    <div
+                      className="d-flex justify-content-between mb-1"
+                      style={{ fontSize: "0.8125rem" }}
+                    >
+                      <span className="text-muted">
+                        Children ({visaDetails.visaChild})
+                      </span>
+                      <span>
+                        AED{" "}
+                        {parseFloat(visaDetails.visaChildRate || "0").toFixed(
+                          2,
+                        )}
+                      </span>
                     </div>
                   )}
                   {parseInt(visaDetails.visaInfant || "0") > 0 && (
-                    <div className="d-flex justify-content-between" style={{ fontSize: "0.8125rem" }}>
-                      <span className="text-muted">Infants ({visaDetails.visaInfant})</span>
-                      <span>AED {parseFloat(visaDetails.visaInfantRate || "0").toFixed(2)}</span>
+                    <div
+                      className="d-flex justify-content-between"
+                      style={{ fontSize: "0.8125rem" }}
+                    >
+                      <span className="text-muted">
+                        Infants ({visaDetails.visaInfant})
+                      </span>
+                      <span>
+                        AED{" "}
+                        {parseFloat(visaDetails.visaInfantRate || "0").toFixed(
+                          2,
+                        )}
+                      </span>
                     </div>
                   )}
                 </div>
               )}
 
-              <div 
+              <div
                 className="mt-3 pt-3 border-top d-flex justify-content-between align-items-center"
                 style={{ borderColor: "#0d6efd !important" }}
               >
-                <span className="fw-bold" style={{ fontSize: "1.125rem", color: "#212529" }}>
+                <span
+                  className="fw-bold"
+                  style={{ fontSize: "1.125rem", color: "#212529" }}
+                >
                   Total Amount
                 </span>
-                <span 
+                <span
                   className="fw-bold"
-                  style={{ 
-                    fontSize: "1.5rem", 
-                    color: "#0d6efd"
+                  style={{
+                    fontSize: "1.5rem",
+                    color: "#0d6efd",
                   }}
                 >
                   AED {sellingPrice.toFixed(2)}
@@ -2491,20 +3145,20 @@ const MakePkgBookingPage = () => {
             </div>
           </div>
         </Modal.Body>
-        <Modal.Footer 
-          style={{ 
+        <Modal.Footer
+          style={{
             borderTop: "2px solid #e9ecef",
             padding: "1.25rem 1.5rem",
-            justifyContent: "space-between"
+            justifyContent: "space-between",
           }}
         >
           <Button
             variant="outline-secondary"
             onClick={() => setShowOrderSummaryModal(false)}
             disabled={isSubmitting}
-            style={{ 
+            style={{
               minWidth: "120px",
-              fontWeight: "500"
+              fontWeight: "500",
             }}
           >
             Cancel
@@ -2513,10 +3167,10 @@ const MakePkgBookingPage = () => {
             variant="primary"
             onClick={confirmBooking}
             disabled={isSubmitting}
-            style={{ 
+            style={{
               minWidth: "160px",
               fontWeight: "600",
-              fontSize: "1rem"
+              fontSize: "1rem",
             }}
           >
             {isSubmitting ? (
@@ -2542,14 +3196,14 @@ const MakePkgBookingPage = () => {
         centered
         className="itinerary-modal"
       >
-        <Modal.Header 
-          closeButton 
+        <Modal.Header
+          closeButton
           className="itinerary-modal-header"
-          style={{ 
+          style={{
             background: "linear-gradient(135deg, #0d6efd 0%, #0056b3 100%)",
             color: "white",
             border: "none",
-            padding: "1.25rem 1.5rem"
+            padding: "1.25rem 1.5rem",
           }}
         >
           <Modal.Title className="fw-bold d-flex align-items-center gap-2">
@@ -2562,7 +3216,9 @@ const MakePkgBookingPage = () => {
             )}
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto", padding: "1.5rem" }}>
+        <Modal.Body
+          style={{ maxHeight: "70vh", overflowY: "auto", padding: "1.5rem" }}
+        >
           {/* Search Bar */}
           <Form.Group className="mb-4">
             <div className="position-relative">
@@ -2572,45 +3228,56 @@ const MakePkgBookingPage = () => {
                 value={itinerarySearchTerm}
                 onChange={(e) => setItinerarySearchTerm(e.target.value)}
                 className="itinerary-search-input"
-                style={{ 
+                style={{
                   padding: "0.875rem 1rem 0.875rem 2.75rem",
                   borderRadius: "8px",
                   border: "2px solid #dee2e6",
-                  fontSize: "0.9rem"
+                  fontSize: "0.9rem",
                 }}
               />
-              <FaClock 
+              <FaClock
                 className="position-absolute"
                 style={{
                   left: "1rem",
                   top: "50%",
                   transform: "translateY(-50%)",
                   color: "#6c757d",
-                  fontSize: "0.9rem"
+                  fontSize: "0.9rem",
                 }}
               />
             </div>
-            {itinerarySearchTerm.trim().length > 0 && itinerarySearchTerm.trim().length < 4 && (
-              <small className="text-muted mt-2 d-block">
-                <FaClock className="me-1" />
-                Type at least 4 letters to search
-              </small>
-            )}
+            {itinerarySearchTerm.trim().length > 0 &&
+              itinerarySearchTerm.trim().length < 4 && (
+                <small className="text-muted mt-2 d-block">
+                  <FaClock className="me-1" />
+                  Type at least 4 letters to search
+                </small>
+              )}
           </Form.Group>
 
           {/* Itinerary List */}
           {loadingItinerary ? (
             <div className="text-center py-5">
               <Spinner animation="border" size="sm" variant="primary" />
-              <p className="mt-2 text-muted small">Loading itinerary details...</p>
+              <p className="mt-2 text-muted small">
+                Loading itinerary details...
+              </p>
             </div>
           ) : filteredItineraryList.length > 0 ? (
             <div className="itinerary-modal-list">
               {filteredItineraryList.map((itinerary) => {
-                const isSelected = currentDay && selectedItineraries[currentDay]?.includes(itinerary.itineraryId);
+                const isSelected =
+                  currentDay &&
+                  selectedItineraries[currentDay]?.includes(
+                    itinerary.itineraryId,
+                  );
                 const description = itinerary.itineraryDesc || "";
-                const shortDesc = description.length > 100 ? description.substring(0, 100) + "..." : description;
-                const showFullDesc = expandedDescriptions[itinerary.itineraryId] || false;
+                const shortDesc =
+                  description.length > 100
+                    ? description.substring(0, 100) + "..."
+                    : description;
+                const showFullDesc =
+                  expandedDescriptions[itinerary.itineraryId] || false;
 
                 return (
                   <div
@@ -2622,7 +3289,7 @@ const MakePkgBookingPage = () => {
                       borderRadius: "12px",
                       padding: "1.25rem",
                       transition: "all 0.3s ease",
-                      cursor: "pointer"
+                      cursor: "pointer",
                     }}
                     onClick={() => handleItineraryToggle(itinerary.itineraryId)}
                   >
@@ -2631,14 +3298,21 @@ const MakePkgBookingPage = () => {
                         type="checkbox"
                         id={`modal-itinerary-${itinerary.itineraryId}`}
                         checked={isSelected || false}
-                        onChange={() => handleItineraryToggle(itinerary.itineraryId)}
+                        onChange={() =>
+                          handleItineraryToggle(itinerary.itineraryId)
+                        }
                         className="me-3 mt-1"
                         style={{ flexShrink: 0 }}
                         onClick={(e) => e.stopPropagation()}
                       />
                       <div className="flex-grow-1">
                         <div className="d-flex align-items-center gap-2 mb-2">
-                          <h6 className="mb-0 fw-bold" style={{ color: isSelected ? "#0d6efd" : "#212529" }}>
+                          <h6
+                            className="mb-0 fw-bold"
+                            style={{
+                              color: isSelected ? "#0d6efd" : "#212529",
+                            }}
+                          >
                             {itinerary.itineraryHeading || "Untitled"}
                           </h6>
                           {isSelected && (
@@ -2648,21 +3322,24 @@ const MakePkgBookingPage = () => {
                             </Badge>
                           )}
                         </div>
-                        <p className="mb-0 text-muted" style={{ fontSize: "0.875rem", lineHeight: "1.6" }}>
+                        <p
+                          className="mb-0 text-muted"
+                          style={{ fontSize: "0.875rem", lineHeight: "1.6" }}
+                        >
                           {showFullDesc ? description : shortDesc}
                           {description.length > 100 && (
                             <button
                               className="btn btn-link p-0 ms-2 text-primary"
-                              style={{ 
-                                fontSize: "0.875rem", 
+                              style={{
+                                fontSize: "0.875rem",
                                 textDecoration: "none",
-                                fontWeight: "500"
+                                fontWeight: "500",
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setExpandedDescriptions(prev => ({
+                                setExpandedDescriptions((prev) => ({
                                   ...prev,
-                                  [itinerary.itineraryId]: !showFullDesc
+                                  [itinerary.itineraryId]: !showFullDesc,
                                 }));
                               }}
                             >
@@ -2676,19 +3353,26 @@ const MakePkgBookingPage = () => {
                 );
               })}
             </div>
-          ) : itinerarySearchTerm.trim().length > 0 && itinerarySearchTerm.trim().length < 4 ? (
+          ) : itinerarySearchTerm.trim().length > 0 &&
+            itinerarySearchTerm.trim().length < 4 ? (
             <div className="text-center py-5">
               <FaClock size={48} className="text-muted mb-3" />
-              <p className="text-muted fw-semibold">Please type at least 4 letters to search</p>
+              <p className="text-muted fw-semibold">
+                Please type at least 4 letters to search
+              </p>
             </div>
           ) : (
             <div className="text-center py-5">
               <FaRoute size={48} className="text-muted mb-3" />
-              <p className="text-muted fw-semibold">No itinerary details found.</p>
+              <p className="text-muted fw-semibold">
+                No itinerary details found.
+              </p>
             </div>
           )}
         </Modal.Body>
-        <Modal.Footer style={{ borderTop: "2px solid #dee2e6", padding: "1rem 1.5rem" }}>
+        <Modal.Footer
+          style={{ borderTop: "2px solid #dee2e6", padding: "1rem 1.5rem" }}
+        >
           <div className="d-flex justify-content-between align-items-center w-100">
             <small className="text-muted">
               {currentDay && selectedItineraries[currentDay]?.length > 0 && (
@@ -2698,8 +3382,8 @@ const MakePkgBookingPage = () => {
                 </>
               )}
             </small>
-            <Button 
-              variant="primary" 
+            <Button
+              variant="primary"
               onClick={handleCloseItineraryModal}
               style={{ minWidth: "120px" }}
             >

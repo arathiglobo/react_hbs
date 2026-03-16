@@ -9,6 +9,8 @@ import {
   Table,
   Card,
   Spinner,
+  Overlay,
+  Popover,
 } from "react-bootstrap";
 import { FaArrowLeft, FaSave } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
@@ -34,6 +36,11 @@ export default function CopyContractRate() {
   const [hotelRooms, setHotelRooms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [roomLoading, setRoomLoading] = useState(false);
+
+  // Cell confirmation popup state
+  const [showCellConfirm, setShowCellConfirm] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [confirmData, setConfirmData] = useState(null);
 
   // ✅ Helper function to get minimum date for Validity To (From date + 1 day)
   const getMinValidityToDate = (fromDate) => {
@@ -205,6 +212,28 @@ export default function CopyContractRate() {
 
       return { ...prev, roomRates: updated };
     });
+  };
+
+  // ✅ Handle onBlur for inline cell confirmation
+  const handleBlur = (e, categoryId, mealType, field, value) => {
+    if (value && Number(value) > 0) {
+      const target = e.target;
+      // Delay to ensure click events that caused the blur don't immediately trigger rootClose
+      setTimeout(() => {
+        setConfirmTarget(target);
+        setConfirmData({
+           categoryId,
+           mealType,
+           field,
+           value,
+           occName: "15", // Default occupancy for CopyRate since it's simplified
+           roomTypeName: mealType
+        });
+        setShowCellConfirm(true);
+      }, 150);
+    } else {
+      setShowCellConfirm(false);
+    }
   };
 
   // ✅ Save Updates
@@ -423,6 +452,15 @@ export default function CopyContractRate() {
                                             e.target.value
                                           )
                                         }
+                                        onBlur={(e) =>
+                                          handleBlur(
+                                            e,
+                                            room.hotelRoomcategoryId,
+                                            mealType,
+                                            field,
+                                            e.target.value
+                                          )
+                                        }
                                       />
                                     </td>
                                   ))}
@@ -437,6 +475,30 @@ export default function CopyContractRate() {
                 </>
               )}
             </Card>
+
+            {/* ✅ Inline cell confirmation popup */}
+            <Overlay show={showCellConfirm} target={confirmTarget} placement="top" rootClose rootCloseEvent="mousedown" onHide={() => setShowCellConfirm(false)}>
+              <Popover id="popover-confirm-rate-copy">
+                <Popover.Header as="h6" className="py-1 bg-warning text-dark">Confirm Rate</Popover.Header>
+                <Popover.Body className="p-2">
+                  <div className="mb-2 text-center text-dark" style={{ fontSize: "0.9rem" }}>
+                    Verify {confirmData?.field === "rateSingle" || confirmData?.field === "rateDouble" ? "Rate" : confirmData?.field === "adultRate" ? "Extra Adult" : "Extra Child"} of <strong>{confirmData?.value}</strong> with <strong>{confirmData?.mealType}</strong>?
+                  </div>
+                  <div className="d-flex justify-content-center gap-2">
+                    <Button size="sm" variant="success" onClick={(e) => { e.stopPropagation(); setShowCellConfirm(false); }}>
+                      Yes
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={(e) => {
+                      e.stopPropagation();
+                      handleRateChange(confirmData.categoryId, confirmData.mealType, confirmData.field, "");
+                      setShowCellConfirm(false);
+                    }}>
+                      No
+                    </Button>
+                  </div>
+                </Popover.Body>
+              </Popover>
+            </Overlay>
           </Container>
         </main>
       </div>
