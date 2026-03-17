@@ -266,12 +266,12 @@ const AgentReg = () => {
   // Static data for external APIs
   const externalApis = [
     { code: "Select", name: "Select" },
-    { code: "IWTX", name: "IWTX" },
-    { code: "X3", name: "X3" },
-    { code: "INHOUSE", name: "INHOUSE" },
-    { code: "DARINA", name: "DARINA" },
-    { code: "RATEHAWK", name: "RATEHAWK" },
-    { code: "ATHARVA", name: "ATHARVA" },
+    // { code: "IWTX", name: "IWTX" },
+    // { code: "X3", name: "X3" },
+    // { code: "INHOUSE", name: "INHOUSE" },
+    // { code: "DARINA", name: "DARINA" },
+    // { code: "RATEHAWK", name: "RATEHAWK" },
+    // { code: "ATHARVA", name: "ATHARVA" },
   ];
 
   const nextId = useMemo(

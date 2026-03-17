@@ -222,22 +222,30 @@ export default function Sidebar() {
           label: "Custom Booking",
           to: "/booking-details/custom-booking-list",
         },
+        // {
+        //   label: "Package Booking",
+        //   to: "/booking-details/package-booking-list",
+        // },
+        // {
+        //   label: "Activity Booking",
+        //   to: "/booking-details/activity-booking-list",
+        // },
         {
-          label: "Package Booking",
-          to: "/booking-details/package-booking-list",
+          label: "Cab Booking",
+          to: "/booking-details/cab-booking-list",
         },
-        {
-          label: "Complete Booking",
-          to: "/booking-details/complete-booking-list",
-        },
-        {
-          label: "Quotation List",
-          to: "/booking-details/quotation-list-list",
-        },
-        {
-          label: "Offline Booking List",
-          to: "/booking-details/offline-booking-list",
-        },
+        // {
+        //   label: "Complete Booking",
+        //   to: "/booking-details/complete-booking-list",
+        // },
+        // {
+        //   label: "Quotation List",
+        //   to: "/booking-details/quotation-list-list",
+        // },
+        // {
+        //   label: "Offline Booking List",
+        //   to: "/booking-details/offline-booking-list",
+        // },
       ],
     },
     {

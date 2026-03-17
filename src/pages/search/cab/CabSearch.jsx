@@ -321,294 +321,418 @@ export const CabSearch = () => {
     });
   };
 
+  const customSelectStyles = {
+  control: (base) => ({
+    ...base,
+    minHeight: "46px",
+    height: "46px",
+    borderRadius: "0.375rem", // matches bootstrap
+  }),
+  valueContainer: (base) => ({
+    ...base,
+    height: "46px",
+    padding: "0 8px",
+  }),
+  indicatorsContainer: (base) => ({
+    ...base,
+    height: "46px",
+  }),
+};
+
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
-      <TopBar />
-      <div className="d-flex flex-grow-1">
-        <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl mb-4 border-0">
+   <div className="min-vh-100 bg-light d-flex flex-column">
+  <TopBar />
+
+  <div className="d-flex flex-grow-1">
+    <Sidebar />
+
+    <main className="flex-grow-1 p-4">
+      <Card className="shadow-sm rounded-xl mb-4 border-0">
+        <Card.Body>
+
+          {/* 🔷 Header */}
+          <div className="mb-4">
+            <h4 className="fw-bold text-primary mb-1">Cab Search</h4>
+            <p className="text-muted small mb-0">
+              Search and compare available transfer options
+            </p>
+          </div>
+
+          {/* 🔷 Search Card */}
+          <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
             <Card.Body>
-              <h4 className="fw-bold mb-4 text-primary">
-                Cab Search
-              </h4>
+              <Form onSubmit={handleTransferSearchSubmit}>
 
-              <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
-                <Card.Body>
-                  <Form onSubmit={handleTransferSearchSubmit}>
-                    <Row className="g-3 mb-3">
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">Nationality</Form.Label>
-                        <Select
-                          options={nationalityList}
-                          value={nationality}
-                          onChange={setNationality}
-                          placeholder="Search Nationality"
-                          isSearchable
-                          isClearable
-                          className="modern-select-sm"
-                          menuPortalTarget={document.body}
-                          styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                      </Col>
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">Destination</Form.Label>
-                        <Select
-                          options={destinationOptions}
-                          value={destination}
-                          onChange={setDestination}
-                          placeholder="Search destinations..."
-                          isSearchable
-                          isClearable
-                          className="modern-select-sm"
-                          isLoading={isDestinationLoading}
-                          noOptionsMessage={() =>
-                            isDestinationLoading
-                              ? "Searching destinations..."
-                              : "Type to search destinations..."
-                          }
-                          onMenuOpen={() => {
-                            if (destinationOptions.length === 0) {
-                              loadPopularDestinations();
-                            }
-                          }}
-                          onInputChange={(inputValue, { action }) => {
-                            if (action === "input-change") {
-                              cityList(inputValue);
-                            }
-                          }}
-                          menuPortalTarget={document.body}
-                          styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                      </Col>
-                    </Row>
-                    
-                    <Row className="g-3">
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">Pickup Date</Form.Label>
-                        <Form.Control
-                          type="date"
-                          value={transferPickupDate}
-                          onChange={(e) => setTransferPickupDate(e.target.value)}
-                          min={new Date().toISOString().split("T")[0]}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">Dropoff Date</Form.Label>
-                        <Form.Control
-                          type="date"
-                          value={transferDropoffDate}
-                          onChange={(e) => setTransferDropoffDate(e.target.value)}
-                          min={transferPickupDate || undefined}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">Adults</Form.Label>
-                        <Form.Select
-                          value={transferAdults}
-                          onChange={(e) => setTransferAdults(parseInt(e.target.value) || 1)}
-                        >
-                          {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
-                            <option key={num} value={num}>
-                              {num}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">Children</Form.Label>
-                        <Form.Select
-                          value={transferChildren}
-                          onChange={(e) => setTransferChildren(parseInt(e.target.value) || 0)}
-                        >
-                          {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                            <option key={num} value={num}>
-                              {num}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                      
-                      {transferChildren > 0 && (
-                        <Col md={4}>
-                          <Form.Label className="mb-2 fw-semibold">Child Ages</Form.Label>
-                          <Row className="g-2">
-                            {transferChildAges.map((age, index) => (
-                              <Col key={index} md={3} sm={4} xs={6}>
-                                <Form.Control
-                                  type="number"
-                                  min="0"
-                                  max="17"
-                                  placeholder={`Age`}
-                                  value={age}
-                                  onChange={(e) =>
-                                    handleTransferChildAgeChange(index, e.target.value)
-                                  }
-                                />
-                              </Col>
-                            ))}
-                          </Row>
-                        </Col>
+                {/* Row 1 */}
+                <Row className="g-3 mb-3">
+                  <Col md={4}>
+                    <Form.Label className="fw-semibold">Nationality</Form.Label>
+                    <Select
+                      options={nationalityList}
+                      value={nationality}
+                      onChange={setNationality}
+                      placeholder="Search Nationality"
+                      isSearchable
+                      isClearable
+                      className="modern-select-sm"
+                      menuPortalTarget={document.body}
+                      styles={{
+                          ...customSelectStyles,
+                        menuPortal: base => ({ ...base, zIndex: 9999 }),
+                      }}
+                    />
+                  </Col>
+
+                  <Col md={4}>
+                    <Form.Label className="fw-semibold">Destination</Form.Label>
+                    <Select
+                      options={destinationOptions}
+                      value={destination}
+                      onChange={setDestination}
+                      placeholder="Search destinations..."
+                      isSearchable
+                      isClearable
+                      className="modern-select-sm"
+                      isLoading={isDestinationLoading}
+                      noOptionsMessage={() =>
+                        isDestinationLoading
+                          ? "Searching destinations..."
+                          : "Type to search destinations..."
+                      }
+                      onMenuOpen={() => {
+                        if (destinationOptions.length === 0) {
+                          loadPopularDestinations();
+                        }
+                      }}
+                      onInputChange={(inputValue, { action }) => {
+                        if (action === "input-change") {
+                          cityList(inputValue);
+                        }
+                      }}
+                      menuPortalTarget={document.body}
+                       styles={{
+                          ...customSelectStyles,
+                        menuPortal: base => ({ ...base, zIndex: 9999 }),
+                      }}
+                    />
+                  </Col>
+                     <Col md={4}>
+                    <Form.Label className="fw-semibold">Pickup Date</Form.Label>
+                    <Form.Control
+                    style={{height:"46px"}}
+                      type="date"
+                      value={transferPickupDate}
+                      onChange={(e) => setTransferPickupDate(e.target.value)}
+                      min={new Date().toISOString().split("T")[0]}
+                    />
+                  </Col>
+                </Row>
+
+                {/* Row 2 */}
+                <Row className="g-3 align-items-end">
+
+               
+
+                  <Col md={4}>
+                    <Form.Label className="fw-semibold">Dropoff Date</Form.Label>
+                    <Form.Control
+                     style={{height:"46px"}}
+                      type="date"
+                      value={transferDropoffDate}
+                      onChange={(e) => setTransferDropoffDate(e.target.value)}
+                      min={transferPickupDate || undefined}
+                    />
+                  </Col>
+
+                  <Col md={4}>
+                    <Form.Label className="fw-semibold">Adults</Form.Label>
+                    <Form.Select
+                     style={{height:"46px"}}
+                      value={transferAdults}
+                      onChange={(e) => setTransferAdults(parseInt(e.target.value) || 1)}
+                    >
+                      {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                        <option key={num} value={num}>
+                          {num}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+
+                  <Col md={4}>
+                    <Form.Label className="fw-semibold">Children</Form.Label>
+                    <Form.Select
+                     style={{height:"46px"}}
+                      value={transferChildren}
+                      onChange={(e) => setTransferChildren(parseInt(e.target.value) || 0)}
+                    >
+                      {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                        <option key={num} value={num}>
+                          {num}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+
+                  {/* <Col md={4} className="d-flex justify-content-md-end mt-3 mt-md-0">
+                    <Button
+                      variant="warning"
+                      className="px-5 py-2 fw-bold w-100 w-md-auto"
+                      type="submit"
+                      disabled={transferLoading}
+                    >
+                      {transferLoading ? (
+                        <>
+                          <Spinner animation="border" size="sm" className="me-2" />
+                          Searching...
+                        </>
+                      ) : (
+                        <>
+                          <FaSearch className="me-2" /> Search Cabs
+                        </>
                       )}
-                      
-                      <Col md={12} className="d-flex justify-content-end mt-4">
-                        <Button
-                          variant="warning"
-                          className="px-5 py-2 fw-bold"
-                          type="submit"
-                          disabled={transferLoading}
-                        >
-                          {transferLoading ? (
-                            <>
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Searching...
-                            </>
-                          ) : (
-                            <>
-                              <FaSearch className="me-2" /> Search Cabs
-                            </>
-                          )}
-                        </Button>
-                      </Col>
-                    </Row>
-                  </Form>
-                </Card.Body>
-              </Card>
+                    </Button>
+                  </Col> */}
 
-              {/* Loading State */}
-              {transferLoading && (
-                <Card className="shadow-sm rounded-xl mb-4 mt-4 border-0">
-                  <Card.Body className="text-center py-5">
-                    <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
-                    <h5 className="text-primary fw-bold mt-3 mb-1">
-                      Searching Transfers...
-                    </h5>
-                    <p className="text-muted small mb-0">
-                      Finding available transfer options for you
-                    </p>
-                  </Card.Body>
-                </Card>
-              )}
+                </Row>
+             <Row className="justify-content-center">
+  <Col md={4} className="d-flex justify-content-center mt-3">
+    <Button
+      variant="warning"
+      className="px-5 py-2 fw-bold"
+      type="submit"
+      disabled={transferLoading}
+    >
+      {transferLoading ? (
+        <>
+          <Spinner animation="border" size="sm" className="me-2" />
+          Searching...
+        </>
+      ) : (
+        <>
+          <FaSearch className="me-2" /> Search Cabs
+        </>
+      )}
+    </Button>
+  </Col>
+</Row>
 
-              {/* Empty State */}
-              {!hasTransferSearched && !transferLoading && (
-                <div className="text-center text-muted mt-5 py-5 bg-white rounded-4 shadow-sm border-0">
-                  <FaCar className="display-4 text-secondary mb-3 opacity-50" />
-                  <h5>Ready to book a transfer?</h5>
-                  <p>Run a search to view available cabs and options.</p>
-                </div>
-              )}
-
-              {/* Results Display */}
-              {hasTransferSearched && !transferLoading && transferResults.length > 0 && (
-                <div className="mt-4">
-                  <h5 className="fw-bold mb-3 text-dark">
-                    Transfer Results <span className="text-muted fs-6 fw-normal">({transferResults.length} found)</span>
-                  </h5>
-                  <Row className="g-4">
-                    {transferResults.map((cab) => (
-                      <Col key={cab.cabid} lg={12} xl={10}>
-                        <Card className="shadow-sm border-0" style={{ borderRadius: "12px", overflow: 'hidden' }}>
-                          <Card.Body className="p-0">
-                            <Row className="g-0">
-                              <Col md={3} sm={4} className="bg-light">
-                                <div style={{ height: "100%", minHeight: "200px" }}>
-                                  <LazyImage src={cab.cabpic} alt={cab.cabname} />
-                                </div>
-                              </Col>
-                              <Col md={9} sm={8} className="p-4 d-flex flex-column">
-                                <div className="mb-3">
-                                  <h4 className="fw-bold mb-2 text-dark">
-                                    {cab.cabname || "Transfer Vehicle"}
-                                  </h4>
-                                  {cab.cabdetails && (
-                                    <p className="text-secondary mb-0" style={{ fontSize: "0.95rem" }}>
-                                      {cab.cabdetails}
-                                    </p>
-                                  )}
-                                  <div className="mt-2">
-                                    <span className="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">
-                                      <FaCar className="me-2" /> Capacity: {cab.noOfCabs || "1"} Vehicle
-                                    </span>
-                                  </div>
-                                </div>
-                                
-                                <div className="mt-auto pt-3">
-                                  {cab.searchCabDetailsDTO && cab.searchCabDetailsDTO.length > 0 ? (
-                                    <div className="table-responsive">
-                                      <Table className="mb-0 text-nowrap" hover>
-                                        <thead className="table-light">
-                                          <tr>
-                                            <th className="py-3 px-3 text-secondary border-bottom border-top-0 border-end-0 border-start-0">Transfer Option</th>
-                                            <th className="py-3 px-3 text-secondary border-bottom border-top-0 border-end-0 border-start-0">Share Type</th>
-                                            <th className="py-3 px-3 text-secondary border-bottom border-top-0 border-end-0 border-start-0 text-end">Total Price</th>
-                                            <th className="py-3 px-3 border-bottom border-top-0 border-end-0 border-start-0 w-100px text-center">Action</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {cab.searchCabDetailsDTO.map((detail, idx) => {
-                                            const rate = detail.types === "SIC" ? detail.sicRate : detail.privateRate;
-                                            const totalRate = detail.totalRateWithoutMrk || rate || 0;
-                                            
-                                            return (
-                                              <tr key={idx} className="align-middle border-bottom">
-                                                <td className="py-3 px-3 fw-medium">
-                                                  {detail.location || "N/A"} <span className="text-muted mx-1">→</span> {detail.dropOff || "N/A"}
-                                                </td>
-                                                <td className="py-3 px-3">
-                                                  <span className={`badge ${detail.types === 'Private' ? 'bg-success' : 'bg-info'} bg-opacity-10 text-${detail.types === 'Private' ? 'success' : 'info'} border border-${detail.types === 'Private' ? 'success' : 'info'} border-opacity-25 px-2 py-1`}>
-                                                    {detail.types}
-                                                  </span>
-                                                </td>
-                                                <td className="py-3 px-3 text-end">
-                                                  <span className="fs-5 fw-bold text-dark">AED {totalRate.toLocaleString()}</span>
-                                                </td>
-                                                <td className="py-3 px-3 text-center">
-                                                  <Button
-                                                    variant="primary"
-                                                    size="sm"
-                                                    className="px-3 rounded-pill fw-medium shadow-sm transition-all"
-                                                    onClick={() => handleBookNow(cab, detail)}
-                                                  >
-                                                    Book Now
-                                                  </Button>
-                                                </td>
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </Table>
-                                    </div>
-                                  ) : (
-                                    <div className="text-muted fst-italic py-2 border-top">No specific options found for this vehicle.</div>
-                                  )}
-                                </div>
-                              </Col>
-                            </Row>
-                          </Card.Body>
-                        </Card>
-                      </Col>
-                    ))}
+                {/* Child Ages */}
+                {transferChildren > 0 && (
+                  <Row className="g-2 mt-3">
+                    <Col md={12}>
+                      <Form.Label className="mb-2 fw-semibold">Child Ages</Form.Label>
+                      <div className="d-flex flex-wrap gap-2">
+                        {transferChildAges.map((age, index) => (
+                          <Form.Control
+                            key={index}
+                            type="number"
+                            min="0"
+                            max="17"
+                            placeholder="Age"
+                            value={age}
+                            style={{ width: "80px" }}
+                            onChange={(e) =>
+                              handleTransferChildAgeChange(index, e.target.value)
+                            }
+                          />
+                        ))}
+                      </div>
+                    </Col>
                   </Row>
-                </div>
-              )}
+                )}
 
-              {/* No Results State */}
-              {hasTransferSearched && !transferLoading && transferResults.length === 0 && (
-                <div className="text-center text-muted mt-5 py-5 bg-white rounded-4 shadow-sm border-0">
-                  <FaCar className="display-4 text-warning mb-3 opacity-75" />
-                  <h5 className="text-dark">No transfers found</h5>
-                  <p>Try selecting different dates or destinations for your search.</p>
-                </div>
-              )}
+              </Form>
             </Card.Body>
           </Card>
-        </main>
-      </div>
-    </div>
+
+          {/* Loading State */}
+          {transferLoading && (
+            <Card className="shadow-sm rounded-xl mb-4 mt-4 border-0">
+              <Card.Body className="text-center py-5">
+                <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
+                <h5 className="text-primary fw-bold mt-3 mb-1">
+                  Searching Transfers...
+                </h5>
+                <p className="text-muted small mb-0">
+                  Finding available transfer options for you
+                </p>
+              </Card.Body>
+            </Card>
+          )}
+
+          {/* Empty State */}
+          {!hasTransferSearched && !transferLoading && (
+            <div className="text-center text-muted mt-5 py-5 bg-white rounded-4 shadow-sm border-0">
+              <FaCar className="display-4 text-secondary mb-3 opacity-50" />
+              <h5>Ready to book a transfer?</h5>
+              <p>Run a search to view available cabs and options.</p>
+            </div>
+          )}
+
+          {/* Results Display */}
+          {hasTransferSearched && !transferLoading && transferResults.length > 0 && (
+            <div className="mt-4">
+
+  {/* Header */}
+  <div className="d-flex justify-content-between align-items-center mb-3 px-1">
+    <h5 className="fw-semibold mb-0">Transfer Results</h5>
+    <span className="text-muted small">
+      {transferResults.length} found
+    </span>
+  </div>
+
+  <Row className="g-3 justify-content-center">
+    {transferResults.map((cab) => (
+      <Col key={cab.cabid} lg={12} xl={12}> {/* 🔥 wider */}
+
+        <Card className="border-0 shadow-sm bg-white">
+          <Card.Body className="p-4"> {/* 🔥 more padding */}
+
+            {/* HEADER */}
+            <div className="d-flex justify-content-between align-items-center mb-3">
+
+              {/* LEFT */}
+              <div>
+                <h5 className="fw-semibold mb-1">
+                  {cab.cabname || "Transfer Vehicle"}
+                </h5>
+
+                <span className="text-muted small">
+                  <FaCar className="me-1" />
+                  {cab.noOfCabs || "1"} Vehicle
+                </span>
+              </div>
+
+              {/* RIGHT IMAGE */}
+              <div
+                style={{
+                  width: "160px",   // 🔥 bigger
+                  height: "95px",
+                  overflow: "hidden",
+                }}
+              >
+                <LazyImage
+                  src={cab.cabpic}
+                  alt={cab.cabname}
+                  className="rounded"
+                />
+              </div>
+
+            </div>
+
+            {/* Divider */}
+            <div style={{ borderTop: "1px solid #f1f5f9", marginBottom: "10px" }} />
+
+            {/* TABLE */}
+            {cab.searchCabDetailsDTO?.length > 0 ? (
+              <div>
+
+                <table className="w-100" style={{ fontSize: "0.95rem" }}>
+                  
+                  <thead>
+                    <tr className="text-muted small">
+                      <th className="pb-2 fw-normal">Route</th>
+                      <th className="pb-2 fw-normal">Type</th>
+                      <th className="pb-2 fw-normal text-end">Price</th>
+                      <th className="pb-2 text-end"></th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {cab.searchCabDetailsDTO.map((detail, idx) => {
+                      const rate =
+                        detail.types === "SIC"
+                          ? detail.sicRate
+                          : detail.privateRate;
+
+                      const totalRate =
+                        detail.totalRateWithoutMrk || rate || 0;
+
+                      return (
+                        <tr
+                          key={idx}
+                          style={{
+                            borderTop: "1px solid #f1f5f9",
+                          }}
+                          className="hover-row"
+                        >
+
+                          {/* Route */}
+                          <td className="py-3"> {/* 🔥 more spacing */}
+                            {detail.location || "N/A"}{" "}
+                            <span className="text-muted mx-1">→</span>{" "}
+                            {detail.dropOff || "N/A"}
+                          </td>
+
+                          {/* Type */}
+                          <td className="py-3">
+                            <span
+                              className={`fw-medium ${
+                                detail.types === "Private"
+                                  ? "text-success"
+                                  : "text-primary"
+                              }`}
+                            >
+                              {detail.types}
+                            </span>
+                          </td>
+
+                          {/* Price */}
+                          <td className="py-3 text-end fw-semibold">
+                            AED {totalRate.toLocaleString()}
+                          </td>
+
+                          {/* Button */}
+                          <td className="py-3 text-end">
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              className="px-3"
+                              onClick={() =>
+                                handleBookNow(cab, detail)
+                              }
+                            >
+                              Book
+                            </Button>
+                          </td>
+
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+
+                </table>
+
+              </div>
+            ) : (
+              <div className="text-muted small mt-2">
+                No options available
+              </div>
+            )}
+
+          </Card.Body>
+        </Card>
+
+      </Col>
+    ))}
+  </Row>
+</div>
+          )}
+
+          {/* No Results */}
+          {hasTransferSearched && !transferLoading && transferResults.length === 0 && (
+            <div className="text-center text-muted mt-5 py-5 bg-white rounded-4 shadow-sm border-0">
+              <FaCar className="display-4 text-warning mb-3 opacity-75" />
+              <h5 className="text-dark">No transfers found</h5>
+              <p>Try selecting different dates or destinations for your search.</p>
+            </div>
+          )}
+
+        </Card.Body>
+      </Card>
+    </main>
+  </div>
+</div>
   );
 };

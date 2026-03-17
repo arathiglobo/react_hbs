@@ -120,6 +120,8 @@ import { CabSearch } from "./pages/search/cab/CabSearch";
 import CabBookingPage from "./pages/booking/CabBookingPage";
 import ActivitySearch from "./pages/search/activity/ActivitySearch";
 import ActivityBookingPage from "./pages/booking/ActivityBookingPage";
+import CabBookingList from "./pages/list/CabBookingList";
+import ActivityBookingList from "./pages/list/ActivityBookingList";
 
 
 export default function App() {
@@ -250,7 +252,10 @@ export default function App() {
         <Route path="/new-booking/tours-and-activities" element={<PrivateRoute><ActivitySearch /> </PrivateRoute>}/>
         <Route path="/new-booking/tours-and-activities/booking" element={<PrivateRoute><ActivityBookingPage /> </PrivateRoute>}/>
 
-       
+        {/* Booking List/Details */}
+        <Route path="/booking-details/cab-booking-list" element={<PrivateRoute><CabBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/activity-booking-list" element={<PrivateRoute><ActivityBookingList /></PrivateRoute>} />
+
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
 

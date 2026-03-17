@@ -1497,7 +1497,7 @@ const HotelRegistrationActions = () => {
                   <Row className="h-100" style={{minHeight:"600px"}}>
                     {/* Left Content Panel */}
                     <Col md={8} className="content-panel">
-                      <div className="content-wrapper">{renderContent()}</div>
+                      <div className="content-wrapper-hotel">{renderContent()}</div>
                     </Col>
 
                     {/* Right Actions Panel */}

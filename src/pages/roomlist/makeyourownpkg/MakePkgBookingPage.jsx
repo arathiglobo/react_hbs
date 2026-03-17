@@ -934,6 +934,7 @@ const MakePkgBookingPage = () => {
           const actualIndex =
             transferIndexInCart >= 0 ? transferIndexInCart : 0;
           const transferDetail = transferDetails[actualIndex] || {};
+          console.log("transferDetail::", transferDetail);
           const cab = item.cab || {};
           const details = cab.details || {};
           // Selling Price = totalRate (with markup)

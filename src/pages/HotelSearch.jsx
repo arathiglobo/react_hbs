@@ -22,12 +22,12 @@ import "../styles/HotelSearch.css";
 function SearchProgressBar({ pollStatus, completedChannels }) {
   const channels = [
     "inhouse",
-    "iwtx",
-    "x3",
-    "ratehawk",
-    "darina",
-    "atharva",
-    "jumeirah",
+    // "iwtx",
+    // "x3",
+    // "ratehawk",
+    // "darina",
+    // "atharva",
+    // "jumeirah",
   ];
   const [progress, setProgress] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -374,12 +374,12 @@ export default function HotelSearch() {
 
   const channelTypeOptions = [
     { value: "inhouse", label: "Inhouse" },
-    { value: "iwtx", label: "Iwtx" },
-    { value: "x3", label: "x3" },
-    { value: "atharva", label: "Atharva" },
-    { value: "jumeirah", label: "Jumeirah" },
-    { value: "ratehawk", label: "Ratehawk" },
-    { value: "darina", label: "Darina" },
+    // { value: "iwtx", label: "Iwtx" },
+    // { value: "x3", label: "x3" },
+    // { value: "atharva", label: "Atharva" },
+    // { value: "jumeirah", label: "Jumeirah" },
+    // { value: "ratehawk", label: "Ratehawk" },
+    // { value: "darina", label: "Darina" },
   ];
 
   useEffect(() => {
@@ -816,12 +816,12 @@ export default function HotelSearch() {
 
       const expectedChannels = [
         "inhouse",
-        "iwtx",
-        "x3",
-        "ratehawk",
-        "darina",
-        "atharva",
-        "jumeirah",
+        // "iwtx",
+        // "x3",
+        // "ratehawk",
+        // "darina",
+        // "atharva",
+        // "jumeirah",
       ];
 
       await pollUntilComplete(

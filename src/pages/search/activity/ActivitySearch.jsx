@@ -334,6 +334,24 @@ const ActivitySearch = () => {
     ));
   };
 
+    const customSelectStyles = {
+  control: (base) => ({
+    ...base,
+    minHeight: "46px",
+    height: "46px",
+    borderRadius: "0.375rem", // matches bootstrap
+  }),
+  valueContainer: (base) => ({
+    ...base,
+    height: "46px",
+    padding: "0 8px",
+  }),
+  indicatorsContainer: (base) => ({
+    ...base,
+    height: "46px",
+  }),
+};
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -347,140 +365,162 @@ const ActivitySearch = () => {
               </h4>
 
               <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
-                <Card.Body>
-                  <Form onSubmit={handleTourSearchSubmit}>
-                    <Row className="g-3 mb-3">
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">Nationality</Form.Label>
-                        <Select
-                          options={nationalityList}
-                          value={nationality}
-                          onChange={setNationality}
-                          placeholder="Search Nationality"
-                          isSearchable
-                          isClearable
-                          className="modern-select-sm"
-                          menuPortalTarget={document.body}
-                          styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                      </Col>
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">Destination</Form.Label>
-                        <Select
-                          options={destinationOptions}
-                          value={destination}
-                          onChange={setDestination}
-                          placeholder="Search destinations..."
-                          isSearchable
-                          isClearable
-                          className="modern-select-sm"
-                          isLoading={isDestinationLoading}
-                          noOptionsMessage={() =>
-                            isDestinationLoading
-                              ? "Searching destinations..."
-                              : "Type to search destinations..."
-                          }
-                          onMenuOpen={() => {
-                            if (destinationOptions.length === 0) {
-                              loadPopularDestinations();
-                            }
-                          }}
-                          onInputChange={(inputValue, { action }) => {
-                            if (action === "input-change") {
-                              cityList(inputValue);
-                            }
-                          }}
-                          menuPortalTarget={document.body}
-                          styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                      </Col>
-                    </Row>
-                    
-                    <Row className="g-3">
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">Tour Date</Form.Label>
-                        <Form.Control
-                          type="date"
-                          value={tourDate}
-                          onChange={(e) => setTourDate(e.target.value)}
-                          min={new Date().toISOString().split("T")[0]}
-                        />
-                      </Col>
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">Adults</Form.Label>
-                        <Form.Select
-                          value={tourAdults}
-                          onChange={(e) => setTourAdults(parseInt(e.target.value) || 1)}
-                        >
-                          {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
-                            <option key={num} value={num}>
-                              {num}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">Children</Form.Label>
-                        <Form.Select
-                          value={tourChildren}
-                          onChange={(e) => setTourChildren(parseInt(e.target.value) || 0)}
-                        >
-                          {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                            <option key={num} value={num}>
-                              {num}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                      
-                      {tourChildren > 0 && (
-                        <Col md={4}>
-                          <Form.Label className="mb-2 fw-semibold">Child Ages</Form.Label>
-                          <Row className="g-2">
-                            {tourChildAges.map((age, index) => (
-                              <Col key={index} md={3} sm={4} xs={6}>
-                                <Form.Control
-                                  type="number"
-                                  min="0"
-                                  max="17"
-                                  placeholder={`Age`}
-                                  value={age}
-                                  onChange={(e) =>
-                                    handleTourChildAgeChange(index, e.target.value)
-                                  }
-                                />
-                              </Col>
-                            ))}
-                          </Row>
-                        </Col>
-                      )}
-                      
-                      <Col md={12} className="d-flex justify-content-end mt-4">
-                        <Button
-                          variant="warning"
-                          className="px-5 py-2 fw-bold"
-                          type="submit"
-                          disabled={tourLoading}
-                        >
-                          {tourLoading ? (
-                            <>
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Searching...
-                            </>
-                          ) : (
-                            <>
-                              <FaSearch className="me-2" /> Search Activities
-                            </>
-                          )}
-                        </Button>
-                      </Col>
-                    </Row>
-                  </Form>
-                </Card.Body>
+               <Card.Body>
+  <Form onSubmit={handleTourSearchSubmit}>
+
+    {/* 🔷 Row 1 */}
+    <Row className="g-3 mb-3">
+      <Col md={6}>
+        <Form.Label className="fw-semibold">Nationality</Form.Label>
+        <Select
+          options={nationalityList}
+          value={nationality}
+          onChange={setNationality}
+          placeholder="Search Nationality"
+          isSearchable
+          isClearable
+          className="modern-select-sm"
+          menuPortalTarget={document.body}
+          styles={{
+            ...customSelectStyles,
+            menuPortal: base => ({ ...base, zIndex: 9999 }),
+          }}
+        />
+      </Col>
+
+      <Col md={6}>
+        <Form.Label className="fw-semibold">Destination</Form.Label>
+        <Select
+          options={destinationOptions}
+          value={destination}
+          onChange={setDestination}
+          placeholder="Search destinations..."
+          isSearchable
+          isClearable
+          className="modern-select-sm"
+          isLoading={isDestinationLoading}
+          noOptionsMessage={() =>
+            isDestinationLoading
+              ? "Searching destinations..."
+              : "Type to search destinations..."
+          }
+          onMenuOpen={() => {
+            if (destinationOptions.length === 0) {
+              loadPopularDestinations();
+            }
+          }}
+          onInputChange={(inputValue, { action }) => {
+            if (action === "input-change") {
+              cityList(inputValue);
+            }
+          }}
+          menuPortalTarget={document.body}
+          styles={{
+            ...customSelectStyles,
+            menuPortal: base => ({ ...base, zIndex: 9999 }),
+          }}
+        />
+      </Col>
+
+     
+    </Row>
+
+    {/* 🔷 Row 2 */}
+    <Row className="g-3 align-items-end">
+       <Col md={4}>
+        <Form.Label className="fw-semibold">Tour Date</Form.Label>
+        <Form.Control
+        style={{height:"46px"}}
+          type="date"
+          value={tourDate}
+          onChange={(e) => setTourDate(e.target.value)}
+          min={new Date().toISOString().split("T")[0]}
+        />
+      </Col>
+      <Col md={4}>
+        <Form.Label className="fw-semibold">Adults</Form.Label>
+        <Form.Select
+        style={{height:"46px"}}
+          value={tourAdults}
+          onChange={(e) => setTourAdults(parseInt(e.target.value) || 1)}
+        >
+          {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+            <option key={num} value={num}>
+              {num}
+            </option>
+          ))}
+        </Form.Select>
+      </Col>
+
+      <Col md={4}>
+        <Form.Label className="fw-semibold">Children</Form.Label>
+        <Form.Select
+        style={{height:"46px"}}
+          value={tourChildren}
+          onChange={(e) => setTourChildren(parseInt(e.target.value) || 0)}
+        >
+          {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+            <option key={num} value={num}>
+              {num}
+            </option>
+          ))}
+        </Form.Select>
+      </Col>
+
+      {/* Button aligned nicely */}
+   
+    </Row>
+   <Row className="mt-4">
+  <Col md={12} className="d-flex justify-content-center">
+    <Button
+      variant="warning"
+      className="px-4 fw-bold"
+      type="submit"
+      disabled={tourLoading}
+      style={{ height: "38px" }}
+    >
+      {tourLoading ? (
+        <>
+          <Spinner animation="border" size="sm" className="me-2" />
+          Searching...
+        </>
+      ) : (
+        <>
+          <FaSearch className="me-2" /> Search Activities
+        </>
+      )}
+    </Button>
+  </Col>
+</Row>
+
+    {/* 🔷 Child Ages */}
+    {tourChildren > 0 && (
+      <Row className="mt-3">
+        <Col md={12}>
+          <Form.Label className="fw-semibold">Child Ages</Form.Label>
+
+          <div className="d-flex flex-wrap gap-2">
+            {tourChildAges.map((age, index) => (
+              <Form.Control
+                key={index}
+                type="number"
+                min="0"
+                max="17"
+                placeholder="Age"
+                value={age}
+                style={{ width: "80px" }}
+                onChange={(e) =>
+                  handleTourChildAgeChange(index, e.target.value)
+                }
+              />
+            ))}
+          </div>
+        </Col>
+      </Row>
+    )}
+
+  </Form>
+</Card.Body>
               </Card>
 
               {/* Loading State */}
@@ -515,19 +555,19 @@ const ActivitySearch = () => {
                   </h5>
                   <Row className="g-4">
                     {tourResults.map((activity) => (
-                      <Col key={activity.id} lg={12} xl={10}>
+                      <Col key={activity.id} xs={12} md={11} lg={10} xl={10} className="mx-auto">
                         <Card className="shadow-sm border-0" style={{ borderRadius: "12px", overflow: 'hidden' }}>
                           <Card.Body className="p-0">
                             <Row className="g-0">
                               <Col md={3} sm={4} className="bg-light">
-                                <div style={{ height: "100%", minHeight: "200px" }}>
+                                <div style={{ height: "100%", minHeight: "110px" }}>
                                   <LazyImage src={activity.activityImage} alt={activity.activityName} />
                                 </div>
                               </Col>
-                              <Col md={9} sm={8} className="p-4 d-flex flex-column">
+                              <Col md={9} sm={8} className="p-3 d-flex flex-column">
                                 <div className="mb-3">
                                   <div className="d-flex justify-content-between align-items-start">
-                                    <h4 className="fw-bold mb-2 text-dark">
+                                    <h4 className="fw-bold mb-1 text-dark">
                                       {activity.activityName || "Activity"}
                                     </h4>
                                     <div className="text-end">
@@ -542,13 +582,13 @@ const ActivitySearch = () => {
                                     </div>
                                   )}
                                   {activity.activityDetails && (
-                                    <p className="text-secondary mb-0 mt-2" style={{ fontSize: "0.95rem" }} dangerouslySetInnerHTML={{ __html: activity.activityDetails.substring(0, 150) + (activity.activityDetails.length > 150 ? "..." : "") }}>
+                                    <p className="text-secondary mb-0 mt-2" style={{ fontSize: "0.9rem" }} dangerouslySetInnerHTML={{ __html: activity.activityDetails.substring(0, 150) + (activity.activityDetails.length > 150 ? "..." : "") }}>
                                     </p>
                                   )}
                                   
                                 </div>
                                 
-                                <div className="mt-auto pt-3 d-flex justify-content-between align-items-center border-top">
+                                <div className="mt-auto pt-2 d-flex justify-content-between align-items-center border-top">
                                   <div className="text-secondary">
                                       {activity.duration && <span className="me-3"><i className="bi bi-clock"></i> Duration: {activity.duration} hrs</span>}
                                       <span><FaUsers className="me-1"/> Max: {activity.maxPax || "N/A"}</span>

@@ -16,6 +16,12 @@ import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 
+const formatDateToDDMMYYYY = (dateString) => {
+  if (!dateString) return "";
+  const [year, month, day] = dateString.split("-");
+  return `${day}-${month}-${year}`;
+};
+
 const CabBookingPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -34,8 +40,23 @@ const CabBookingPage = () => {
     lpo: "",
   });
 
+  const [transporterDetails, setTransporterDetails] = useState({
+    transporter: "",
+    contactNumber: "",
+    driverName: "",
+    driverContact: "",
+  });
+
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const rate = selectedOption?.types === "SIC" ? selectedOption.sicRate : selectedOption?.privateRate;
+  const initialTotalRate = selectedOption?.totalRateWithoutMrk || rate || 0;
+
+  const [prices, setPrices] = useState({
+    sellingPrice: initialTotalRate.toString(),
+    totalPrice: initialTotalRate.toString(),
+  });
 
   // If no state, show prompt
   if (!hasValidState) {
@@ -61,8 +82,7 @@ const CabBookingPage = () => {
     );
   }
 
-  const rate = selectedOption.types === "SIC" ? selectedOption.sicRate : selectedOption.privateRate;
-  const totalRate = selectedOption.totalRateWithoutMrk || rate || 0;
+  const totalRate = parseFloat(prices.totalPrice) || initialTotalRate;
 
   const handlePrimaryGuestChange = (field, value) => {
     setPrimaryGuest((prev) => ({ ...prev, [field]: value }));
@@ -87,6 +107,14 @@ const CabBookingPage = () => {
         return updated;
       });
     }
+  };
+
+  const handleTransporterChange = (field, value) => {
+    setTransporterDetails((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handlePriceChange = (field, value) => {
+    setPrices((prev) => ({ ...prev, [field]: value }));
   };
 
   const validateForm = () => {
@@ -140,19 +168,20 @@ const CabBookingPage = () => {
                    || "1";
 
       const payload = {
-        agentId: parseInt(agentId),
         cabId: cab.cabid,
-        cabName: cab.cabname,
-        travelType: selectedOption.travelType || "1",
-        shareType: selectedOption.types,
-        locationId: String(selectedOption.locationId || ""),
-        pickupDate: searchCriteria.pickupDate,
-        dropoffDate: searchCriteria.dropoffDate || searchCriteria.pickupDate,
-        adults: searchCriteria.adults,
-        children: searchCriteria.children,
-        childAges: searchCriteria.childAges || [],
-        totalRate: totalRate,
-        primaryGuestDetails: {
+        noOfCabs: cab.noOfCabs || 1,
+        pickupDate: formatDateToDDMMYYYY(searchCriteria.pickupDate),
+        dropOffDate: formatDateToDDMMYYYY(searchCriteria.dropoffDate || searchCriteria.pickupDate),
+        travelType: parseInt(selectedOption.travelType) || 1,
+        locationId: parseInt(selectedOption.locationId) || 0,
+        noOfAdult: parseInt(searchCriteria.adults) || 1,
+        noOfChild: parseInt(searchCriteria.children) || 0,
+        childAgeArray: (searchCriteria.childAges || []).map(age => parseInt(age)),
+        totalRate: parseFloat(prices.totalPrice) || totalRate,
+        totalRateWithoutmrk: parseFloat(selectedOption.totalRateWithoutMrk || totalRate),
+        agentId: parseInt(agentId),
+        userId: parseInt(agentId), 
+        customerDTO: {
           salutation: primaryGuest.salutation,
           firstName: primaryGuest.firstName,
           lastName: primaryGuest.lastName,
@@ -160,14 +189,20 @@ const CabBookingPage = () => {
           emailId: primaryGuest.emailId,
           passportNumber: primaryGuest.passportNumber,
           lpo: primaryGuest.lpo
-        }
+        },
+        transporter: transporterDetails.transporter,
+        contactNumber: transporterDetails.contactNumber,
+        driverName: transporterDetails.driverName,
+        driverContact: transporterDetails.driverContact,
+        sellingPrice: prices.sellingPrice,
+        totalPrice: prices.totalPrice
       };
 
-      const response = await axiosInstance.post("/api/saveCabBooking", payload);
+      const response = await axiosInstance.post("/api/cab/book", payload);
 
       if (response && (response.data?.success !== false && response.status === 200)) {
         toast.success("Cab booked successfully!");
-        navigate("/new-booking/cab"); // Or to a booking success list page
+        navigate("/booking-details/cab-booking-list");
       } else {
         toast.error(response.data?.message || "Failed to book cab.");
       }
@@ -198,222 +233,511 @@ const CabBookingPage = () => {
             <Row className="g-4">
               {/* Left Column: Guest Details */}
               <Col lg={8}>
-                <Card className="shadow-sm border-0 rounded-4 mb-4">
-                  <Card.Header className="bg-white border-bottom-0 pt-4 pb-0 px-4">
-                    <h5 className="fw-bold text-dark d-flex align-items-center m-0">
-                      <FaUserAlt className="me-2 text-primary" />
-                      Primary Guest Details
-                    </h5>
-                  </Card.Header>
-                  <Card.Body className="p-4">
-                    <Row className="g-3">
-                      <Col md={2}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Salutation <span className="text-danger">*</span></Form.Label>
-                          <Form.Select
-                            value={primaryGuest.salutation}
-                            onChange={(e) => handlePrimaryGuestChange("salutation", e.target.value)}
-                            isInvalid={!!validationErrors.salutation}
-                          >
-                            <option value="Mr">Mr</option>
-                            <option value="Mrs">Mrs</option>
-                            <option value="Ms">Ms</option>
-                            <option value="Miss">Miss</option>
-                            <option value="Dr">Dr</option>
-                          </Form.Select>
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.salutation}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={5}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">First Name <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="e.g. John"
-                            value={primaryGuest.firstName}
-                            onChange={(e) => handlePrimaryGuestChange("firstName", e.target.value)}
-                            isInvalid={!!validationErrors.firstName}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.firstName}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={5}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Last Name <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="e.g. Doe"
-                            value={primaryGuest.lastName}
-                            onChange={(e) => handlePrimaryGuestChange("lastName", e.target.value)}
-                            isInvalid={!!validationErrors.lastName}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.lastName}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
+               <Card className="shadow border-0 rounded-4 mb-4">
+  
+  {/* Header */}
+  <Card.Header className="bg-white border-0 pt-4 px-4">
+    <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
+      <FaUserAlt className="me-2 text-primary" />
+      Primary Guest Details
+    </h5>
+  </Card.Header>
 
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Contact Number <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="+1 234 567 8900"
-                            value={primaryGuest.contactNumber}
-                            onChange={(e) => handlePrimaryGuestChange("contactNumber", e.target.value)}
-                            isInvalid={!!validationErrors.contactNumber}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.contactNumber}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Email ID <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="email"
-                            placeholder="john.doe@example.com"
-                            value={primaryGuest.emailId}
-                            onChange={(e) => handlePrimaryGuestChange("emailId", e.target.value)}
-                            isInvalid={!!validationErrors.emailId}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.emailId}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
+  <Card.Body className="px-4 pb-4">
 
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Passport Number <span className="text-muted fw-normal">(Optional)</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="A1234567"
-                            value={primaryGuest.passportNumber}
-                            onChange={(e) => handlePrimaryGuestChange("passportNumber", e.target.value)}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">LPO Number <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="LPO-12345"
-                            value={primaryGuest.lpo}
-                            onChange={(e) => handlePrimaryGuestChange("lpo", e.target.value)}
-                            isInvalid={!!validationErrors.lpo}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.lpo}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
+    <Row className="g-3">
+
+      {/* Salutation */}
+      <Col xs={12} md={3} lg={2}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Salutation <span className="text-danger">*</span>
+          </Form.Label>
+
+          <Form.Select
+            className="rounded-3 shadow-sm"
+            value={primaryGuest.salutation}
+            onChange={(e) =>
+              handlePrimaryGuestChange("salutation", e.target.value)
+            }
+            isInvalid={!!validationErrors.salutation}
+          >
+            <option value="Mr">Mr</option>
+            <option value="Mrs">Mrs</option>
+            <option value="Ms">Ms</option>
+            <option value="Miss">Miss</option>
+            <option value="Dr">Dr</option>
+          </Form.Select>
+
+          <Form.Control.Feedback type="invalid">
+            {validationErrors.salutation}
+          </Form.Control.Feedback>
+        </Form.Group>
+      </Col>
+
+      {/* First Name */}
+      <Col xs={12} md={5}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            First Name <span className="text-danger">*</span>
+          </Form.Label>
+
+          <Form.Control
+            type="text"
+            placeholder="John"
+            className="rounded-3 shadow-sm"
+            value={primaryGuest.firstName}
+            onChange={(e) =>
+              handlePrimaryGuestChange("firstName", e.target.value)
+            }
+            isInvalid={!!validationErrors.firstName}
+          />
+
+          <Form.Control.Feedback type="invalid">
+            {validationErrors.firstName}
+          </Form.Control.Feedback>
+        </Form.Group>
+      </Col>
+
+      {/* Last Name */}
+      <Col xs={12} md={4} lg={5}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Last Name <span className="text-danger">*</span>
+          </Form.Label>
+
+          <Form.Control
+            type="text"
+            placeholder="Doe"
+            className="rounded-3 shadow-sm"
+            value={primaryGuest.lastName}
+            onChange={(e) =>
+              handlePrimaryGuestChange("lastName", e.target.value)
+            }
+            isInvalid={!!validationErrors.lastName}
+          />
+
+          <Form.Control.Feedback type="invalid">
+            {validationErrors.lastName}
+          </Form.Control.Feedback>
+        </Form.Group>
+      </Col>
+
+      {/* Phone */}
+      <Col xs={12} md={6}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Contact Number <span className="text-danger">*</span>
+          </Form.Label>
+
+          <Form.Control
+            type="text"
+            placeholder="+91 98765 43210"
+            className="rounded-3 shadow-sm"
+            value={primaryGuest.contactNumber}
+            onChange={(e) =>
+              handlePrimaryGuestChange("contactNumber", e.target.value)
+            }
+            isInvalid={!!validationErrors.contactNumber}
+          />
+
+          <Form.Control.Feedback type="invalid">
+            {validationErrors.contactNumber}
+          </Form.Control.Feedback>
+        </Form.Group>
+      </Col>
+
+      {/* Email */}
+      <Col xs={12} md={6}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Email ID <span className="text-danger">*</span>
+          </Form.Label>
+
+          <Form.Control
+            type="email"
+            placeholder="john@example.com"
+            className="rounded-3 shadow-sm"
+            value={primaryGuest.emailId}
+            onChange={(e) =>
+              handlePrimaryGuestChange("emailId", e.target.value)
+            }
+            isInvalid={!!validationErrors.emailId}
+          />
+
+          <Form.Control.Feedback type="invalid">
+            {validationErrors.emailId}
+          </Form.Control.Feedback>
+        </Form.Group>
+      </Col>
+
+      {/* Passport */}
+      <Col xs={12} md={6}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Passport Number{" "}
+            <span className="text-muted fw-normal">(Optional)</span>
+          </Form.Label>
+
+          <Form.Control
+            type="text"
+            placeholder="A1234567"
+            className="rounded-3 shadow-sm"
+            value={primaryGuest.passportNumber}
+            onChange={(e) =>
+              handlePrimaryGuestChange("passportNumber", e.target.value)
+            }
+          />
+        </Form.Group>
+      </Col>
+
+      {/* LPO */}
+      <Col xs={12} md={6}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            LPO Number <span className="text-danger">*</span>
+          </Form.Label>
+
+          <Form.Control
+            type="text"
+            placeholder="LPO-12345"
+            className="rounded-3 shadow-sm"
+            value={primaryGuest.lpo}
+            onChange={(e) =>
+              handlePrimaryGuestChange("lpo", e.target.value)
+            }
+            isInvalid={!!validationErrors.lpo}
+          />
+
+          <Form.Control.Feedback type="invalid">
+            {validationErrors.lpo}
+          </Form.Control.Feedback>
+        </Form.Group>
+      </Col>
+
+    </Row>
+
+  </Card.Body>
+</Card>
+
+                {/* Transporter & Driver Details Card */}
+               <Card className="shadow border-0 rounded-4 mb-4">
+
+  {/* Header */}
+  <Card.Header className="bg-white border-0 pt-4 px-4">
+    <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
+      <FaCar className="me-2 text-primary" />
+      Transporter & Driver Details
+    </h5>
+  </Card.Header>
+
+  <Card.Body className="px-4 pb-4">
+
+    {/* ===== Transport Fields ===== */}
+    <Row className="g-3">
+
+      <Col xs={12} md={6}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Transporter Name
+          </Form.Label>
+          <Form.Control
+            className="rounded-3 shadow-sm"
+            placeholder="Enter transporter name"
+            value={transporterDetails.transporter}
+            onChange={(e) =>
+              handleTransporterChange("transporter", e.target.value)
+            }
+          />
+        </Form.Group>
+      </Col>
+
+      <Col xs={12} md={6}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Contact Number
+          </Form.Label>
+          <Form.Control
+            className="rounded-3 shadow-sm"
+            placeholder="Enter contact number"
+            value={transporterDetails.contactNumber}
+            onChange={(e) =>
+              handleTransporterChange("contactNumber", e.target.value)
+            }
+          />
+        </Form.Group>
+      </Col>
+
+      <Col xs={12} md={6}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Driver Name
+          </Form.Label>
+          <Form.Control
+            className="rounded-3 shadow-sm"
+            placeholder="Enter driver name"
+            value={transporterDetails.driverName}
+            onChange={(e) =>
+              handleTransporterChange("driverName", e.target.value)
+            }
+          />
+        </Form.Group>
+      </Col>
+
+      <Col xs={12} md={6}>
+        <Form.Group>
+          <Form.Label className="small text-muted fw-semibold">
+            Driver Contact
+          </Form.Label>
+          <Form.Control
+            className="rounded-3 shadow-sm"
+            placeholder="Enter driver contact"
+            value={transporterDetails.driverContact}
+            onChange={(e) =>
+              handleTransporterChange("driverContact", e.target.value)
+            }
+          />
+        </Form.Group>
+      </Col>
+
+    </Row>
+
+    {/* ===== Price Section ===== */}
+    <div className="mt-4 pt-4 border-top">
+
+      <Row className="g-3">
+
+        {/* Selling Price */}
+        <Col xs={12} md={6}>
+          <div className="bg-light border rounded-3 p-3 h-100">
+            <small className="text-muted fw-semibold d-block mb-1">
+              Selling Price
+            </small>
+
+            <div className="d-flex align-items-center">
+              <span className="text-muted me-2">AED</span>
+
+              <Form.Control
+                type="text"
+                className="border-0 bg-transparent p-0 fw-bold text-success"
+                value={prices.sellingPrice}
+                onChange={(e) =>
+                  handlePriceChange("sellingPrice", e.target.value)
+                }
+              />
+            </div>
+          </div>
+        </Col>
+
+        {/* Total Price */}
+        <Col xs={12} md={6}>
+          <div className="bg-light border rounded-3 p-3 h-100">
+            <small className="text-muted fw-semibold d-block mb-1">
+              Total Price
+            </small>
+
+            <div className="d-flex align-items-center">
+              <span className="text-muted me-2">AED</span>
+
+              <Form.Control
+                type="text"
+                className="border-0 bg-transparent p-0 fw-bold text-success"
+                value={prices.totalPrice}
+                onChange={(e) =>
+                  handlePriceChange("totalPrice", e.target.value)
+                }
+              />
+            </div>
+          </div>
+        </Col>
+
+      </Row>
+
+    </div>
+
+  </Card.Body>
+</Card>
               </Col>
 
               {/* Right Column: Order Summary */}
               <Col lg={4}>
-                <Card className="shadow-sm border-0 rounded-4 sticky-top" style={{ top: "20px" }}>
-                  <Card.Header className="bg-primary text-white border-bottom-0 p-3 rounded-top-4">
-                    <h5 className="mb-0 fw-bold">Booking Summary</h5>
-                  </Card.Header>
-                  <Card.Body className="p-0">
-                    {/* Transfer Info */}
-                    <div className="p-3 border-bottom">
-                      <div className="d-flex mb-3">
-                        <div className="me-3" style={{ width: "80px", height: "80px", borderRadius: "8px", overflow: "hidden", flexShrink: 0 }}>
-                          <img 
-                            src={cab.cabpic || "https://via.placeholder.com/80?text=Cab"} 
-                            alt={cab.cabname}
-                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                          />
-                        </div>
-                        <div>
-                          <h6 className="fw-bold mb-1 text-dark">{cab.cabname}</h6>
-                          <div className="mb-1">
-                            <span className={`badge ${selectedOption.types === 'Private' ? 'bg-success' : 'bg-info'} bg-opacity-10 text-${selectedOption.types === 'Private' ? 'success' : 'info'} border border-${selectedOption.types === 'Private' ? 'success' : 'info'} border-opacity-25 mr-1`}>
-                              {selectedOption.types}
-                            </span>
-                          </div>
-                          {cab.cabdetails && <small className="text-muted d-block line-clamp-2">{cab.cabdetails}</small>}
-                        </div>
-                      </div>
+                <Card
+  className="shadow border-0 rounded-4 "
+ 
+>
+  {/* ===== Header ===== */}
+  <Card.Header
+    className="border-0 rounded-top-4"
+    style={{
+      background: "#7193d5",
+      padding: "18px 20px",
+    }}
+  >
+    <div className="d-flex align-items-center justify-content-between">
+      <div>
+        <h5 className="mb-1 fw-bold text-white">Booking Summary</h5>
+        <small className="text-white opacity-75">
+          Review your trip details
+        </small>
+      </div>
 
-                      <div className="bg-light rounded p-2 mb-2">
-                        <div className="d-flex align-items-start mb-2">
-                          <FaCalendarAlt className="text-primary mt-1 me-2 flex-shrink-0" />
-                          <div>
-                            <small className="d-block text-muted fw-semibold">Pickup Date</small>
-                            <span className="fw-medium text-dark">{searchCriteria.pickupDate}</span>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-start mb-2">
-                          <FaMapMarkerAlt className="text-danger mt-1 me-2 flex-shrink-0" />
-                          <div>
-                            <small className="d-block text-muted fw-semibold">Route details</small>
-                            <span className="fw-medium text-dark">{selectedOption.location || "N/A"} → {selectedOption.dropOff || "N/A"}</span>
-                          </div>
-                        </div>
-                      </div>
+      <div
+        className="bg-white bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center"
+        style={{ width: "40px", height: "40px" }}
+      >
+        <FaCar className="text-white" />
+      </div>
+    </div>
+  </Card.Header>
 
-                      <div className="d-flex justify-content-between text-muted small">
-                        <span>Adults: <span className="fw-bold text-dark">{searchCriteria.adults}</span></span>
-                        <span>Children: <span className="fw-bold text-dark">{searchCriteria.children}</span></span>
-                      </div>
-                    </div>
+  <Card.Body className="p-0">
 
-                    {/* Price Summary */}
-                    <div className="p-3 bg-light">
-                      <div className="d-flex justify-content-between align-items-center mb-2 text-muted">
-                        <span>Transfer Fare</span>
-                        <span className="fw-medium">{formatPrice(totalRate)}</span>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center mb-2 text-muted">
-                        <span>Taxes & Fees</span>
-                        <span className="fw-medium">{formatPrice(0)}</span>
-                      </div>
-                      
-                      <hr className="my-3 border-secondary border-opacity-25" />
-                      
-                      <div className="d-flex justify-content-between align-items-center">
-                        <span className="fw-bold text-dark fs-5">Total Amount</span>
-                        <span className="fw-bold text-primary fs-4">{formatPrice(totalRate)}</span>
-                      </div>
-                    </div>
+    {/* ===== Transfer Info ===== */}
+    <div className="p-4 border-bottom">
 
-                    {/* Submit Button */}
-                    <div className="p-3">
-                      <Button
-                        variant="success"
-                        className="w-100 py-3 rounded-3 fw-bold fs-5 shadow-sm d-flex justify-content-center align-items-center"
-                        onClick={confirmBooking}
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <Spinner animation="border" size="sm" className="me-2" />
-                            Processing Booking...
-                          </>
-                        ) : (
-                          <>
-                            <FaCheckCircle className="me-2" /> Confirm Booking
-                          </>
-                        )}
-                      </Button>
-                      <p className="text-center text-muted small mt-3 mb-0">
-                        By confirming, you agree to the Terms and Conditions of this booking.
-                      </p>
-                    </div>
-                  </Card.Body>
-                </Card>
+      {/* Cab Info */}
+      <div className="d-flex align-items-start gap-3 mb-3">
+        <div
+          style={{
+            width: "100px",
+            height: "80px",
+            borderRadius: "12px",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}
+        >
+          <img
+            src={cab.cabpic || "https://via.placeholder.com/80?text=Cab"}
+            alt={cab.cabname}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </div>
+
+        <div className="flex-grow-1">
+          <h6 className="fw-bold mb-1 text-dark">{cab.cabname}</h6>
+
+          <div className="mb-2">
+          <span
+  className={`fw-semibold ${
+    selectedOption.types === "Private"
+      ? "text-success"
+      : "text-info"
+  }`}
+>
+  {selectedOption.types}
+</span>
+          </div>
+
+          {cab.cabdetails && (
+            <small className="text-muted d-block" style={{ lineHeight: "1.3" }}>
+              {cab.cabdetails}
+            </small>
+          )}
+        </div>
+      </div>
+
+      {/* Info Box */}
+      <div className="bg-light rounded-3 p-3 mb-3">
+
+        {/* Date */}
+        <div className="d-flex align-items-start gap-2 mb-3">
+          <FaCalendarAlt className="text-primary mt-1" />
+          <div>
+            <small className="text-muted fw-semibold d-block">
+              Pickup Date
+            </small>
+            <span className="fw-medium text-dark">
+              {searchCriteria.pickupDate}
+            </span>
+          </div>
+        </div>
+
+        {/* Route */}
+        <div className="d-flex align-items-start gap-2">
+          <FaMapMarkerAlt className="text-danger mt-1" />
+          <div>
+            <small className="text-muted fw-semibold d-block">
+              Route Details
+            </small>
+            <span className="fw-medium text-dark">
+              {selectedOption.location || "N/A"} →{" "}
+              {selectedOption.dropOff || "N/A"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Passengers */}
+      <div className="d-flex justify-content-between small">
+        <span className="text-muted">
+          Adults:{" "}
+          <span className="fw-bold text-dark">
+            {searchCriteria.adults}
+          </span>
+        </span>
+        <span className="text-muted">
+          Children:{" "}
+          <span className="fw-bold text-dark">
+            {searchCriteria.children}
+          </span>
+        </span>
+      </div>
+    </div>
+
+    {/* ===== Price Section ===== */}
+    <div className="p-4 bg-light">
+
+      <div className="d-flex justify-content-between mb-2 text-muted">
+        <span>Transfer Fare</span>
+        <span className="fw-medium">{formatPrice(totalRate)}</span>
+      </div>
+
+      <div className="d-flex justify-content-between mb-3 text-muted">
+        <span>Taxes & Fees</span>
+        <span className="fw-medium">{formatPrice(0)}</span>
+      </div>
+
+      <hr className="my-3" />
+
+      <div className="d-flex justify-content-between align-items-center">
+        <span className="fw-bold text-dark fs-5">
+          Total Amount
+        </span>
+        <span className="fw-bold text-primary fs-4">
+          {formatPrice(totalRate)}
+        </span>
+      </div>
+    </div>
+
+    {/* ===== Button ===== */}
+    <div className="p-4">
+
+      <Button
+        variant="success"
+        className="w-100 py-3 rounded-3 fw-bold fs-5 shadow d-flex align-items-center justify-content-center gap-2"
+        onClick={confirmBooking}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? (
+          <>
+            <Spinner animation="border" size="sm" />
+            Processing...
+          </>
+        ) : (
+          <>
+            <FaCheckCircle />
+            Confirm Booking
+          </>
+        )}
+      </Button>
+
+      <p className="text-center text-muted small mt-3 mb-0">
+        By confirming, you agree to the Terms and Conditions.
+      </p>
+    </div>
+
+  </Card.Body>
+</Card>
               </Col>
             </Row>
           </Container>
