@@ -585,7 +585,9 @@ const PolicyUpdate = () => {
                   <Button
                     variant="outline-danger"
                     className="px-4 rounded-pill"
-                    onClick={() => navigate(`/registration/hotel/${id}/policy`)}
+                    // onClick={() => navigate(`/registration/hotel/${id}/policy`)}
+                    onClick={() =>  navigate(-1)}
+                    
                   >
                     ✖ Cancel
                   </Button>
