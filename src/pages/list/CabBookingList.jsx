@@ -150,119 +150,89 @@ const CabBookingList = () => {
             <Card className="border-0 shadow-sm" style={{ borderRadius: "12px" }}>
               <Card.Body className="p-0">
                 <div className="table-responsive">
-                  <Table
-                    className="mb-0 align-middle"
-                    style={{ borderCollapse: "separate", borderSpacing: "0 10px" }}
-                  >
-                    <thead>
-                      <tr className="text-muted small">
-                        <th className="ps-4">Booking</th>
-                        <th className="ps-4">Customer Name</th>
-                        <th>Cab</th>
-                        <th>Travel</th>
-                        <th>Pax</th>
-                        <th>Amount</th>
-                        {/* <th>Status</th> */}
-                        <th className="text-center pe-4">Action</th>
-                      </tr>
-                    </thead>
+                <Table bordered hover className="mb-0 align-middle">
+  <thead className="table-light">
+    <tr className="text-muted small">
+      <th className="ps-4">Booking</th>
+      <th className="ps-4">Customer Name</th>
+      <th>Cab</th>
+      <th>Travel</th>
+      <th>Pax</th>
+      <th>Amount</th>
+      <th className="text-center pe-4">Action</th>
+    </tr>
+  </thead>
 
-                    <tbody>
-                      {loading ? (
-                        <tr>
-                          <td colSpan="7" className="text-center py-5">
-                            <Spinner />
-                          </td>
-                        </tr>
-                      ) : filteredBookings.length === 0 ? (
-                        <tr>
-                          <td colSpan="7" className="text-center py-5 text-muted">
-                            No bookings found
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredBookings.map((b) => (
-                         <tr
-  key={b.custombookingId}
-  style={{
-    background: "#fff",
-    boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-    borderRadius: "10px",
-  }}
->
-  {/* Booking */}
-  <td className="ps-4 py-3">
-    <div className="fw-semibold text-dark">
-      {b.packageBookCode}
-    </div>
-    <small className="text-muted">
-      {formatDate(b.bookingDate)}
-    </small>
-  </td>
+  <tbody>
+    {loading ? (
+      <tr>
+        <td colSpan="7" className="text-center py-5">
+          <Spinner />
+        </td>
+      </tr>
+    ) : filteredBookings.length === 0 ? (
+      <tr>
+        <td colSpan="7" className="text-center py-5 text-muted">
+          No bookings found
+        </td>
+      </tr>
+    ) : (
+      filteredBookings.map((b) => (
+        <tr key={b.custombookingId}>
+          <td className="ps-4">
+            <div className="fw-semibold">{b.packageBookCode}</div>
+            <small className="text-muted">
+              {formatDate(b.bookingDate)}
+            </small>
+          </td>
 
-  {/* Customer Name ✅ FIXED */}
-  <td className="ps-4">
-    <div className="fw-medium text-dark">
-      {b.customer?.salutaion || ""}{" "}
-      {b.customer?.firstName || ""}{" "}
-      {b.customer?.lastName || ""}
-    </div>
-    <small className="text-muted">
-      {b.customer?.emailId || "-"}
-    </small>
-  </td>
+          <td className="ps-4">
+            <div className="fw-medium">
+              {b.customer?.salutaion || ""}{" "}
+              {b.customer?.firstName || ""}{" "}
+              {b.customer?.lastName || ""}
+            </div>
+            <small className="text-muted">
+              {b.customer?.emailId || "-"}
+            </small>
+          </td>
 
-  {/* Cab */}
-  <td>
-    <div className="fw-medium">{b.cabName}</div>
-    <small className="text-muted">
-      {b.transporter || "-"}
-    </small>
-  </td>
+          <td>
+            <div className="fw-medium">{b.cabName}</div>
+            <small className="text-muted">
+              {b.transporter || "-"}
+            </small>
+          </td>
 
-  {/* Travel */}
-  <td className="small text-muted">
-    <div>
-      <FaCalendarAlt size={11} className="me-1" />
-      {formatDate(b.pickupDate)}
-    </div>
-    <div>
-      {b.travelType === 1 ? "Oneway" : "Return"}
-    </div>
-  </td>
+          <td>
+            <FaCalendarAlt size={11} className="me-1" />
+            {b.pickupDate}
+          </td>
 
-  {/* Pax */}
-  <td className="small text-muted">
-    <FaUserAlt size={11} className="me-1" />
-    {b.noOfAdult}A / {b.noOfChild}C
-  </td>
+          <td>
+            <FaUserAlt size={11} className="me-1" />
+            {b.noOfAdult}A / {b.noOfChild}C
+          </td>
 
-  {/* Amount */}
-  <td>
-    <div className="fw-semibold text-dark">
-      {formatPrice(b.totalPrice)}
-    </div>
-    <small className="text-muted">
-      {formatPrice(b.totalRate)}
-    </small>
-  </td>
+          <td className="fw-semibold">
+            {formatPrice(b.totalPrice)}
+          </td>
 
-  {/* Action */}
-  <td className="text-center pe-4">
-    <Button
-      variant="light"
-      size="sm"
-      className="rounded-pill px-3 border"
-      onClick={() => handleCancelClick(b)}
-    >
-      <FaTrash size={12} className="text-danger" />
-    </Button>
-  </td>
-</tr>
-                        ))
-                      )}
-                    </tbody>
-                  </Table>
+          <td className="text-center">
+            <Button
+              variant="light"
+              size="sm"
+              className="px-3 border"
+              onClick={() => handleCancelClick(b)}
+            >
+              <FaTrash size={12} className="text-danger" />
+            </Button>
+          </td>
+        </tr>
+      ))
+    )}
+  </tbody>
+</Table>
                 </div>
               </Card.Body>
             </Card>

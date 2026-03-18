@@ -12,7 +12,6 @@ import {
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
-import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import {
@@ -198,7 +197,6 @@ const AgentReg = () => {
     currency: "",
     status: "",
     agentLogo: null,
-    // GST Details as nested object to match AgentGSTDetailsDTO
     agentGSTDetailsDTO: {
       agentClassification: "",
       agentGstIn: "",
@@ -207,6 +205,60 @@ const AgentReg = () => {
       agentRegisterstatus: "",
       agentHsncode: "",
       agentStatus: "",
+    },
+  });
+
+  const mapAgentToForm = (data) => ({
+    companyName: data?.companyName || "",
+    shortName: data?.shortName || "",
+    businessType: data?.businessType || "",
+    agentCategoryId: String(data?.agentCategoryId || ""),
+    companyCode: data?.companyCode || "",
+    agentUrl: data?.agentUrl || "",
+    firstName: data?.firstName || "",
+    lastName: data?.lastName || "",
+    personalEmail: data?.personalEmail || "",
+    zipCode: data?.zipCode || "",
+    mobileNumber: data?.mobileNumber || "",
+    telephoneNumber: data?.telephoneNumber || "",
+    contactPerson: data?.contactPerson || "",
+    countryId: String(data?.countryId || ""),
+    provinceId: String(data?.provinceId || ""),
+    placeId: String(data?.placeId || ""),
+    address: data?.address || "",
+    markup: String(data?.markup || ""),
+    currency: String(data?.currency || ""),
+    status: data?.status || "",
+    agentLogo: null,
+    agentGSTDetailsDTO: {
+      agentClassification:
+        data?.agentClassification ||
+        data?.agentGSTDetailsDTO?.agentClassification ||
+        "",
+      agentGstIn:
+        data?.agentGstIn ||
+        data?.agentGSTDetailsDTO?.agentGstIn ||
+        "",
+      agentProvisionalGstno:
+        data?.agentProvisionalGstno ||
+        data?.agentGSTDetailsDTO?.agentProvisionalGstno ||
+        "",
+      agentCorrespondmail:
+        data?.agentCorrespondmail ||
+        data?.agentGSTDetailsDTO?.agentCorrespondmail ||
+        "",
+      agentRegisterstatus:
+        data?.agentRegisterstatus ||
+        data?.agentGSTDetailsDTO?.agentRegisterstatus ||
+        "",
+      agentHsncode:
+        data?.agentHsncode ||
+        data?.agentGSTDetailsDTO?.agentHsncode ||
+        "",
+      agentStatus:
+        data?.agentStatus ||
+        data?.agentGSTDetailsDTO?.agentStatus ||
+        "",
     },
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -266,18 +318,14 @@ const AgentReg = () => {
   // Static data for external APIs
   const externalApis = [
     { code: "Select", name: "Select" },
-    // { code: "IWTX", name: "IWTX" },
-    // { code: "X3", name: "X3" },
-    // { code: "INHOUSE", name: "INHOUSE" },
-    // { code: "DARINA", name: "DARINA" },
-    // { code: "RATEHAWK", name: "RATEHAWK" },
-    // { code: "ATHARVA", name: "ATHARVA" },
+    { code: "IWTX", name: "IWTX" },
+    { code: "X3", name: "X3" },
+    { code: "INHOUSE", name: "INHOUSE" },
+    { code: "DARINA", name: "DARINA" },
+    { code: "RATEHAWK", name: "RATEHAWK" },
+    { code: "ATHARVA", name: "ATHARVA" },
   ];
 
-  const nextId = useMemo(
-    () => Math.max(0, ...items.map((i) => i.id)) + 1,
-    [items]
-  );
 
   // Helper function to convert file to base64
   const convertToBase64 = (file) => {
@@ -332,84 +380,28 @@ const AgentReg = () => {
   };
 
   const openEdit = async (item) => {
-       setIsViewMode(false); // Set to edit mode
+    setIsViewMode(false);
 
-      const getEditData = await axiosInstance.get(`/api/agent/${item.id}`);
-      
-      setEditing(getEditData.data);
- console.log("editing", editing);
-    // Set form data first
-    setFormData({
-      companyName: editing.companyName || "",
-      shortName: editing.shortName || "",
-      businessType: editing.businessType || "",
-      agentCategoryId: String(editing.agentCategoryId || ""),
-      companyCode: editing.companyCode || "",
-      agentUrl: editing.agentUrl || "",
-      firstName: editing.firstName || "",
-      lastName: editing.lastName || "",
-      personalEmail: editing.personalEmail || "",
-      zipCode: editing.zipCode || "",
-      mobileNumber: editing.mobileNumber || "",
-      telephoneNumber: editing.telephoneNumber || "",
-      contactPerson: editing.contactPerson || "",
-      countryId: String(editing.countryId || ""),
-      provinceId: String(editing.provinceId || ""),
-      placeId: String(editing.placeId || ""),
-      address: editing.address || "",
-      markup: String(editing.markup || ""),
-      currency: String(editing.currency || ""),
-      status: editing.status || "",
-      agentLogo: null,
-      // GST Details as nested object to match AgentGSTDetailsDTO
-      agentGSTDetailsDTO: {
-        agentClassification:
-          editing.agentClassification ||
-          editing.agentGSTDetailsDTO?.agentClassification ||
-          "",
-        agentGstIn:
-          editing.agentGstIn || editing.agentGSTDetailsDTO?.agentGstIn || "",
-        agentProvisionalGstno:
-          editing.agentProvisionalGstno ||
-          editing.agentGSTDetailsDTO?.agentProvisionalGstno ||
-          "",
-        agentCorrespondmail:
-          getEditData.agentCorrespondmail ||
-          getEditData.agentGSTDetailsDTO?.agentCorrespondmail ||
-          "",
-        agentRegisterstatus:
-          editing.agentRegisterstatus ||
-          editing.agentGSTDetailsDTO?.agentRegisterstatus ||
-          "",
-        agentHsncode:
-          editing.agentHsncode || editing.agentGSTDetailsDTO?.agentHsncode || "",
-        agentStatus:
-          editing.agentStatus || editing.agentGSTDetailsDTO?.agentStatus || "",
-      },
-    });
+    try {
+      const res = await axiosInstance.get(`/api/agent/${item.id}`);
+      const data = res.data;
 
-    // Clear existing provinces and places first
-    setProvinces([]);
-    setPlaces([]);
+      setEditing(data);
+      setFormData(mapAgentToForm(data));
 
-    // Fetch provinces and cities for the selected country and province
-    if (editing.countryId) {
-      try {
-       // console.log("Loading provinces for countryId:", item.countryId);
-        await provinceList(editing.countryId);
-
-        // After provinces are loaded, fetch cities if provinceId exists
-        if (editing.provinceId) {
-         // console.log("Loading cities for provinceId:", item.provinceId);
-          await cityList(editing.provinceId);
+      if (data.countryId) {
+        await provinceList(data.countryId);
+        if (data.provinceId) {
+          await cityList(data.provinceId);
         }
-      } catch (error) {
-        console.error("Error loading provinces/cities:", error);
       }
-    }
 
-    setValidationErrors({});
-    setShowModal(true);
+      setValidationErrors({});
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error in openEdit:", error);
+      toast.error("Failed to load agent details");
+    }
   };
 
   const userRolesList = async () => {
@@ -424,7 +416,7 @@ const AgentReg = () => {
 
   const agentCategoryList = async () => {
     try {
-      const agentCatResponse = await axios.get("/api/agentCategory");
+      const agentCatResponse = await axiosInstance.get("/api/agentCategory");
       setAgentCategoryies(agentCatResponse.data);
     } catch (error) {
      // console.log("agent category api call error::", error);
@@ -433,7 +425,7 @@ const AgentReg = () => {
 
   const countryList = async () => {
     try {
-      const response = await axios.get("/api/country");
+      const response = await axiosInstance.get("/api/country");
      // console.log("Countries loaded:", response.data);
       setCountries(response.data);
     } catch (error) {
@@ -443,7 +435,7 @@ const AgentReg = () => {
 
   const provinceList = async (countryId) => {
     try {
-      const response = await axios.get(
+      const response = await axiosInstance.get(
         `/api/province/getByCountryId/${countryId}`
       );
       setProvinces(Array.isArray(response.data) ? response.data : []);
@@ -454,7 +446,7 @@ const AgentReg = () => {
 
   const cityList = async (stateId) => {
     try {
-      const response = await axios.get(`/api/destination/getplaces/${stateId}`);
+      const response = await axiosInstance.get(`/api/destination/getplaces/${stateId}`);
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
      // console.log("axios call error for city list : ", error);
@@ -577,10 +569,10 @@ const AgentReg = () => {
       }
 
      // console.log("Edit payload:", agentPayload);
-     // console.log("Editing agent ID:", editing.id);
+     // console.log("Editing agent ID:", editing?.id);
 
       const editRes = await axiosInstance.put(
-        `/api/agent/${editing.id}`,
+        `/api/agent/${editing?.id}`,
         agentPayload
       );
 
@@ -764,32 +756,23 @@ const AgentReg = () => {
       newErrors.mobileNumber = "Mobile Number must be 10-15 digits";
 
     // GST fields validation (only if country is India)
-    if (String(data.countryId) === "1") {
-     // console.log("GST validation running - country is India");
-      const gstInValue = getStringValue(data.agentGSTDetailsDTO?.agentGstIn);
-   
+    if (String(data?.countryId) === "1") {
+      const gstDetails = data?.agentGSTDetailsDTO;
+      const gstInValue = getStringValue(gstDetails?.agentGstIn);
+      const isRegistered = gstDetails?.agentClassification === "registered";
 
-      if (
-        data.agentGSTDetailsDTO?.agentClassification === "registered" &&
-        !gstInValue
-      ) {
-       // console.log("Adding GSTIN required error");
+      if (isRegistered && !gstInValue) {
         newErrors["agentGSTDetailsDTO.agentGstIn"] =
-          "GSTIN is required for registered agencies";
+          "GSTIN is required for Registered agents";
+      } else if (gstInValue && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstInValue)) {
+        newErrors["agentGSTDetailsDTO.agentGstIn"] = "Invalid GSTIN format";
       }
-      if (gstInValue && !/^[A-Z0-9]{15}$/.test(gstInValue)) {
-       // console.log("Adding GSTIN format error");
-        newErrors["agentGSTDetailsDTO.agentGstIn"] =
-          "GSTIN must be 15 alphanumeric characters";
-      }
-      if (
-        data.agentGSTDetailsDTO?.agentCorrespondmail &&
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-          data.agentGSTDetailsDTO.agentCorrespondmail
-        )
-      )
+
+      const correspondMail = gstDetails?.agentCorrespondmail;
+      if (isRegistered && (!correspondMail || !/\S+@\S+\.\S+/.test(correspondMail))) {
         newErrors["agentGSTDetailsDTO.agentCorrespondmail"] =
-          "Invalid correspondence email format";
+          "Valid Correspondent Email is required";
+      }
     } else {
      // console.log("GST validation skipped - country is not India:", data.countryId );
     }
@@ -876,24 +859,11 @@ const AgentReg = () => {
   };
 
   useEffect(() => {
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
+    const delayDebounce = setTimeout(() => {
+      fetchAgentList(0, search);
+    }, 500);
 
-    if (search !== "") {
-      const timeout = setTimeout(() => {
-        fetchAgentList(0, search);
-      }, 500);
-      setSearchTimeout(timeout);
-    } else if (search === "") {
-      fetchAgentList(0, "");
-    }
-
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-    };
+    return () => clearTimeout(delayDebounce);
   }, [search]);
 
   const handleDelete = (item) => {
@@ -925,81 +895,28 @@ const AgentReg = () => {
   };
 
   const handleView = async (item) => {
-    setEditing(item);
-    setIsViewMode(true); // Set to view mode
+    setIsViewMode(true);
 
-    // Set form data first
-    setFormData({
-      companyName: item.companyName || "",
-      shortName: item.shortName || "",
-      businessType: item.businessType || "",
-      agentCategoryId: String(item.agentCategoryId || ""),
-      companyCode: item.companyCode || "",
-      agentUrl: item.agentUrl || "",
-      firstName: item.firstName || "",
-      lastName: item.lastName || "",
-      personalEmail: item.personalEmail || "",
-      zipCode: item.zipCode || "",
-      mobileNumber: item.mobileNumber || "",
-      telephoneNumber: item.telephoneNumber || "",
-      contactPerson: item.contactPerson || "",
-      countryId: String(item.countryId || ""),
-      provinceId: String(item.provinceId || ""),
-      placeId: String(item.placeId || ""),
-      address: item.address || "",
-      markup: String(item.markup || ""),
-      currency: String(item.currency || ""),
-      status: item.status || "",
-      agentLogo: null,
-      // GST Details as nested object to match AgentGSTDetailsDTO
-      agentGSTDetailsDTO: {
-        agentClassification:
-          item.agentClassification ||
-          item.agentGSTDetailsDTO?.agentClassification ||
-          "",
-        agentGstIn:
-          item.agentGstIn || item.agentGSTDetailsDTO?.agentGstIn || "",
-        agentProvisionalGstno:
-          item.agentProvisionalGstno ||
-          item.agentGSTDetailsDTO?.agentProvisionalGstno ||
-          "",
-        agentCorrespondmail:
-          item.agentCorrespondmail ||
-          item.agentGSTDetailsDTO?.agentCorrespondmail ||
-          "",
-        agentRegisterstatus:
-          item.agentRegisterstatus ||
-          item.agentGSTDetailsDTO?.agentRegisterstatus ||
-          "",
-        agentHsncode:
-          item.agentHsncode || item.agentGSTDetailsDTO?.agentHsncode || "",
-        agentStatus:
-          item.agentStatus || item.agentGSTDetailsDTO?.agentStatus || "",
-      },
-    });
+    try {
+      const res = await axiosInstance.get(`/api/agent/${item.id}`);
+      const data = res.data;
 
-    // Clear existing provinces and places first
-    setProvinces([]);
-    setPlaces([]);
+      setEditing(data);
+      setFormData(mapAgentToForm(data));
 
-    // Fetch provinces and cities for the selected country and province
-    if (item.countryId) {
-      try {
-       // console.log("Loading provinces for countryId:", item.countryId);
-        await provinceList(item.countryId);
-
-        // After provinces are loaded, fetch cities if provinceId exists
-        if (item.provinceId) {
-         // console.log("Loading cities for provinceId:", item.provinceId);
-          await cityList(item.provinceId);
+      if (data.countryId) {
+        await provinceList(data.countryId);
+        if (data.provinceId) {
+          await cityList(data.provinceId);
         }
-      } catch (error) {
-        console.error("Error loading provinces/cities:", error);
       }
-    }
 
-    setValidationErrors({});
-    setShowModal(true);
+      setValidationErrors({});
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error in handleView:", error);
+      toast.error("Failed to load agent details");
+    }
   };
 
   const handleLogin = async (item) => {
@@ -1133,7 +1050,7 @@ const AgentReg = () => {
          // console.log("activeRoleObj:", activeRoleObj);
 
           loginPayload = {
-            userId: editing.id,   // Agent ID
+            userId: editing?.id,   // Agent ID
             userTypeId: activeRoleObj.id,
             userName: loginFormData.username,
             userRoleIds: loginFormData.userroles,
@@ -1265,10 +1182,12 @@ const AgentReg = () => {
       const response = await axiosInstance.get(
         `/api/agent-credit-limit/agent/${item.id}`
       );
-      if (response.data) {
-        const creditData = response.data;
+      const creditData = response.data;
+
+      if (creditData && Number(creditData.totalCreditLimit) > 0) {
+        // ✅ Existing credit
         setHasInitialCredit(true);
-        setCreditLimitType("update"); // Default to update if credit exists
+        setCreditLimitType("update");
         setCreditLimitFormData((prev) => ({
           ...prev,
           totalCreditLimit: creditData.totalCreditLimit || "0",
@@ -1276,8 +1195,16 @@ const AgentReg = () => {
           usedCreditLimit: creditData.usedCreditLimit || "0",
         }));
       } else {
+        // ✅ New agent (no credit)
         setHasInitialCredit(false);
-        setCreditLimitType("initial"); // Default to initial if no credit exists
+        setCreditLimitType("initial");
+        setCreditLimitFormData({
+          addCreditLimit: "",
+          remarks: "",
+          totalCreditLimit: "0",
+          availableCreditLimit: "0",
+          usedCreditLimit: "0",
+        });
       }
     } catch (error) {
       console.error("Failed to fetch credit limit data:", error);
@@ -1333,7 +1260,7 @@ const AgentReg = () => {
       if (creditLimitType === "initial") {
         // Create initial credit limit
         const createPayload = {
-          agentId: editing.id,
+          agentId: editing?.id,
           totalCreditLimit: addAmount,
         };
 
@@ -1348,7 +1275,7 @@ const AgentReg = () => {
       } else {
         // Add to existing credit limit
         const addCreditPayload = {
-          agentId: editing.id,
+          agentId: editing?.id,
           additionalCredit: addAmount,
           remarks: creditLimitFormData.remarks,
           totalCreditLimit: creditLimitFormData.totalCreditLimit,
@@ -1462,7 +1389,7 @@ const AgentReg = () => {
     const value = e.target.value;
 
     // Check if Agent Classification is selected first
-    if (!formData.agentGSTDetailsDTO.agentClassification) {
+    if (!formData?.agentGSTDetailsDTO?.agentClassification) {
       setGstinError("Please select Agent Classification first.");
       return; // Don't update the form data
     }
@@ -1600,7 +1527,7 @@ const AgentReg = () => {
     try {
      // console.log("Removing exclusion for API:", apiCode);
       await axiosInstance.delete(
-        `/api/agent-api-exclusion/agent/${editing.id}/api/${apiCode}`
+        `/api/agent-api-exclusion/agent/${editing?.id}/api/${apiCode}`
       );
      // console.log("Exclusion removed successfully");
     } catch (error) {
@@ -1639,7 +1566,7 @@ const AgentReg = () => {
       let existingApiCodes = [];
       try {
         const existingResponse = await axiosInstance.get(
-          `/api/agent-api-exclusion/agent/${editing.id}`
+          `/api/agent-api-exclusion/agent/${editing?.id}`
         );
         if (existingResponse.data && Array.isArray(existingResponse.data)) {
           existingApiCodes = existingResponse.data
@@ -1667,7 +1594,7 @@ const AgentReg = () => {
       // Send multiple requests for each new API (avoiding duplicates)
       const promises = newApiCodes.map((apiCode) => {
         const exclusionPayload = {
-          agentId: editing.id,
+          agentId: editing?.id,
           nationality: exclusionFormData.nationality,
           apiCode: apiCode,
         };
@@ -3190,6 +3117,7 @@ const AgentReg = () => {
                         label="Update Credit Limit"
                         checked={creditLimitType === "update"}
                         onChange={handleCreditLimitTypeChange}
+                        disabled={!hasInitialCredit}
                         className="mb-2"
                       />
                     </Col>

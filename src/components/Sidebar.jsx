@@ -226,10 +226,10 @@ export default function Sidebar() {
         //   label: "Package Booking",
         //   to: "/booking-details/package-booking-list",
         // },
-        // {
-        //   label: "Activity Booking",
-        //   to: "/booking-details/activity-booking-list",
-        // },
+        {
+          label: "Activity Booking",
+          to: "/booking-details/activity-booking-list",
+        },
         {
           label: "Cab Booking",
           to: "/booking-details/cab-booking-list",
