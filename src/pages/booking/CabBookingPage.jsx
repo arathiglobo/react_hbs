@@ -284,7 +284,7 @@ const CabBookingPage = () => {
 
           <Form.Control
             type="text"
-            placeholder="John"
+            placeholder="First Name"
             className="rounded-3 shadow-sm"
             value={primaryGuest.firstName}
             onChange={(e) =>
@@ -308,7 +308,7 @@ const CabBookingPage = () => {
 
           <Form.Control
             type="text"
-            placeholder="Doe"
+            placeholder="Last Name"
             className="rounded-3 shadow-sm"
             value={primaryGuest.lastName}
             onChange={(e) =>
@@ -332,7 +332,7 @@ const CabBookingPage = () => {
 
           <Form.Control
             type="text"
-            placeholder="+91 98765 43210"
+            placeholder="Contact Number"
             className="rounded-3 shadow-sm"
             value={primaryGuest.contactNumber}
             onChange={(e) =>
@@ -356,7 +356,7 @@ const CabBookingPage = () => {
 
           <Form.Control
             type="email"
-            placeholder="john@example.com"
+            placeholder="Email ID"
             className="rounded-3 shadow-sm"
             value={primaryGuest.emailId}
             onChange={(e) =>
@@ -376,12 +376,11 @@ const CabBookingPage = () => {
         <Form.Group>
           <Form.Label className="small text-muted fw-semibold">
             Passport Number{" "}
-            <span className="text-muted fw-normal">(Optional)</span>
           </Form.Label>
 
           <Form.Control
             type="text"
-            placeholder="A1234567"
+            placeholder="Passport Number"
             className="rounded-3 shadow-sm"
             value={primaryGuest.passportNumber}
             onChange={(e) =>
@@ -400,7 +399,7 @@ const CabBookingPage = () => {
 
           <Form.Control
             type="text"
-            placeholder="LPO-12345"
+            placeholder="Agent LPO"
             className="rounded-3 shadow-sm"
             value={primaryGuest.lpo}
             onChange={(e) =>

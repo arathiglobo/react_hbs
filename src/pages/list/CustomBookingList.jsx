@@ -544,587 +544,316 @@ const CustomBookingList = () => {
       </div>
 
       {/* Booking Details Modal */}
-      <style>{`
-        .custom-booking-modal .modal-dialog {
-          max-width: 900px;
-          width: 100%;
-        }
-        .custom-booking-modal .modal-content {
-          border-radius: 12px;
-          overflow: hidden;
-        }
-      `}</style>
       <Modal
         show={showDetailsModal}
         onHide={() => setShowDetailsModal(false)}
         centered
         scrollable
-        dialogClassName="custom-booking-modal"
+        size="xl"
       >
-        <Modal.Header closeButton style={{ background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", color: "white", borderBottom: "none" }}>
-          <Modal.Title className="d-flex align-items-center gap-2" style={{ color: "white" }}>
-            <FaEye />
-            Booking Details
+        <Modal.Header closeButton className="bg-dark text-white border-0">
+          <Modal.Title className="d-flex align-items-center gap-2">
+            <FaEye className="text-info" />
+            <span className="fw-bold">Booking Details</span>
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body style={{ padding: "1.5rem", background: "#f8f9fa" }}>
+        <Modal.Body className="bg-light p-4">
           {loadingDetails ? (
             <div className="text-center py-5">
-              <Spinner animation="border" variant="primary" size="sm" />
-              <p className="mt-3 text-muted">Loading booking details...</p>
+              <Spinner animation="border" variant="primary" />
+              <p className="mt-3 text-muted fw-medium">Fetching details...</p>
             </div>
           ) : bookingDetails ? (
-            <div>
-              {/* Basic Information */}
-              <Card className="mb-4 shadow-sm border-0">
-                <Card.Header className="bg-white border-bottom" style={{ padding: "0.75rem 1rem" }}>
-                  <div className="d-flex align-items-center gap-2">
-                    <FaCalendarAlt className="text-primary" />
-                    <h6 className="mb-0 fw-bold">Basic Information</h6>
-                  </div>
-                </Card.Header>
-                <Card.Body style={{ padding: "1rem" }}>
-                  <Row className="g-3">
-                    <Col xs={12} md={6}>
-                      <div className="p-2 bg-light rounded">
-                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Package Code</small>
-                        <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{bookingDetails.packageCode || "-"}</strong>
-                      </div>
-                    </Col>
-                    <Col xs={12} md={6}>
-                      <div className="p-2 bg-light rounded">
-                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Booking Date</small>
-                        <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{formatDate(bookingDetails.bookDate || bookingDetails.bookingDate)}</strong>
-                      </div>
-                    </Col>
-                    <Col xs={12} md={6}>
-                      <div className="p-2 bg-light rounded">
-                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Tour Date</small>
-                        <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{formatDate(bookingDetails.tourDate || bookingDetails.travelDate)}</strong>
-                      </div>
-                    </Col>
-                    <Col xs={12} md={6}>
-                      <div className="p-2 bg-light rounded">
-                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Status</small>
-                        <Badge bg={getStatusBadge(bookingDetails.status || bookingDetails.bookingStatus)} style={{ fontSize: "0.85rem", padding: "0.35em 0.65em" }}>
-                          {bookingDetails.status || bookingDetails.bookingStatus || "-"}
-                        </Badge>
-                      </div>
-                    </Col>
-                    <Col xs={12} md={6}>
-                      <div className="p-2 bg-light rounded">
-                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Selling Price</small>
-                        <strong className="text-success" style={{ fontSize: "1rem", fontWeight: "600" }}>AED {parseFloat(bookingDetails.sellingPrice || 0).toFixed(2)}</strong>
-                      </div>
-                    </Col>
-                    <Col xs={12} md={6}>
-                      <div className="p-2 bg-light rounded">
-                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Total Price</small>
-                        <strong className="text-primary" style={{ fontSize: "1rem", fontWeight: "600" }}>AED {parseFloat(bookingDetails.totalPrice || 0).toFixed(2)}</strong>
-                      </div>
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
-
-              {/* Guest Information - from first hotel or customerDTO */}
-              {(bookingDetails.hotelBookingRequest && Array.isArray(bookingDetails.hotelBookingRequest) && bookingDetails.hotelBookingRequest.length > 0 && bookingDetails.hotelBookingRequest[0].primaryGuest) || bookingDetails.customerDTO ? (
-                <Card className="mb-4 shadow-sm border-0">
-                  <Card.Header className="bg-white border-bottom" style={{ padding: "0.75rem 1rem" }}>
-                    <div className="d-flex align-items-center gap-2">
-                      <FaUsers className="text-primary" />
-                      <h6 className="mb-0 fw-bold">Primary Guest Information</h6>
+            <div className="animate__animated animate__fadeIn">
+              {/* Summary Cards */}
+              <Row className="g-3 mb-4">
+                <Col md={3}>
+                  <Card className="border-0 shadow-sm text-center h-100 p-3">
+                    <small className="text-uppercase text-muted fw-bold mb-1" style={{ fontSize: '0.65rem' }}>Package Code</small>
+                    <h5 className="mb-0 fw-bold text-dark">{bookingDetails.packageCode || "-"}</h5>
+                  </Card>
+                </Col>
+                <Col md={3}>
+                  <Card className="border-0 shadow-sm text-center h-100 p-3">
+                    <small className="text-uppercase text-muted fw-bold mb-1" style={{ fontSize: '0.65rem' }}>Booking Date</small>
+                    <h5 className="mb-0 fw-bold text-dark">{formatDate(bookingDetails.bookDate || bookingDetails.bookingDate)}</h5>
+                  </Card>
+                </Col>
+                <Col md={3}>
+                  <Card className="border-0 shadow-sm text-center h-100 p-3">
+                    <small className="text-uppercase text-muted fw-bold mb-1" style={{ fontSize: '0.65rem' }}>Tour Date</small>
+                    <h5 className="mb-0 fw-bold text-dark">{formatDate(bookingDetails.tourDate || bookingDetails.travelDate)}</h5>
+                  </Card>
+                </Col>
+                <Col md={3}>
+                  <Card className="border-0 shadow-sm text-center h-100 p-3">
+                    <small className="text-uppercase text-muted fw-bold mb-1" style={{ fontSize: '0.65rem' }}>Status</small>
+                    <div>
+                      <Badge bg={getStatusBadge(bookingDetails.status || bookingDetails.bookingStatus)} className="rounded-pill px-3 py-2 text-uppercase">
+                        {(bookingDetails.status || bookingDetails.bookingStatus || "N/A")}
+                      </Badge>
                     </div>
-                  </Card.Header>
-                  <Card.Body style={{ padding: "1rem" }}>
-                    {(() => {
-                      const primaryGuest = bookingDetails.hotelBookingRequest?.[0]?.primaryGuest || bookingDetails.customerDTO || {};
-                      return (
-                        <Row className="g-3">
-                          <Col xs={12}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Full Name</small>
-                              <strong style={{ fontSize: "0.95rem", color: "#212529" }}>
-                                {primaryGuest.salutation || ""}{" "}
-                                {primaryGuest.firstName || ""}{" "}
-                                {primaryGuest.middleName || ""}{" "}
-                                {primaryGuest.lastName || ""}
-                              </strong>
-                            </div>
-                          </Col>
-                          <Col xs={12} md={6}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Email</small>
-                              <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{primaryGuest.email || primaryGuest.emailId || "-"}</strong>
-                            </div>
-                          </Col>
-                          <Col xs={12} md={6}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Phone</small>
-                              <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{primaryGuest.phone || primaryGuest.mobileNumber || "-"}</strong>
-                            </div>
-                          </Col>
-                          <Col xs={12} md={6}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Passport Number</small>
-                              <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{primaryGuest.passportNo || "-"}</strong>
-                            </div>
-                          </Col>
-                          <Col xs={12} md={6}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Nationality</small>
-                              <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{primaryGuest.nativeCountry || "-"}</strong>
-                            </div>
-                          </Col>
-                          <Col xs={12} md={6}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>LPO Number</small>
-                              <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{primaryGuest.agentLpo || primaryGuest.agentlpo || "-"}</strong>
-                            </div>
-                          </Col>
-                        </Row>
-                      );
-                    })()}
-                  </Card.Body>
-                </Card>
-              ) : null}
+                  </Card>
+                </Col>
+              </Row>
 
-              {/* Hotel Details - Handle array of hotels */}
-              {bookingDetails.hotelBookingRequest && Array.isArray(bookingDetails.hotelBookingRequest) && bookingDetails.hotelBookingRequest.length > 0 ? (
-                <Card className="mb-4 shadow-sm border-0">
-                  <Card.Header className="bg-white border-bottom" style={{ padding: "0.75rem 1rem" }}>
-                    <div className="d-flex align-items-center gap-2">
-                      <FaHotel className="text-primary" />
-                      <h6 className="mb-0 fw-bold">Hotel Details ({bookingDetails.hotelBookingRequest.length})</h6>
+              <Row className="g-4">
+                {/* Left Column: Guest & Basic Info */}
+                <Col lg={4}>
+                  <Card className="border-0 shadow-sm h-100 mb-4 rounded-4 overflow-hidden">
+                    <div className="bg-white p-3 border-bottom d-flex align-items-center gap-2">
+                       <FaUsers className="text-primary" />
+                       <h6 className="mb-0 fw-bold">Guest Details</h6>
                     </div>
-                  </Card.Header>
-                  <Card.Body style={{ padding: "1rem" }}>
-                    {bookingDetails.hotelBookingRequest.map((hotel, hotelIdx) => (
-                      <Card key={hotelIdx} className="mb-3 border" style={{ borderColor: "#e0e0e0 !important" }}>
-                        <Card.Header className="bg-light" style={{ padding: "0.75rem 1rem" }}>
-                          <h6 className="mb-0 fw-bold" style={{ fontSize: "0.95rem", color: "#495057" }}>
-                            {bookingDetails.hotelBookingRequest.length > 1 ? `Hotel ${hotelIdx + 1}: ` : ""}
-                            {hotel.hotelName || "-"}
-                          </h6>
-                        </Card.Header>
-                        <Card.Body style={{ padding: "1rem" }}>
-                      <Row className="g-2">
-                        <Col xs={12}>
-                          <small className="text-muted d-block">Address</small>
-                          <strong className="small">{hotel.address || "-"}</strong>
-                        </Col>
-                        <Col xs={6}>
-                          <small className="text-muted d-block">Check-in</small>
-                          <strong className="small">{formatDate(hotel.checkInDate || hotel.checkIn)}</strong>
-                        </Col>
-                        <Col xs={6}>
-                          <small className="text-muted d-block">Check-out</small>
-                          <strong className="small">{formatDate(hotel.checkOutDate || hotel.checkOut)}</strong>
-                        </Col>
-                        <Col xs={4}>
-                          <small className="text-muted d-block">Nights</small>
-                          <strong className="small">{hotel.nights || "-"}</strong>
-                        </Col>
-                        <Col xs={4}>
-                          <small className="text-muted d-block">Star Rating</small>
-                          <strong className="small">{hotel.starRating || "-"}</strong>
-                        </Col>
-                        <Col xs={4}>
-                          <small className="text-muted d-block">Status</small>
-                          <Badge bg={hotel.roomStatus === "Available" || hotel.roomStatus === "Confirmed" ? "success" : hotel.roomStatus === "Not Confirmed" ? "warning" : "secondary"} className="small">
-                            {hotel.roomStatus || "-"}
-                          </Badge>
-                        </Col>
-                        {hotel.primaryGuest && (
-                          <Col xs={12}>
-                            <small className="text-muted d-block">Primary Guest</small>
-                            <strong className="small">
-                              {hotel.primaryGuest.salutation || ""} {hotel.primaryGuest.firstName || ""} {hotel.primaryGuest.lastName || ""}
-                            </strong>
-                            <div className="small text-muted">
-                              {hotel.primaryGuest.email && `Email: ${hotel.primaryGuest.email}`}
-                              {hotel.primaryGuest.phone && ` | Phone: ${hotel.primaryGuest.phone}`}
+                    <Card.Body>
+                      {(() => {
+                        const guest = bookingDetails.hotelBookingRequest?.[0]?.primaryGuest || bookingDetails.customerDTO || {};
+                        return (
+                          <div className="d-flex flex-column gap-3">
+                            <div>
+                              <label className="small text-muted mb-0">Full Name</label>
+                              <p className="mb-0 fw-bold text-primary">
+                                {guest.salutation || ""} {guest.firstName || ""} {guest.lastName || ""}
+                              </p>
                             </div>
-                          </Col>
-                        )}
-                        {hotel.rooms && Array.isArray(hotel.rooms) && hotel.rooms.length > 0 && (
-                          <Col xs={12}>
-                            <div className="mb-2">
-                              <small className="text-muted d-block mb-2" style={{ fontSize: "0.8rem", fontWeight: "600" }}>Rooms</small>
+                            <Row>
+                              <Col xs={12}>
+                                <label className="small text-muted mb-0">Email</label>
+                                <p className="mb-0 small fw-medium text-break">{guest.email || guest.emailId || "-"}</p>
+                              </Col>
+                            </Row>
+                            <Row>
+                                <Col xs={6}>
+                                  <label className="small text-muted mb-0">Phone</label>
+                                  <p className="mb-0 small fw-medium">{guest.phone || guest.mobileNumber || "-"}</p>
+                                </Col>
+                                <Col xs={6}>
+                                  <label className="small text-muted mb-0">Nationality</label>
+                                  <p className="mb-0 small fw-medium">{guest.nativeCountry || "-"}</p>
+                                </Col>
+                            </Row>
+                            <Row>
+                              <Col xs={6}>
+                                <label className="small text-muted mb-0">Passport</label>
+                                <p className="mb-0 small fw-medium">{guest.passportNo || "-"}</p>
+                              </Col>
+                              <Col xs={6}>
+                                <label className="small text-muted mb-0">LPO No.</label>
+                                <p className="mb-0 small fw-medium">{guest.agentLpo || guest.agentlpo || "-"}</p>
+                              </Col>
+                            </Row>
+                            <div className="mt-2 pt-3 border-top">
+                              <Row>
+                                <Col xs={6}>
+                                  <div className="bg-light p-2 rounded text-center">
+                                    <label className="small text-muted d-block mb-0">Selling Price</label>
+                                    <span className="fw-bold text-success">AED {parseFloat(bookingDetails.sellingPrice || 0).toLocaleString()}</span>
+                                  </div>
+                                </Col>
+                                <Col xs={6}>
+                                  <div className="bg-light p-2 rounded text-center">
+                                    <label className="small text-muted d-block mb-0">Total Cost</label>
+                                    <span className="fw-bold text-primary">AED {parseFloat(bookingDetails.totalPrice || 0).toLocaleString()}</span>
+                                  </div>
+                                </Col>
+                              </Row>
                             </div>
-                            <div className="table-responsive">
-                              <Table striped bordered hover size="sm" className="mb-0" style={{ fontSize: "0.85rem" }}>
-                              <thead>
-                                <tr>
-                                  <th>Room</th>
-                                  <th>Category</th>
-                                  <th>Meal Plan</th>
-                                  <th>Adults</th>
-                                  <th>Children</th>
-                                  <th>Rate</th>
-                                  <th>Non-Refundable</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {hotel.rooms.map((room, idx) => (
-                                  <tr key={idx}>
-                                    <td>{room.roomNo || idx + 1}</td>
-                                    <td>{room.roomCategory || "-"}</td>
-                                    <td>{room.mealPlan || "-"}</td>
-                                    <td>{room.adults || 0}</td>
-                                    <td>{room.children || 0}</td>
-                                    <td>{room.currency || "AED"} {room.rate || room.rateWithoutMarkup || 0}</td>
-                                    <td>
-                                      <Badge bg={room.nonRefundable ? "danger" : "success"} className="small">
-                                        {room.nonRefundable ? "Yes" : "No"}
-                                      </Badge>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </Table>
+                          </div>
+                        );
+                      })()}
+                    </Card.Body>
+                  </Card>
+                </Col>
+
+                {/* Right Column: Hotel & Activities */}
+                <Col lg={8}>
+                  {/* Hotel Section */}
+                  {bookingDetails.hotelBookingRequest?.length > 0 && (
+                    <Card className="border-0 shadow-sm mb-4 rounded-4 overflow-hidden">
+                      <div className="bg-white p-3 border-bottom d-flex align-items-center gap-2">
+                        <FaHotel className="text-primary" />
+                        <h6 className="mb-0 fw-bold">Hotel Reservations</h6>
+                      </div>
+                      <Card.Body className="p-0">
+                        {bookingDetails.hotelBookingRequest.map((hotel, hIdx) => (
+                          <div key={hIdx} className={`p-4 ${hIdx > 0 ? 'border-top' : ''}`}>
+                            <div className="d-flex justify-content-between align-items-start mb-3">
+                              <div>
+                                <h5 className="mb-1 text-dark fw-bold">{hotel.hotelName}</h5>
+                                <small className="text-muted"><FaMapMarkerAlt size={10} className="me-1" />{hotel.address}</small>
+                              </div>
+                              <Badge bg={hotel.roomStatus === "Confirmed" ? "success" : "warning"} className="px-3">
+                                {hotel.roomStatus}
+                              </Badge>
                             </div>
-                            {hotel.rooms.some(room => room.guests && room.guests.length > 0) && (
-                              <div className="mt-3 p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-2" style={{ fontSize: "0.8rem", fontWeight: "600" }}>Room Guests</small>
-                                {hotel.rooms.map((room, roomIdx) => (
-                                  room.guests && room.guests.length > 0 && (
-                                    <div key={roomIdx} className="mb-1 small">
-                                      <strong>Room {room.roomNo || roomIdx + 1}:</strong>{" "}
-                                      {room.guests.map((guest, guestIdx) => (
-                                        <span key={guestIdx}>
-                                          {guest.salutation || ""} {guest.firstName || ""} {guest.lastName || ""}
-                                          {guest.isChild && " (Child)"}
-                                          {guestIdx < room.guests.length - 1 && ", "}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )
-                                ))}
+                            <Row className="mb-3 g-3">
+                              <Col md={3} xs={6}>
+                                <label className="small text-muted d-block">Check-In</label>
+                                <span className="fw-bold small">{formatDate(hotel.checkInDate || hotel.checkIn)}</span>
+                              </Col>
+                              <Col md={3} xs={6}>
+                                <label className="small text-muted d-block">Check-Out</label>
+                                <span className="fw-bold small">{formatDate(hotel.checkOutDate || hotel.checkOut)}</span>
+                              </Col>
+                              <Col md={3} xs={6}>
+                                <label className="small text-muted d-block">Nights</label>
+                                <span className="fw-bold small">{hotel.nights} Nights</span>
+                              </Col>
+                              <Col md={3} xs={6}>
+                                <label className="small text-muted d-block">Star Rating</label>
+                                <span className="fw-bold small text-warning">{"★".repeat(parseInt(hotel.starRating) || 0)}</span>
+                              </Col>
+                            </Row>
+                            {hotel.rooms?.length > 0 && (
+                              <div className="bg-light rounded-3 p-3 overflow-hidden">
+                                <Table hover size="sm" className="mb-0 bg-transparent">
+                                  <thead>
+                                    <tr className="small text-muted border-0">
+                                      <th className="border-0">Room Type</th>
+                                      <th className="border-0">Meal</th>
+                                      <th className="border-0">Pax</th>
+                                      <th className="border-0 text-end">Rate</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {hotel.rooms.map((room, rIdx) => (
+                                      <tr key={rIdx} className="small">
+                                        <td className="fw-medium border-0 py-2">{room.roomCategory}</td>
+                                        <td className="border-0 py-2">{room.mealPlan}</td>
+                                        <td className="border-0 py-2">{room.adults}A / {room.children}C</td>
+                                        <td className="text-end fw-bold border-0 py-2">AED {room.rate}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </Table>
                               </div>
                             )}
-                          </Col>
-                        )}
-                        {hotel.remarks && (
-                          <Col xs={12}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Remarks</small>
-                              <strong style={{ fontSize: "0.9rem", color: "#212529" }}>{hotel.remarks}</strong>
-                            </div>
-                          </Col>
-                        )}
-                        {hotel.specialRequests && (
-                          <Col xs={12}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Special Requests</small>
-                              <strong style={{ fontSize: "0.9rem", color: "#212529" }}>{hotel.specialRequests}</strong>
-                            </div>
-                          </Col>
-                        )}
-                        {hotel.cancellationPolicy && Array.isArray(hotel.cancellationPolicy) && hotel.cancellationPolicy.length > 0 && (
-                          <Col xs={12}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-2" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Cancellation Policy</small>
-                              <ul className="mb-0" style={{ fontSize: "0.85rem", paddingLeft: "1.2rem" }}>
-                                {hotel.cancellationPolicy.map((policy, policyIdx) => (
-                                  <li key={policyIdx} style={{ marginBottom: "0.25rem" }}>{typeof policy === 'string' ? policy : policy.policyText || JSON.stringify(policy)}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          </Col>
-                        )}
-                        {hotel.deadlineDate && (
-                          <Col xs={12}>
-                            <div className="p-2 bg-light rounded">
-                              <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Deadline Date</small>
-                              <strong style={{ fontSize: "0.9rem", color: "#212529" }}>{formatDate(hotel.deadlineDate)}</strong>
-                            </div>
-                          </Col>
-                        )}
+                          </div>
+                        ))}
+                      </Card.Body>
+                    </Card>
+                  )}
+
+                  {/* Activity Section */}
+                  {bookingDetails.customBookingActivityDTO?.length > 0 && (
+                    <Card className="border-0 shadow-sm mb-4 rounded-4 overflow-hidden">
+                      <div className="bg-white p-3 border-bottom d-flex align-items-center gap-2">
+                        <FaTicketAlt className="text-primary" />
+                        <h6 className="mb-0 fw-bold">Booked Activities</h6>
+                      </div>
+                      <Card.Body className="p-0">
+                        <Table hover responsive className="mb-0 small align-middle">
+                          <thead className="bg-light">
+                            <tr className="text-muted">
+                              <th className="ps-4">Activity Description</th>
+                              <th>Tour Date</th>
+                              <th>Pax</th>
+                              <th className="text-end pe-4">Price</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bookingDetails.customBookingActivityDTO.map((act, aIdx) => (
+                              <tr key={aIdx}>
+                                <td className="ps-4 py-3 fw-medium">{act.activityName || act.activityId || "Activity Service"}</td>
+                                <td>{formatDate(act.tourDate)}</td>
+                                <td>{act.noOfAdult}A / {act.noOfChild}C</td>
+                                <td className="text-end pe-4 fw-bold text-success">AED {parseFloat(act.totalPrice).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      </Card.Body>
+                    </Card>
+                  )}
+
+                  {/* Transfer Section */}
+                  {bookingDetails.customBookingCabDTO?.length > 0 && (
+                    <Card className="border-0 shadow-sm mb-4 rounded-4 overflow-hidden">
+                      <div className="bg-white p-3 border-bottom d-flex align-items-center gap-2">
+                        <FaCar className="text-primary" />
+                        <h6 className="mb-0 fw-bold">Transfer Details</h6>
+                      </div>
+                      <Card.Body className="p-3">
+                        <Row className="g-3">
+                          {bookingDetails.customBookingCabDTO.map((cab, cIdx) => (
+                            <Col md={6} key={cIdx}>
+                              <div className="border rounded-3 p-3 h-100 bg-white shadow-none">
+                                <div className="d-flex justify-content-between mb-2">
+                                  <span className="fw-bold text-primary">{cab.cabName || "Transfer"}</span>
+                                  <Badge bg="info">{cab.travelType === 1 ? "Round Trip" : "One Way"}</Badge>
+                                </div>
+                                <div className="small text-muted mb-2">
+                                  <FaCalendarAlt size={10} className="me-1" /> {formatDate(cab.pickupDate)}
+                                </div>
+                                <div className="d-flex justify-content-between align-items-end pt-2 border-top">
+                                  <span className="small text-muted">{cab.noOfAdult}A / {cab.noOfChild}C</span>
+                                  <span className="fw-bold text-dark">AED {parseFloat(cab.totalPrice || cab.totalRate).toFixed(2)}</span>
+                                </div>
+                              </div>
+                            </Col>
+                          ))}
                         </Row>
                       </Card.Body>
                     </Card>
-                  ))}
-                </Card.Body>
-              </Card>
-              ) : bookingDetails.hotelDetails ? (
-                <Card className="mb-4 shadow-sm border-0">
-                  <Card.Header className="bg-white border-bottom" style={{ padding: "0.75rem 1rem" }}>
-                    <div className="d-flex align-items-center gap-2">
-                      <FaHotel className="text-primary" />
-                      <h6 className="mb-0 fw-bold">Hotel Details</h6>
-                    </div>
-                  </Card.Header>
-                  <Card.Body style={{ padding: "1rem" }}>
-                    <Row className="g-3">
-                      <Col xs={12}>
-                        <div className="p-2 bg-light rounded">
-                          <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Hotel Name</small>
-                          <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{bookingDetails.hotelDetails.hotelName || "-"}</strong>
-                        </div>
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
-              ) : null}
+                  )}
 
-              {/* Activity Details */}
-              {bookingDetails.customBookingActivityDTO && Array.isArray(bookingDetails.customBookingActivityDTO) && bookingDetails.customBookingActivityDTO.length > 0 && (
-                <Card className="mb-4 shadow-sm border-0">
-                  <Card.Header className="bg-white border-bottom" style={{ padding: "0.75rem 1rem" }}>
-                    <div className="d-flex align-items-center gap-2">
-                      <FaTicketAlt className="text-primary" />
-                      <h6 className="mb-0 fw-bold">Activities ({bookingDetails.customBookingActivityDTO.length})</h6>
-                    </div>
-                  </Card.Header>
-                  <Card.Body style={{ padding: "1rem" }}>
-                    <div className="table-responsive">
-                      <Table striped bordered hover size="sm" className="mb-0" style={{ fontSize: "0.85rem" }}>
-                    <thead>
-                      <tr>
-                        <th>Activity ID</th>
-                        <th>Date</th>
-                        <th>Adults</th>
-                        <th>Children</th>
-                        <th>Selling Price</th>
-                        <th>Total Price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bookingDetails.customBookingActivityDTO.map((activity, idx) => (
-                        <tr key={idx}>
-                          <td>{activity.activityId || activity.activityName || `Activity ${idx + 1}`}</td>
-                          <td>{formatDate(activity.tourDate)}</td>
-                          <td>{activity.noOfAdult || 0}</td>
-                          <td>{activity.noOfChild || 0}</td>
-                          <td>AED {parseFloat(activity.sellingPrice || 0).toFixed(2)}</td>
-                          <td>AED {parseFloat(activity.totalPrice || 0).toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                    </div>
-                  </Card.Body>
-                </Card>
-              )}
-
-              {/* Transfer Details */}
-              {bookingDetails.customBookingCabDTO && Array.isArray(bookingDetails.customBookingCabDTO) && bookingDetails.customBookingCabDTO.length > 0 && (
-                <Card className="mb-4 shadow-sm border-0">
-                  <Card.Header className="bg-white border-bottom" style={{ padding: "0.75rem 1rem" }}>
-                    <div className="d-flex align-items-center gap-2">
-                      <FaCar className="text-primary" />
-                      <h6 className="mb-0 fw-bold">Transfers ({bookingDetails.customBookingCabDTO.length})</h6>
-                    </div>
-                  </Card.Header>
-                  <Card.Body style={{ padding: "1rem" }}>
-                    {bookingDetails.customBookingCabDTO.map((cab, idx) => (
-                      <Card key={idx} className="mb-3 border" style={{ borderColor: "#e0e0e0 !important" }}>
-                        <Card.Header className="bg-light" style={{ padding: "0.75rem 1rem" }}>
-                          <h6 className="mb-0 fw-bold" style={{ fontSize: "0.95rem", color: "#495057" }}>
-                            {bookingDetails.customBookingCabDTO.length > 1 ? `Transfer ${idx + 1}` : "Transfer Details"}
-                          </h6>
-                        </Card.Header>
-                        <Card.Body style={{ padding: "1rem" }}>
-                      <Row className="g-2">
-                            <Col xs={12} md={6}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Pickup Date</small>
-                                <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{formatDate(cab.pickupDate)}</strong>
-                              </div>
-                            </Col>
-                            <Col xs={12} md={6}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Drop-off Date</small>
-                                <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{formatDate(cab.dropOffDate)}</strong>
-                              </div>
-                            </Col>
-                            <Col xs={12} md={4}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Adults</small>
-                                <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{cab.noOfAdult || 0}</strong>
-                              </div>
-                            </Col>
-                            <Col xs={12} md={4}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Children</small>
-                                <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{cab.noOfChild || 0}</strong>
-                              </div>
-                            </Col>
-                            <Col xs={12} md={4}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>No. of Cabs</small>
-                                <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{cab.noOfCabs || 1}</strong>
-                              </div>
-                            </Col>
-                            <Col xs={12} md={6}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Travel Type</small>
-                                <strong style={{ fontSize: "0.95rem", color: "#212529" }}>
-                                  {cab.travelType === 1 ? "Arrival & Departure" : cab.travelType === 2 ? "Arrival" : cab.travelType === 3 ? "Departure" : cab.travelType}
-                                </strong>
-                              </div>
-                            </Col>
-                            <Col xs={12} md={6}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Luggage</small>
-                                <Badge bg={cab.luggage ? "success" : "secondary"} style={{ fontSize: "0.85rem", padding: "0.35em 0.65em" }}>
-                                  {cab.luggage ? "Yes" : "No"}
-                                </Badge>
-                              </div>
-                            </Col>
-                            {cab.transporter && (
-                              <Col xs={12} md={6}>
-                                <div className="p-2 bg-light rounded">
-                                  <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Transporter Name</small>
-                                  <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{cab.transporter}</strong>
-                                </div>
-                              </Col>
-                            )}
-                            {cab.contactNumber && (
-                              <Col xs={12} md={6}>
-                                <div className="p-2 bg-light rounded">
-                                  <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Contact Number</small>
-                                  <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{cab.contactNumber}</strong>
-                                </div>
-                              </Col>
-                            )}
-                            {cab.driverName && (
-                              <Col xs={12} md={6}>
-                                <div className="p-2 bg-light rounded">
-                                  <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Driver Name</small>
-                                  <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{cab.driverName}</strong>
-                                </div>
-                              </Col>
-                            )}
-                            {cab.driverContact && (
-                              <Col xs={12} md={6}>
-                                <div className="p-2 bg-light rounded">
-                                  <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Driver Contact</small>
-                                  <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{cab.driverContact}</strong>
-                                </div>
-                              </Col>
-                            )}
-                            <Col xs={12} md={6}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Total Rate</small>
-                                <strong style={{ fontSize: "0.95rem", color: "#212529" }}>AED {parseFloat(cab.totalRate || 0).toFixed(2)}</strong>
-                              </div>
-                            </Col>
-                            <Col xs={12} md={6}>
-                              <div className="p-2 bg-light rounded">
-                                <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Rate Without Markup</small>
-                                <strong style={{ fontSize: "0.95rem", color: "#212529" }}>AED {parseFloat(cab.totalRateWithoutmrk || 0).toFixed(2)}</strong>
-                              </div>
-                            </Col>
-                          </Row>
-                        </Card.Body>
-                      </Card>
-                    ))}
-                  </Card.Body>
-                </Card>
-              )}
-
-              {/* Visa Information */}
-              <Card className="mb-4 shadow-sm border-0">
-                <Card.Header className="bg-white border-bottom" style={{ padding: "0.75rem 1rem" }}>
-                  <h6 className="mb-0 fw-bold">Visa Information</h6>
-                </Card.Header>
-                <Card.Body style={{ padding: "1rem" }}>
+                  {/* Visa & Other Info */}
                   <Row className="g-3">
-                    <Col xs={12} md={6}>
-                      <div className="p-2 bg-light rounded">
-                        <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Visa Required</small>
-                        <Badge bg={bookingDetails.visaStatus ? "success" : "secondary"} style={{ fontSize: "0.85rem", padding: "0.35em 0.65em" }}>
-                          {bookingDetails.visaStatus ? "Yes" : "No"}
-                        </Badge>
-                      </div>
+                    <Col md={6}>
+                       <Card className="border-0 shadow-sm h-100 rounded-4 overflow-hidden">
+                         <div className="bg-white p-3 border-bottom">
+                           <h6 className="mb-0 fw-bold">Visa & Insurance</h6>
+                         </div>
+                         <Card.Body>
+                            <Row className="g-3">
+                               <Col xs={12}>
+                                 <div className="d-flex justify-content-between align-items-center p-2 bg-light rounded text-dark">
+                                   <span className="small fw-medium">Visa Required</span>
+                                   <Badge bg={bookingDetails.visaStatus ? "success" : "secondary"}>{bookingDetails.visaStatus ? "YES" : "NO"}</Badge>
+                                 </div>
+                               </Col>
+                               {bookingDetails.visaStatus && (
+                                 <Col xs={12}>
+                                    <div className="text-muted small mb-1">Visa Breakdown</div>
+                                    <div className="fw-bold small">{bookingDetails.visaAdult}A / {bookingDetails.visaChild}C / {bookingDetails.visaInfant}I</div>
+                                 </Col>
+                               )}
+                            </Row>
+                         </Card.Body>
+                       </Card>
                     </Col>
-                    {bookingDetails.visaStatus && (
-                      <>
-                        <Col xs={12} md={6}>
-                          <div className="p-2 bg-light rounded">
-                            <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Adults</small>
-                            <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{bookingDetails.visaAdult || 0}</strong>
-                          </div>
-                        </Col>
-                        <Col xs={12} md={6}>
-                          <div className="p-2 bg-light rounded">
-                            <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Adult Rate</small>
-                            <strong style={{ fontSize: "0.95rem", color: "#212529" }}>AED {parseFloat(bookingDetails.visaAdultRate || 0).toFixed(2)}</strong>
-                          </div>
-                        </Col>
-                        <Col xs={12} md={6}>
-                          <div className="p-2 bg-light rounded">
-                            <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Children</small>
-                            <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{bookingDetails.visaChild || 0}</strong>
-                          </div>
-                        </Col>
-                        <Col xs={12} md={6}>
-                          <div className="p-2 bg-light rounded">
-                            <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Child Rate</small>
-                            <strong style={{ fontSize: "0.95rem", color: "#212529" }}>AED {parseFloat(bookingDetails.visaChildRate || 0).toFixed(2)}</strong>
-                          </div>
-                        </Col>
-                        <Col xs={12} md={6}>
-                          <div className="p-2 bg-light rounded">
-                            <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Infants</small>
-                            <strong style={{ fontSize: "0.95rem", color: "#212529" }}>{bookingDetails.visaInfant || 0}</strong>
-                          </div>
-                        </Col>
-                        <Col xs={12} md={6}>
-                          <div className="p-2 bg-light rounded">
-                            <small className="text-muted d-block mb-1" style={{ fontSize: "0.75rem", fontWeight: "500" }}>Infant Rate</small>
-                            <strong style={{ fontSize: "0.95rem", color: "#212529" }}>AED {parseFloat(bookingDetails.visaInfantRate || 0).toFixed(2)}</strong>
-                          </div>
-                        </Col>
-                      </>
-                    )}
+                    <Col md={6}>
+                       <Card className="border-0 shadow-sm h-100 rounded-4 overflow-hidden">
+                         <div className="bg-white p-3 border-bottom">
+                           <h6 className="mb-0 fw-bold">Notes & Policy</h6>
+                         </div>
+                         <Card.Body>
+                            <div className="small text-muted mb-2 overflow-hidden" style={{ maxHeight: '100px' }}>
+                               {bookingDetails.hotelBookingRequest?.[0]?.remarks || "No special remarks provided for this booking."}
+                            </div>
+                            <div className="alert alert-info py-2 px-3 small mb-0 border-0">
+                               <FaExclamationTriangle className="me-2" /> Please check cancellation policies before modification.
+                            </div>
+                         </Card.Body>
+                       </Card>
+                    </Col>
                   </Row>
-                </Card.Body>
-              </Card>
-
-              {/* Itinerary Details */}
-              {bookingDetails.customBookingItinearyDTO && Array.isArray(bookingDetails.customBookingItinearyDTO) && bookingDetails.customBookingItinearyDTO.length > 0 && (
-                <Card className="mb-4 shadow-sm border-0">
-                  <Card.Header className="bg-white border-bottom" style={{ padding: "0.75rem 1rem" }}>
-                    <div className="d-flex align-items-center gap-2">
-                      <FaMapMarkerAlt className="text-primary" />
-                      <h6 className="mb-0 fw-bold">Itineraries ({bookingDetails.customBookingItinearyDTO.length})</h6>
-                    </div>
-                  </Card.Header>
-                  <Card.Body style={{ padding: "1rem" }}>
-                    <div className="table-responsive">
-                      <Table striped bordered hover size="sm" className="mb-0" style={{ fontSize: "0.85rem" }}>
-                        <thead>
-                          <tr>
-                            <th>Itinerary ID</th>
-                            <th>Day</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {bookingDetails.customBookingItinearyDTO.map((itinerary, idx) => (
-                            <tr key={idx}>
-                              <td>{itinerary.itinearyId || "-"}</td>
-                              <td>Day {itinerary.days || "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    </div>
-                  </Card.Body>
-                </Card>
-              )}
+                </Col>
+              </Row>
             </div>
           ) : (
-            <div className="text-center py-3">
-              <p className="text-muted small">No booking details available</p>
+            <div className="text-center py-5">
+              <FaExclamationTriangle size={40} className="text-muted mb-3" />
+              <p className="text-muted">Booking data is unavailable at this moment.</p>
             </div>
           )}
         </Modal.Body>
-        <Modal.Footer style={{ borderTop: "none", padding: "1rem 1.5rem", background: "#f8f9fa" }}>
-          <Button variant="secondary" onClick={() => setShowDetailsModal(false)} style={{ minWidth: "100px" }}>
-            Close
+        <Modal.Footer className="bg-white border-0 px-4 py-3">
+          <Button variant="light" className="px-5 fw-bold" onClick={() => setShowDetailsModal(false)}>
+            Dismiss
+          </Button>
+          <Button variant="dark" className="px-5 fw-bold shadow-sm" onClick={() => window.print()}>
+            Print Preview
           </Button>
         </Modal.Footer>
       </Modal>
