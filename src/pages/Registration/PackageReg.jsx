@@ -942,6 +942,7 @@ const PackageReg = () => {
   };
 
   const handleDelete = async (item) => {
+    // console.log("Deleting item:", item);
     const result = await Swal.fire({
       title: "Are you sure?",
       text: `Do you want to delete "${item.packageName}"?`,
@@ -956,7 +957,7 @@ const PackageReg = () => {
       try {
         setIsLoading(true);
         const response = await axiosInstance.delete(
-          `/api/TravelPackage/${item.id}`
+          `/api/TravelPackage/${item.packageId}`
         );
         if (response.data) {
           toast.success("Package deleted successfully!");
@@ -1187,15 +1188,15 @@ const PackageReg = () => {
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
               <div>
-                <Button
+                {/* <Button
                   variant="outline-primary"
-                  onClick={() => navigate("/registration")}
+                  onClick={() => navigate(-1)}
                   className="mb-2 me-3"
                   size="sm"
                 >
                   <FaBackward className="me-2" />
                   Back to Registration
-                </Button>
+                </Button> */}
                 <span className="fw-semibold">
                   <FaPlus className="me-2 text-success" />
                   Packages
@@ -1884,6 +1885,7 @@ const PackageReg = () => {
                       Add Day
                     </Button>
                   </div>
+                  {console.log("packageItinearyDTOList::" , packageItinearyDTOList)}
                   {packageItinearyDTOList.map((day, index) => (
                     <Card key={index} className="mb-3">
                       <Card.Header className="d-flex justify-content-between align-items-center">

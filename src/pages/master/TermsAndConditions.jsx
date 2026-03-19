@@ -461,7 +461,7 @@ export default function TermsAndConditions() {
   // Load countries list
   const countryList = async () => {
     try {
-      const response = await axios.get("/api/country");
+      const response = await axiosInstance.get("/api/country");
       setCountries(response.data);
     } catch (error) {
       console.log("error for country list :", error);

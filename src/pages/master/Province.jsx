@@ -208,7 +208,7 @@ export default function Province() {
 
   const fetchCountryList = async () => {
     try {
-      const response = await axios.get("/api/country");
+      const response = await axiosInstance.get("/api/country");
       setCountryList(response.data);
     } catch (error) {
       console.log("error for country list :", error);
