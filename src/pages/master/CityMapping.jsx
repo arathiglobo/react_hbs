@@ -27,12 +27,12 @@ const CityMapping = () => {
     useState(null);
 
   const [platforms] = useState([
-    // "Iwtx",
-    // "Darina",
-    // "Jumeirah",
-    // "X3",
-    // "Ratehawk",
-    // "Atharva",
+    "Iwtx",
+    "Darina",
+    "Jumeirah",
+    "X3",
+    "Ratehawk",
+    "Atharva",
   ]);
 
   // Row-wise selections and status per platform in the overview table
@@ -356,6 +356,7 @@ const CityMapping = () => {
     Jumeirah: { showCountry: true, showCity: true },
     X3: { showCountry: false, showCity: false },
     Ratehawk: { showCountry: true, showCity: true },
+    Atharva: { showCountry: true, showCity: true }, 
     // add more platforms as needed
   };
 

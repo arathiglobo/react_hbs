@@ -11,11 +11,11 @@ import {
   InputGroup,
   Spinner,
   Modal,
+  Pagination,
 } from "react-bootstrap";
 import {
   FaSearch,
   FaTrash,
-  FaCar,
   FaCalendarAlt,
   FaUserAlt,
 } from "react-icons/fa";
@@ -24,29 +24,122 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 
+const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
 const ActivityBookingList = () => {
-  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("upcoming");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [apiData, setApiData] = useState({
+    upcomingBookings: { content: [] },
+    completedBookings: { content: [] },
+    cancelledBookings: { content: [] },
+  });
+  const [pagination, setPagination] = useState({
+    upcoming: { page: 1, perPage: 10 },
+    completed: { page: 1, perPage: 10 },
+    cancelled: { page: 1, perPage: 10 },
+  });
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 2014 }, (_, i) => 2020 + i);
 
   const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get("/api/activity/list");
-      if (response.data) setBookings(response.data);
+      const params = {
+        upcomingPage: Math.max(pagination.upcoming.page - 1, 0),
+        upcomingSize: pagination.upcoming.perPage,
+        completedPage: Math.max(pagination.completed.page - 1, 0),
+        completedSize: pagination.completed.perPage,
+        cancelledPage: Math.max(pagination.cancelled.page - 1, 0),
+        cancelledSize: pagination.cancelled.perPage,
+      };
+
+      if (selectedMonth && selectedYear) {
+        params.month = Number(selectedMonth);
+        params.year = Number(selectedYear);
+      }
+
+      const response = await axiosInstance.get("/api/activity/grouped-list", { params });
+      if (response.data && response.data.success) {
+        setApiData({
+          upcomingBookings: response.data.upcomingBookings || { content: [] },
+          completedBookings: response.data.completedBookings || { content: [] },
+          cancelledBookings: response.data.cancelledBookings || { content: [] },
+        });
+      }
     } catch {
       toast.error("Failed to load activity bookings");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagination, selectedMonth, selectedYear]);
 
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
+
+  const handleMonthChange = (value) => {
+    setSelectedMonth(value);
+    resetAllPages();
+  };
+
+  const handleYearChange = (value) => {
+    setSelectedYear(value);
+    resetAllPages();
+  };
+
+  const resetAllPages = () => {
+    setPagination((prev) => ({
+      upcoming: { ...prev.upcoming, page: 1 },
+      completed: { ...prev.completed, page: 1 },
+      cancelled: { ...prev.cancelled, page: 1 },
+    }));
+  };
+
+  const handlePageChange = (nextPage) => {
+    setPagination((prev) => ({
+      ...prev,
+      [status]: { ...prev[status], page: nextPage },
+    }));
+  };
+
+  const handlePageSizeChange = (nextSize) => {
+    setPagination((prev) => ({
+      ...prev,
+      [status]: { ...prev[status], perPage: nextSize, page: 1 },
+    }));
+  };
+
+  const getCurrentList = () => {
+    if (status === "upcoming") return apiData.upcomingBookings.content || [];
+    if (status === "completed") return apiData.completedBookings.content || [];
+    if (status === "cancelled") return apiData.cancelledBookings.content || [];
+    return [];
+  };
+
+  const filteredBookings = useMemo(() => {
+    const list = getCurrentList();
+    if (!search.trim()) return list;
+    return list.filter(
+      (b) =>
+        b.packageBookCode?.toLowerCase().includes(search.toLowerCase()) ||
+        b.firstName?.toLowerCase().includes(search.toLowerCase()) ||
+        b.lastName?.toLowerCase().includes(search.toLowerCase()) ||
+        b.activityName?.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [apiData, status, search]);
 
   const handleCancelClick = (booking) => {
     setSelectedBooking(booking);
@@ -55,13 +148,11 @@ const ActivityBookingList = () => {
 
   const handleCancelBooking = async () => {
     if (!selectedBooking) return;
-
     try {
       setCancelling(true);
       const response = await axiosInstance.delete(
         `/api/activity/delete/${selectedBooking.customBookingId}`
       );
-
       if (response.data?.status === "success") {
         toast.success("Booking cancelled");
         setShowCancelModal(false);
@@ -75,16 +166,6 @@ const ActivityBookingList = () => {
       setCancelling(false);
     }
   };
-
-  const filteredBookings = useMemo(() => {
-    if (!search.trim()) return bookings;
-    return bookings.filter(
-      (b) =>
-        b.packageBookCode?.toLowerCase().includes(search.toLowerCase()) ||
-        b.firstName?.toLowerCase().includes(search.toLowerCase()) ||
-        b.lastName?.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [bookings, search]);
 
   const formatPrice = (price) =>
     new Intl.NumberFormat("en-AE", {
@@ -101,154 +182,182 @@ const ActivityBookingList = () => {
     }
   };
 
+  const currentTabPagination = apiData[`${status}Bookings`] || {};
+  const totalPages = currentTabPagination.totalPages || 0;
+  const totalElements = currentTabPagination.totalElements || 0;
+  const currentPage = pagination[status].page;
+  const currentPerPage = pagination[status].perPage;
+
   return (
     <div className="min-vh-100 d-flex flex-column" style={{ background: "#f8fafc" }}>
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-4" style={{ overflow: "hidden" }}>
           <Container fluid>
-
-            {/* Header */}
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h4 className="fw-semibold text-dark mb-0">Activity Bookings</h4>
-
             </div>
 
-            {/* Search */}
-            <Card className="border-0 shadow-sm mb-4" style={{ borderRadius: "12px" }}>
-              <Card.Body className="p-3">
-                <Row>
-                  <Col md={4}>
-                    <InputGroup>
-                      <InputGroup.Text className="bg-white border-0">
-                        <FaSearch size={13} className="text-muted" />
-                      </InputGroup.Text>
-                      <Form.Control
-                        placeholder="Search bookings..."
-                        className="border-0 shadow-none"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                    </InputGroup>
-                  </Col>
-                </Row>
-              </Card.Body>
-            </Card>
+            {/* Search and Filters */}
+            <Row className="mb-4 g-3">
+              <Col md={4}>
+                <InputGroup className="shadow-sm rounded-3 overflow-hidden bg-white border">
+                  <InputGroup.Text className="bg-white border-0">
+                    <FaSearch size={13} className="text-muted" />
+                  </InputGroup.Text>
+                  <Form.Control
+                    placeholder="Search by Booking Code or Name..."
+                    className="border-0 shadow-none py-2"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </InputGroup>
+              </Col>
+            </Row>
+
+            <Row className="mb-4 g-3">
+              {/* Type Filter */}
+              <Col lg={6}>
+                <Card className="border-0 shadow-sm h-100" style={{ borderRadius: "12px" }}>
+                  <Card.Body className="p-3">
+                    <h6 className="mb-3 fw-bold text-dark small text-uppercase" style={{ letterSpacing: "0.5px" }}>
+                      Booking Types
+                    </h6>
+                    <div className="d-flex gap-4">
+                      {["upcoming", "completed", "cancelled"].map((type) => (
+                        <Form.Check
+                          key={type}
+                          type="radio"
+                          id={type}
+                          name="statusType"
+                          label={type.charAt(0).toUpperCase() + type.slice(1)}
+                          checked={status === type}
+                          onChange={() => setStatus(type)}
+                          className="fw-medium text-capitalize"
+                        />
+                      ))}
+                    </div>
+                  </Card.Body>
+                </Card>
+              </Col>
+
+              {/* Date Filter */}
+              <Col lg={6}>
+                <Card className="border-0 shadow-sm h-100" style={{ borderRadius: "12px" }}>
+                  <Card.Body className="p-3">
+                    <h6 className="mb-3 fw-bold text-dark small text-uppercase" style={{ letterSpacing: "0.5px" }}>
+                      Time Period
+                    </h6>
+                    <Row className="g-2">
+                      <Col xs={6}>
+                        <Form.Select
+                          size="sm"
+                          value={selectedMonth}
+                          onChange={(e) => handleMonthChange(e.target.value)}
+                          className="border px-3 py-2"
+                        >
+                          <option value="">Month</option>
+                          {months.map((m, idx) => (
+                            <option key={m} value={idx + 1}>{m}</option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                      <Col xs={6}>
+                        <Form.Select
+                          size="sm"
+                          value={selectedYear}
+                          onChange={(e) => handleYearChange(e.target.value)}
+                          className="border px-3 py-2"
+                        >
+                          <option value="">Year</option>
+                          {years.map((y) => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
 
             {/* Table */}
             <Card className="border-0 shadow-sm" style={{ borderRadius: "12px" }}>
               <Card.Body className="p-0">
                 <div className="table-responsive">
-                  <Table
-                    bordered
-                    hover
-                    className="mb-0 align-middle"
-                    style={{ borderCollapse: "separate", borderSpacing: "0 10px" }}
-                  >
-                    <thead>
-                      <tr className="text-muted small">
-                        <th className="ps-4">Booking</th>
-                        <th className="ps-4">Customer Name</th>
-                        <th>Activity</th>
-                        <th>Travel</th>
+                  <Table bordered hover className="mb-0 align-middle small">
+                    <thead className="bg-light text-muted uppercase small font-weight-bold">
+                      <tr>
+                        <th className="ps-4 py-3">Booking</th>
+                        <th>Customer Name</th>
+                        <th>Activity Details</th>
+                        <th>Travel Info</th>
                         <th>Pax</th>
                         <th>Amount</th>
-                        {/* <th>Status</th> */}
                         <th className="text-center pe-4">Action</th>
                       </tr>
                     </thead>
-
                     <tbody>
                       {loading ? (
                         <tr>
                           <td colSpan="7" className="text-center py-5">
-                            <Spinner />
+                            <Spinner animation="border" size="sm" variant="primary" className="me-2" />
+                            <span className="text-muted">Loading bookings...</span>
                           </td>
                         </tr>
                       ) : filteredBookings.length === 0 ? (
                         <tr>
-                          <td colSpan="7" className="text-center py-5 text-muted">
-                            No bookings found
-                          </td>
+                          <td colSpan="7" className="text-center py-5 text-muted">No activities found in this category</td>
                         </tr>
                       ) : (
                         filteredBookings.map((b) => (
-                          <tr
-                            key={b.customBookingId}
-                            style={{
-                              background: "#fff",
-                              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-                              borderRadius: "10px",
-                            }}
-                          >
-                            {/* Booking */}
-                            <td className="ps-4 py-3">
-                              <div className="fw-semibold text-dark">
-                                {b.packageBookCode}
-                              </div>
-                              <small className="text-muted">
-                                {formatDate(b.bookingDate)}
-                              </small>
-                            </td>
-
-                            {/* Customer Name */}
+                          <tr key={b.customBookingId}>
                             <td className="ps-4">
-                              <div className="fw-medium text-dark">
-                                {b.salutation || ""} {b.firstName || ""} {b.lastName || ""}
-                              </div>
-                              <small className="text-muted">
-                                {b.emailId || "-"}
-                              </small>
+                              <div className="fw-bold text-dark">{b.packageBookCode}</div>
+                              <small className="text-muted">{formatDate(b.bookingDate)}</small>
                             </td>
-
-                            {/* Activity / Itinerary */}
                             <td>
-                              {b.customBookingItinearyDTO && b.customBookingItinearyDTO.length > 0 ? (
-                                <ul className="list-unstyled mb-0 small">
-                                  {b.customBookingItinearyDTO.map((item, idx) => (
-                                    <li key={idx} className="text-dark fw-medium">
-                                      • {item.itinerary}
-                                    </li>
+                              <div className="fw-medium text-dark">{b.salutation} {b.firstName} {b.lastName}</div>
+                              <small className="text-muted d-block">{b.emailId}</small>
+                            </td>
+                            <td>
+                              <div className="fw-bold text-primary">{b.activityName}</div>
+                              {b.customBookingItinearyDTO?.length > 0 && (
+                                <ul className="list-unstyled mb-0 mt-1 x-small">
+                                  {b.customBookingItinearyDTO.map((it, idx) => (
+                                    <li key={idx} className="text-muted">• {it.itinerary}</li>
                                   ))}
                                 </ul>
-                              ) : (
-                                <span className="text-muted small">No itinerary</span>
                               )}
                             </td>
-
-                            {/* Travel */}
-                            <td className="small text-muted">
-                              <div>
-                                <FaCalendarAlt size={11} className="me-1" />
+                            <td>
+                              <div className="d-flex align-items-center text-muted">
+                                <FaCalendarAlt size={10} className="me-2 text-primary" />
                                 {formatDate(b.tourDate)}
                               </div>
                             </td>
-
-                            {/* Pax */}
-                            <td className="small text-muted">
-                              <FaUserAlt size={11} className="me-1" />
-                              {b.noOfAdult}A / {b.noOfChild}C
-                            </td>
-
-                            {/* Amount */}
                             <td>
-                              <div className="fw-semibold text-dark">
-                                {formatPrice(b.totalPrice)}
+                              <div className="d-flex align-items-center text-muted">
+                                <FaUserAlt size={10} className="me-2 text-primary" />
+                                {b.noOfAdult}A / {b.noOfChild}C
                               </div>
                             </td>
-
-                            {/* Action */}
+                            <td>
+                              <div className="fw-bold text-dark">{formatPrice(b.totalPrice)}</div>
+                              
+                            </td>
                             <td className="text-center pe-4">
-                              <Button
-                                variant="light"
-                                size="sm"
-                                className="rounded-pill px-3 border"
-                                onClick={() => handleCancelClick(b)}
-                              >
-                                <FaTrash size={12} className="text-danger" />
-                              </Button>
+                              {status === "upcoming" && (
+                                <Button
+                                  variant="light"
+                                  size="sm"
+                                  className="rounded-pill px-3 border"
+                                  onClick={() => handleCancelClick(b)}
+                                >
+                                  <FaTrash size={12} className="text-danger" />
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         ))
@@ -256,43 +365,63 @@ const ActivityBookingList = () => {
                     </tbody>
                   </Table>
                 </div>
+
+                {/* Pagination */}
+                {!loading && totalElements > 0 && (
+                  <div className="px-4 py-3 d-flex justify-content-between align-items-center border-top">
+                    <div className="d-flex align-items-center gap-3">
+                      <span className="small text-muted">Showing {filteredBookings.length} of {totalElements} entries</span>
+                      <Form.Select
+                        size="sm"
+                        className="w-auto"
+                        value={currentPerPage}
+                        onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                      >
+                        {PER_PAGE_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>{opt} / page</option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                    <Pagination size="sm" className="mb-0">
+                      <Pagination.Prev 
+                        disabled={currentPage === 1}
+                        onClick={() => handlePageChange(currentPage - 1)}
+                      />
+                      {[...Array(totalPages)].map((_, idx) => (
+                        <Pagination.Item
+                          key={idx + 1}
+                          active={idx + 1 === currentPage}
+                          onClick={() => handlePageChange(idx + 1)}
+                        >
+                          {idx + 1}
+                        </Pagination.Item>
+                      )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
+                      <Pagination.Next 
+                        disabled={currentPage === totalPages}
+                        onClick={() => handlePageChange(currentPage + 1)}
+                      />
+                    </Pagination>
+                  </div>
+                )}
               </Card.Body>
             </Card>
 
-            {/* Modal */}
-            <Modal
-              show={showCancelModal}
-              onHide={() => !cancelling && setShowCancelModal(false)}
-              centered
-            >
+            <Modal show={showCancelModal} onHide={() => !cancelling && setShowCancelModal(false)} centered>
               <Modal.Header closeButton={!cancelling}>
-                <Modal.Title>Cancel Booking</Modal.Title>
+                <Modal.Title>Cancel Activity Booking</Modal.Title>
               </Modal.Header>
-
-              <Modal.Body className="text-center">
-                <p className="mb-1">Cancel this booking?</p>
-                <strong>{selectedBooking?.packageBookCode}</strong>
+              <Modal.Body className="text-center py-4">
+                <p className="mb-1 text-muted">Are you sure you want to cancel this booking?</p>
+                <h5 className="mb-0">{selectedBooking?.packageBookCode}</h5>
+                <p className="text-primary small mt-2">{selectedBooking?.activityName}</p>
               </Modal.Body>
-
-              <Modal.Footer className="justify-content-center">
-                <Button
-                  variant="light"
-                  onClick={() => setShowCancelModal(false)}
-                  disabled={cancelling}
-                >
-                  No
-                </Button>
-
-                <Button
-                  variant="dark"
-                  onClick={handleCancelBooking}
-                  disabled={cancelling}
-                >
-                  {cancelling ? <Spinner size="sm" /> : "Yes, Cancel"}
+              <Modal.Footer className="justify-content-center border-0 pb-4">
+                <Button variant="light" className="px-4" onClick={() => setShowCancelModal(false)} disabled={cancelling}>No, Keep</Button>
+                <Button variant="dark" className="px-4" onClick={handleCancelBooking} disabled={cancelling}>
+                  {cancelling ? <Spinner size="sm" className="me-2" /> : "Yes, Cancel"}
                 </Button>
               </Modal.Footer>
             </Modal>
-
           </Container>
         </main>
       </div>

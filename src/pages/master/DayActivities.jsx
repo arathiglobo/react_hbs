@@ -427,7 +427,7 @@ export default function DayActivities() {
 
   const countryList = async () => {
     try {
-      const response = await axios.get("/api/country");
+      const response = await axiosInstance.get("/api/country");
       setCountries(response.data);
     } catch (error) {
       console.log("axios call error for country list : ", error);
