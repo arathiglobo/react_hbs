@@ -113,7 +113,7 @@ const CityMapping = () => {
 
   const platformCountryApis = {
     Iwtx: {
-      countries: "/api/iwtx/countries",
+      countries: "api/iwtx/countrylist",
     },
     Darina: {
       countries: "/api/darina/countrylist",
@@ -122,7 +122,7 @@ const CityMapping = () => {
       countries: "/api/country",
     },
     X3: {
-      countries: "/api/x3/countries",
+      countries: "api/iwtx/countrylist",
     },
     Ratehawk: {
       countries: "/api/ratehawk/countrylist",
@@ -134,7 +134,7 @@ const CityMapping = () => {
 
   const platformCityApis = {
     Iwtx: {
-      cities: "/api/iwtx/cities",
+      cities: "api/iwtx/citylist",
     },
     Darina: {
       cities: "/api/darina/citylist",
@@ -143,7 +143,7 @@ const CityMapping = () => {
       cities: "/api/jumeirah/cities",
     },
     X3: {
-      cities: "/api/x3/cities",
+      cities: "/api/iwtx/citylist",
     },
     Ratehawk: {
       cities: "/api/ratehawk/citylist",
@@ -351,10 +351,10 @@ const CityMapping = () => {
 
   // Example rules for each platform
   const platformVisibility = {
-    Iwtx: { showCountry: false, showCity: false },
+    Iwtx: { showCountry: true, showCity: true },
     Darina: { showCountry: true, showCity: true },
     Jumeirah: { showCountry: true, showCity: true },
-    X3: { showCountry: false, showCity: false },
+    X3: { showCountry: true, showCity: true },
     Ratehawk: { showCountry: true, showCity: true },
     Atharva: { showCountry: true, showCity: true }, 
     // add more platforms as needed
