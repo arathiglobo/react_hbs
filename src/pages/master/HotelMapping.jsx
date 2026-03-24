@@ -45,6 +45,7 @@ const HotelMapping = () => {
   const [searching, setSearching] = useState(false);
   const [errors, setErrors] = useState({});
   const [mappingId, setMappingId] = useState(null); // to track which group is being mapped
+  const [bulkMapping, setBulkMapping] = useState(false); // global bulk loading
   const [resultsFilter, setResultsFilter] = useState("");
 
   // Generic form input handler
@@ -157,10 +158,25 @@ const HotelMapping = () => {
         { timeout: 0 },
       );
 
-      if (response.status === 200 || response.status === 201) {
+      if (response.status === 200) {
         toast.success("Hotels mapped successfully!");
         // Optional: remove mapped group from results
-        setSearchResults((prev) => prev.filter((_, i) => i !== index));
+        // setSearchResults((prev) => prev.filter((_, i) => i !== index));
+
+        setSearchResults((prev) =>
+          prev.map((group, i) => {
+            if (i === index) {
+              return {
+                ...group,
+                hotels: group.hotels.map((h) => ({
+                  ...h,
+                  mappingStatus: true,
+                })),
+              };
+            }
+            return group;
+          }),
+        );
       } else {
         toast.error("Failed to map hotels.");
       }
@@ -171,6 +187,67 @@ const HotelMapping = () => {
       );
     } finally {
       setMappingId(null);
+    }
+  };
+
+  const handleBulkMap = async () => {
+    // Collect all unmapped groups (groups where mappingStatus is false for some hotels)
+    const unmappedGroups = searchResults.filter((group) =>
+      group.hotels.some((h) => !h.mappingStatus),
+    );
+
+    if (unmappedGroups.length === 0) {
+      toast.success("All visible hotels are already mapped.");
+      return;
+    }
+
+    setBulkMapping(true);
+    try {
+      const payload = unmappedGroups.map((group) => {
+        const sourceHotel = group.hotels[0];
+        return {
+          sourceSupplier: sourceHotel.supplier,
+          sourceSupplierHotelId: sourceHotel.supplierHotelId,
+          hotelsToMap: group.hotels.map((h) => ({
+            supplier: h.supplier,
+            supplierHotelId: h.supplierHotelId,
+            name: h.name,
+            latitude: h.latitude,
+            longitude: h.longitude,
+            city: h.city,
+            country: h.country,
+          })),
+        };
+      });
+
+      const response = await axiosInstance.post(
+        "/api/hotel-mapping/map-duplicates",
+        payload,
+        { timeout: 0 },
+      );
+
+      if (response.status === 200) {
+        toast.success(`Successfully mapped ${unmappedGroups.length} groups!`);
+        // Update entire search results to mark everything as mapped
+        setSearchResults((prev) =>
+          prev.map((group) => ({
+            ...group,
+            hotels: group.hotels.map((h) => ({
+              ...h,
+              mappingStatus: true,
+            })),
+          })),
+        );
+      } else {
+        toast.error("Failed to map bulk data.");
+      }
+    } catch (error) {
+      console.error("Bulk mapping error:", error);
+      toast.error(
+        error.response?.data?.message || "Error occurred during bulk mapping.",
+      );
+    } finally {
+      setBulkMapping(false);
     }
   };
 
@@ -469,27 +546,49 @@ const HotelMapping = () => {
                       `(${searchResults.length} Matches)`}
                   </h5>
                   {searchResults.length > 0 && (
-                    <div
-                      className="position-relative"
-                      style={{ width: "300px" }}
-                    >
-                      <Form.Control
-                        type="text"
-                        placeholder="Filter by hotel name..."
-                        value={resultsFilter}
-                        onChange={(e) => setResultsFilter(e.target.value)}
-                        className="ps-4 rounded-pill shadow-sm"
-                        style={{ height: "40px", border: "1px solid #e0e0e0" }}
-                      />
-                      <i
-                        className="fas fa-search position-absolute text-muted"
-                        style={{
-                          left: "12px",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          fontSize: "0.9rem",
-                        }}
-                      ></i>
+                    <div className="d-flex align-items-center gap-3">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        className="rounded-pill px-4 fw-bold shadow-sm"
+                        onClick={handleBulkMap}
+                        disabled={bulkMapping || searching}
+                      >
+                        {bulkMapping ? (
+                          <>
+                            <Spinner
+                              animation="border"
+                              size="sm"
+                              className="me-2"
+                            />
+                            Mapping All...
+                          </>
+                        ) : (
+                          "✅ Map All Results"
+                        )}
+                      </Button>
+                      <div
+                        className="position-relative"
+                        style={{ width: "300px" }}
+                      >
+                        <Form.Control
+                          type="text"
+                          placeholder="Filter by hotel name..."
+                          value={resultsFilter}
+                          onChange={(e) => setResultsFilter(e.target.value)}
+                          className="ps-4 rounded-pill shadow-sm"
+                          style={{ height: "40px", border: "1px solid #e0e0e0" }}
+                        />
+                        <i
+                          className="fas fa-search position-absolute text-muted"
+                          style={{
+                            left: "12px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            fontSize: "0.9rem",
+                          }}
+                        ></i>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -618,8 +717,18 @@ const HotelMapping = () => {
                                         .filter(Boolean)
                                         .join(", ")}
                                     </td>
-                                    <td className="align-middle small">
-                                      mapped
+                                    <td className="align-middle text-end pe-4">
+                                      {hotel.mappingStatus ? (
+                                        <i
+                                          className="fas fa-check-circle text-success"
+                                          title="Mapped"
+                                        ></i>
+                                      ) : (
+                                        <i
+                                          className="fas fa-times-circle text-danger"
+                                          title="Not Mapped"
+                                        ></i>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
