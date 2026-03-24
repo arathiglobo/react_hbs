@@ -118,10 +118,10 @@ export default function Sidebar() {
           children: [
             // { label: "Country", to: "/masters/country-mapping" },
             { label: "City", to: "/masters/city-mapping" },
-            // { label: "Hotel", to: "/masters/hotel-mapping" },
+            { label: "Hotel", to: "/masters/hotel-mapping" }, 
           ],
         },
-        //nee to uncomment once implemented
+        //need to uncomment once implemented
         // {
         //   label: "UnMapping settings",
         //   children: [
