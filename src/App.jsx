@@ -123,6 +123,7 @@ import ActivityBookingPage from "./pages/booking/ActivityBookingPage";
 import CabBookingList from "./pages/list/CabBookingList";
 import ActivityBookingList from "./pages/list/ActivityBookingList";
 import HotelMapping from "./pages/master/HotelMapping";
+import HotelMappingBulkList from "./pages/master/HotelMappingBulkList";
 
 
 export default function App() {
@@ -214,6 +215,8 @@ export default function App() {
         <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping" element={<PrivateRoute><HotelMapping /></PrivateRoute>} />
+        <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
+     
      
         {/* :bar_chart: Reports */}
         <Route path="/report/booking" element={<ReportBooking />} />
