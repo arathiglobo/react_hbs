@@ -8,7 +8,6 @@ import {
   Spinner,
   Row,
   Col,
-  Modal,
 } from "react-bootstrap";
 import toast from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
@@ -48,13 +47,6 @@ const HotelMapping = () => {
   const [mappingId, setMappingId] = useState(null); // to track which group is being mapped
   const [bulkMapping, setBulkMapping] = useState(false); // global bulk loading
   const [resultsFilter, setResultsFilter] = useState("");
-
-  // Bulk Modal states
-  const [showBulkModal, setShowBulkModal] = useState(false);
-  const [selectedHundredPercentGroups, setSelectedHundredPercentGroups] =
-    useState([]);
-  const [selectedBelowHundredPercentGroup, setSelectedBelowHundredPercentGroup] =
-    useState(null);
 
   // Generic form input handler
   const handleChange = (e) => {
@@ -198,8 +190,8 @@ const HotelMapping = () => {
     }
   };
 
-  const handleBulkMap = () => {
-    // Only open the modal and initialize selections
+  const handleBulkMap = async () => {
+    // Collect all unmapped groups (groups where mappingStatus is false for some hotels)
     const unmappedGroups = searchResults.filter((group) =>
       group.hotels.some((h) => !h.mappingStatus),
     );
@@ -209,44 +201,9 @@ const HotelMapping = () => {
       return;
     }
 
-    // Initialize selections: select all 100% match groups by default if desired, 
-    // or just leave empty. Let's select all 100% unmapped groups.
-    const hundredPercentIndices = searchResults.reduce((acc, group, idx) => {
-      if (
-        Number(group.matchScore) === 100 &&
-        group.hotels.some((h) => !h.mappingStatus)
-      ) {
-        acc.push(idx);
-      }
-      return acc;
-    }, []);
-
-    setSelectedHundredPercentGroups(hundredPercentIndices);
-    setSelectedBelowHundredPercentGroup(null);
-    setShowBulkModal(true);
-  };
-
-  const handleConfirmBulkMap = async () => {
-    // Collect selected groups
-    const selectedIndices = [
-      ...selectedHundredPercentGroups,
-      ...(selectedBelowHundredPercentGroup !== null
-        ? [selectedBelowHundredPercentGroup]
-        : []),
-    ];
-
-    if (selectedIndices.length === 0) {
-      toast.error("Please select at least one group to map.");
-      return;
-    }
-
-    const unmappedGroupsToMap = selectedIndices.map((idx) => searchResults[idx]);
-
     setBulkMapping(true);
-    setShowBulkModal(false);
-
     try {
-      const payload = unmappedGroupsToMap.map((group) => {
+      const payload = unmappedGroups.map((group) => {
         const sourceHotel = group.hotels[0];
         return {
           sourceSupplier: sourceHotel.supplier,
@@ -270,21 +227,16 @@ const HotelMapping = () => {
       );
 
       if (response.status === 200) {
-        toast.success(`Successfully mapped ${unmappedGroupsToMap.length} groups!`);
-        // Update search results to mark selected groups as mapped
+        toast.success(`Successfully mapped ${unmappedGroups.length} groups!`);
+        // Update entire search results to mark everything as mapped
         setSearchResults((prev) =>
-          prev.map((group, idx) => {
-            if (selectedIndices.includes(idx)) {
-              return {
-                ...group,
-                hotels: group.hotels.map((h) => ({
-                  ...h,
-                  mappingStatus: true,
-                })),
-              };
-            }
-            return group;
-          }),
+          prev.map((group) => ({
+            ...group,
+            hotels: group.hotels.map((h) => ({
+              ...h,
+              mappingStatus: true,
+            })),
+          })),
         );
       } else {
         toast.error("Failed to map bulk data.");
@@ -801,197 +753,6 @@ const HotelMapping = () => {
           )}
         </main>
       </div>
-
-      {/* Bulk Mapping Modal */}
-      <Modal
-        show={showBulkModal}
-        onHide={() => setShowBulkModal(false)}
-        size="lg"
-        centered
-        scrollable
-      >
-        <Modal.Header closeButton className="bg-light">
-          <Modal.Title className="h5 fw-bold">Confirm Bulk Mapping</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="p-4">
-          {/* 100% Match Section */}
-          <div className="mb-4">
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <h6 className="fw-bold text-success mb-0">
-                100% Match Groups (Select Multiple)
-              </h6>
-              <Button
-                variant="link"
-                size="sm"
-                className="text-decoration-none p-0"
-                onClick={() => {
-                  const hundredPercentIndices = searchResults.reduce(
-                    (acc, group, idx) => {
-                      if (
-                        Number(group.matchScore) === 100 &&
-                        group.hotels.some((h) => !h.mappingStatus)
-                      ) {
-                        acc.push(idx);
-                      }
-                      return acc;
-                    },
-                    [],
-                  );
-                  setSelectedHundredPercentGroups(
-                    selectedHundredPercentGroups.length ===
-                      hundredPercentIndices.length
-                      ? []
-                      : hundredPercentIndices,
-                  );
-                }}
-              >
-                {selectedHundredPercentGroups.length ===
-                searchResults.filter((g) => Number(g.matchScore) === 100).length
-                  ? "Deselect All"
-                  : "Select All"}
-              </Button>
-            </div>
-            <div
-              className="border rounded p-3 bg-white"
-              style={{ maxHeight: "250px", overflowY: "auto" }}
-            >
-              {searchResults
-                .map((group, idx) => ({ group, idx }))
-                .filter(
-                  ({ group }) =>
-                    Number(group.matchScore) === 100 &&
-                    group.hotels.some((h) => !h.mappingStatus),
-                ).length > 0 ? (
-                searchResults
-                  .map((group, idx) => ({ group, idx }))
-                  .filter(
-                    ({ group }) =>
-                      Number(group.matchScore) === 100 &&
-                      group.hotels.some((h) => !h.mappingStatus),
-                  )
-                  .map(({ group, idx }) => (
-                    <Form.Check
-                      key={idx}
-                      type="checkbox"
-                      id={`group-100-${idx}`}
-                      className="mb-2"
-                    >
-                      <Form.Check.Input
-                        type="checkbox"
-                        checked={selectedHundredPercentGroups.includes(idx)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedHundredPercentGroups((prev) => [
-                              ...prev,
-                              idx,
-                            ]);
-                          } else {
-                            setSelectedHundredPercentGroups((prev) =>
-                              prev.filter((id) => id !== idx),
-                            );
-                          }
-                        }}
-                      />
-                      <Form.Check.Label className="ms-2 small">
-                        <strong>Group {idx + 1}:</strong>{" "}
-                        {group.hotels[0]?.name}
-                        <span className="text-muted ms-2">
-                          ({group.hotels.length} hotels)
-                        </span>
-                      </Form.Check.Label>
-                    </Form.Check>
-                  ))
-              ) : (
-                <div className="text-center text-muted small py-3">
-                  No unmapped 100% match groups found.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <hr />
-
-          {/* Under 100% Match Section */}
-          <div>
-            <h6 className="fw-bold text-warning mb-3">
-              Less Than 100% Match Groups (Select One)
-            </h6>
-            <div
-              className="border rounded p-3 bg-white"
-              style={{ maxHeight: "250px", overflowY: "auto" }}
-            >
-              {searchResults
-                .map((group, idx) => ({ group, idx }))
-                .filter(
-                  ({ group }) =>
-                    Number(group.matchScore) < 100 &&
-                    group.hotels.some((h) => !h.mappingStatus),
-                ).length > 0 ? (
-                searchResults
-                  .map((group, idx) => ({ group, idx }))
-                  .filter(
-                    ({ group }) =>
-                      Number(group.matchScore) < 100 &&
-                      group.hotels.some((h) => !h.mappingStatus),
-                  )
-                  .map(({ group, idx }) => (
-                    <Form.Check
-                      key={idx}
-                      type="radio"
-                      id={`group-under-100-${idx}`}
-                      className="mb-2"
-                    >
-                      <Form.Check.Input
-                        type="radio"
-                        name="under100Group"
-                        checked={selectedBelowHundredPercentGroup === idx}
-                        onChange={() => setSelectedBelowHundredPercentGroup(idx)}
-                      />
-                      <Form.Check.Label className="ms-2 small">
-                        <strong>Group {idx + 1}:</strong>{" "}
-                        {group.hotels[0]?.name}
-                        <span className="text-muted ms-2">
-                          (Match: {Number(group.matchScore).toFixed(2)}%,{" "}
-                          {group.hotels.length} hotels)
-                        </span>
-                      </Form.Check.Label>
-                    </Form.Check>
-                  ))
-              ) : (
-                <div className="text-center text-muted small py-3">
-                  No unmapped groups with match score {"<"} 100% found.
-                </div>
-              )}
-              <Form.Check type="radio" id="group-none" className="mt-3">
-                <Form.Check.Input
-                  type="radio"
-                  name="under100Group"
-                  checked={selectedBelowHundredPercentGroup === null}
-                  onChange={() => setSelectedBelowHundredPercentGroup(null)}
-                />
-                <Form.Check.Label className="ms-2 small text-muted">
-                  None selected
-                </Form.Check.Label>
-              </Form.Check>
-            </div>
-          </div>
-        </Modal.Body>
-        <Modal.Footer className="bg-light">
-          <Button variant="secondary" onClick={() => setShowBulkModal(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="success"
-            onClick={handleConfirmBulkMap}
-            disabled={
-              selectedHundredPercentGroups.length === 0 &&
-              selectedBelowHundredPercentGroup === null
-            }
-          >
-            Confirm & Map Selected
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </div>
   );
 };

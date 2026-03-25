@@ -22,12 +22,12 @@ import "../styles/HotelSearch.css";
 function SearchProgressBar({ pollStatus, completedChannels }) {
   const channels = [
     "inhouse",
-    "iwtx",
-    "x3",
-    "ratehawk",
-    "darina",
-    "atharva",
-    "jumeirah",
+    // "iwtx",
+    // "x3",
+    // "ratehawk",
+    // "darina",
+    // "atharva",
+    // "jumeirah",
   ];
   const [progress, setProgress] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -341,6 +341,7 @@ export default function HotelSearch() {
   const [clickedHotelIds, setClickedHotelIds] = useState([]);
 
   const [allResults, setAllResults] = useState([]);
+  const [finalHotelSearchTerm, setFinalHotelSearchTerm] = useState("");
   const [agents, setAgents] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -374,12 +375,12 @@ export default function HotelSearch() {
 
   const channelTypeOptions = [
     { value: "inhouse", label: "Inhouse" },
-    { value: "iwtx", label: "Iwtx" },
-    { value: "x3", label: "x3" },
-    { value: "atharva", label: "Atharva" },
-    { value: "jumeirah", label: "Jumeirah" },
-    { value: "ratehawk", label: "Ratehawk" },
-    { value: "darina", label: "Darina" },
+    // { value: "iwtx", label: "Iwtx" },
+    // { value: "x3", label: "x3" },
+    // { value: "atharva", label: "Atharva" },
+    // { value: "jumeirah", label: "Jumeirah" },
+    // { value: "ratehawk", label: "Ratehawk" },
+    // { value: "darina", label: "Darina" },
   ];
 
   useEffect(() => {
@@ -438,6 +439,12 @@ export default function HotelSearch() {
     }, 300),
   ).current;
 
+  const debouncedSetFinalTerm = useRef(
+    debounce((term) => {
+      setFinalHotelSearchTerm(term);
+    }, 500),
+  ).current;
+
   useEffect(() => {
     if (checkIn && checkOut) {
       const start = new Date(checkIn);
@@ -466,13 +473,7 @@ export default function HotelSearch() {
 
   const filteredResults = useMemo(() => {
     let results = allResults;
-    if (hotelSearchTerm) {
-      results = results.filter((hotel) => {
-        console.log("hotel:::#", hotel);
-        const hotelName = hotel.name || hotel.hotelName || "";
-        return hotelName.toLowerCase().includes(hotelSearchTerm.toLowerCase());
-      });
-    }
+
     if (starRating) {
       results = results.filter(
         (hotel) => Number(hotel.rating) === Number(starRating.value),
@@ -589,7 +590,7 @@ export default function HotelSearch() {
     if (hasSearchResult && resultsRef.current) {
       resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [hotelSearchTerm, starRating, hotelType, channelType, sortBy]);
+  }, [starRating, hotelType, channelType, sortBy]);
 
   const formatDate = (date) => date.toISOString().split("T")[0];
   const getTomorrow = (date = new Date()) => {
@@ -621,8 +622,13 @@ export default function HotelSearch() {
     });
   };
 
-  const fetchHotels = async (page, sid, agentId) => {
+  const fetchHotels = async (page, sid, agentId, nameSearch = "") => {
     try {
+      const isNameSearching = !!nameSearch.trim();
+      const endpoint = isNameSearching
+        ? `/api/hotel-search/results/${sid}/filter-by-name`
+        : `/api/hotel-search/results/${sid}`;
+
       const params = {
         agentId: agentId || agent || 1,
         page,
@@ -640,7 +646,11 @@ export default function HotelSearch() {
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
 
-      const res = await axiosInstance.get(`/api/hotel-search/results/${sid}`, {
+      if (isNameSearching) {
+        params.hotelName = nameSearch.trim();
+      }
+
+      const res = await axiosInstance.get(endpoint, {
         params,
       });
 
@@ -657,6 +667,7 @@ export default function HotelSearch() {
               ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
               : "Unknown City",
             price: hotel.baseRate || null,
+            badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
             image:
               hotel.hotelImage ||
               "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
@@ -666,21 +677,20 @@ export default function HotelSearch() {
           }))
         : [];
 
-      // setAllResults(mappedResults);
-
-      if (mappedResults.length > 0) {
-        // During polling we merge, but during pagination we replace
-        if (pollStatus === "IN_PROGRESS") {
+      if (mappedResults.length > 0 || isNameSearching) {
+        if (pollStatus === "IN_PROGRESS" && !isNameSearching) {
           setAllResults((prev) => {
             const map = new Map(prev.map((h) => [h.id, h]));
             mappedResults.forEach((h) => map.set(h.id, h));
             return Array.from(map.values());
           });
         } else {
-          // For pagination replace results
           setAllResults(mappedResults);
         }
+      } else if (!isNameSearching && pollStatus !== "IN_PROGRESS") {
+        setAllResults([]);
       }
+
       setTotalElements(Number(res.data.totalResults) || mappedResults.length);
       setTotalPages(
         Math.max(
@@ -694,7 +704,7 @@ export default function HotelSearch() {
       return res.data;
     } catch (err) {
       console.error("Fetch hotels failed:", err);
-      setPollStatus("ERROR");
+      if (!nameSearch) setPollStatus("ERROR");
       throw err;
     }
   };
@@ -816,12 +826,12 @@ export default function HotelSearch() {
 
       const expectedChannels = [
         "inhouse",
-        "iwtx",
-        "x3",
-        "ratehawk",
-        "darina",
-        "atharva",
-        "jumeirah",
+        // "iwtx",
+        // "x3",
+        // "ratehawk",
+        // "darina",
+        // "atharva",
+        // "jumeirah",
       ];
 
       await pollUntilComplete(
@@ -913,7 +923,9 @@ export default function HotelSearch() {
     if (!searchId || !hasSearched) return;
     if (pollStatus === "IN_PROGRESS") return;
     setIsLoading(true);
-    fetchHotels(pageIndex, searchId, agent).finally(() => setIsLoading(false));
+    fetchHotels(pageIndex, searchId, agent, finalHotelSearchTerm).finally(() =>
+      setIsLoading(false),
+    );
   }, [
     pageIndex,
     sortBy,
@@ -923,6 +935,7 @@ export default function HotelSearch() {
     agent,
     hasSearched,
     pollStatus,
+    finalHotelSearchTerm,
   ]);
 
   return (
@@ -1278,7 +1291,12 @@ export default function HotelSearch() {
                             placeholder={placeholder}
                             className="ps-3 mb-2"
                             value={hotelSearchTerm}
-                            onChange={(e) => setHotelSearchTerm(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setHotelSearchTerm(val);
+                              setPageIndex(0);
+                              debouncedSetFinalTerm(val);
+                            }}
                           />
 
                           <Form.Group className="mb-2">

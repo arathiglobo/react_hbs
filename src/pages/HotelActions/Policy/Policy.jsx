@@ -134,7 +134,7 @@ const Policy = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/policies/${policy.policyId}`)
+          .delete(`/api/hotelPolicy/${policy.policyId}`)
           .then(() => {
             toast.success("Policy deleted successfully");
             fetchPolicies();

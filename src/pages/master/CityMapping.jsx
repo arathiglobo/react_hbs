@@ -27,12 +27,12 @@ const CityMapping = () => {
     useState(null);
 
   const [platforms] = useState([
-    "Iwtx",
-    "Darina",
-    "Jumeirah",
-    "X3",
-    "Ratehawk",
-    "Atharva",
+    // "Iwtx",
+    // "Darina",
+    // "Jumeirah",
+    // "X3",
+    // "Ratehawk",
+    // "Atharva",
   ]);
 
   // Row-wise selections and status per platform in the overview table
@@ -119,7 +119,7 @@ const CityMapping = () => {
       countries: "/api/darina/countrylist",
     },
     Jumeirah: {
-      countries: "/api/country",
+      countries: "/api/jumeirah/countrylist",
     },
     X3: {
       countries: "api/iwtx/countrylist",
@@ -140,7 +140,7 @@ const CityMapping = () => {
       cities: "/api/darina/citylist",
     },
     Jumeirah: {
-      cities: "/api/jumeirah/cities",
+      cities: "/api/jumeirah/citylist",
     },
     X3: {
       cities: "/api/iwtx/citylist",
