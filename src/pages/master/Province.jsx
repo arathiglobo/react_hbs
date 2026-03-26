@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash } from "react-icons/fa";
 import axios from "axios";
+import Select from "react-select";
 
 export default function Province() {
   const [items, setItems] = useState([]);
@@ -24,6 +25,27 @@ export default function Province() {
   const [countryList, setCountryList] = useState([]);
   const [state, setState] = useState("");
   const [stateCode, setStateCode] = useState("");
+
+  const customSelectStyles = {
+    control: (base) => ({
+      ...base,
+      minHeight: "42px",
+      borderRadius: "0.5rem",
+      border: "1px solid #dee2e6",
+      boxShadow: "none",
+      "&:hover": { borderColor: "#86b7fe" },
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999,
+    }),
+    option: (base, state) => ({
+      ...base,
+      backgroundColor: state.isFocused ? "#f8f9fa" : "white",
+      color: state.isSelected ? "#0d6efd" : "#212529",
+      "&:active": { backgroundColor: "#0d6efd", color: "white" },
+    }),
+  };
 
   const nextId = useMemo(
     () => Math.max(0, ...items.map((i) => i.id)) + 1,
@@ -349,23 +371,29 @@ export default function Province() {
               <Form>
                 <Form.Group className="mb-3">
                   <Form.Label>Country</Form.Label>
-                  <Form.Select
-                    name="countryId"
-                    value={selectedCountry}
-                    onChange={(e) => setSelectedCountry(e.target.value)}
-                    isInvalid={!!error}
-                  >
-                    <option value="">Select Country</option>
-                    {countryList.map((region) => (
-                      <option key={region.id} value={region.id}>
-                        {region.name}
-                      </option>
-                    ))}
-                  </Form.Select>
+                  <Select
+                    options={countryList.map((country) => ({
+                      value: country.id,
+                      label: country.name,
+                    }))}
+                    value={
+                      countryList
+                        .map((country) => ({
+                          value: country.id,
+                          label: country.name,
+                        }))
+                        .find((opt) => String(opt.value) === String(selectedCountry)) || null
+                    }
+                    onChange={(option) => setSelectedCountry(option ? option.value : "")}
+                    placeholder="Search and Select Country"
+                    isSearchable
+                    isClearable
+                    styles={customSelectStyles}
+                  />
                   {error && (
-                    <Form.Control.Feedback type="invalid">
+                    <div className="text-danger small mt-1">
                       {error}
-                    </Form.Control.Feedback>
+                    </div>
                   )}
                 </Form.Group>
                 <Form.Group className="mb-3">

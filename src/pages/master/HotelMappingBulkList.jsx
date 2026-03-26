@@ -27,8 +27,12 @@ const HotelMappingBulkList = () => {
   // Selection states
   const [selectedHundredPercentGroups, setSelectedHundredPercentGroups] =
     useState([]);
-  const [selectedBelowHundredPercentGroup, setSelectedBelowHundredPercentGroup] =
-    useState(null);
+  const [
+    selectedBelowHundredPercentGroup,
+    setSelectedBelowHundredPercentGroup,
+  ] = useState(null);
+
+  console.log("searchResults::", searchResults);
 
   // Initialize 100% selections on load
   useEffect(() => {
@@ -57,7 +61,9 @@ const HotelMappingBulkList = () => {
       return;
     }
 
-    const unmappedGroupsToMap = selectedIndices.map((idx) => searchResults[idx]);
+    const unmappedGroupsToMap = selectedIndices.map(
+      (idx) => searchResults[idx],
+    );
 
     setBulkMapping(true);
 
@@ -86,7 +92,9 @@ const HotelMappingBulkList = () => {
       );
 
       if (response.status === 200) {
-        toast.success(`Successfully mapped ${unmappedGroupsToMap.length} groups!`);
+        toast.success(
+          `Successfully mapped ${unmappedGroupsToMap.length} groups!`,
+        );
         // Navigate back to the mapping page after a short delay to let the toast be seen
         setTimeout(() => {
           navigate("/masters/hotel-mapping");
@@ -143,9 +151,11 @@ const HotelMappingBulkList = () => {
                   </p>
                 </div>
                 <div className="text-end">
-                  <Badge bg="info" className="p-2 mb-2">
-                    {hundredPercentGroups.length + underHundredPercentGroups.length} Unmapped Groups Total
-                  </Badge>
+                  <p className="mb-2">
+                    {hundredPercentGroups.length +
+                      underHundredPercentGroups.length}{" "}
+                    Unmapped Groups Total
+                  </p>
                   <div>
                     <Button
                       variant="success"
@@ -177,23 +187,27 @@ const HotelMappingBulkList = () => {
                     <Card.Header className="bg-success bg-opacity-10 py-3 border-0">
                       <div className="d-flex justify-content-between align-items-center">
                         <h6 className="fw-bold mb-0 text-success d-flex align-items-center">
-                          <CheckCircle size={18} className="me-2" /> 100% Match Groups
+                          <CheckCircle size={18} className="me-2" /> 100% Match
+                          Groups
                         </h6>
                         <Button
                           variant="link"
                           size="sm"
                           className="text-decoration-none p-0 text-success fw-bold"
                           onClick={() => {
-                            const indices = hundredPercentGroups.map((g) => g.idx);
+                            const indices = hundredPercentGroups.map(
+                              (g) => g.idx,
+                            );
                             setSelectedHundredPercentGroups(
-                              selectedHundredPercentGroups.length === indices.length
+                              selectedHundredPercentGroups.length ===
+                                indices.length
                                 ? []
                                 : indices,
                             );
                           }}
                         >
                           {selectedHundredPercentGroups.length ===
-                          hundredPercentGroups.length
+                            hundredPercentGroups.length
                             ? "Deselect All"
                             : "Select All"}
                         </Button>
@@ -208,11 +222,10 @@ const HotelMappingBulkList = () => {
                           {hundredPercentGroups.map(({ group, idx }) => (
                             <div
                               key={idx}
-                              className={`list-group-item p-3 ${
-                                selectedHundredPercentGroups.includes(idx)
+                              className={`list-group-item p-3 ${selectedHundredPercentGroups.includes(idx)
                                   ? "bg-light"
                                   : ""
-                              }`}
+                                }`}
                             >
                               <Form.Check id={`group-100-${idx}`}>
                                 <Form.Check.Input
@@ -222,10 +235,9 @@ const HotelMappingBulkList = () => {
                                   )}
                                   onChange={(e) => {
                                     if (e.target.checked) {
-                                      setSelectedHundredPercentGroups((prev) => [
-                                        ...prev,
-                                        idx,
-                                      ]);
+                                      setSelectedHundredPercentGroups(
+                                        (prev) => [...prev, idx],
+                                      );
                                     } else {
                                       setSelectedHundredPercentGroups((prev) =>
                                         prev.filter((id) => id !== idx),
@@ -243,8 +255,21 @@ const HotelMappingBulkList = () => {
                                     </Badge>
                                   </div>
                                   <div className="text-muted small">
-                                    City: {group.hotels[0]?.city} | Country: {group.hotels[0]?.country}
+                                    City: {group.hotels[0]?.city} | Country:{" "}
+                                    {group.hotels[0]?.country}
                                   </div>
+                                  {/* <div className="text-muted small">
+                                    Supplier: {group.hotels[0]?.city} | Country:{" "}
+                                    {group.hotels[0]?.country}
+                                  </div> */}
+                                   <div className="text-muted small">
+                                    Supplier:  {[...new Set(group.hotels.map(h => h.supplier))].map((sup, sIdx) => (
+                                        <span  key={sIdx} bg="light" text="dark" className="font-monospace" style={{fontSize: '12px'}}>
+                                          {sup}
+                                        </span >
+                                      ))}
+                                  </div>
+                               
                                 </Form.Check.Label>
                               </Form.Check>
                             </div>
@@ -264,7 +289,8 @@ const HotelMappingBulkList = () => {
                   <Card className="border-0 shadow-sm h-100">
                     <Card.Header className="bg-warning bg-opacity-10 py-3 border-0">
                       <h6 className="fw-bold mb-0 text-warning d-flex align-items-center">
-                        <AlertTriangle size={18} className="me-2" /> Under 100% Match
+                        <AlertTriangle size={18} className="me-2" /> Under 100%
+                        Match
                       </h6>
                     </Card.Header>
                     <Card.Body
@@ -276,17 +302,18 @@ const HotelMappingBulkList = () => {
                           {underHundredPercentGroups.map(({ group, idx }) => (
                             <div
                               key={idx}
-                              className={`list-group-item p-3 ${
-                                selectedBelowHundredPercentGroup === idx
+                              className={`list-group-item p-3 ${selectedBelowHundredPercentGroup === idx
                                   ? "bg-light"
                                   : ""
-                              }`}
+                                }`}
                             >
                               <Form.Check id={`group-under-${idx}`}>
                                 <Form.Check.Input
                                   type="radio"
                                   name="under100Group"
-                                  checked={selectedBelowHundredPercentGroup === idx}
+                                  checked={
+                                    selectedBelowHundredPercentGroup === idx
+                                  }
                                   onChange={() =>
                                     setSelectedBelowHundredPercentGroup(idx)
                                   }
@@ -296,9 +323,10 @@ const HotelMappingBulkList = () => {
                                     <div className="fw-bold text-dark">
                                       {group.hotels[0]?.name}
                                     </div>
-                                    <Badge bg="warning" text="dark">
-                                      Score: {Number(group.matchScore).toFixed(2)}%
-                                    </Badge>
+                                    <span style={{ whiteSpace: "nowrap" }}>
+                                      Score:{" "}
+                                      {Number(group.matchScore).toFixed(2)}%
+                                    </span>
                                   </div>
                                   <div className="text-muted small">
                                     Matches: {group.hotels.length} hotels
@@ -312,7 +340,9 @@ const HotelMappingBulkList = () => {
                               <Form.Check.Input
                                 type="radio"
                                 name="under100Group"
-                                checked={selectedBelowHundredPercentGroup === null}
+                                checked={
+                                  selectedBelowHundredPercentGroup === null
+                                }
                                 onChange={() =>
                                   setSelectedBelowHundredPercentGroup(null)
                                 }
@@ -325,7 +355,8 @@ const HotelMappingBulkList = () => {
                         </div>
                       ) : (
                         <div className="p-5 text-center text-muted">
-                          No unmapped groups with match score {"<"} 100% available.
+                          No unmapped groups with match score {"<"} 100%
+                          available.
                         </div>
                       )}
                     </Card.Body>

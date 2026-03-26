@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash } from "react-icons/fa";
 import axios from "axios";
+import Select from "react-select";
 
 export default function Destination() {
   const [items, setItems] = useState([]);
@@ -25,6 +26,28 @@ export default function Destination() {
   const [state, setState] = useState([]);
   const [selectedState, setSelectedState] = useState("");
   const [destinationCode, setDestinationCode] = useState("");
+  const [isStateLoading, setIsStateLoading] = useState(false);
+
+  const customSelectStyles = {
+    control: (base) => ({
+      ...base,
+      minHeight: "42px",
+      borderRadius: "0.5rem",
+      border: "1px solid #dee2e6",
+      boxShadow: "none",
+      "&:hover": { borderColor: "#86b7fe" },
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999,
+    }),
+    option: (base, state) => ({
+      ...base,
+      backgroundColor: state.isFocused ? "#f8f9fa" : "white",
+      color: state.isSelected ? "#0d6efd" : "#212529",
+      "&:active": { backgroundColor: "#0d6efd", color: "white" },
+    }),
+  };
 
   const nextId = useMemo(
     () => Math.max(0, ...items.map((i) => i.id)) + 1,
@@ -233,6 +256,7 @@ export default function Destination() {
 
   const StateList = async () => {
     try {
+      setIsStateLoading(true);
       const response = await axiosInstance.get("/api/province");
 
       if (Array.isArray(response.data)) {
@@ -243,6 +267,8 @@ export default function Destination() {
       }
     } catch (error) {
       console.log("error for state list :", error);
+    } finally {
+      setIsStateLoading(false);
     }
   };
 
@@ -381,46 +407,57 @@ export default function Destination() {
               <Form>
                 <Form.Group className="mb-3">
                   <Form.Label>Country</Form.Label>
-                  <Form.Select
-                    name="countryId"
-                    value={selectedCountry}
-                    onChange={(e) => setSelectedCountry(e.target.value)}
-                    isInvalid={!!error}
-                  >
-                    <option value="">Select Country</option>
-                    {Array.isArray(country) &&
-                      country.map((con) => (
-                        <option key={con.id} value={con.id}>
-                          {con.name}
-                        </option>
-                      ))}
-                  </Form.Select>
+                  <Select
+                    options={(Array.isArray(country) ? country : []).map((con) => ({
+                      value: con.id,
+                      label: con.name,
+                    }))}
+                    value={
+                      (Array.isArray(country) ? country : [])
+                        .map((con) => ({
+                          value: con.id,
+                          label: con.name,
+                        }))
+                        .find((opt) => String(opt.value) === String(selectedCountry)) || null
+                    }
+                    onChange={(option) => setSelectedCountry(option ? option.value : "")}
+                    placeholder="Search and Select Country"
+                    isSearchable
+                    isClearable
+                    styles={customSelectStyles}
+                  />
                   {error && (
-                    <Form.Control.Feedback type="invalid">
+                    <div className="text-danger small mt-1">
                       {error}
-                    </Form.Control.Feedback>
+                    </div>
                   )}
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Province</Form.Label>
-                  <Form.Select
-                    name="provinceId"
-                    value={selectedState}
-                    onChange={(e) => setSelectedState(e.target.value)}
-                    isInvalid={!!error}
-                  >
-                    <option value="">Select Province</option>
-                    {Array.isArray(state) &&
-                      state.map((st) => (
-                        <option key={st.id} value={st.id}>
-                          {st.stateName}
-                        </option>
-                      ))}
-                  </Form.Select>
+                  <Select
+                    options={(Array.isArray(state) ? state : []).map((st) => ({
+                      value: st.id,
+                      label: st.stateName,
+                    }))}
+                    value={
+                      (Array.isArray(state) ? state : [])
+                        .map((st) => ({
+                          value: st.id,
+                          label: st.stateName,
+                        }))
+                        .find((opt) => String(opt.value) === String(selectedState)) || null
+                    }
+                    onChange={(option) => setSelectedState(option ? option.value : "")}
+                    placeholder="Search and Select Province"
+                    isSearchable
+                    isClearable
+                    isLoading={isStateLoading}
+                    styles={customSelectStyles}
+                  />
                   {error && (
-                    <Form.Control.Feedback type="invalid">
+                    <div className="text-danger small mt-1">
                       {error}
-                    </Form.Control.Feedback>
+                    </div>
                   )}
                 </Form.Group>
 

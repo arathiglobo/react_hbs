@@ -9,41 +9,74 @@ import {
   Spinner,
   Alert,
   Form,
+  Pagination,
 } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
-import { 
-  FaPlus, 
-  FaHotel, 
-  FaMapMarkerAlt, 
+import {
+  FaPlus,
+  FaHotel,
+  FaMapMarkerAlt,
   FaStar,
   FaEye,
   FaEdit,
   FaTrash,
-  FaSearch
+  FaSearch,
 } from "react-icons/fa";
-import "../../styles/HotelList.css"
+import "../../styles/HotelList.css";
 
 const HotelList = () => {
-  const [hotels, setHotels] = useState([]);
   const [filteredHotels, setFilteredHotels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pageSize] = useState(20);
+  const [totalElements, setTotalElements] = useState(0);
+
   const navigate = useNavigate();
 
-  // Load hotels from API
-  const loadHotels = async () => {
+  // Load hotels from API with pagination
+  const loadHotels = async (page = 0, search = searchTerm) => {
     try {
       setIsLoading(true);
-      const response = await axiosInstance.get("/api/hotels");
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString(),
+      });
+
+      if (search.trim()) {
+        params.append("search", search.trim());
+      }
+
+      const response = await axiosInstance.get(`/api/hotels?${params.toString()}`, {
+        timeout: 0,
+      });
+
       console.log("Hotels response:", response.data);
-      const hotelsData = response.data || [];
-      setHotels(hotelsData);
-      setFilteredHotels(hotelsData);
+      
+      // Handle both array response and paginated object response
+      if (Array.isArray(response.data)) {
+        setFilteredHotels(response.data);
+        // Fallback pagination logic if backend doesn't provide totalElements
+        if (response.data.length < pageSize) {
+          setTotalPages(page + 1);
+        } else {
+          setTotalPages(Math.max(totalPages, page + 2));
+        }
+      } else if (response.data && response.data.content) {
+        setFilteredHotels(response.data.content);
+        setTotalPages(response.data.totalPages || 0);
+        setTotalElements(response.data.totalElements || 0);
+      }
+      
+      setCurrentPage(page);
       setError(null);
     } catch (error) {
       console.error("Error loading hotels:", error);
@@ -54,23 +87,13 @@ const HotelList = () => {
     }
   };
 
-  // Filter hotels based on search term
-  const filterHotels = (searchValue) => {
-    if (!searchValue.trim()) {
-      setFilteredHotels(hotels);
-    } else {
-      const filtered = hotels.filter(hotel =>
-        hotel.hotelName.toLowerCase().includes(searchValue.toLowerCase())
-      );
-      setFilteredHotels(filtered);
-    }
-  };
 
   // Handle search input change
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
-    filterHotels(value);
+    // Reset to first page on search
+    loadHotels(0, value);
   };
 
   // Load hotels on component mount
@@ -107,9 +130,12 @@ const HotelList = () => {
   };
 
   return (
-    <div className="min-vh-100 bg-gradient-light d-flex flex-column" style={{
-      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
-    }}>
+    <div
+      className="min-vh-100 bg-gradient-light d-flex flex-column"
+      style={{
+        background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
+      }}
+    >
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
@@ -122,7 +148,9 @@ const HotelList = () => {
                   <FaHotel className="me-2" />
                   Hotel Management
                 </h2>
-                <p className="text-muted mb-0">Manage your hotel listings and details</p>
+                <p className="text-muted mb-0">
+                  Manage your hotel listings and details
+                </p>
               </div>
               <div className="d-flex gap-2">
                 <Button
@@ -138,19 +166,17 @@ const HotelList = () => {
 
             {/* Content Section */}
             <Card className="shadow-lg border-0 rounded-4">
-            <Card.Header className="bg-gradient-primary text-white border-0 rounded-top-4">
-  <div className="d-flex align-items-center justify-content-between">
+              <Card.Header className="bg-gradient-primary text-white border-0 rounded-top-4">
+                <div className="d-flex align-items-center justify-content-between">
+                  {/* LEFT: Title */}
+                  <h4 className="mb-0 d-flex align-items-center">
+                    <FaHotel className="me-2" />
+                    Hotel List
+                  </h4>
 
-    {/* LEFT: Title */}
-    <h4 className="mb-0 d-flex align-items-center">
-      <FaHotel className="me-2" />
-      Hotel List
-    </h4>
-
-    {/* RIGHT: Search + Badge */}
-    <div className="d-flex align-items-center gap-3">
-
-      {/* <Badge bg="light" text="dark" className="fs-6 px-3 py-2">
+                  {/* RIGHT: Search + Badge */}
+                  <div className="d-flex align-items-center gap-3">
+                    {/* <Badge bg="light" text="dark" className="fs-6 px-3 py-2">
         {filteredHotels.length} Hotel{filteredHotels.length !== 1 ? "s" : ""}
         {searchTerm && (
           <span className="ms-2 text-muted">
@@ -159,21 +185,19 @@ const HotelList = () => {
         )}
       </Badge> */}
 
-      <div className="search-wrapper">
-        <i className="bi bi-search search-icon"></i>
-        <input
-          type="text"
-          placeholder="Search hotel names..."
-          value={searchTerm}
-          onChange={handleSearchChange}
-          className="modern-search-input"
-        />
-      </div>
-
-    </div>
-
-  </div>
-</Card.Header>
+                    <div className="search-wrapper">
+                      <i className="bi bi-search search-icon"></i>
+                      <input
+                        type="text"
+                        placeholder="Search hotel names..."
+                        value={searchTerm}
+                        onChange={handleSearchChange}
+                        className="modern-search-input"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </Card.Header>
               <Card.Body className="p-4">
                 {isLoading ? (
                   <div className="text-center py-5">
@@ -184,9 +208,9 @@ const HotelList = () => {
                   <Alert variant="danger" className="text-center">
                     <FaHotel className="me-2" />
                     {error}
-                    <Button 
-                      variant="outline-danger" 
-                      className="ms-3" 
+                    <Button
+                      variant="outline-danger"
+                      className="ms-3"
                       onClick={loadHotels}
                     >
                       Retry
@@ -199,17 +223,16 @@ const HotelList = () => {
                       {searchTerm ? "No Hotels Found" : "No Hotels Found"}
                     </h5>
                     <p className="text-muted mb-4">
-                      {searchTerm 
+                      {searchTerm
                         ? `No hotels found matching "${searchTerm}". Try a different search term.`
-                        : "Start by creating your first hotel."
-                      }
+                        : "Start by creating your first hotel."}
                     </p>
                     {searchTerm ? (
                       <Button
                         variant="outline-primary"
                         onClick={() => {
                           setSearchTerm("");
-                          setFilteredHotels(hotels);
+                          loadHotels(0, "");
                         }}
                         className="d-flex align-items-center gap-2 mx-auto px-4 py-2 rounded-pill"
                       >
@@ -231,7 +254,7 @@ const HotelList = () => {
                   <Row>
                     {filteredHotels.map((hotel) => (
                       <Col key={hotel.id} lg={4} md={6} className="mb-4">
-                        <Card 
+                        <Card
                           className="h-100 shadow-sm border-0 rounded-4 hotel-card"
                           style={{ cursor: "pointer" }}
                           onClick={() => handleViewHotel(hotel.id)}
@@ -239,12 +262,14 @@ const HotelList = () => {
                           <div className="position-relative">
                             <Card.Img
                               variant="top"
-                              src={hotel.image360 || "/images/not-available.jpg"}
+                              src={
+                                hotel.image360 || "/images/not-available.jpg"
+                              }
                               alt={hotel.hotelName}
                               style={{
-                                height: '170px',
-                                objectFit: 'cover',
-                                borderRadius: '1rem 1rem 0 0'
+                                height: "170px",
+                                objectFit: "cover",
+                                borderRadius: "1rem 1rem 0 0",
                               }}
                               onError={(e) => {
                                 e.target.src = "/images/not-available.jpg";
@@ -256,7 +281,7 @@ const HotelList = () => {
                               </Badge>
                             </div>
                           </div>
-                          
+
                           <Card.Body className="d-flex flex-column">
                             <div className="mb-0">
                               <h5 className="card-title text-primary mb-2">
@@ -317,6 +342,35 @@ const HotelList = () => {
                       </Col>
                     ))}
                   </Row>
+                )}
+
+                {/* Pagination Controls */}
+                {!isLoading && !error && (totalPages > 1 || totalElements > pageSize) && (
+                  <div className="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <div className="text-muted small">
+                      Showing {filteredHotels.length} hotels
+                      {totalElements > 0 && ` of ${totalElements}`}
+                    </div>
+                    <Pagination className="mb-0 custom-pagination">
+                      <Pagination.Prev
+                        disabled={currentPage === 0}
+                        onClick={() => loadHotels(currentPage - 1)}
+                      />
+                      {[...Array(totalPages).keys()].map((num) => (
+                        <Pagination.Item
+                          key={num}
+                          active={num === currentPage}
+                          onClick={() => loadHotels(num)}
+                        >
+                          {num + 1}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={currentPage >= totalPages - 1}
+                        onClick={() => loadHotels(currentPage + 1)}
+                      />
+                    </Pagination>
+                  </div>
                 )}
               </Card.Body>
             </Card>
