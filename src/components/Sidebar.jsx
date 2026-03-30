@@ -275,11 +275,11 @@ export default function Sidebar() {
         },
       ],
     },
-    {
-      label: "Assigned Agents",
-      to: "/assigned-agents",
-      roles: ["admin"],
-    },
+    // {
+    //   label: "Assigned Agents",
+    //   to: "/assigned-agents",
+    //   roles: ["admin"],
+    // },
     {
       label: "Calendar",
       to: "/calendar",

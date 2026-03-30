@@ -27,12 +27,12 @@ const CityMapping = () => {
     useState(null);
 
   const [platforms] = useState([
-    // "Iwtx",
-    // "Darina",
-    // "Jumeirah",
-    // "X3",
-    // "Ratehawk",
-    // "Atharva",
+    "Iwtx",
+    "Darina",
+    "Jumeirah",
+    "X3",
+    "Ratehawk",
+    "Atharva",
   ]);
 
   // Row-wise selections and status per platform in the overview table

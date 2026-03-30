@@ -318,13 +318,13 @@ const AgentReg = () => {
   // Static data for external APIs
   const externalApis = [
     { code: "Select", name: "Select" },
-    // { code: "IWTX", name: "IWTX" },
-    // { code: "X3", name: "X3" },
+    { code: "IWTX", name: "IWTX" },
+    { code: "X3", name: "X3" },
     { code: "INHOUSE", name: "INHOUSE" },
-    // { code: "DARINA", name: "DARINA" },
-    // { code: "RATEHAWK", name: "RATEHAWK" },
-    // { code: "ATHARVA", name: "ATHARVA" },
-    // { code: "JUMEIRAH", name: "JUMEIRAH" },
+    { code: "DARINA", name: "DARINA" },
+    { code: "RATEHAWK", name: "RATEHAWK" },
+    { code: "ATHARVA", name: "ATHARVA" },
+    { code: "JUMEIRAH", name: "JUMEIRAH" },
   ];
 
 
@@ -1517,24 +1517,12 @@ const AgentReg = () => {
     setShowApiDropdown(false);
   };
 
-  const removeApi = async (apiCode) => {
+  const removeApi = (apiCode) => {
     // Remove from form data
     setExclusionFormData((prev) => ({
       ...prev,
       externalApi: prev.externalApi.filter((code) => code !== apiCode),
     }));
-
-    // Also remove from backend if it exists
-    try {
-     // console.log("Removing exclusion for API:", apiCode);
-      await axiosInstance.delete(
-        `/api/agent-api-exclusion/agent/${editing?.id}/api/${apiCode}`
-      );
-     // console.log("Exclusion removed successfully");
-    } catch (error) {
-     // console.log("Error removing exclusion or exclusion doesn't exist:", error );
-      // This is normal if the exclusion doesn't exist in the backend
-    }
   };
 
   // Validate exclusion form
@@ -1563,7 +1551,7 @@ const AgentReg = () => {
     try {
       setIsLoading(true);
 
-      // First, fetch existing exclusions to avoid duplicates
+      // Fetch existing exclusions to determine additions and deletions
       let existingApiCodes = [];
       try {
         const existingResponse = await axiosInstance.get(
@@ -1575,59 +1563,61 @@ const AgentReg = () => {
             .filter(Boolean);
         }
       } catch (error) {
-       // console.log("No existing exclusions found");
+        console.log("No existing exclusions found or error fetching:", error);
       }
 
-      // Filter out APIs that are already excluded
+      // APIs to add (in selection but not in backend)
       const newApiCodes = exclusionFormData.externalApi.filter(
         (apiCode) => !existingApiCodes.includes(apiCode)
       );
 
-      if (newApiCodes.length === 0) {
-        toast.info("All selected APIs are already excluded for this agent.");
+      // APIs to remove (in backend but not in selection)
+      const removedApiCodes = existingApiCodes.filter(
+        (apiCode) => !exclusionFormData.externalApi.includes(apiCode)
+      );
+
+      if (newApiCodes.length === 0 && removedApiCodes.length === 0) {
+        toast.info("No changes made to API exclusions.");
         setIsLoading(false);
         return;
       }
 
-     // console.log("Adding new exclusions:", newApiCodes);
-     // console.log("Already excluded:", existingApiCodes);
+      const promises = [];
 
-      // Send multiple requests for each new API (avoiding duplicates)
-      const promises = newApiCodes.map((apiCode) => {
+      // Add POST promises for new exclusions
+      newApiCodes.forEach((apiCode) => {
         const exclusionPayload = {
           agentId: editing?.id,
           nationality: exclusionFormData.nationality,
           apiCode: apiCode,
         };
-
-       // console.log("Exclusion payload:", exclusionPayload);
-
-        return axiosInstance.post(
-          "/api/agent-api-exclusion/exclude",
-          exclusionPayload
+        promises.push(
+          axiosInstance.post("/api/agent-api-exclusion/exclude", exclusionPayload)
         );
       });
 
-      const responses = await Promise.all(promises);
-     
-      // Check if all responses were successful
-      const allSuccessful = responses.every((response) => response.data);
-    
-
-      if (allSuccessful) {
-        toast.success(
-          `${newApiCodes.length} new API exclusion(s) added successfully!`
+      // Add DELETE promises for removed exclusions
+      removedApiCodes.forEach((apiCode) => {
+        promises.push(
+          axiosInstance.delete(
+            `/api/agent-api-exclusion/agent/${editing?.id}/api/${apiCode}`
+          )
         );
-        setExclusionErrors({});
-        closeExclusionModal();
-        // Refresh the agent list
-        await fetchAgentList(page, search);
-      }else{
-          toast.error("Exclusions removed successfully");
-      }
+      });
+
+      await Promise.all(promises);
+
+      toast.success("API exclusions updated successfully!", {
+        duration: 1000,
+      });
+
+      setExclusionErrors({});
+      closeExclusionModal();
+      // Refresh the agent list
+      await fetchAgentList(page, search);
     } catch (error) {
       console.error("Exclusion submission failed:", error);
-     
+      toast.error("Failed to update API exclusions. Please try again.");
     } finally {
       setIsLoading(false);
     }

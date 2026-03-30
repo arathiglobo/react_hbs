@@ -74,7 +74,7 @@ const SearchableSelect = ({
   };
 
   const selectedOption = options?.find(
-    (option) => String(option.marketTypeId) === String(value)
+    (option) => String(option.marketTypeId) === String(value),
   );
 
   return (
@@ -97,8 +97,9 @@ const SearchableSelect = ({
         }}
         onFocus={() => !disabled && setIsOpen(true)}
         placeholder={placeholder}
-        className={`form-input ${isInvalid ? "is-invalid" : ""} ${className || ""
-          }`}
+        className={`form-input ${isInvalid ? "is-invalid" : ""} ${
+          className || ""
+        }`}
         disabled={disabled}
         readOnly={disabled}
         autoComplete="off"
@@ -223,7 +224,7 @@ const OccupancyAndMinimumLength = () => {
     // Add 1 minute to the from date to ensure validityTo is after validityFrom
     date.setMinutes(date.getMinutes() + 1);
     // Format to YYYY-MM-DDTHH:MM for datetime-local input
-    const pad = (num) => num.toString().padStart(2, '0');
+    const pad = (num) => num.toString().padStart(2, "0");
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
   const [activeTab, setActiveTab] = useState("occupancy");
@@ -237,14 +238,15 @@ const OccupancyAndMinimumLength = () => {
   const getFormControlPropsOcc = (
     fieldName,
     onChangeHandler,
-    additionalProps = {}
+    additionalProps = {},
   ) => {
     return {
       ...additionalProps,
       readOnly: isViewModeOcc,
       onChange: isViewModeOcc ? undefined : onChangeHandler,
-      className: `${additionalProps.className || ""} ${isViewModeOcc ? "bg-light" : ""
-        }`.trim(),
+      className: `${additionalProps.className || ""} ${
+        isViewModeOcc ? "bg-light" : ""
+      }`.trim(),
       autoFocus: isViewModeOcc ? false : additionalProps.autoFocus,
     };
   };
@@ -257,7 +259,7 @@ const OccupancyAndMinimumLength = () => {
       // Add "All" option with value -1 at the beginning
       const marketTypesWithAll = [
         { marketTypeId: 100, name: "All", marketTypeName: "All" },
-        ...(response.data || [])
+        ...(response.data || []),
       ];
 
       setMarketTypes(marketTypesWithAll);
@@ -280,7 +282,7 @@ const OccupancyAndMinimumLength = () => {
   const loadHotelRoomDatas = async () => {
     try {
       const response = await axiosInstance.get(
-        `/api/hotelRoomDetailsController/${id}`
+        `/api/hotelRoomDetailsController/${id}`,
       );
       console.log("Hotel Rooms Data:", response.data);
       setHotelRoomsData(response.data || []);
@@ -291,11 +293,11 @@ const OccupancyAndMinimumLength = () => {
 
   // Test backend connectivity
 
-  useEffect(() => {
-    loadMarketTypes();
-    loadOccupancyTypes();
-    loadHotelRoomDatas();
-  }, []);
+  // useEffect(() => {
+  //   loadMarketTypes();
+  //   loadOccupancyTypes();
+  //   loadHotelRoomDatas();
+  // }, []);
 
   useEffect(() => {
     if (hotelRoomsData.length > 0) {
@@ -366,12 +368,14 @@ const OccupancyAndMinimumLength = () => {
     } else {
       data.validityPeriods.forEach((period, index) => {
         if (!period.validityFrom) {
-          newErrors.validityFrom = `Validity From is required for period ${index + 1
-            }`;
+          newErrors.validityFrom = `Validity From is required for period ${
+            index + 1
+          }`;
         }
         if (!period.validityTo) {
-          newErrors.validityTo = `Validity To is required for period ${index + 1
-            }`;
+          newErrors.validityTo = `Validity To is required for period ${
+            index + 1
+          }`;
         }
       });
     }
@@ -384,14 +388,16 @@ const OccupancyAndMinimumLength = () => {
           newErrors.roomId = `Room ID is required for room ${index + 1}`;
         }
         if (!room.roomOccupancies || room.roomOccupancies.length === 0) {
-          newErrors.roomOccupancies = `At least one occupancy is required for room ${index + 1
-            }`;
+          newErrors.roomOccupancies = `At least one occupancy is required for room ${
+            index + 1
+          }`;
         } else {
           room.roomOccupancies.forEach((occ, occIndex) => {
             console.log("Validating occupancy:", occ);
             if (!occ.occupancyTypeId) {
-              newErrors.occupancyTypeId = `Occupancy Type is required for occupancy ${occIndex + 1
-                } in room ${index + 1}`;
+              newErrors.occupancyTypeId = `Occupancy Type is required for occupancy ${
+                occIndex + 1
+              } in room ${index + 1}`;
             }
           });
         }
@@ -406,7 +412,9 @@ const OccupancyAndMinimumLength = () => {
     const errors = validateOccupancyForm(formDataOcc);
     if (Object.keys(errors).length > 0) {
       setValidationErrorsOcc(errors);
-      toast.error("Please check the form for errors. Some required fields are missing.");
+      toast.error(
+        "Please check the form for errors. Some required fields are missing.",
+      );
       console.error("Validation errors:", errors);
       return;
     }
@@ -416,8 +424,12 @@ const OccupancyAndMinimumLength = () => {
         hotelId: id,
         marketTypeId: formDataOcc.marketTypeId || null,
         validityPeriods: formDataOcc.validityPeriods.map((period) => ({
-          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
-          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
+          validityFrom: period.validityFrom
+            ? `${period.validityFrom}:00`
+            : period.validityFrom,
+          validityTo: period.validityTo
+            ? `${period.validityTo}:00`
+            : period.validityTo,
         })),
         hotelRooms: formDataOcc.hotelRooms.map((room) => ({
           id: room.id, // Use the mapped rommCategoryId
@@ -436,7 +448,7 @@ const OccupancyAndMinimumLength = () => {
         payload,
         {
           headers: { "Content-Type": "application/json" },
-        }
+        },
       );
       if (response.data) {
         toast.success("Occupancy added successfully!");
@@ -448,8 +460,9 @@ const OccupancyAndMinimumLength = () => {
       console.error("Save occupancy error:", error);
       setError("Failed to save occupancy data");
       toast.error(
-        `Failed to save occupancy data: ${error.response?.data?.message || error.message
-        }`
+        `Failed to save occupancy data: ${
+          error.response?.data?.message || error.message
+        }`,
       );
     } finally {
       setIsLoading(false);
@@ -461,7 +474,9 @@ const OccupancyAndMinimumLength = () => {
     const errors = validateOccupancyForm(formDataOcc);
     if (Object.keys(errors).length > 0) {
       setValidationErrorsOcc(errors);
-      toast.error("Please check the form for errors. Some required fields are missing.");
+      toast.error(
+        "Please check the form for errors. Some required fields are missing.",
+      );
       console.error("Validation errors:", errors);
       return;
     }
@@ -472,8 +487,12 @@ const OccupancyAndMinimumLength = () => {
         hotelId: id,
         marketTypeId: formDataOcc.marketTypeId || null,
         validityPeriods: formDataOcc.validityPeriods.map((period) => ({
-          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
-          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
+          validityFrom: period.validityFrom
+            ? `${period.validityFrom}:00`
+            : period.validityFrom,
+          validityTo: period.validityTo
+            ? `${period.validityTo}:00`
+            : period.validityTo,
         })),
         hotelRooms: formDataOcc.hotelRooms.map((room) => ({
           id: room.id, // Use the mapped rommCategoryId
@@ -489,7 +508,7 @@ const OccupancyAndMinimumLength = () => {
       console.log("Edit Occupancy Payload:", payload);
       const response = await axiosInstance.put(
         `/api/hotels/${id}/occupancies/${occupancyId}`,
-        payload
+        payload,
       );
       if (response.data) {
         toast.success("Occupancy updated successfully!");
@@ -501,8 +520,9 @@ const OccupancyAndMinimumLength = () => {
       console.error("Edit occupancy error:", error);
       setError("Failed to update occupancy");
       toast.error(
-        `Failed to update occupancy: ${error.response?.data?.message || error.message
-        }`
+        `Failed to update occupancy: ${
+          error.response?.data?.message || error.message
+        }`,
       );
     } finally {
       setIsLoading(false);
@@ -581,8 +601,11 @@ const OccupancyAndMinimumLength = () => {
 
   const openEditOcc = async (item) => {
     try {
+      loadMarketTypes();
+      loadOccupancyTypes();
+      loadHotelRoomDatas();
       const editRes = await axiosInstance.get(
-        `/api/hotels/${id}/occupancies/${item.occupancyId}`
+        `/api/hotels/${id}/occupancies/${item.occupancyId}`,
       );
       console.log("edit res::", editRes.data);
       const data = editRes.data;
@@ -610,7 +633,9 @@ const OccupancyAndMinimumLength = () => {
 
       // Transform validity list - convert from yyyy-MM-dd'T'HH:mm:ss to yyyy-MM-ddTHH:mm for UI
       const validityPeriods = (data.validityList || []).map((v) => ({
-        validityFrom: v.validityFrom ? v.validityFrom.substring(0, 16) : v.validityFrom,
+        validityFrom: v.validityFrom
+          ? v.validityFrom.substring(0, 16)
+          : v.validityFrom,
         validityTo: v.validityTo ? v.validityTo.substring(0, 16) : v.validityTo,
       }));
 
@@ -618,7 +643,8 @@ const OccupancyAndMinimumLength = () => {
       const marketTypeId =
         marketTypes.find(
           (mt) =>
-            mt.name === data.marketName || mt.marketTypeName === data.marketName
+            mt.name === data.marketName ||
+            mt.marketTypeName === data.marketName,
         )?.marketTypeId ||
         data.marketTypeId ||
         "";
@@ -633,19 +659,19 @@ const OccupancyAndMinimumLength = () => {
         hotelRooms: hotelRooms.length
           ? hotelRooms
           : [
-            {
-              id: "",
-              roomOccupancies: [
-                {
-                  occupancyTypeId: "",
-                  totalAdult: 0,
-                  totalChild: 0,
-                  extraAdult: 0,
-                  extraChild: 0,
-                },
-              ],
-            },
-          ],
+              {
+                id: "",
+                roomOccupancies: [
+                  {
+                    occupancyTypeId: "",
+                    totalAdult: 0,
+                    totalChild: 0,
+                    extraAdult: 0,
+                    extraChild: 0,
+                  },
+                ],
+              },
+            ],
         live: data.live || false,
       });
       setValidationErrorsOcc({});
@@ -661,7 +687,7 @@ const OccupancyAndMinimumLength = () => {
       setIsLoading(true);
       // Fetch detailed occupancy data from API
       const viewRes = await axiosInstance.get(
-        `/api/hotels/${id}/occupancies/${item.occupancyId}`
+        `/api/hotels/${id}/occupancies/${item.occupancyId}`,
       );
       console.log("View occupancy data:", viewRes.data);
       const data = viewRes.data;
@@ -688,7 +714,9 @@ const OccupancyAndMinimumLength = () => {
 
       // Transform validity list - convert from yyyy-MM-dd'T'HH:mm:ss to yyyy-MM-ddTHH:mm for UI
       const validityPeriods = (data.validityList || []).map((v) => ({
-        validityFrom: v.validityFrom ? v.validityFrom.substring(0, 16) : v.validityFrom,
+        validityFrom: v.validityFrom
+          ? v.validityFrom.substring(0, 16)
+          : v.validityFrom,
         validityTo: v.validityTo ? v.validityTo.substring(0, 16) : v.validityTo,
       }));
 
@@ -696,7 +724,8 @@ const OccupancyAndMinimumLength = () => {
       const marketTypeId =
         marketTypes.find(
           (mt) =>
-            mt.name === data.marketName || mt.marketTypeName === data.marketName
+            mt.name === data.marketName ||
+            mt.marketTypeName === data.marketName,
         )?.marketTypeId ||
         data.marketTypeId ||
         "";
@@ -711,19 +740,19 @@ const OccupancyAndMinimumLength = () => {
         hotelRooms: hotelRooms.length
           ? hotelRooms
           : [
-            {
-              id: "",
-              roomOccupancies: [
-                {
-                  occupancyTypeId: "",
-                  totalAdult: 0,
-                  totalChild: 0,
-                  extraAdult: 0,
-                  extraChild: 0,
-                },
-              ],
-            },
-          ],
+              {
+                id: "",
+                roomOccupancies: [
+                  {
+                    occupancyTypeId: "",
+                    totalAdult: 0,
+                    totalChild: 0,
+                    extraAdult: 0,
+                    extraChild: 0,
+                  },
+                ],
+              },
+            ],
         live: data.live || false,
       });
       setValidationErrorsOcc({});
@@ -764,8 +793,7 @@ const OccupancyAndMinimumLength = () => {
       // Add CORS headers to the request
       const res = await axiosInstance.patch(
         `/api/hotels/${id}/occupancies/${selectedItemOcc.occupancyId}/status`,
-        payload
-
+        payload,
       );
 
       console.log("✅ API call successful!");
@@ -777,21 +805,17 @@ const OccupancyAndMinimumLength = () => {
         toast.success("Occupancy deactivated successfully");
       }
 
-
-
       // Refresh the occupancy list to show updated data
       await fetchOccupancyList(pageOcc, searchOcc);
       setShowLiveStatusModalOcc(false);
       setSelectedItemOcc(null);
     } catch (error) {
-
-
       // Handle CORS error specifically
       if (error.code === "ERR_NETWORK" || error.message.includes("CORS")) {
         console.error("🚨 CORS Error Detected!");
         console.error("This is a CORS (Cross-Origin Resource Sharing) issue.");
         console.error(
-          "The backend server needs to be configured to allow requests from localhost:3000"
+          "The backend server needs to be configured to allow requests from localhost:3000",
         );
 
         toast.error(
@@ -803,7 +827,7 @@ const OccupancyAndMinimumLength = () => {
             <small>
               Add @CrossOrigin annotation to your Spring Boot controller
             </small>
-          </div>
+          </div>,
         );
       } else if (error.response?.status === 404) {
         toast.error("API endpoint not found. Please check the backend routes.");
@@ -811,8 +835,9 @@ const OccupancyAndMinimumLength = () => {
         toast.error("Server error. Please check the backend logs.");
       } else {
         toast.error(
-          `Failed to update status: ${error.response?.data?.message || error.message
-          }`
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`,
         );
       }
     } finally {
@@ -860,7 +885,7 @@ const OccupancyAndMinimumLength = () => {
 
       // Fetch detailed minimum length data from API
       const editRes = await axiosInstance.get(
-        `/api/hotels/${id}/minimumlengths/${itemId}`
+        `/api/hotels/${id}/minimumlengths/${itemId}`,
       );
       console.log("Edit API response:", editRes.data);
       const data = editRes.data;
@@ -877,13 +902,13 @@ const OccupancyAndMinimumLength = () => {
           validityTo: period.validityTo
             ? period.validityTo.substring(0, 16)
             : "",
-        })
+        }),
       );
 
       // Map hotel rooms correctly - need to match with hotelRoomsData
       const mappedHotelRooms = (data.hotelRooms || []).map((room) => {
         const matchingCategory = hotelRoomsData.find(
-          (cat) => cat.rommCategoryId === room.roomId
+          (cat) => cat.rommCategoryId === room.roomId,
         );
         console.log(`Mapping room ${room.roomId}:`, {
           roomData: room,
@@ -915,8 +940,9 @@ const OccupancyAndMinimumLength = () => {
     } catch (error) {
       console.error("Error in openEditMin:", error);
       toast.error(
-        `Failed to load minimum length data for editing: ${error.response?.data?.message || error.message
-        }`
+        `Failed to load minimum length data for editing: ${
+          error.response?.data?.message || error.message
+        }`,
       );
     } finally {
       setIsLoading(false);
@@ -936,12 +962,16 @@ const OccupancyAndMinimumLength = () => {
         hotelId: id,
         marketTypeId: formDataMin.marketTypeId,
         validityPeriods: formDataMin.validityPeriods.map((period) => ({
-          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
-          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
+          validityFrom: period.validityFrom
+            ? `${period.validityFrom}:00`
+            : period.validityFrom,
+          validityTo: period.validityTo
+            ? `${period.validityTo}:00`
+            : period.validityTo,
         })),
         hotelRooms: hotelRoomsData.map((category) => {
           const roomData = formDataMin.hotelRooms.find(
-            (room) => room.roomId === category.rommCategoryId.toString()
+            (room) => room.roomId === category.rommCategoryId.toString(),
           );
           return {
             roomId: category.rommCategoryId,
@@ -959,7 +989,7 @@ const OccupancyAndMinimumLength = () => {
           headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
       if (editRes.data) {
         toast.success("Minimum Length Updated Successfully!");
@@ -971,8 +1001,9 @@ const OccupancyAndMinimumLength = () => {
       console.error("Edit min length error:", error);
       setError("Failed to update min length");
       toast.error(
-        `Failed to update min length: ${error.response?.data?.message || error.message
-        }`
+        `Failed to update min length: ${
+          error.response?.data?.message || error.message
+        }`,
       );
     } finally {
       setIsLoading(false);
@@ -1041,30 +1072,32 @@ const OccupancyAndMinimumLength = () => {
 
   const validateMinForm = (data) => {
     const newErrors = {};
-    if (!data.marketTypeId || data.marketTypeId === "") newErrors.marketTypeId = "Market Type is required";
+    if (!data.marketTypeId || data.marketTypeId === "")
+      newErrors.marketTypeId = "Market Type is required";
     if (!data.validityPeriods || data.validityPeriods.length === 0) {
       newErrors.validityPeriods = "At least one validity period is required";
     } else {
       data.validityPeriods.forEach((period, index) => {
         if (!period.validityFrom) {
-          newErrors.validityFrom = `Validity From is required for period ${index + 1
-            }`;
+          newErrors.validityFrom = `Validity From is required for period ${
+            index + 1
+          }`;
         }
         if (!period.validityTo) {
-          newErrors.validityTo = `Validity To is required for period ${index + 1
-            }`;
+          newErrors.validityTo = `Validity To is required for period ${
+            index + 1
+          }`;
         }
       });
     }
     // Validate minimum length for each room category
     hotelRoomsData.forEach((category) => {
       const roomData = data.hotelRooms.find(
-        (room) => room.roomId === category.rommCategoryId.toString()
+        (room) => room.roomId === category.rommCategoryId.toString(),
       );
       if (!roomData || !roomData.minimumLength || roomData.minimumLength <= 0) {
-        newErrors[
-          `minimumLength_${category.rommCategoryId}`
-        ] = `Minimum Length is required for ${category.roomCategory}`;
+        newErrors[`minimumLength_${category.rommCategoryId}`] =
+          `Minimum Length is required for ${category.roomCategory}`;
       }
     });
     return newErrors;
@@ -1083,12 +1116,16 @@ const OccupancyAndMinimumLength = () => {
         hotelId: id,
         marketTypeId: formDataMin.marketTypeId,
         validityPeriods: formDataMin.validityPeriods.map((period) => ({
-          validityFrom: period.validityFrom ? `${period.validityFrom}:00` : period.validityFrom,
-          validityTo: period.validityTo ? `${period.validityTo}:00` : period.validityTo,
+          validityFrom: period.validityFrom
+            ? `${period.validityFrom}:00`
+            : period.validityFrom,
+          validityTo: period.validityTo
+            ? `${period.validityTo}:00`
+            : period.validityTo,
         })),
         hotelRooms: hotelRoomsData.map((category) => {
           const roomData = formDataMin.hotelRooms.find(
-            (room) => room.roomId === category.rommCategoryId.toString()
+            (room) => room.roomId === category.rommCategoryId.toString(),
           );
           return {
             roomId: category.rommCategoryId,
@@ -1104,7 +1141,7 @@ const OccupancyAndMinimumLength = () => {
           headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
       if (response.data) {
         toast.success("Minimum Length Stay added Successfully!");
@@ -1116,8 +1153,9 @@ const OccupancyAndMinimumLength = () => {
       console.error("Save min length error:", error);
       setError("Sorry! Data not saved to db..");
       toast.error(
-        `Failed to save min length data: ${error.response?.data?.message || error.message
-        }`
+        `Failed to save min length data: ${
+          error.response?.data?.message || error.message
+        }`,
       );
     } finally {
       setIsLoading(false);
@@ -1154,13 +1192,14 @@ const OccupancyAndMinimumLength = () => {
         title: "swal-small-title",
         htmlContainer: "swal-small-text",
       },
-    }).then(async (result) => { // ✅ make callback async
+    }).then(async (result) => {
+      // ✅ make callback async
 
       if (result.isConfirmed) {
         try {
           const itemId = item.minimumLengthId;
           const minDeleteRes = await axiosInstance.delete(
-            `/api/hotels/${id}/minimumlengths/${itemId}`
+            `/api/hotels/${id}/minimumlengths/${itemId}`,
           );
 
           console.log("Minimum length delete response:", minDeleteRes);
@@ -1173,7 +1212,9 @@ const OccupancyAndMinimumLength = () => {
             await fetchMinLengthList(pageMin, searchMin);
 
             // Additional force update - remove the deleted item from state immediately
-            setItemsMin(prevItems => prevItems.filter(item => item.minimumLengthId !== itemId));
+            setItemsMin((prevItems) =>
+              prevItems.filter((item) => item.minimumLengthId !== itemId),
+            );
 
             console.log("List refreshed after deletion");
           } else {
@@ -1186,7 +1227,6 @@ const OccupancyAndMinimumLength = () => {
       }
     });
   };
-
 
   const handleViewMin = async (item) => {
     try {
@@ -1207,7 +1247,7 @@ const OccupancyAndMinimumLength = () => {
 
       // Fetch detailed minimum length data from API
       const viewRes = await axiosInstance.get(
-        `/api/hotels/${id}/minimumlengths/${itemId}`
+        `/api/hotels/${id}/minimumlengths/${itemId}`,
       );
       console.log("View API response:", viewRes.data);
       const data = viewRes.data;
@@ -1224,13 +1264,13 @@ const OccupancyAndMinimumLength = () => {
           validityTo: period.validityTo
             ? period.validityTo.substring(0, 16)
             : "",
-        })
+        }),
       );
 
       // Map hotel rooms correctly (same as edit)
       const mappedHotelRooms = (data.hotelRooms || []).map((room) => {
         const matchingCategory = hotelRoomsData.find(
-          (cat) => cat.rommCategoryId === room.roomId
+          (cat) => cat.rommCategoryId === room.roomId,
         );
         console.log(`View mapping room ${room.roomId}:`, {
           roomData: room,
@@ -1265,8 +1305,9 @@ const OccupancyAndMinimumLength = () => {
       console.error("Error status:", error.response?.status);
       console.error("Error message:", error.message);
       toast.error(
-        `Failed to load minimum length data for viewing: ${error.response?.data?.message || error.message
-        }`
+        `Failed to load minimum length data for viewing: ${
+          error.response?.data?.message || error.message
+        }`,
       );
     } finally {
       setIsLoading(false);
@@ -1301,7 +1342,7 @@ const OccupancyAndMinimumLength = () => {
 
       const res = await axiosInstance.patch(
         `/api/hotels/${id}/minimumlengths/${selectedItemMin.minimumLengthId}/status`,
-        payload
+        payload,
       );
 
       console.log("✅ API call successful!");
@@ -1327,8 +1368,9 @@ const OccupancyAndMinimumLength = () => {
         toast.error("Server error. Please check the backend logs.");
       } else {
         toast.error(
-          `Failed to update status: ${error.response?.data?.message || error.message
-          }`
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`,
         );
       }
     } finally {
@@ -1422,6 +1464,10 @@ const OccupancyAndMinimumLength = () => {
                   <Button
                     className="btn-green create-btn"
                     onClick={() => {
+                      loadMarketTypes();
+                      loadOccupancyTypes();
+                      loadHotelRoomDatas();
+
                       setEditingOcc(null);
                       setIsViewModeOcc(false);
                       setShowModalOcc(true);
@@ -1457,7 +1503,6 @@ const OccupancyAndMinimumLength = () => {
                                 Active
                               </Badge>
                             ) : (
-
                               <Badge
                                 bg="danger"
                                 style={{ cursor: "pointer" }}
@@ -1669,8 +1714,15 @@ const OccupancyAndMinimumLength = () => {
                                       e.target.value;
 
                                     // Clear Validity To if it becomes invalid (before or equal to From date)
-                                    const currentToDate = formDataOcc.validityPeriods[index].validityTo;
-                                    if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                    const currentToDate =
+                                      formDataOcc.validityPeriods[index]
+                                        .validityTo;
+                                    if (
+                                      currentToDate &&
+                                      e.target.value &&
+                                      new Date(currentToDate) <=
+                                        new Date(e.target.value)
+                                    ) {
                                       newPeriods[index].validityTo = "";
                                     }
 
@@ -1698,7 +1750,9 @@ const OccupancyAndMinimumLength = () => {
                                 <Form.Control
                                   type="datetime-local"
                                   value={period.validityTo || ""}
-                                  min={getMinValidityToDate(period.validityFrom)}
+                                  min={getMinValidityToDate(
+                                    period.validityFrom,
+                                  )}
                                   onChange={(e) => {
                                     const newPeriods = [
                                       ...formDataOcc.validityPeriods,
@@ -1732,7 +1786,7 @@ const OccupancyAndMinimumLength = () => {
                                     onClick={() => {
                                       const newPeriods =
                                         formDataOcc.validityPeriods.filter(
-                                          (_, i) => i !== index
+                                          (_, i) => i !== index,
                                         );
                                       setFormDataOcc({
                                         ...formDataOcc,
@@ -1774,8 +1828,8 @@ const OccupancyAndMinimumLength = () => {
                             <span>
                               {hotelRoomsData[roomIndex]?.roomCategory
                                 ? hotelRoomsData[
-                                  roomIndex
-                                ].roomCategory.toUpperCase()
+                                    roomIndex
+                                  ].roomCategory.toUpperCase()
                                 : `Room ${roomIndex + 1}`}
                             </span>
                             {hotelRoomsData[roomIndex]?.roomTypeDetailsDTOs && (
@@ -1942,7 +1996,7 @@ const OccupancyAndMinimumLength = () => {
                                           newRooms[
                                             roomIndex
                                           ].roomOccupancies.filter(
-                                            (_, i) => i !== occIndex
+                                            (_, i) => i !== occIndex,
                                           );
                                         setFormDataOcc({
                                           ...formDataOcc,
@@ -2328,8 +2382,15 @@ const OccupancyAndMinimumLength = () => {
                                       e.target.value;
 
                                     // Clear Validity To if it becomes invalid (before or equal to From date)
-                                    const currentToDate = formDataMin.validityPeriods[index].validityTo;
-                                    if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                    const currentToDate =
+                                      formDataMin.validityPeriods[index]
+                                        .validityTo;
+                                    if (
+                                      currentToDate &&
+                                      e.target.value &&
+                                      new Date(currentToDate) <=
+                                        new Date(e.target.value)
+                                    ) {
                                       newValidityPeriods[index].validityTo = "";
                                     }
 
@@ -2357,7 +2418,9 @@ const OccupancyAndMinimumLength = () => {
                                 <Form.Control
                                   type="datetime-local"
                                   value={period.validityTo || ""}
-                                  min={getMinValidityToDate(period.validityFrom)}
+                                  min={getMinValidityToDate(
+                                    period.validityFrom,
+                                  )}
                                   onChange={(e) => {
                                     const newValidityPeriods = [
                                       ...formDataMin.validityPeriods,
@@ -2391,7 +2454,7 @@ const OccupancyAndMinimumLength = () => {
                                     onClick={() => {
                                       const newValidityPeriods =
                                         formDataMin.validityPeriods.filter(
-                                          (_, i) => i !== index
+                                          (_, i) => i !== index,
                                         );
                                       setFormDataMin({
                                         ...formDataMin,
@@ -2455,7 +2518,7 @@ const OccupancyAndMinimumLength = () => {
                                       formDataMin.hotelRooms.find(
                                         (room) =>
                                           room.roomId ===
-                                          category.rommCategoryId.toString()
+                                          category.rommCategoryId.toString(),
                                       );
                                     console.log(
                                       `Finding minimum length for category ${category.rommCategoryId}:`,
@@ -2463,7 +2526,7 @@ const OccupancyAndMinimumLength = () => {
                                         categoryId: category.rommCategoryId,
                                         roomData: roomData,
                                         minimumLength: roomData?.minimumLength,
-                                      }
+                                      },
                                     );
                                     return roomData?.minimumLength || "";
                                   })()}
@@ -2475,7 +2538,7 @@ const OccupancyAndMinimumLength = () => {
                                       newHotelRooms.findIndex(
                                         (room) =>
                                           room.roomId ===
-                                          category.rommCategoryId.toString()
+                                          category.rommCategoryId.toString(),
                                       );
 
                                     if (existingRoomIndex >= 0) {
@@ -2502,21 +2565,21 @@ const OccupancyAndMinimumLength = () => {
                                   disabled={isViewModeMin}
                                   isInvalid={
                                     !!validationErrorsMin[
-                                    `minimumLength_${category.rommCategoryId}`
+                                      `minimumLength_${category.rommCategoryId}`
                                     ]
                                   }
                                 />
                                 {validationErrorsMin[
                                   `minimumLength_${category.rommCategoryId}`
                                 ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrorsMin[
+                                  <Form.Control.Feedback type="invalid">
+                                    {
+                                      validationErrorsMin[
                                         `minimumLength_${category.rommCategoryId}`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
+                                      ]
+                                    }
+                                  </Form.Control.Feedback>
+                                )}
                               </Form.Group>
                             </Col>
                           </Row>
@@ -2583,7 +2646,13 @@ const OccupancyAndMinimumLength = () => {
                     <div className="text-center">
                       <p className="mb-3">
                         Are you sure you want to{" "}
-                        <strong className={selectedItemMin.status ? "text-danger" : "text-success"}>
+                        <strong
+                          className={
+                            selectedItemMin.status
+                              ? "text-danger"
+                              : "text-success"
+                          }
+                        >
                           {selectedItemMin.status ? "deactivate" : "activate"}
                         </strong>{" "}
                         this minimum length?
@@ -2613,8 +2682,10 @@ const OccupancyAndMinimumLength = () => {
                         ></span>
                         Processing...
                       </>
+                    ) : selectedItemMin?.status ? (
+                      "Deactivate"
                     ) : (
-                      selectedItemMin?.status ? "Deactivate" : "Activate"
+                      "Activate"
                     )}
                   </Button>
                 </Modal.Footer>

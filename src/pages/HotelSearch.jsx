@@ -22,12 +22,12 @@ import "../styles/HotelSearch.css";
 function SearchProgressBar({ pollStatus, completedChannels }) {
   const channels = [
     "inhouse",
-    // "iwtx",
-    // "x3",
-    // "ratehawk",
-    // "darina",
-    // "atharva",
-    // "jumeirah",
+    "iwtx",
+    "x3",
+    "ratehawk",
+    "darina",
+    "atharva",
+    "jumeirah",
   ];
   const [progress, setProgress] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -375,12 +375,12 @@ export default function HotelSearch() {
 
   const channelTypeOptions = [
     { value: "inhouse", label: "Inhouse" },
-    // { value: "iwtx", label: "Iwtx" },
-    // { value: "x3", label: "x3" },
-    // { value: "atharva", label: "Atharva" },
-    // { value: "jumeirah", label: "Jumeirah" },
-    // { value: "ratehawk", label: "Ratehawk" },
-    // { value: "darina", label: "Darina" },
+    { value: "iwtx", label: "Iwtx" },
+    { value: "x3", label: "x3" },
+    { value: "atharva", label: "Atharva" },
+    { value: "jumeirah", label: "Jumeirah" },
+    { value: "ratehawk", label: "Ratehawk" },
+    { value: "darina", label: "Darina" },
   ];
 
   useEffect(() => {
@@ -670,7 +670,7 @@ export default function HotelSearch() {
             badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
             image:
               hotel.hotelImage ||
-              "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+              "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
             rating: hotel.starRating || 0,
             hotelType: "hotel",
             channelType: hotel.apiType?.toLowerCase() || "inhouse",
@@ -714,7 +714,7 @@ export default function HotelSearch() {
     params,
     checkComplete,
     onUpdate,
-    intervalMs = 4000,
+    intervalMs = 2000,
     timeoutMs = 20000,
     initialDelay = 2000,
   ) => {
@@ -826,12 +826,12 @@ export default function HotelSearch() {
 
       const expectedChannels = [
         "inhouse",
-        // "iwtx",
-        // "x3",
-        // "ratehawk",
-        // "darina",
-        // "atharva",
-        // "jumeirah",
+        "iwtx",
+        "x3",
+        "ratehawk",
+        "darina",
+        "atharva",
+        "jumeirah",
       ];
 
       await pollUntilComplete(
@@ -855,7 +855,7 @@ export default function HotelSearch() {
                 badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
                 image:
                   hotel.hotelImage ||
-                  "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+                  "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
                 rating: hotel.starRating || 0,
                 hotelType: "hotel",
                 channelType: hotel.apiType?.toLowerCase() || "inhouse",
@@ -899,7 +899,7 @@ export default function HotelSearch() {
             ),
           );
         },
-        4000,
+        2000,
         20000,
         2000,
       );
