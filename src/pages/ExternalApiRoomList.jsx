@@ -10,6 +10,8 @@ import {
   Spinner,
   Alert,
   Modal,
+  Tabs,
+  Tab,
 } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
@@ -66,6 +68,7 @@ const ExternalApiRoomList = () => {
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
   const [policyList, setPolicyList] = useState(null);
   const [selectedRate, setSelectedRate] = useState([]);
+  const [lowestRate, setLowestRate] = useState(Infinity);
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
 
@@ -112,6 +115,17 @@ const ExternalApiRoomList = () => {
           return;
         }
 
+        // Find global lowest rate for "Best Deal"
+        let globalMin = Infinity;
+        (res.data.hotels || []).forEach((h) => {
+          (h.roomCategories || []).forEach((c) => {
+            (c.availableRates || []).forEach((r) => {
+              if (r.totalRate < globalMin) globalMin = r.totalRate;
+            });
+          });
+        });
+        setLowestRate(globalMin);
+
         const enriched = {
           ...res.data,
           hotels: (res.data.hotels || []).map((h) => ({
@@ -132,6 +146,8 @@ const ExternalApiRoomList = () => {
           Array.from({ length: numRooms }, (_, i) => ({
             roomNo: i + 1,
             selectedRate: null,
+            hotelId: null,
+            hotelName: null,
           }))
         );
         setRoomData(enriched);
@@ -146,9 +162,11 @@ const ExternalApiRoomList = () => {
     fetchRooms();
   }, [location.state]);
 
-  const handleRateSelect = (roomIndex, rate) => {
+  const handleRateSelect = (roomIndex, rate, hotelId, hotelName) => {
     setSelectedRooms((prev) =>
-      prev.map((r, i) => (i === roomIndex ? { ...r, selectedRate: rate } : r))
+      prev.map((r, i) =>
+        i === roomIndex ? { ...r, selectedRate: rate, hotelId, hotelName } : r
+      )
     );
   };
 
@@ -156,9 +174,8 @@ const ExternalApiRoomList = () => {
     selectedRooms.length > 0 && selectedRooms.every((r) => r.selectedRate !== null);
 
   const handleBooking = async () => {
-    const { payload, hotels } = roomData;
-    const hotelsdetail = hotels[0];
-    const primaryRate = selectedRooms[0]?.selectedRate;
+    const firstRoomSelection = selectedRooms[0];
+    const primaryRate = firstRoomSelection?.selectedRate;
 
     if (payload.apiId === 12 || payload.apiId === 15) {
       setLoadingRate(true);
@@ -246,9 +263,9 @@ const ExternalApiRoomList = () => {
               primaryRate.roomRateBasedOnRoomCount_WithoutMarkup,
             roomStatus: r.selectedRate?.roomStatus,
             currency: "AED",
-            hotelId: hotelsdetail.hotelId,
-            hotelName: hotelsdetail.hotelName,
-            cancellationPolicy: hotelsdetail.cancellationPolicies,
+            hotelId: r.hotelId,
+            hotelName: r.hotelName,
+            cancellationPolicy: r.selectedRate?.cancellationPolicies,
           })),
           hotelStaticData: roomData.meta,
           payload: payload,
@@ -607,170 +624,187 @@ const ExternalApiRoomList = () => {
                       </Accordion.Header>
 
                       <Accordion.Body className="p-3">
-                        <Accordion>
-                          {hotel.roomCategories.map((category, catIndex) => {
-                            const innerKey = `${roomIndex}-${catIndex}`;
-                            const minRate = Math.min(
-                              ...category.availableRates.map((r) => r.totalRate || 0)
-                            );
-
+                        <Tabs defaultActiveKey={roomData.hotels[0]?.apiType} className="mb-3 provider-tabs">
+                          {roomData.hotels.map((providerHotel, provIndex) => {
+                            const apiType = providerHotel.roomCategories?.[0]?.apiType || providerHotel.hotelName.split("(").pop().replace(")", "") || `Provider ${provIndex + 1}`;
                             return (
-                              <Accordion.Item
-                                key={innerKey}
-                                eventKey={innerKey}
-                                className="room-category-item mb-3"
-                              >
-                                {/* INNER category header — visually lighter than outer */}
-                                <Accordion.Header
-                                  className="room-category-header"
-                                  style={{ backgroundColor: "#f4f6f9" }}
-                                >
-                                  <div className="d-flex justify-content-between align-items-center w-100 pe-3">
-                                    <div>
-                                      <h6 className="mb-0 fw-semibold text-dark" style={{ fontSize: "0.95rem" }}>
-                                        {category.roomCategory}
-                                      </h6>
-                                      <p className="mb-0 text-muted" style={{ fontSize: "0.8rem" }}>
-                                        {category.baseRoomType}
-                                      </p>
-                                    </div>
-                                    <div className="d-flex align-items-center gap-3">
-                                      <div className="text-end">
-                                        <div className="fw-semibold text-success" style={{ fontSize: "0.9rem" }}>
-                                          From {formatPrice(minRate)}
-                                        </div>
-                                        <div className="text-muted" style={{ fontSize: "0.78rem" }}>
-                                          {category.availableRates.length} rate{category.availableRates.length !== 1 ? "s" : ""} available
-                                        </div>
-                                      </div>
-                                      <span
-                                        style={{
-                                          fontSize: "0.78rem",
-                                          fontWeight: 600,
-                                          color: "#0d6efd",
-                                          border: "1px solid #0d6efd",
-                                          borderRadius: "4px",
-                                          padding: "2px 10px",
-                                          whiteSpace: "nowrap",
-                                        }}
+                              <Tab key={provIndex} eventKey={apiType} title={apiType}>
+                                <Accordion className="mt-2">
+                                  {providerHotel.roomCategories.map((category, catIndex) => {
+                                    const innerKey = `${roomIndex}-${provIndex}-${catIndex}`;
+                                    const minRate = Math.min(
+                                      ...category.availableRates.map((r) => r.totalRate || 0)
+                                    );
+
+                                    return (
+                                      <Accordion.Item
+                                        key={innerKey}
+                                        eventKey={innerKey}
+                                        className="room-category-item mb-3"
                                       >
-                                        View / Select
-                                      </span>
-                                    </div>
-                                  </div>
-                                </Accordion.Header>
-
-                                {/* ── RATE CARDS — layout matches screenshot ── */}
-                                <Accordion.Body className="room-rates-section p-3">
-                                  <Row className="g-3">
-                                    {category.availableRates.map((rate, rateIndex) => {
-                                      const radioId = `room${roomIndex}_cat${catIndex}_rate${rateIndex}`;
-                                      const isChecked = selectedRooms[roomIndex]?.selectedRate === rate;
-
-                                      return (
-                                        <Col xs={12} sm={5} md={4} key={rateIndex}>
-                                          <Card
-                                            className={`rate-selection-card ${isChecked ? "selected-rate-card" : ""}`}
-                                            onClick={() => handleRateSelect(roomIndex, rate)}
-                                            style={{
-                                              cursor: "pointer",
-                                              border: isChecked ? "2px solid #0d6efd" : "1px solid #e0e0e0",
-                                              borderRadius: "12px",
-                                              backgroundColor: isChecked ? "#f0f5ff" : "#fff",
-                                              boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
-                                              transition: "border-color 0.15s, background-color 0.15s",
-                                              minHeight: "380px",
-                                              display: "flex",
-                                              flexDirection: "column",
-                                            }}
-                                          >
-                                            <Card.Body className="p-4 d-flex flex-column">
-
-                                              {/* Section 1: meal plan title + refund badge + radio */}
-                                              <div className="d-flex justify-content-between align-items-start mb-2">
-                                                <div className="d-flex align-items-center gap-1 flex-wrap">
-                                                  {getMealPlanIcon(rate.mealPlan || "")}
-                                                  <span className="fw-bold" style={{ fontSize: "0.9rem" }}>
-                                                    {rate.mealPlan}
-                                                  </span>
-                                                  {getRefundStatusBadgeInRoomList(rate.nonRefundable)}
-                                                </div>
-                                                <input
-                                                  type="radio"
-                                                  name={`roomSelection_${roomIndex}`}
-                                                  id={radioId}
-                                                  checked={isChecked}
-                                                  onChange={() => handleRateSelect(roomIndex, rate)}
-                                                  onClick={(e) => e.stopPropagation()}
-                                                  className="rate-radio-input"
-                                                  style={{ transform: "scale(1.2)", cursor: "pointer", flexShrink: 0 }}
-                                                />
-                                              </div>
-
-                                              {/* Room status text */}
-                                              <div className="text-muted mb-3" style={{ fontSize: "0.82rem" }}>
-                                                {getRoomStatusBadge(rate.roomStatus)}
-                                              </div>
-
-                                              {/* Divider */}
-                                              <hr className="my-2" />
-
-                                              {/* Section 2: price block */}
-                                              <div className="text-center mb-3">
-                                                <div className="fw-bold text-success" style={{ fontSize: "1.4rem" }}>
-                                                  {formatPrice(rate.totalRate)}
+                                        <Accordion.Header
+                                          className="room-category-header"
+                                          style={{ backgroundColor: "#f4f6f9" }}
+                                        >
+                                          <div className="d-flex justify-content-between align-items-center w-100 pe-3">
+                                            <div>
+                                              <h6 className="mb-0 fw-semibold text-dark" style={{ fontSize: "0.95rem" }}>
+                                                {category.roomCategory}
+                                              </h6>
+                                              <p className="mb-0 text-muted" style={{ fontSize: "0.8rem" }}>
+                                                {category.baseRoomType}
+                                              </p>
+                                            </div>
+                                            <div className="d-flex align-items-center gap-3">
+                                              <div className="text-end">
+                                                <div className="fw-semibold text-success" style={{ fontSize: "0.9rem" }}>
+                                                  From {formatPrice(minRate)}
                                                 </div>
                                                 <div className="text-muted" style={{ fontSize: "0.78rem" }}>
-                                                  {formatPrice(rate.totalRate || 0)} × 1 rooms
-                                                </div>
-                                                <div className="text-muted" style={{ fontSize: "0.78rem" }}>
-                                                  per night
+                                                  {category.availableRates.length} rate{category.availableRates.length !== 1 ? "s" : ""} available
                                                 </div>
                                               </div>
-
-                                              {/* Divider */}
-                                              <hr className="my-2" />
-
-                                              {/* Section 3: contract + cancellation policy */}
-                                              <div className="mb-3" style={{ fontSize: "0.82rem" }}>
-                                                <div className="d-flex align-items-center gap-1 text-muted mb-1">
-                                                  <FaInfoCircle size={11} />
-                                                  <span>contract</span>
-                                                </div>
-                                                {rate.cancellationPolicies?.length > 0 && (
-                                                  <div className="d-flex align-items-start gap-1 text-muted">
-                                                    <FaShieldAlt size={11} style={{ marginTop: 2, flexShrink: 0 }} />
-                                                    <span>{rate.cancellationPolicies[0].policyText}</span>
-                                                  </div>
-                                                )}
-                                              </div>
-
-                                              {/* Section 4: full-width select button pinned to bottom */}
-                                              <Button
-                                                variant="primary"
-                                                className="w-100 mt-auto"
+                                              <span
                                                 style={{
-                                                  borderRadius: "8px",
+                                                  fontSize: "0.78rem",
                                                   fontWeight: 600,
-                                                  fontSize: "0.88rem",
-                                                  padding: "9px 0",
-                                                  opacity: isChecked ? 1 : 0.88,
+                                                  color: "#0d6efd",
+                                                  border: "1px solid #0d6efd",
+                                                  borderRadius: "4px",
+                                                  padding: "2px 10px",
+                                                  whiteSpace: "nowrap",
                                                 }}
                                               >
-                                                {isChecked ? "✓ Selected" : "View Details / Select"}
-                                              </Button>
+                                                View / Select
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </Accordion.Header>
 
-                                            </Card.Body>
-                                          </Card>
-                                        </Col>
-                                      );
-                                    })}
-                                  </Row>
-                                </Accordion.Body>
-                              </Accordion.Item>
+                                        <Accordion.Body className="room-rates-section p-3">
+                                          <Row className="g-3">
+                                            {category.availableRates.map((rate, rateIndex) => {
+                                              const radioId = `room${roomIndex}_prov${provIndex}_cat${catIndex}_rate${rateIndex}`;
+                                              const isChecked = selectedRooms[roomIndex]?.selectedRate === rate;
+                                              const isBestDeal = rate.totalRate === lowestRate;
+
+                                              return (
+                                                <Col xs={12} sm={5} md={4} key={rateIndex}>
+                                                  <Card
+                                                    className={`rate-selection-card ${isChecked ? "selected-rate-card" : ""}`}
+                                                    onClick={() => handleRateSelect(roomIndex, rate, providerHotel.hotelId, providerHotel.hotelName)}
+                                                    style={{
+                                                      cursor: "pointer",
+                                                      border: isChecked ? "2px solid #0d6efd" : "1px solid #e0e0e0",
+                                                      borderRadius: "12px",
+                                                      backgroundColor: isChecked ? "#f0f5ff" : "#fff",
+                                                      boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
+                                                      transition: "border-color 0.15s, background-color 0.15s",
+                                                      minHeight: "380px",
+                                                      display: "flex",
+                                                      flexDirection: "column",
+                                                      position: "relative",
+                                                    }}
+                                                  >
+                                                    {isBestDeal && (
+                                                      <Badge
+                                                        bg="warning"
+                                                        text="dark"
+                                                        style={{
+                                                          position: "absolute",
+                                                          top: "-10px",
+                                                          right: "10px",
+                                                          zIndex: 1,
+                                                          fontSize: "0.8rem",
+                                                          padding: "5px 10px",
+                                                          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                                                        }}
+                                                      >
+                                                        Best Deal
+                                                      </Badge>
+                                                    )}
+                                                    <Card.Body className="p-4 d-flex flex-column">
+                                                      <div className="d-flex justify-content-between align-items-start mb-2">
+                                                        <div className="d-flex align-items-center gap-1 flex-wrap">
+                                                          {getMealPlanIcon(rate.mealPlan || "")}
+                                                          <span className="fw-bold" style={{ fontSize: "0.9rem" }}>
+                                                            {rate.mealPlan}
+                                                          </span>
+                                                          {getRefundStatusBadgeInRoomList(rate.nonRefundable)}
+                                                        </div>
+                                                        <input
+                                                          type="radio"
+                                                          name={`roomSelection_${roomIndex}`}
+                                                          id={radioId}
+                                                          checked={isChecked}
+                                                          onChange={() => handleRateSelect(roomIndex, rate, providerHotel.hotelId, providerHotel.hotelName)}
+                                                          onClick={(e) => e.stopPropagation()}
+                                                          className="rate-radio-input"
+                                                          style={{ transform: "scale(1.2)", cursor: "pointer", flexShrink: 0 }}
+                                                        />
+                                                      </div>
+
+                                                      <div className="text-muted mb-3" style={{ fontSize: "0.82rem" }}>
+                                                        {getRoomStatusBadge(rate.roomStatus)}
+                                                      </div>
+
+                                                      <hr className="my-2" />
+
+                                                      <div className="text-center mb-3">
+                                                        <div className="fw-bold text-success" style={{ fontSize: "1.4rem" }}>
+                                                          {formatPrice(rate.totalRate)}
+                                                        </div>
+                                                        <div className="text-muted" style={{ fontSize: "0.78rem" }}>
+                                                          {formatPrice(rate.totalRate || 0)} × 1 rooms
+                                                        </div>
+                                                        <div className="text-muted" style={{ fontSize: "0.78rem" }}>
+                                                          per night
+                                                        </div>
+                                                      </div>
+
+                                                      <hr className="my-2" />
+
+                                                      <div className="mb-3" style={{ fontSize: "0.82rem" }}>
+                                                        <div className="d-flex align-items-center gap-1 text-muted mb-1">
+                                                          <FaInfoCircle size={11} />
+                                                          <span>contract: {rate.contractLabel || apiType}</span>
+                                                        </div>
+                                                        {rate.cancellationPolicies?.length > 0 && (
+                                                          <div className="d-flex align-items-start gap-1 text-muted">
+                                                            <FaShieldAlt size={11} style={{ marginTop: 2, flexShrink: 0 }} />
+                                                            <span>{rate.cancellationPolicies[0].policyText}</span>
+                                                          </div>
+                                                        )}
+                                                      </div>
+
+                                                      <Button
+                                                        variant="primary"
+                                                        className="w-100 mt-auto"
+                                                        style={{
+                                                          borderRadius: "8px",
+                                                          fontWeight: 600,
+                                                          fontSize: "0.88rem",
+                                                          padding: "9px 0",
+                                                          opacity: isChecked ? 1 : 0.88,
+                                                        }}
+                                                      >
+                                                        {isChecked ? "✓ Selected" : "View Details / Select"}
+                                                      </Button>
+                                                    </Card.Body>
+                                                  </Card>
+                                                </Col>
+                                              );
+                                            })}
+                                          </Row>
+                                        </Accordion.Body>
+                                      </Accordion.Item>
+                                    );
+                                  })}
+                                </Accordion>
+                              </Tab>
                             );
                           })}
-                        </Accordion>
+                        </Tabs>
                       </Accordion.Body>
                     </Accordion.Item>
                   );
