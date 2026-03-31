@@ -35,8 +35,8 @@ const UnMappingCity = () => {
     countryId: "",
     cityId: "",
     apiCountryId: "",
-    apiCityId: "",
-    search: "",
+    apiCityId: ""
+    
   });
 
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
@@ -192,12 +192,14 @@ const UnMappingCity = () => {
       return;
     }
 
+    console.log("filters::", filters);
     setLoading(true);
     try {
       const response = await axiosInstance.get("/api/cityMapping", {
         params: {
-          apiProvider: filters.apiProvider,
-          search: filters.search || "",
+          apiProvider: filters.apiProvider || "",
+          countryId: filters.countryId || "",
+          cityId: filters.cityId || "",
           page: 0,
           limit: 100,
         },
@@ -269,7 +271,8 @@ const UnMappingCity = () => {
 
           <Card className="border-0 shadow-sm mb-4 rounded-4">
             <Card.Body className="p-4">
-              <Row className="g-3">
+              <Row className="g-3">                
+
                 <Col md={3}>
                   <Form.Group>
                     <Form.Label className="fw-semibold small text-uppercase text-muted">
@@ -293,17 +296,16 @@ const UnMappingCity = () => {
                 <Col md={3}>
                   <Form.Group>
                     <Form.Label className="fw-semibold small text-uppercase text-muted">
-                      Platform Country
+                    Country
                     </Form.Label>
                     <AsyncSelect
                       key={`p-country-${filters.apiProvider}`}
                       cacheOptions
                       defaultOptions
                       placeholder="Search country..."
-                      value={selectedPlatformCountryOption}
-                      loadOptions={loadPlatformCountry(filters.apiProvider)}
-                      onChange={handlePlatformCountrySelect}
-                      isDisabled={!filters.apiProvider}
+                      value={selectedCountryOption}
+                      loadOptions={loadCountries}
+                      onChange={handleCountrySelect}
                       styles={selectStyles}
                       menuPortalTarget={document.body}
                     />
@@ -313,20 +315,17 @@ const UnMappingCity = () => {
                 <Col md={3}>
                   <Form.Group>
                     <Form.Label className="fw-semibold small text-uppercase text-muted">
-                      Platform City
+                    City
                     </Form.Label>
                     <AsyncSelect
                       key={`p-city-${filters.apiProvider}-${filters.apiCountryId}`}
                       cacheOptions
                       defaultOptions
                       placeholder="Search city..."
-                      value={selectedPlatformCityOption}
-                      loadOptions={loadPlatformCity(
-                        filters.apiProvider,
-                        filters.apiCountryId,
-                      )}
-                      onChange={handlePlatformCitySelect}
-                      isDisabled={!filters.apiCountryId}
+                      value={selectedCityOption}
+                      loadOptions={loadCities}
+                      onChange={handleCitySelect}
+                      isDisabled={!filters.countryId}
                       styles={selectStyles}
                       menuPortalTarget={document.body}
                     />
