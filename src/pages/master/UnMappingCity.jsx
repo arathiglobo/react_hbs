@@ -34,18 +34,42 @@ const UnMappingCity = () => {
     apiProvider: "",
     countryId: "",
     cityId: "",
+    apiCountryId: "",
+    apiCityId: "",
     search: "",
   });
 
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [selectedCityOption, setSelectedCityOption] = useState(null);
+  const [selectedPlatformCountryOption, setSelectedPlatformCountryOption] =
+    useState(null);
+  const [selectedPlatformCityOption, setSelectedPlatformCityOption] =
+    useState(null);
 
   // Modal State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [itemToUnmap, setItemToUnmap] = useState(null);
   const [isUnmapping, setIsUnmapping] = useState(false);
 
-  // Load countries for filter
+  const platformCountryApis = {
+    Iwtx: { countries: "api/iwtx/countrylist" },
+    Darina: { countries: "/api/darina/countrylist" },
+    Jumeirah: { countries: "/api/jumeirah/countrylist" },
+    X3: { countries: "api/iwtx/countrylist" },
+    Ratehawk: { countries: "/api/ratehawk/countrylist" },
+    Atharva: { countries: "/api/atharva/countrylist" },
+  };
+
+  const platformCityApis = {
+    Iwtx: { cities: "api/iwtx/citylist" },
+    Darina: { cities: "/api/darina/citylist" },
+    Jumeirah: { cities: "/api/jumeirah/citylist" },
+    X3: { cities: "/api/iwtx/citylist" },
+    Ratehawk: { cities: "/api/ratehawk/citylist" },
+    Atharva: { cities: "/api/atharva/citylist" },
+  };
+
+  // 1. Load Master Countries
   const loadCountries = async (inputValue) => {
     try {
       const response = await axiosInstance.get("/api/country", {
@@ -58,7 +82,7 @@ const UnMappingCity = () => {
     }
   };
 
-  // Load cities for filter
+  // 2. Load Master Cities
   const loadCities = async (inputValue) => {
     if (!filters.countryId) return [];
     try {
@@ -72,6 +96,44 @@ const UnMappingCity = () => {
       }));
     } catch (error) {
       console.error("Error loading cities:", error);
+      return [];
+    }
+  };
+
+  // 3. Load Platform Countries
+  const loadPlatformCountry = (platform) => async (inputValue) => {
+    if (!platform) return [];
+    try {
+      const apiUrl = platformCountryApis[platform]?.countries;
+      if (!apiUrl) return [];
+      const response = await axiosInstance.get(apiUrl, {
+        params: { search: inputValue },
+      });
+      return response.data.map((c) => ({
+        value: c.id || c.countryId,
+        label: c.name || c.countryName,
+      }));
+    } catch (error) {
+      console.error("Error loading platform countries:", error);
+      return [];
+    }
+  };
+
+  // 4. Load Platform Cities
+  const loadPlatformCity = (platform, countryId) => async (inputValue) => {
+    if (!platform || !countryId) return [];
+    try {
+      const apiUrl = platformCityApis[platform]?.cities;
+      if (!apiUrl) return [];
+      const response = await axiosInstance.get(apiUrl, {
+        params: { search: inputValue, countryId: countryId },
+      });
+      return response.data.map((c) => ({
+        value: c.cityId || c.id,
+        label: c.cityName || c.name,
+      }));
+    } catch (error) {
+      console.error("Error loading platform cities:", error);
       return [];
     }
   };
@@ -94,11 +156,34 @@ const UnMappingCity = () => {
     }));
   };
 
-  const handlePlatformChange = (e) => {
+  const handlePlatformCountrySelect = (option) => {
+    setSelectedPlatformCountryOption(option);
     setFilters((prev) => ({
       ...prev,
-      apiProvider: e.target.value,
+      apiCountryId: option ? option.value : "",
+      apiCityId: "",
     }));
+    setSelectedPlatformCityOption(null);
+  };
+
+  const handlePlatformCitySelect = (option) => {
+    setSelectedPlatformCityOption(option);
+    setFilters((prev) => ({
+      ...prev,
+      apiCityId: option ? option.value : "",
+    }));
+  };
+
+  const handlePlatformChange = (e) => {
+    const platform = e.target.value;
+    setFilters((prev) => ({
+      ...prev,
+      apiProvider: platform,
+      apiCountryId: "",
+      apiCityId: "",
+    }));
+    setSelectedPlatformCountryOption(null);
+    setSelectedPlatformCityOption(null);
   };
 
   const fetchMappings = async () => {
@@ -118,9 +203,6 @@ const UnMappingCity = () => {
         },
       });
       setMappings(response.data || []);
-      if (response.data?.length === 0) {
-        toast.info("No mapped cities found for the selected filters");
-      }
     } catch (error) {
       console.error("Error fetching mappings:", error);
       toast.error("Failed to fetch mappings");
@@ -136,21 +218,19 @@ const UnMappingCity = () => {
 
   const handleUnmap = async () => {
     if (!itemToUnmap) return;
-
     setIsUnmapping(true);
+
+    console.log("itemToUnmap::", itemToUnmap);
     try {
-      const { id, countryId, apiProvider } = itemToUnmap;
-      // Endpoint: api/cityMapping/unmap?id=?&countryId=?&apiProvider=?
-      await axiosInstance.post(`/api/cityMapping/unmap`, null, {
+      const { id, masterCountryId, apiProvider } = itemToUnmap;
+      await axiosInstance.delete("/api/cityMapping/unmap", {
         params: {
-          id,
-          countryId,
-          apiProvider,
+          id: id,
+          countryId: masterCountryId, 
+          apiProvider: apiProvider,
         },
       });
-
       toast.success("City unmapped successfully ✅");
-      // Optimistic UI update
       setMappings((prev) => prev.filter((m) => m.id !== id));
       setShowConfirmModal(false);
       setItemToUnmap(null);
@@ -169,9 +249,7 @@ const UnMappingCity = () => {
       border: "1px solid #dee2e6",
       borderRadius: "6px",
       fontSize: "0.875rem",
-      "&:hover": {
-        borderColor: "#86b7fe",
-      },
+      "&:hover": { borderColor: "#86b7fe" },
     }),
     menuPortal: (base) => ({ ...base, zIndex: 9999 }),
   };
@@ -184,16 +262,19 @@ const UnMappingCity = () => {
         <main className="flex-grow-1 p-4">
           <div className="mb-4">
             <h3 className="fw-bold text-dark mb-1">City Unmapping</h3>
-            <p className="text-muted">View and remove mapped cities from external API platforms.</p>
+            <p className="text-muted">
+              View and remove mapped cities from external API platforms.
+            </p>
           </div>
 
-          {/* Filters Card */}
           <Card className="border-0 shadow-sm mb-4 rounded-4">
             <Card.Body className="p-4">
-              <Row className="g-3 align-items-end">
+              <Row className="g-3">
                 <Col md={3}>
                   <Form.Group>
-                    <Form.Label className="fw-semibold small text-uppercase text-muted">Platform</Form.Label>
+                    <Form.Label className="fw-semibold small text-uppercase text-muted">
+                      Platform
+                    </Form.Label>
                     <Form.Select
                       value={filters.apiProvider}
                       onChange={handlePlatformChange}
@@ -201,7 +282,9 @@ const UnMappingCity = () => {
                     >
                       <option value="">Select Platform</option>
                       {platforms.map((p, idx) => (
-                        <option key={idx} value={p}>{p}</option>
+                        <option key={idx} value={p}>
+                          {p}
+                        </option>
                       ))}
                     </Form.Select>
                   </Form.Group>
@@ -209,14 +292,18 @@ const UnMappingCity = () => {
 
                 <Col md={3}>
                   <Form.Group>
-                    <Form.Label className="fw-semibold small text-uppercase text-muted">Country</Form.Label>
+                    <Form.Label className="fw-semibold small text-uppercase text-muted">
+                      Platform Country
+                    </Form.Label>
                     <AsyncSelect
+                      key={`p-country-${filters.apiProvider}`}
                       cacheOptions
                       defaultOptions
                       placeholder="Search country..."
-                      value={selectedCountryOption}
-                      loadOptions={loadCountries}
-                      onChange={handleCountrySelect}
+                      value={selectedPlatformCountryOption}
+                      loadOptions={loadPlatformCountry(filters.apiProvider)}
+                      onChange={handlePlatformCountrySelect}
+                      isDisabled={!filters.apiProvider}
                       styles={selectStyles}
                       menuPortalTarget={document.body}
                     />
@@ -225,30 +312,40 @@ const UnMappingCity = () => {
 
                 <Col md={3}>
                   <Form.Group>
-                    <Form.Label className="fw-semibold small text-uppercase text-muted">City</Form.Label>
+                    <Form.Label className="fw-semibold small text-uppercase text-muted">
+                      Platform City
+                    </Form.Label>
                     <AsyncSelect
+                      key={`p-city-${filters.apiProvider}-${filters.apiCountryId}`}
                       cacheOptions
                       defaultOptions
                       placeholder="Search city..."
-                      value={selectedCityOption}
-                      loadOptions={loadCities}
-                      onChange={handleCitySelect}
-                      isDisabled={!filters.countryId}
+                      value={selectedPlatformCityOption}
+                      loadOptions={loadPlatformCity(
+                        filters.apiProvider,
+                        filters.apiCountryId,
+                      )}
+                      onChange={handlePlatformCitySelect}
+                      isDisabled={!filters.apiCountryId}
                       styles={selectStyles}
                       menuPortalTarget={document.body}
                     />
                   </Form.Group>
                 </Col>
 
-                <Col md={3}>
-                  <Button 
-                    variant="primary" 
+                <Col md={3} className="d-flex align-items-end">
+                  <Button
+                    variant="primary"
                     className="w-100 btn-lg fs-6 fw-bold d-flex align-items-center justify-content-center"
                     onClick={fetchMappings}
                     style={{ height: "38px" }}
                     disabled={loading}
                   >
-                    {loading ? <Spinner size="sm" className="me-2" /> : <FaSearch className="me-2" />}
+                    {loading ? (
+                      <Spinner size="sm" className="me-2" />
+                    ) : (
+                      <FaSearch className="me-2" />
+                    )}
                     Search
                   </Button>
                 </Col>
@@ -256,64 +353,74 @@ const UnMappingCity = () => {
             </Card.Body>
           </Card>
 
-          {/* Table Card */}
           <Card className="border-0 shadow-sm rounded-4 overflow-hidden">
             <Card.Body className="p-0">
-              <div className="p-3 bg-white border-bottom d-flex justify-content-between align-items-center">
+              <div className="p-3 bg-white border-bottom">
                 <h5 className="mb-0 fw-bold">Mapped Data Overview</h5>
               </div>
-              <Table hover responsive className="mb-0 custom-table bg-white">
+              <Table
+                striped
+                bordered
+                hover
+                responsive
+                className="un-mapping-table"
+              >
                 <thead className="bg-light text-muted small text-uppercase">
                   <tr>
                     <th className="px-4 py-3 border-0">API Provider</th>
-                    <th className="py-3 border-0">Country</th>
-                    <th className="py-3 border-0">City</th>
-                    <th className="py-3 border-0">Mapped Code</th>
+                    <th className="py-3 border-0 text-start">Country</th>
+                    <th className="py-3 border-0 text-start">City</th>
+                    <th className="py-3 border-0">Mapped Id</th>
                     <th className="py-3 border-0">Status</th>
-                    <th className="py-3 border-0 text-center">Action</th>
+                    <th className="py-3 border-0">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="6" className="text-center py-5">
-                        <Spinner animation="border" variant="primary" size="sm" className="me-2" />
-                        <span className="text-muted">Loading mappings...</span>
+                      <td colSpan="6" className="py-5">
+                        <Spinner
+                          animation="border"
+                          variant="primary"
+                          size="sm"
+                        />
+                        <span className="ms-2">Loading...</span>
                       </td>
                     </tr>
                   ) : mappings.length > 0 ? (
                     mappings.map((item, idx) => (
                       <tr key={idx} className="align-middle border-bottom">
-                        <td className="px-4 py-3 fw-medium text-dark">{item.apiProvider}</td>
-                        <td className="py-3">{item.countryName || item.masterCountryName || "N/A"}</td>
-                        <td className="py-3">{item.cityName || item.masterCityName || "N/A"}</td>
-                        <td className="py-3">
-                          <code className="bg-light text-primary px-2 py-1 rounded small">
-                            {item.apiCityId || item.mappedCode || "N/A"}
-                          </code>
+                        <td className="px-4 py-3 fw-medium">
+                          {item.apiProvider}
                         </td>
+                        <td className="py-3 text-start">
+                          {item.apiCountryCode || "-"}
+                        </td>
+                        <td className="py-3 text-start">
+                          {item.apiCityCode || "-"}
+                        </td>
+                        <td className="py-3">{item.id}</td>
                         <td className="py-3">
-                          <Badge bg="success-subtle" className="text-success border border-success-subtle px-3 py-2 rounded-pill fw-medium">
+                          <span bg="success-subtle" className="text-success">
                             Active
-                          </Badge>
+                          </span>
                         </td>
-                        <td className="py-3 text-center">
+                        <td className="py-3">
                           <Button
                             variant="outline-danger"
                             size="sm"
-                            className="rounded-pill px-3 d-inline-flex align-items-center"
+                            className="rounded-pill px-3"
                             onClick={() => initiateUnmap(item)}
                           >
-                            <FaUnlink className="me-2" />
-                            Un Map
+                            <FaUnlink className="me-1" /> Un Map
                           </Button>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="text-center py-5 text-muted">
-                        No mapped data found. Please select a platform and search.
+                      <td colSpan="6" className="py-5 text-muted">
+                        No mappings found.
                       </td>
                     </tr>
                   )}
@@ -322,39 +429,50 @@ const UnMappingCity = () => {
             </Card.Body>
           </Card>
 
-          {/* Confirmation Modal */}
-          <Modal show={showConfirmModal} onHide={() => !isUnmapping && setShowConfirmModal(false)} centered border="0">
-            <Modal.Header closeButton style={{ borderBottom: "none" }}>
-              <Modal.Title className="d-flex align-items-center text-danger h5">
-                <FaExclamationTriangle className="me-2" />
-                Confirm Unmapping
+          <Modal
+            show={showConfirmModal}
+            onHide={() => !isUnmapping && setShowConfirmModal(false)}
+            centered
+          >
+            <Modal.Header closeButton className="border-0">
+              <Modal.Title className="text-danger h5 d-flex align-items-center">
+                <FaExclamationTriangle className="me-2" /> Confirm Unmapping
               </Modal.Title>
             </Modal.Header>
-            <Modal.Body className="py-4">
-              <p className="text-secondary mb-4">Are you sure you want to unmap this city? This action cannot be undone.</p>
-              
-              <div className="p-3 bg-light rounded-3">
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted small">Provider:</span>
-                  <span className="fw-bold">{itemToUnmap?.apiProvider}</span>
+            <Modal.Body>
+              <p>Are you sure you want to unmap this city?</p>
+              {/* <div className="p-3 bg-light rounded shadow-sm">
+                <div className="d-flex justify-content-between mb-1">
+                  <span className="text-muted">Provider:</span>{" "}
+                  <strong>{itemToUnmap?.apiProvider}</strong>
                 </div>
                 <div className="d-flex justify-content-between">
-                  <span className="text-muted small">City:</span>
-                  <span className="fw-bold">{itemToUnmap?.cityName || itemToUnmap?.masterCityName}</span>
+                  {" "}
+                  <span className="text-muted">City:</span>{" "}
+                  <strong>
+                    {itemToUnmap?.cityName || itemToUnmap?.masterCityName}
+                  </strong>
                 </div>
-              </div>
+              </div> */}
             </Modal.Body>
-            <Modal.Footer style={{ borderTop: "none" }}>
-              <Button variant="light" onClick={() => setShowConfirmModal(false)} disabled={isUnmapping} className="px-4">
+            <Modal.Footer className="border-0">
+              <Button
+                variant="light"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isUnmapping}
+              >
                 Cancel
               </Button>
-              <Button variant="danger" onClick={handleUnmap} disabled={isUnmapping} className="px-4">
-                {isUnmapping ? <Spinner size="sm" className="me-2" /> : null}
-                Un Map
+              <Button
+                variant="danger"
+                onClick={handleUnmap}
+                disabled={isUnmapping}
+              >
+                {isUnmapping ? <Spinner size="sm" className="me-2" /> : null} Un
+                Map
               </Button>
             </Modal.Footer>
           </Modal>
-
         </main>
       </div>
     </div>
