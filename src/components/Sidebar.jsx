@@ -121,15 +121,14 @@ export default function Sidebar() {
             { label: "Hotel", to: "/masters/hotel-mapping" }, 
           ],
         },
-        //need to uncomment once implemented
-        // {
-        //   label: "UnMapping settings",
-        //   children: [
-        //     { label: "Country", to: "/masters/country-unmapping" },
-        //     { label: "City", to: "/masters/city-unmapping" },
-        //     { label: "Hotel", to: "/masters/hotel-unmapping" },
-        //   ],
-        // },
+        {
+          label: "UnMapping settings",
+          children: [
+            // { label: "Country", to: "/masters/country-unmapping" },
+            { label: "City", to: "/masters/city-unmapping" },
+            // { label: "Hotel", to: "/masters/hotel-unmapping" },
+          ],
+        },
         {
           label: "Hotel settings",
           children: [
