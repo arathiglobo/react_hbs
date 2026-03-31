@@ -69,6 +69,17 @@ const ExternalApiRoomList = () => {
   const [policyList, setPolicyList] = useState(null);
   const [selectedRate, setSelectedRate] = useState([]);
   const [lowestRate, setLowestRate] = useState(Infinity);
+  const [selectedProvider, setSelectedProvider] = useState("");
+  const [selectedApiId, setSelectedApiId] = useState(null);
+
+  const apiIdMapping = {
+    JUMEIRAH: 10,
+    IWTX: 12,
+    X3: 15,
+    RATEHAWK: 14,
+    DARINA: 16,
+    ATHARVA: 3,
+  };
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
 
@@ -151,6 +162,15 @@ const ExternalApiRoomList = () => {
           }))
         );
         setRoomData(enriched);
+
+        if (enriched.hotels && enriched.hotels.length > 0) {
+          const firstHotel = enriched.hotels[0];
+          const firstApiType =
+            firstHotel.apiType ||
+            firstHotel.hotelName.split("(").pop().replace(")", "");
+          setSelectedProvider(firstApiType);
+          setSelectedApiId(apiIdMapping[firstApiType.toUpperCase()] || payload.apiId);
+        }
       } catch (err) {
         console.error("Room search failed:", err);
         setError("Search failed. Please try again.");
@@ -161,6 +181,11 @@ const ExternalApiRoomList = () => {
 
     fetchRooms();
   }, [location.state]);
+
+  const handleTabSelect = (apiType) => {
+    setSelectedProvider(apiType);
+    setSelectedApiId(apiIdMapping[apiType.toUpperCase()] || payload.apiId);
+  };
 
   const handleRateSelect = (roomIndex, rate, hotelId, hotelName) => {
     setSelectedRooms((prev) =>
@@ -176,8 +201,10 @@ const ExternalApiRoomList = () => {
   const handleBooking = async () => {
     const firstRoomSelection = selectedRooms[0];
     const primaryRate = firstRoomSelection?.selectedRate;
+    const currentApiId = selectedApiId || payload.apiId;
 
-    if (payload.apiId === 12 || payload.apiId === 15) {
+    if (currentApiId === 12 || currentApiId === 15) {
+      console.log("inside 12 or 15 api id");
       setLoadingRate(true);
       setTimeout(async () => {
         try {
@@ -211,13 +238,10 @@ const ExternalApiRoomList = () => {
           };
 
           let endpoint = "";
-          switch (payload.apiId) {
-            case 12:
-              endpoint = "/api/iwtx/hotel/availability";
-              break;
-            case 15:
-              endpoint = "/api/x3/hotel/availability";
-              break;
+          if (currentApiId === 12) {
+            endpoint = "/api/iwtx/hotel/availability";
+          } else {
+            endpoint = "/api/x3/hotel/availability";
           }
 
           const response = await axiosInstance.post(endpoint, priceCheckReq);
@@ -248,6 +272,7 @@ const ExternalApiRoomList = () => {
         }
       }, 3000);
     } else {
+      console.log("inside other api id");
       try {
         const bookingData = {
           selectedRate: selectedRooms.map((r, i) => ({
@@ -268,7 +293,7 @@ const ExternalApiRoomList = () => {
             cancellationPolicy: r.selectedRate?.cancellationPolicies,
           })),
           hotelStaticData: roomData.meta,
-          payload: payload,
+          payload: { ...payload, apiId: currentApiId },
         };
 
         console.log("bookingData::", bookingData);
@@ -624,9 +649,16 @@ const ExternalApiRoomList = () => {
                       </Accordion.Header>
 
                       <Accordion.Body className="p-3">
-                        <Tabs defaultActiveKey={roomData.hotels[0]?.apiType} className="mb-3 provider-tabs">
+                        <Tabs 
+                          activeKey={selectedProvider} 
+                          onSelect={handleTabSelect}
+                          className="mb-3 provider-tabs"
+                        >
                           {roomData.hotels.map((providerHotel, provIndex) => {
-                            const apiType = providerHotel.roomCategories?.[0]?.apiType || providerHotel.hotelName.split("(").pop().replace(")", "") || `Provider ${provIndex + 1}`;
+                            const apiType = 
+                              providerHotel.apiType || 
+                              providerHotel.hotelName.split("(").pop().replace(")", "") || 
+                              `Provider ${provIndex + 1}`;
                             return (
                               <Tab key={provIndex} eventKey={apiType} title={apiType}>
                                 <Accordion className="mt-2">
