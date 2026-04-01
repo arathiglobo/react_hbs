@@ -10,6 +10,7 @@ import {
   Alert,
   Form,
   Pagination,
+  Modal,
 } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
@@ -25,6 +26,7 @@ import {
   FaEdit,
   FaTrash,
   FaSearch,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import "../../styles/HotelList.css";
 
@@ -33,7 +35,10 @@ const HotelList = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [hotelToDelete, setHotelToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -55,12 +60,15 @@ const HotelList = () => {
         params.append("search", search.trim());
       }
 
-      const response = await axiosInstance.get(`/api/hotels?${params.toString()}`, {
-        timeout: 0,
-      });
+      const response = await axiosInstance.get(
+        `/api/hotels?${params.toString()}`,
+        {
+          timeout: 0,
+        },
+      );
 
       console.log("Hotels response:", response.data);
-      
+
       // Handle both array response and paginated object response
       if (Array.isArray(response.data)) {
         setFilteredHotels(response.data);
@@ -75,7 +83,7 @@ const HotelList = () => {
         setTotalPages(response.data.totalPages || 0);
         setTotalElements(response.data.totalElements || 0);
       }
-      
+
       setCurrentPage(page);
       setError(null);
     } catch (error) {
@@ -86,7 +94,6 @@ const HotelList = () => {
       setIsLoading(false);
     }
   };
-
 
   // Handle search input change
   const handleSearchChange = (e) => {
@@ -116,10 +123,40 @@ const HotelList = () => {
     navigate(`/registration/hotel/create/${hotelId}`);
   };
 
+  // Trigger delete confirmation modal
+  const confirmDelete = (hotelId) => {
+    setHotelToDelete(hotelId);
+    setShowDeleteModal(true);
+  };
+
   // Handle delete hotel
-  const handleDeleteHotel = (hotelId) => {
-    // You can implement delete functionality here
-    console.log("Delete hotel:", hotelId);
+  const handleDeleteHotel = async () => {
+    if (!hotelToDelete) return;
+
+    try {
+      setIsDeleting(true);
+      const response = await axiosInstance.delete(`/api/hotels/${hotelToDelete}`);
+
+      console.log("Hotel deleted:", response.data);
+
+      // ✅ Show success toast (use backend message)
+      toast.success(response.data || "Hotel deleted successfully");
+
+      // ✅ Remove deleted hotel from UI instantly
+      setFilteredHotels((prevHotels) =>
+        prevHotels.filter((hotel) => hotel.id !== hotelToDelete),
+      );
+
+      // ✅ Optional: update totalElements (if pagination used)
+      setTotalElements((prev) => prev - 1);
+      setShowDeleteModal(false);
+      setHotelToDelete(null);
+    } catch (error) {
+      console.error("Error while deleting hotel:", error);
+      toast.error("Failed to delete hotel");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Get star rating display
@@ -328,7 +365,7 @@ const HotelList = () => {
                                   size="sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleDeleteHotel(hotel.id);
+                                    confirmDelete(hotel.id);
                                   }}
                                   className="flex-fill rounded-pill"
                                 >
@@ -345,38 +382,81 @@ const HotelList = () => {
                 )}
 
                 {/* Pagination Controls */}
-                {!isLoading && !error && (totalPages > 1 || totalElements > pageSize) && (
-                  <div className="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                    <div className="text-muted small">
-                      Showing {filteredHotels.length} hotels
-                      {totalElements > 0 && ` of ${totalElements}`}
+                {!isLoading &&
+                  !error &&
+                  (totalPages > 1 || totalElements > pageSize) && (
+                    <div className="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                      <div className="text-muted small">
+                        Showing {filteredHotels.length} hotels
+                        {totalElements > 0 && ` of ${totalElements}`}
+                      </div>
+                      <Pagination className="mb-0 custom-pagination">
+                        <Pagination.Prev
+                          disabled={currentPage === 0}
+                          onClick={() => loadHotels(currentPage - 1)}
+                        />
+                        {[...Array(totalPages).keys()].map((num) => (
+                          <Pagination.Item
+                            key={num}
+                            active={num === currentPage}
+                            onClick={() => loadHotels(num)}
+                          >
+                            {num + 1}
+                          </Pagination.Item>
+                        ))}
+                        <Pagination.Next
+                          disabled={currentPage >= totalPages - 1}
+                          onClick={() => loadHotels(currentPage + 1)}
+                        />
+                      </Pagination>
                     </div>
-                    <Pagination className="mb-0 custom-pagination">
-                      <Pagination.Prev
-                        disabled={currentPage === 0}
-                        onClick={() => loadHotels(currentPage - 1)}
-                      />
-                      {[...Array(totalPages).keys()].map((num) => (
-                        <Pagination.Item
-                          key={num}
-                          active={num === currentPage}
-                          onClick={() => loadHotels(num)}
-                        >
-                          {num + 1}
-                        </Pagination.Item>
-                      ))}
-                      <Pagination.Next
-                        disabled={currentPage >= totalPages - 1}
-                        onClick={() => loadHotels(currentPage + 1)}
-                      />
-                    </Pagination>
-                  </div>
-                )}
+                  )}
               </Card.Body>
             </Card>
           </Container>
         </main>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        show={showDeleteModal}
+        onHide={() => !isDeleting && setShowDeleteModal(false)}
+        centered
+      >
+        <Modal.Header closeButton className="border-0">
+          <Modal.Title className="text-danger h5 d-flex align-items-center">
+            <FaExclamationTriangle className="me-2" /> Confirm Deletion
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="py-0">
+          <p className="mb-0">Are u sure u want delete this hotel</p>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="light"
+            onClick={() => setShowDeleteModal(false)}
+            disabled={isDeleting}
+            className="rounded-pill px-4"
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={handleDeleteHotel}
+            disabled={isDeleting}
+            className="rounded-pill px-4"
+          >
+            {isDeleting ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Deleting...
+              </>
+            ) : (
+              "Yes"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };
