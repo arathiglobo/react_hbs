@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   Button,
@@ -36,59 +36,50 @@ export default function Invoice() {
   const [toDate, setToDate] = useState("");
   const [agent, setAgent] = useState("");
   const [agents, setAgents] = useState([]);
-  const [agentsLoaded, setAgentsLoaded] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfUrl, setPdfUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const agentList = async () => {
-    if (agentsLoaded) return; // Don't fetch if already loaded
-    
     try {
       const response = await axiosInstance.get("/api/agent");
       setAgents(response.data || []);
-      setAgentsLoaded(true);
     } catch (error) {
       console.log("error for agent axios list:", error);
       setAgents([]);
     }
   };
 
-  const handleAgentDropdownClick = () => {
+  useEffect(() => {
     agentList();
-  };
+  }, []);
 
   const fetchInvoiceData = async () => {
-    if (!agent) {
-      setError("Please select an agent");
-      toast.error("Please select an agent");
-      return;
-    }
-
     setIsLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
-      if (fromDate) {
-        params.append("fromDate", fromDate);
-      }
-      if (toDate) {
-        params.append("toDate", toDate);
-      }
+      if (fromDate) params.append("fromDate", fromDate);
+      if (toDate) params.append("toDate", toDate);
+      if (agent) params.append("agent", agent);
+      params.append("page", "0");
+      params.append("limit", "100");
       
-      const queryString = params.toString();
-      const url = `/api/invoice-generation/data/${agent}${queryString ? `?${queryString}` : ""}`;
+      const response = await axiosInstance.get(`/api/bookings/full-list?${params.toString()}`);
       
-      const response = await axiosInstance.get(url);
-      setInvoiceList(Array.isArray(response.data) ? response.data : []);
-      if (response.data && Array.isArray(response.data) && response.data.length === 0) {
-        toast.success("No invoices found for the selected criteria");
+      if (response.data && response.data.success) {
+        setInvoiceList(response.data.bookings?.content || []);
+        if (response.data.bookings?.content?.length === 0) {
+          toast.success("No bookings found for the selected criteria");
+        }
+      } else {
+        setError(response.data?.message || "Failed to fetch bookings");
+        setInvoiceList([]);
       }
     } catch (err) {
-     
-      setError(err.response.data.message);
-      
+      console.error("Error fetching bookings:", err);
+      setError(err.response?.data?.message || "An error occurred while fetching bookings");
       setInvoiceList([]);
     } finally {
       setIsLoading(false);
@@ -180,7 +171,7 @@ export default function Invoice() {
   const handleInvoiceVoucherClick = async (invoice) => {
     try {
       // Assuming the ID is hotelId or bookingId - adjust based on your data structure
-      const invoiceId = invoice.bookingId || invoice.hotelId || invoice.id;
+      const invoiceId = invoice.bookingId || invoice.hotelId || invoice.id || invoice.bookingCode;
       
       if (!invoiceId) {
         toast.error("Invoice ID not found");
@@ -210,7 +201,7 @@ export default function Invoice() {
   const handleTaxVoucherClick = async (invoice) => {
     try {
       // Assuming the ID is hotelId or bookingId - adjust based on your data structure
-      const invoiceId = invoice.bookingId || invoice.hotelId || invoice.id;
+      const invoiceId = invoice.bookingId || invoice.hotelId || invoice.id || invoice.bookingCode;
       
       if (!invoiceId) {
         toast.error("Invoice ID not found");
@@ -336,8 +327,7 @@ export default function Invoice() {
                       <Form.Select
                         value={agent}
                         onChange={(e) => setAgent(e.target.value)}
-                            onClick={handleAgentDropdownClick}
-                            required
+                        required
                       >
                         <option value="">Select Agent</option>
                         {agents.map((agentItem) => (
@@ -670,7 +660,7 @@ export default function Invoice() {
                         </td>
                                 <td style={{ ...baseCellStyle, textAlign: "right" }}>
                                   <span className="fw-bold text-dark">
-                                    {formatCurrency(invoice.totalAmount)}
+                                    {formatCurrency(invoice.totalRate)}
                                   </span>
                         </td>
                                 <td style={baseCellStyle}>
@@ -681,7 +671,7 @@ export default function Invoice() {
                                       color: "#495057",
                                     }}
                                   >
-                                    {invoice.referenceNumber || "-"}
+                                    {invoice.confirmationCode || "-"}
                                   </code>
                           </td>
                                 <td style={{ ...baseCellStyle, textAlign: "center" }}>
@@ -742,7 +732,7 @@ export default function Invoice() {
                                             color: "#495057",
                                           }}
                                         >
-                                          {invoice.referenceNumber || "-"}
+                                          {invoice.confirmationCode || "-"}
                                         </code>
                                       </div>
                                     </div>
