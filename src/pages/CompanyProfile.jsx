@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { Card, Button, Form, Row, Col, Table, Modal, Pagination } from "react-bootstrap";
+import {
+  Card,
+  Button,
+  Form,
+  Row,
+  Col,
+  Table,
+  Modal,
+  Pagination,
+} from "react-bootstrap";
+import Select from "react-select";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
@@ -23,6 +33,7 @@ export default function CompanyProfile() {
     faxNumber: "",
     mobile: "",
     postOffice: "",
+    whitelistedSupplierCodes: [],
   });
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -36,6 +47,7 @@ export default function CompanyProfile() {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewData, setViewData] = useState(null);
+  const [suppliers, setSuppliers] = useState([]);
 
   // Helper function to safely convert value to string
   const toString = (value) => {
@@ -121,20 +133,26 @@ export default function CompanyProfile() {
 
   const isValidUrl = (url) => {
     try {
-      // Add http:// if protocol is missing
-      const urlToCheck = url.startsWith('http://') || url.startsWith('https://') || url.startsWith('www.') ? url : `http://${url}`;
+      const urlToCheck =
+        url.startsWith("http://") ||
+        url.startsWith("https://") ||
+        url.startsWith("www.")
+          ? url
+          : `http://${url}`;
       new URL(urlToCheck);
       return true;
     } catch {
-      // Also check simple patterns like www.example.com
-      const urlPattern = /^(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
+      const urlPattern =
+        /^(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
       return urlPattern.test(url);
     }
   };
 
   const isValidYear = (year) => {
     const yearNum = parseInt(year);
-    return !isNaN(yearNum) && yearNum >= 1900 && yearNum <= new Date().getFullYear();
+    return (
+      !isNaN(yearNum) && yearNum >= 1900 && yearNum <= new Date().getFullYear()
+    );
   };
 
   const fetchCompanyList = async (pageNum = 0, searchStr = searchTerm) => {
@@ -149,11 +167,12 @@ export default function CompanyProfile() {
         params.append("search", searchStr.trim());
       }
 
-      const res = await axiosInstance.get(`/api/companyProfile?${params.toString()}`);
+      const res = await axiosInstance.get(
+        `/api/companyProfile?${params.toString()}`,
+      );
 
       if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
-        // Since backend doesn't return totalPages, calculate it like Bank.jsx
         if (res.data.length < 20) {
           setTotalPages(pageNum + 1);
         } else {
@@ -192,6 +211,7 @@ export default function CompanyProfile() {
       faxNumber: "",
       mobile: "",
       postOffice: "",
+      whitelistedSupplierCodes: [],
     });
     setValidationErrors({});
     setShowModal(true);
@@ -201,8 +221,9 @@ export default function CompanyProfile() {
     setEditing(item);
     setIsLoading(true);
     try {
-      // Fetch full details from backend as per controller @GetMapping("/{id}")
-      const res = await axiosInstance.get(`/api/companyProfile/${item.companyProfileId}`);
+      const res = await axiosInstance.get(
+        `/api/companyProfile/${item.companyProfileId}`,
+      );
       if (res.data) {
         const data = res.data;
         setFormData({
@@ -220,6 +241,7 @@ export default function CompanyProfile() {
           faxNumber: toString(data.faxNumber),
           mobile: toString(data.mobile),
           postOffice: toString(data.postOffice),
+          whitelistedSupplierCodes: data.whitelistedSupplierCodes || [],
         });
         setValidationErrors({});
         setShowModal(true);
@@ -234,8 +256,9 @@ export default function CompanyProfile() {
   const handleView = async (item) => {
     setIsLoading(true);
     try {
-      // Fetch full details as requested
-      const res = await axiosInstance.get(`/api/companyProfile/${item.companyProfileId}`);
+      const res = await axiosInstance.get(
+        `/api/companyProfile/${item.companyProfileId}`,
+      );
       if (res.data) {
         setViewData(res.data);
         setShowViewModal(true);
@@ -260,7 +283,6 @@ export default function CompanyProfile() {
       ...prev,
       [field]: value,
     }));
-    // Clear validation error for this field when user starts typing
     if (validationErrors[field]) {
       setValidationErrors((prev) => ({
         ...prev,
@@ -270,7 +292,6 @@ export default function CompanyProfile() {
   };
 
   const saveCompanyProfile = async () => {
-    // Validation
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
@@ -280,7 +301,7 @@ export default function CompanyProfile() {
     try {
       setIsLoading(true);
       setValidationErrors({});
-      
+
       const payload = {
         companyName: safeTrim(formData.companyName),
         authorizedPerson: safeTrim(formData.authorizedPerson),
@@ -295,26 +316,35 @@ export default function CompanyProfile() {
         faxNumber: safeTrim(formData.faxNumber),
         mobile: safeTrim(formData.mobile),
         postOffice: safeTrim(formData.postOffice),
+        whitelistedSupplierCodes: formData.whitelistedSupplierCodes,
       };
 
       let response;
       if (editing) {
-        // Use @PutMapping("/{id}") for updates
-        response = await axiosInstance.put(`/api/companyProfile/${editing.companyProfileId}`, payload);
+        response = await axiosInstance.put(
+          `/api/companyProfile/${editing.companyProfileId}`,
+          payload,
+        );
         toast.success("Company Profile updated successfully!");
       } else {
-        // Use @PostMapping("/save") for new records
-        response = await axiosInstance.post("/api/companyProfile/save", payload);
+        response = await axiosInstance.post(
+          "/api/companyProfile/save",
+          payload,
+        );
         toast.success("Company Profile saved successfully!");
       }
-      
+
       if (response.data) {
         fetchCompanyList(page, searchTerm);
         closeModal();
       }
     } catch (error) {
       console.error("Save error:", error);
-      toast.error(editing ? "Failed to update company profile" : "Failed to save company profile");
+      toast.error(
+        editing
+          ? "Failed to update company profile"
+          : "Failed to save company profile",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -349,10 +379,22 @@ export default function CompanyProfile() {
   };
 
   useEffect(() => {
+    const fetchSuppliers = async () => {
+      try {
+        const res = await axiosInstance.get("/api/external-apis/list");
+        if (res.data) {
+          setSuppliers(
+            res.data.map((s) => ({ value: s.apiCode, label: s.apiCode })),
+          );
+        }
+      } catch (err) {
+        console.error("Failed to fetch suppliers", err);
+      }
+    };
+    fetchSuppliers();
     fetchCompanyList();
   }, []);
 
-  // Debounced search effect
   useEffect(() => {
     if (searchTimeout) clearTimeout(searchTimeout);
 
@@ -389,10 +431,16 @@ export default function CompanyProfile() {
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
-                    <FaSearch className="position-absolute top-50 translate-middle-y ms-2 text-muted" style={{ left: '5px', fontSize: '12px' }} />
+                    <FaSearch
+                      className="position-absolute top-50 translate-middle-y ms-2 text-muted"
+                      style={{ left: "5px", fontSize: "12px" }}
+                    />
                   </div>
                 </Form.Group>
-                <Button className="btn-green d-flex align-items-center gap-2" onClick={openCreate}>
+                <Button
+                  className="btn-green d-flex align-items-center gap-2"
+                  onClick={openCreate}
+                >
                   <FaPlus size={12} /> Create
                 </Button>
               </div>
@@ -440,7 +488,10 @@ export default function CompanyProfile() {
                   {isLoading && items.length === 0 && (
                     <tr>
                       <td colSpan={5} className="text-center text-muted py-4">
-                        <div className="spinner-border spinner-border-sm me-2" role="status">
+                        <div
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                        >
                           <span className="visually-hidden">Loading...</span>
                         </div>
                         Loading company profiles...
@@ -457,7 +508,6 @@ export default function CompanyProfile() {
                 </tbody>
               </Table>
 
-              {/* Pagination */}
               {totalPages > 1 && (
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
                   <div>
@@ -489,7 +539,6 @@ export default function CompanyProfile() {
             </Card.Body>
           </Card>
 
-          {/* Create/Edit Modal */}
           <Modal show={showModal} onHide={closeModal} centered size="lg">
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
@@ -501,43 +550,61 @@ export default function CompanyProfile() {
                 <Row>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Company Name <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Company Name <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.companyName}
-                        onChange={(e) => handleInputChange("companyName", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("companyName", e.target.value)
+                        }
                         placeholder="Enter company name"
                         isInvalid={!!validationErrors.companyName}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.companyName}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.companyName}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Authorized Person <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Authorized Person <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.authorizedPerson}
-                        onChange={(e) => handleInputChange("authorizedPerson", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("authorizedPerson", e.target.value)
+                        }
                         placeholder="Enter authorized person"
                         isInvalid={!!validationErrors.authorizedPerson}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.authorizedPerson}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.authorizedPerson}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                 </Row>
 
                 <Form.Group className="mb-3">
-                  <Form.Label>Address <span className="text-danger">*</span></Form.Label>
+                  <Form.Label>
+                    Address <span className="text-danger">*</span>
+                  </Form.Label>
                   <Form.Control
                     as="textarea"
                     rows={2}
                     value={formData.address}
-                    onChange={(e) => handleInputChange("address", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("address", e.target.value)
+                    }
                     placeholder="Enter company address"
                     isInvalid={!!validationErrors.address}
                   />
-                  <Form.Control.Feedback type="invalid">{validationErrors.address}</Form.Control.Feedback>
+                  <Form.Control.Feedback type="invalid">
+                    {validationErrors.address}
+                  </Form.Control.Feedback>
                 </Form.Group>
 
                 <Row>
@@ -547,24 +614,34 @@ export default function CompanyProfile() {
                       <Form.Control
                         type="text"
                         value={formData.website}
-                        onChange={(e) => handleInputChange("website", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("website", e.target.value)
+                        }
                         placeholder="www.example.com"
                         isInvalid={!!validationErrors.website}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.website}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.website}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Main Office <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Main Office <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.mainOffice}
-                        onChange={(e) => handleInputChange("mainOffice", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("mainOffice", e.target.value)
+                        }
                         placeholder="Enter main office"
                         isInvalid={!!validationErrors.mainOffice}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.mainOffice}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.mainOffice}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                 </Row>
@@ -572,28 +649,40 @@ export default function CompanyProfile() {
                 <Row>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Year Stand Up <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Year Stand Up <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.yearStandUp}
-                        onChange={(e) => handleInputChange("yearStandUp", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("yearStandUp", e.target.value)
+                        }
                         placeholder="e.g. 2010"
                         isInvalid={!!validationErrors.yearStandUp}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.yearStandUp}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.yearStandUp}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Email <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Email <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="email"
                         value={formData.mailId}
-                        onChange={(e) => handleInputChange("mailId", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("mailId", e.target.value)
+                        }
                         placeholder="info@company.com"
                         isInvalid={!!validationErrors.mailId}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.mailId}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.mailId}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                 </Row>
@@ -601,38 +690,56 @@ export default function CompanyProfile() {
                 <Row>
                   <Col md={4}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Labours <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Labours <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="number"
                         value={formData.labours}
-                        onChange={(e) => handleInputChange("labours", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("labours", e.target.value)
+                        }
                         isInvalid={!!validationErrors.labours}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.labours}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.labours}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={4}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Branches <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Branches <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="number"
                         value={formData.branches}
-                        onChange={(e) => handleInputChange("branches", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("branches", e.target.value)
+                        }
                         isInvalid={!!validationErrors.branches}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.branches}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.branches}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={4}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Post Office <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Post Office <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.postOffice}
-                        onChange={(e) => handleInputChange("postOffice", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("postOffice", e.target.value)
+                        }
                         isInvalid={!!validationErrors.postOffice}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.postOffice}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.postOffice}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                 </Row>
@@ -644,20 +751,28 @@ export default function CompanyProfile() {
                       <Form.Control
                         type="text"
                         value={formData.telephone}
-                        onChange={(e) => handleInputChange("telephone", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("telephone", e.target.value)
+                        }
                       />
                     </Form.Group>
                   </Col>
                   <Col md={4}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Mobile <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Mobile <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.mobile}
-                        onChange={(e) => handleInputChange("mobile", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("mobile", e.target.value)
+                        }
                         isInvalid={!!validationErrors.mobile}
                       />
-                      <Form.Control.Feedback type="invalid">{validationErrors.mobile}</Form.Control.Feedback>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.mobile}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={4}>
@@ -666,7 +781,41 @@ export default function CompanyProfile() {
                       <Form.Control
                         type="text"
                         value={formData.faxNumber}
-                        onChange={(e) => handleInputChange("faxNumber", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("faxNumber", e.target.value)
+                        }
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Whitelisted Suppliers</Form.Label>
+
+                      <Select
+                        isMulti
+                        options={suppliers}
+                        value={suppliers.filter((opt) =>
+                          formData.whitelistedSupplierCodes?.includes(
+                            opt.value,
+                          ),
+                        )}
+                        onChange={(selected) => {
+                          const values = selected
+                            ? selected.map((o) => o.value)
+                            : [];
+                          handleInputChange("whitelistedSupplierCodes", values);
+                        }}
+                        placeholder="SELECT" // 👈 This is what you want
+                        menuPortalTarget={document.body}
+                        menuPlacement="auto"
+                        menuPosition="fixed"
+                        maxMenuHeight={200}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        }}
                       />
                     </Form.Group>
                   </Col>
@@ -674,19 +823,36 @@ export default function CompanyProfile() {
               </Form>
             </Modal.Body>
             <Modal.Footer>
-              <Button variant="secondary" onClick={closeModal} disabled={isLoading}>Cancel</Button>
-              <Button className="btn-indigo" onClick={saveCompanyProfile} disabled={isLoading}>
+              <Button
+                variant="secondary"
+                onClick={closeModal}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="btn-indigo"
+                onClick={saveCompanyProfile}
+                disabled={isLoading}
+              >
                 {isLoading ? (
                   <>
-                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
                     {editing ? "Updating..." : "Saving..."}
                   </>
-                ) : editing ? "Update" : "Save"}
+                ) : editing ? (
+                  "Update"
+                ) : (
+                  "Save"
+                )}
               </Button>
             </Modal.Footer>
           </Modal>
 
-          {/* View Details Modal */}
           <Modal show={showViewModal} onHide={closeModal} centered size="lg">
             <Modal.Header closeButton className="border-0 bg-light">
               <Modal.Title className="h5 fw-bold text-primary">
@@ -699,9 +865,12 @@ export default function CompanyProfile() {
                   <Row className="mb-4">
                     <Col md={12}>
                       <div className="p-3 bg-indigo-subtle border border-indigo-subtle rounded-3">
-                        <h4 className="mb-1 fw-bold text-indigo">{viewData.companyName}</h4>
+                        <h4 className="mb-1 fw-bold text-indigo">
+                          {viewData.companyName}
+                        </h4>
                         <p className="mb-0 text-muted d-flex align-items-center gap-2">
-                          <i className="bi bi-person-check"></i> Authorized: <strong>{viewData.authorizedPerson}</strong>
+                          <i className="bi bi-person-check"></i> Authorized:{" "}
+                          <strong>{viewData.authorizedPerson}</strong>
                         </p>
                       </div>
                     </Col>
@@ -710,39 +879,89 @@ export default function CompanyProfile() {
                   <Row className="g-4">
                     <Col md={6}>
                       <div className="view-group">
-                        <label className="small text-uppercase fw-bold text-muted mb-1">Company Information</label>
+                        <label className="small text-uppercase fw-bold text-muted mb-1">
+                          Company Information
+                        </label>
                         <div className="p-3 bg-light rounded-3 border">
-                          <p className="mb-2"><strong>Main Office:</strong> {viewData.mainOffice}</p>
-                          <p className="mb-2"><strong>Year Established:</strong> {viewData.yearStandUp}</p>
-                          <p className="mb-2"><strong>Labours:</strong> {viewData.labours}</p>
-                          <p className="mb-0"><strong>Branches:</strong> {viewData.branches}</p>
+                          <p className="mb-2">
+                            <strong>Main Office:</strong> {viewData.mainOffice}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Year Established:</strong>{" "}
+                            {viewData.yearStandUp}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Labours:</strong> {viewData.labours}
+                          </p>
+                          <p className="mb-0">
+                            <strong>Branches:</strong> {viewData.branches}
+                          </p>
                         </div>
                       </div>
                     </Col>
 
                     <Col md={6}>
                       <div className="view-group">
-                        <label className="small text-uppercase fw-bold text-muted mb-1">Contact Details</label>
+                        <label className="small text-uppercase fw-bold text-muted mb-1">
+                          Contact Details
+                        </label>
                         <div className="p-3 bg-light rounded-3 border">
-                          <p className="mb-2"><strong>Email:</strong> {viewData.mailId}</p>
-                          <p className="mb-2"><strong>Mobile:</strong> {viewData.mobile}</p>
-                          <p className="mb-2"><strong>Telephone:</strong> {viewData.telephone || "N/A"}</p>
-                          <p className="mb-0"><strong>Fax:</strong> {viewData.faxNumber || "N/A"}</p>
+                          <p className="mb-2">
+                            <strong>Email:</strong> {viewData.mailId}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Mobile:</strong> {viewData.mobile}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Telephone:</strong>{" "}
+                            {viewData.telephone || "N/A"}
+                          </p>
+                          <p className="mb-0">
+                            <strong>Fax:</strong> {viewData.faxNumber || "N/A"}
+                          </p>
                         </div>
                       </div>
                     </Col>
 
                     <Col md={12}>
                       <div className="view-group">
-                        <label className="small text-uppercase fw-bold text-muted mb-1">Location & Identity</label>
+                        <label className="small text-uppercase fw-bold text-muted mb-1">
+                          Location & Identity
+                        </label>
                         <div className="p-3 bg-light rounded-3 border">
-                          <p className="mb-2"><strong>Address:</strong> {viewData.address}</p>
+                          <p className="mb-2">
+                            <strong>Address:</strong> {viewData.address}
+                          </p>
                           <Row>
                             <Col md={6}>
-                              <p className="mb-0"><strong>Post Office:</strong> {viewData.postOffice}</p>
+                              <p className="mb-2">
+                                <strong>Post Office:</strong>{" "}
+                                {viewData.postOffice}
+                              </p>
                             </Col>
                             <Col md={6}>
-                              <p className="mb-0"><strong>Website:</strong> <a href={viewData.website?.startsWith('http') ? viewData.website : `https://${viewData.website}`} target="_blank" rel="noopener noreferrer">{viewData.website}</a></p>
+                              <p className="mb-2">
+                                <strong>Website:</strong>{" "}
+                                <a
+                                  href={
+                                    viewData.website?.startsWith("http")
+                                      ? viewData.website
+                                      : `https://${viewData.website}`
+                                  }
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {viewData.website}
+                                </a>
+                              </p>
+                            </Col>
+                            <Col md={12}>
+                              <p className="mb-0">
+                                <strong>Whitelisted Suppliers:</strong>{" "}
+                                {viewData.whitelistedSupplierCodes?.length > 0
+                                  ? viewData.whitelistedSupplierCodes.join(", ")
+                                  : "None"}
+                              </p>
                             </Col>
                           </Row>
                         </div>
@@ -759,7 +978,11 @@ export default function CompanyProfile() {
               )}
             </Modal.Body>
             <Modal.Footer className="border-0">
-              <Button variant="indigo" className="px-4 rounded-pill" onClick={closeModal}>
+              <Button
+                variant="indigo"
+                className="px-4 rounded-pill"
+                onClick={closeModal}
+              >
                 Close
               </Button>
             </Modal.Footer>
