@@ -254,6 +254,7 @@ const ExternalApiRoomList = () => {
               roomConfigurationId: room.roomConfigurationId,
               hotelId: hotel.hotelId,
               hotelName: hotel.hotelName,
+              hotelCode:hotel.hotelCode,
               roomCategory: room.roomType,
               mealPlan: room.mealPlan,
               contractLabel: room.contractLabel,

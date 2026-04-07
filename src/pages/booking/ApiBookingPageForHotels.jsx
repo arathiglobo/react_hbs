@@ -278,8 +278,9 @@ const ApiBookingPageForHotels = () => {
 
       const payload = {
         agentId: bookingData.payload.agentId || null,
-        apiId: "INHOUSE", //bookingData.payload.apiId || null,
-        hotelId: selectedRate.hotelId,
+        apiId: bookingData.payload.apiId || null,
+        hotelId: bookingData.selectedRate[0]?.hotelId || "",
+        hotelCode: bookingData.selectedRate[0]?.hotelCode || "",
         hotelName: bookingData.hotelStaticData.hotelName,
         address: bookingData.hotelStaticData.address,
         starRating: bookingData.hotelStaticData.starRating,
@@ -287,67 +288,76 @@ const ApiBookingPageForHotels = () => {
         checkOutDate: bookingData.payload.checkOutDate,
         nights: nights,
         employeeId: primaryGuest.employeeId || null,
-        roomStatus: bookingData.selectedRate.roomStatus,
-        cancellationPolicy:
-          bookingData.selectedRate.cancellationPolicy?.map(
-            (p) => p.policyText,
-          ) || [],
+        roomStatus: "Available",
+        cancellationPolicy: [
+          ...new Set(
+            bookingData.selectedRate.flatMap((rate) =>
+              (rate.cancellationPolicy || []).map((p) => p.policyText),
+            ),
+          ),
+        ],
 
-        // Calculate deadlineDate based on nonRefundable and cancellationPolicy
+        // Calculate deadlineDate based on nonRefundable and cancellationPolicy across all rooms
         deadlineDate: (() => {
-          const nonRefundable =
-            bookingData.selectedRate.nonRefundable === true ||
-            bookingData.selectedRate.nonRefundable === "true";
+          const deadlines = bookingData.selectedRate
+            .map((rate) => {
+              const nonRefundable =
+                rate.nonRefundable === true ||
+                rate.nonRefundable === "true" ||
+                rate.nonRefundable === "Y";
 
-          if (nonRefundable === true) {
-            // 2 days before current date
-            const today = new Date();
-            const deadline = new Date(today);
-            deadline.setDate(today.getDate() - 2);
-            deadline.setHours(0, 0, 0, 0); // Set to midnight
-            const year = deadline.getFullYear();
-            const month = String(deadline.getMonth() + 1).padStart(2, "0");
-            const day = String(deadline.getDate()).padStart(2, "0");
-            return `${year}-${month}-${day}T00:00:00`;
-          } else {
-            // 2 days before earliest fromDate from cancellationPolicy
-            const policies = bookingData.selectedRate.cancellationPolicy || [];
-            if (policies.length === 0) {
-              return null;
-            }
+              if (nonRefundable === true) {
+                // 2 days before current date
+                const today = new Date();
+                const deadline = new Date(today);
+                deadline.setDate(today.getDate() - 2);
+                deadline.setHours(0, 0, 0, 0); // Set to midnight
+                return deadline;
+              } else {
+                // 2 days before earliest fromDate from cancellationPolicy
+                const policies = rate.cancellationPolicy || [];
+                if (policies.length === 0) {
+                  return null;
+                }
 
-            // Find earliest fromDate
-            const dates = policies
-              .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
-              .filter((date) => date !== null && !isNaN(date.getTime()));
+                // Find earliest fromDate
+                const dates = policies
+                  .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
+                  .filter((date) => date !== null && !isNaN(date.getTime()));
 
-            if (dates.length === 0) {
-              return null;
-            }
+                if (dates.length === 0) {
+                  return null;
+                }
 
-            const earliestDate = new Date(
-              Math.min(...dates.map((d) => d.getTime())),
-            );
-            const deadline = new Date(earliestDate);
-            deadline.setDate(earliestDate.getDate() - 2);
-            deadline.setHours(0, 0, 0, 0); // Set to midnight
-            const year = deadline.getFullYear();
-            const month = String(deadline.getMonth() + 1).padStart(2, "0");
-            const day = String(deadline.getDate()).padStart(2, "0");
-            return `${year}-${month}-${day}T00:00:00`;
+                const earliestDate = new Date(
+                  Math.min(...dates.map((d) => d.getTime())),
+                );
+                const deadline = new Date(earliestDate);
+                deadline.setDate(earliestDate.getDate() - 2);
+                deadline.setHours(0, 0, 0, 0); // Set to midnight
+                return deadline;
+              }
+            })
+            .filter((d) => d !== null);
+
+          if (deadlines.length === 0) {
+            return null;
           }
+
+          // Pick the earliest deadline among all rooms
+          const overallDeadline = new Date(
+            Math.min(...deadlines.map((d) => d.getTime())),
+          );
+          const year = overallDeadline.getFullYear();
+          const month = String(overallDeadline.getMonth() + 1).padStart(
+            2,
+            "0",
+          );
+          const day = String(overallDeadline.getDate()).padStart(2, "0");
+          return `${year}-${month}-${day}T00:00:00`;
         })(),
-        // New Payload Mapping Logic (Around line 331)
-        isBookandVoucher: (() => {
-          if (selectedRate.roomStatus === "Available") {
-            // User selects from radio buttons when available
-            return bookingConfirmation === "Book & Voucher" ? true : false;
-          } else {
-            // For "On Request" or any other status, avoid pushing inappropriate voucher flags
-            // Adjust this fallback to what's expected by the backend for "On Request"
-            return false;
-          }
-        })(),
+
+        isBookandVoucher: bookingConfirmation === "Book & Voucher",
 
         // ✅ Primary guest details
         primaryGuest: {
@@ -373,9 +383,7 @@ const ApiBookingPageForHotels = () => {
             nonRefundable:
               rate.nonRefundable === true ||
               rate.nonRefundable === "true" ||
-              rate.nonRefundable === "Y"
-                ? true
-                : false,
+              rate.nonRefundable === "Y",
             currency: rate.currency || "AED",
             rate: parseFloat(rate.rate || 0),
             rateWithoutMarkup: parseFloat(rate.rateWithoutMarkup || 0),
@@ -400,8 +408,6 @@ const ApiBookingPageForHotels = () => {
         specialRequests: specialRequests || "",
         tourismDirhams: parseFloat(tourismDirhams) || 0,
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
-
-        // ✅ Metadata
       };
 
       console.log("📦 Final booking payload:", payload);

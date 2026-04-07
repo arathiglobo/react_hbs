@@ -331,20 +331,20 @@ export default function App() {
           transform: "translate(-50%, -50%)",
         }}
         toastOptions={{
-          duration: 5000,
+          duration: 3000,
           style: {
             background: "#363636",
             color: "#fff",
           },
           success: {
-            duration: 5000,
+            duration: 3000,
             iconTheme: {
               primary: "#4bb543",
               secondary: "#fff",
             },
           },
           error: {
-            duration: 6000,
+            duration: 3000,
             iconTheme: {
               primary: "#ff3333",
               secondary: "#fff",
