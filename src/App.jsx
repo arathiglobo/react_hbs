@@ -125,6 +125,7 @@ import ActivityBookingList from "./pages/list/ActivityBookingList";
 import HotelMapping from "./pages/master/HotelMapping";
 import HotelMappingBulkList from "./pages/master/HotelMappingBulkList";
 import UnMappingCity from "./pages/master/UnMappingCity";
+import SubLocation from "./pages/master/SubLocation";
 
 
 export default function App() {
@@ -198,6 +199,7 @@ export default function App() {
         <Route path="/masters/countries" element={<PrivateRoute><Country /></PrivateRoute>} />
         <Route path="/masters/states" element={<PrivateRoute><Province /></PrivateRoute>} />
         <Route path="/masters/destination" element={<PrivateRoute><Destination /></PrivateRoute>} />
+        <Route path="/masters/sub-location" element={<PrivateRoute><SubLocation /></PrivateRoute>} />
         <Route path="/masters/city-mapping" element={<PrivateRoute><CityMapping /></PrivateRoute>} />
         <Route path="/masters/city-unmapping" element={<PrivateRoute><UnMappingCity /></PrivateRoute>} />
         <Route path="/masters/hotel-category" element={<PrivateRoute><HotelCategory /></PrivateRoute>} />

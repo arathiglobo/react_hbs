@@ -111,6 +111,7 @@ export default function Sidebar() {
             { label: "Countries", to: "/masters/countries" },
             { label: "Province", to: "/masters/states" },
             { label: "Destinations", to: "/masters/destination" },
+            { label: "Locality", to: "/masters/sub-location" },
           ],
         },
         {

@@ -9,7 +9,7 @@ import { FaEdit, FaTrash } from "react-icons/fa";
 import axios from "axios";
 import Select from "react-select";
 
-export default function Destination() {
+export default function SubLocation() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -329,8 +329,8 @@ export default function Destination() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <span className="fw-semibold">Destination</span>
-              {/* Destination Name Search */}
+              <span className="fw-semibold">SubLocation / Locality</span>
+              {/* Sub Location Name Search */}
               <Form.Group className="hotel-search-bar">
                 <Form.Control
                   type="text"
@@ -355,7 +355,7 @@ export default function Destination() {
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Province</th>
                     <th>Destination</th>
-                    <th>Destination Code</th>
+                    <th>Locality</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
                 </thead>
