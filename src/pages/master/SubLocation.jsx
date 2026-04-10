@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Card, Button, Table, Modal, Form, Pagination } from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
@@ -6,7 +6,6 @@ import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash } from "react-icons/fa";
-import axios from "axios";
 import Select from "react-select";
 
 export default function SubLocation() {
@@ -18,20 +17,32 @@ export default function SubLocation() {
   const [error, setError] = useState("");
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [search, setSearch] = useState("");
-  const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Country & State dropdowns
   const [countryOptions, setCountryOptions] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState("");
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [stateOptions, setStateOptions] = useState([]);
   const [selectedState, setSelectedState] = useState("");
   const [selectedStateOption, setSelectedStateOption] = useState(null);
-  const [destinationCode, setDestinationCode] = useState("");
+
+  // Destination (place) dropdown for SubLocation
+  const [destinationOptions, setDestinationOptions] = useState([]);
+  const [selectedDestination, setSelectedDestination] = useState("");
+  const [selectedDestinationOption, setSelectedDestinationOption] = useState(null);
+
+  const [subLocationCode, setSubLocationCode] = useState("");
   const [isCountryLoading, setIsCountryLoading] = useState(false);
   const [isStateLoading, setIsStateLoading] = useState(false);
+  const [isDestinationLoading, setIsDestinationLoading] = useState(false);
+
   const countryDebounceRef = useRef(null);
   const stateDebounceRef = useRef(null);
+  const destinationDebounceRef = useRef(null);
+  const searchDebounceRef = useRef(null);
+
+  const PAGE_SIZE = 10;
 
   const customSelectStyles = {
     control: (base) => ({
@@ -42,10 +53,7 @@ export default function SubLocation() {
       boxShadow: "none",
       "&:hover": { borderColor: "#86b7fe" },
     }),
-    menu: (base) => ({
-      ...base,
-      zIndex: 9999,
-    }),
+    menu: (base) => ({ ...base, zIndex: 9999 }),
     option: (base, state) => ({
       ...base,
       backgroundColor: state.isFocused ? "#f8f9fa" : "white",
@@ -54,123 +62,26 @@ export default function SubLocation() {
     }),
   };
 
-  const nextId = useMemo(
-    () => Math.max(0, ...items.map((i) => i.id)) + 1,
-    [items]
-  );
+  // ─── API Calls ────────────────────────────────────────────────────────────────
 
-  const openCreate = () => {
-    setEditing(null);
-    setSelectedCountry("");
-    setSelectedCountryOption(null);
-    setSelectedState("");
-    setSelectedStateOption(null);
-    setStateOptions([]);
-    setName("");
-    setDestinationCode("");
-    fetchCountries("");
-    setShowModal(true);
-  };
-
-  const openEdit = (item) => {
-    console.log("edit itm::", item);
-    setEditing(item);
-    setSelectedCountry(item.countryId || "");
-    setSelectedState(item.stateId || "");
-    setName(item.name || "");
-    setDestinationCode(item.placeCode || "");
-    // Preload country options and set selected country option
-    fetchCountries("").then((options) => {
-      const matched = (options || []).find(
-        (opt) => String(opt.value) === String(item.countryId)
-      );
-      setSelectedCountryOption(matched || null);
-    });
-    // Preload provinces for the existing country
-    if (item.countryId) {
-      fetchStates(item.countryId, "").then((options) => {
-        const matched = (options || []).find(
-          (opt) => String(opt.value) === String(item.stateId)
-        );
-        setSelectedStateOption(matched || null);
-      });
-    }
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-    setEditing(null);
-    setSelectedCountry("");
-    setSelectedCountryOption(null);
-    setSelectedState("");
-    setSelectedStateOption(null);
-    setCountryOptions([]);
-    setStateOptions([]);
-    setName("");
-    setDestinationCode("");
-    setError("");
-  };
-
-  const handleEdit = async () => {
-    if (!editing) return;
-
-    try {
-      setIsLoading(true);
-      const editRes = await axiosInstance.put(
-        `/api/destination/${editing.id}`,
-        {
-          countryId: `${selectedCountry}`,
-          stateId: `${selectedState}`,
-          name: `${name}`,
-          placeCode: `${destinationCode}`,
-        }
-      );
-
-      if (editRes.data) {
-        toast.success("Destination Updated Successfully!");
-        // First refresh the list
-        await fetchDestinationList(page, search);
-        // Then close modal and reset state
-        closeModal();
-      }
-    } catch (error) {
-      setError("Failed to update destination");
-      toast.error("Failed to update destination");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchDestinationList = async (pageNum = 0, searchTerm = search) => {
+  const fetchSubLocationList = async (pageNum = 0, search = "") => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
         page: pageNum.toString(),
-        limit: "10",
+        limit: PAGE_SIZE.toString(),
       });
-
-      if (searchTerm && searchTerm.trim()) {
-        params.append("search", searchTerm.trim());
+      if (search && search.trim()) {
+        params.append("search", search.trim());
       }
-
-      const res = await axiosInstance.get(
-        `/api/destination?${params.toString()}`
-      );
-
-      // Check if response has data and pagination info
+      const res = await axiosInstance.get(`/api/sub-locations?${params.toString()}`);
       if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
-        // Since backend doesn't return totalPages, we'll calculate it based on data length
-        // If we get less than 10 items, it's likely the last page
-        if (res.data.length < 10) {
+        if (res.data.length < PAGE_SIZE) {
           setTotalPages(pageNum + 1);
         } else {
-          // If we get exactly 10 items, there might be more pages
-          // We'll set a reasonable total or keep the current totalPages
-          setTotalPages(Math.max(totalPages, pageNum + 2));
+          setTotalPages((prev) => Math.max(prev, pageNum + 2));
         }
-
         setPage(pageNum);
       } else {
         setItems([]);
@@ -178,7 +89,7 @@ export default function SubLocation() {
         setPage(0);
       }
     } catch (err) {
-      toast.error("Failed to load destinations");
+      toast.error("Failed to load sub-locations");
       setItems([]);
       setTotalPages(0);
       setPage(0);
@@ -187,63 +98,68 @@ export default function SubLocation() {
     }
   };
 
-  const saveDestination = async () => {
+  const saveSubLocation = async () => {
+    if (!selectedCountry) { setError("Please select a Country"); return; }
+    if (!selectedState)   { setError("Please select a Province"); return; }
+    if (!selectedDestination) { setError("Please select a Destination"); return; }
+    if (!name.trim())     { setError("Sub-location name is required"); return; }
+
     try {
       setIsLoading(true);
-      const destinationPayload = {
-        countryId: `${selectedCountry}`,
-        stateId: `${selectedState}`,
-        name: `${name}`,
-        placeCode: `${destinationCode}`,
+      const payload = {
+        countryId:     `${selectedCountry}`,
+        stateId:       `${selectedState}`,
+        placeId: `${selectedDestination}`,
+        locationName:          name.trim(),
+        locationCode:     subLocationCode.trim(),
       };
-      const saveRes = await axiosInstance.post(
-        "/api/destination/save",
-        destinationPayload
-      );
-      if (saveRes.data !== 0) {
-        toast.success("Destination added Successfully!");
-        // First refresh the list
-        await fetchDestinationList(page, search);
-        // Then close modal
+      const res = await axiosInstance.post("/api/sub-locations/save", payload);
+      if (res.data) {
+        toast.success("Sub-location added successfully!");
+        await fetchSubLocationList(page, searchTerm);
         closeModal();
       }
-    } catch (error) {
-      setError("Sorry! Data not saved to db..");
-      toast.error("Failed to save destination data");
+    } catch (err) {
+      setError("Failed to save sub-location");
+      toast.error("Failed to save sub-location");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Debounced search effect
-  useEffect(() => {
-    // Clear previous timeout
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
+  const handleEdit = async () => {
+    if (!editing) return;
+    if (!selectedCountry) { setError("Please select a Country"); return; }
+    if (!selectedState)   { setError("Please select a Province"); return; }
+    if (!selectedDestination) { setError("Please select a Destination"); return; }
+    if (!name.trim())     { setError("Sub-location name is required"); return; }
 
-    // Set new timeout for search
-    if (search !== "") {
-      const timeout = setTimeout(() => {
-        fetchDestinationList(0, search);
-      }, 500); // 500ms delay
-      setSearchTimeout(timeout);
-    } else if (search === "") {
-      // If search is cleared, fetch all data
-      fetchDestinationList(0, "");
-    }
-
-    // Cleanup timeout on unmount
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
+    try {
+      setIsLoading(true);
+      const payload = {
+        countryId:     `${selectedCountry}`,
+        stateId:       `${selectedState}`,
+        placeId: `${selectedDestination}`,
+        locationName:          name.trim(),
+        locationCode:     subLocationCode.trim(),
+      };
+      const res = await axiosInstance.put(`/api/sub-locations/${editing.id}`, payload);
+      if (res.data) {
+        toast.success("Sub-location updated successfully!");
+        await fetchSubLocationList(page, searchTerm);
+        closeModal();
       }
-    };
-  }, [search]);
+    } catch (err) {
+      setError("Failed to update sub-location");
+      toast.error("Failed to update sub-location");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDelete = (item) => {
     Swal.fire({
-      title: `Are you sure? You want to delete ${item.name}`,
+      title: `Are you sure you want to delete "${item.name}"?`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -257,35 +173,34 @@ export default function SubLocation() {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/destination/${item.id}`)
+          .delete(`/api/sub-locations/${item.id}`)
           .then(() => {
-            toast.success("Destination deleted successfully");
-            fetchDestinationList(page, search);
+            toast.success("Sub-location deleted successfully");
+            fetchSubLocationList(page, searchTerm);
           })
           .catch(() => {
-            toast.error("Sorry!!Destination not deleted");
+            toast.error("Failed to delete sub-location");
           });
       }
     });
   };
 
-  // Fetch countries with search-as-you-type; returns options array for use in openEdit
-  const fetchCountries = async (searchTerm = "") => {
+  // ─── Dropdown Fetchers ────────────────────────────────────────────────────────
+
+  const fetchCountries = async (search = "") => {
     setIsCountryLoading(true);
     try {
       const res = await axiosInstance.get(
-        `/api/country?page=0&limit=20&search=${encodeURIComponent(searchTerm)}`
+        `/api/country?page=0&limit=20&search=${encodeURIComponent(search)}`
       );
       if (Array.isArray(res.data)) {
         const options = res.data.map((c) => ({ value: c.id, label: c.name }));
         setCountryOptions(options);
         return options;
-      } else {
-        setCountryOptions([]);
-        return [];
       }
-    } catch (error) {
-      console.error("Error fetching countries:", error);
+      setCountryOptions([]);
+      return [];
+    } catch {
       setCountryOptions([]);
       return [];
     } finally {
@@ -293,33 +208,124 @@ export default function SubLocation() {
     }
   };
 
-  // Fetch provinces filtered by countryId + search term; returns options array for use in openEdit
-  const fetchStates = async (countryId, searchTerm = "") => {
-    if (!countryId) {
-      setStateOptions([]);
-      return [];
-    }
+  const fetchStates = async (countryId, search = "") => {
+    if (!countryId) { setStateOptions([]); return []; }
     setIsStateLoading(true);
     try {
       const res = await axiosInstance.get(
-        `/api/province/countryId?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(searchTerm)}`
+        `/api/province/countryId?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(search)}`
       );
       if (Array.isArray(res.data)) {
         const options = res.data.map((s) => ({ value: s.id, label: s.stateName }));
         setStateOptions(options);
         return options;
-      } else {
-        setStateOptions([]);
-        return [];
       }
-    } catch (error) {
-      console.error("Error fetching provinces:", error);
+      setStateOptions([]);
+      return [];
+    } catch {
       setStateOptions([]);
       return [];
     } finally {
       setIsStateLoading(false);
     }
   };
+
+  const fetchDestinations = async (stateId, search = "") => {
+    if (!stateId) { setDestinationOptions([]); return []; }
+    setIsDestinationLoading(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/destination?page=0&limit=50&search=${encodeURIComponent(search)}`
+      );
+      if (Array.isArray(res.data)) {
+        const options = res.data.map((d) => ({ value: d.id, label: d.name }));
+        setDestinationOptions(options);
+        return options;
+      }
+      setDestinationOptions([]);
+      return [];
+    } catch {
+      setDestinationOptions([]);
+      return [];
+    } finally {
+      setIsDestinationLoading(false);
+    }
+  };
+
+  // ─── Modal Open/Close ─────────────────────────────────────────────────────────
+
+  const resetForm = () => {
+    setEditing(null);
+    setSelectedCountry("");
+    setSelectedCountryOption(null);
+    setSelectedState("");
+    setSelectedStateOption(null);
+    setSelectedDestination("");
+    setSelectedDestinationOption(null);
+    setCountryOptions([]);
+    setStateOptions([]);
+    setDestinationOptions([]);
+    setName("");
+    setSubLocationCode("");
+    setError("");
+  };
+
+  const openCreate = () => {
+    resetForm();
+    fetchCountries("");
+    setShowModal(true);
+  };
+
+  const openEdit = (item) => {
+    resetForm();
+    setEditing(item);
+    setName(item.locationName || "");
+    setSubLocationCode(item.locationCode || "");
+    setSelectedCountry(item.countryId || "");
+    setSelectedState(item.stateId || "");
+    setSelectedDestination(item.placeId || "");
+
+    // Pre-load country options and match selected
+    fetchCountries("").then((opts) => {
+      const matched = (opts || []).find((o) => String(o.value) === String(item.countryId));
+      setSelectedCountryOption(matched || null);
+    });
+
+    // Pre-load state options and match selected
+    if (item.countryId) {
+      fetchStates(item.countryId, "").then((opts) => {
+        const matched = (opts || []).find((o) => String(o.value) === String(item.stateId));
+        setSelectedStateOption(matched || null);
+      });
+    }
+
+    // Pre-load destination options and match selected
+    if (item.stateId) {
+      fetchDestinations(item.stateId, "").then((opts) => {
+        const matched = (opts || []).find((o) => String(o.value) === String(item.placeId));
+        setSelectedDestinationOption(matched || null);
+      });
+    }
+
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    resetForm();
+    setShowModal(false);
+  };
+
+  // ─── Debounced Search ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      fetchSubLocationList(0, searchTerm);
+    }, 500);
+    return () => clearTimeout(searchDebounceRef.current);
+  }, [searchTerm]);
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -329,43 +335,43 @@ export default function SubLocation() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <span className="fw-semibold">SubLocation / Locality</span>
-              {/* Sub Location Name Search */}
+              <span className="fw-semibold">Sub-Location / Locality</span>
               <Form.Group className="hotel-search-bar">
                 <Form.Control
                   type="text"
-                  placeholder="Search Destination..."
+                  placeholder="Search Sub-Location..."
                   className="form-control-modern-sm"
                   value={searchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSearchTerm(value);
-                    fetchDestinationList(0, value); // pass value to API
-                  }}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </Form.Group>
               <Button className="btn-green" onClick={openCreate}>
                 + Create
               </Button>
             </Card.Header>
+
             <Card.Body className="p-0">
               <Table responsive hover striped className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th style={{ width: 100 }}>S/N</th>
+                    <th style={{ width: 80 }}>S/N</th>
+                    <th>Country</th>
                     <th>Province</th>
                     <th>Destination</th>
-                    <th>Locality</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th>Sub-Location</th>
+                    <th>Code</th>
+                    <th style={{ width: 120 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
                     <tr key={item.id}>
-                      <td>{index + 1 + page * 10}</td>
-                      <td>{item.state}</td>
-                      <td>{item.name}</td>
-                      <td>{item.placeCode}</td>
+                      <td>{index + 1 + page * PAGE_SIZE}</td>
+                      <td>{item.country  || "—"}</td>
+                      <td>{item.state || "—"}</td>
+                      <td>{item.place  || "—"}</td>
+                      <td>{item.locationName}</td>
+                      <td>{item.locationCode || "—"}</td>
                       <td>
                         <div className="d-flex gap-2">
                           <FaEdit
@@ -386,21 +392,18 @@ export default function SubLocation() {
                   ))}
                   {isLoading && (
                     <tr>
-                      <td colSpan={3} className="text-center text-muted py-4">
-                        <div
-                          className="spinner-border spinner-border-sm me-2"
-                          role="status"
-                        >
+                      <td colSpan={7} className="text-center text-muted py-4">
+                        <div className="spinner-border spinner-border-sm me-2" role="status">
                           <span className="visually-hidden">Loading...</span>
                         </div>
-                        Loading available destinations...
+                        Loading sub-locations...
                       </td>
                     </tr>
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={3} className="text-center text-muted py-4">
-                        No destinations found.
+                      <td colSpan={7} className="text-center text-muted py-4">
+                        No sub-locations found.
                       </td>
                     </tr>
                   )}
@@ -410,65 +413,64 @@ export default function SubLocation() {
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
-                  <div>
-                    <small className="text-muted">
-                      Showing {items.length} of {totalPages * 10} destinations
-                    </small>
-                  </div>
-                  <div>
-                    <Pagination className="mb-0">
-                      <Pagination.Prev
-                        disabled={page === 0}
-                        onClick={() => fetchDestinationList(page - 1, search)}
-                      />
-                      {[...Array(totalPages).keys()].map((num) => (
-                        <Pagination.Item
-                          key={num}
-                          active={num === page}
-                          onClick={() => fetchDestinationList(num, search)}
-                        >
-                          {num + 1}
-                        </Pagination.Item>
-                      ))}
-                      <Pagination.Next
-                        disabled={page === totalPages - 1}
-                        onClick={() => fetchDestinationList(page + 1, search)}
-                      />
-                    </Pagination>
-                  </div>
+                  <small className="text-muted">
+                    Showing {items.length} of {totalPages * PAGE_SIZE} sub-locations
+                  </small>
+                  <Pagination className="mb-0">
+                    <Pagination.Prev
+                      disabled={page === 0}
+                      onClick={() => fetchSubLocationList(page - 1, searchTerm)}
+                    />
+                    {[...Array(totalPages).keys()].map((num) => (
+                      <Pagination.Item
+                        key={num}
+                        active={num === page}
+                        onClick={() => fetchSubLocationList(num, searchTerm)}
+                      >
+                        {num + 1}
+                      </Pagination.Item>
+                    ))}
+                    <Pagination.Next
+                      disabled={page === totalPages - 1}
+                      onClick={() => fetchSubLocationList(page + 1, searchTerm)}
+                    />
+                  </Pagination>
                 </div>
               )}
             </Card.Body>
           </Card>
 
+          {/* Create / Edit Modal */}
           <Modal show={showModal} onHide={closeModal} centered backdrop="static" keyboard={false}>
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
-                {editing ? "Update Destination" : "Create Destination"}
+                {editing ? "Update Sub-Location" : "Create Sub-Location"}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <Form>
+                {/* Country */}
                 <Form.Group className="mb-3">
-                  <Form.Label>Country</Form.Label>
+                  <Form.Label>Country <span className="text-danger">*</span></Form.Label>
                   <Select
                     options={countryOptions}
                     value={selectedCountryOption}
                     onChange={(option) => {
                       setSelectedCountryOption(option);
                       setSelectedCountry(option ? option.value : "");
-                      // Clear province when country changes
+                      // Reset cascades
                       setSelectedState("");
                       setSelectedStateOption(null);
+                      setSelectedDestination("");
+                      setSelectedDestinationOption(null);
                       setStateOptions([]);
-                      // Preload provinces for newly selected country
+                      setDestinationOptions([]);
                       if (option) fetchStates(option.value, "");
+                      setError("");
                     }}
                     onInputChange={(inputValue) => {
                       clearTimeout(countryDebounceRef.current);
-                      countryDebounceRef.current = setTimeout(() => {
-                        fetchCountries(inputValue);
-                      }, 400);
+                      countryDebounceRef.current = setTimeout(() => fetchCountries(inputValue), 400);
                     }}
                     filterOption={() => true}
                     placeholder="Search and Select Country"
@@ -481,28 +483,33 @@ export default function SubLocation() {
                     }
                   />
                 </Form.Group>
+
+                {/* Province / State */}
                 <Form.Group className="mb-3">
-                  <Form.Label>Province</Form.Label>
+                  <Form.Label>Province <span className="text-danger">*</span></Form.Label>
                   <Select
                     options={stateOptions}
                     value={selectedStateOption}
                     onChange={(option) => {
                       setSelectedStateOption(option);
                       setSelectedState(option ? option.value : "");
+                      // Reset destination cascade
+                      setSelectedDestination("");
+                      setSelectedDestinationOption(null);
+                      setDestinationOptions([]);
+                      if (option) fetchDestinations(option.value, "");
+                      setError("");
                     }}
                     onInputChange={(inputValue) => {
                       if (!selectedCountry) return;
                       clearTimeout(stateDebounceRef.current);
-                      stateDebounceRef.current = setTimeout(() => {
-                        fetchStates(selectedCountry, inputValue);
-                      }, 400);
+                      stateDebounceRef.current = setTimeout(
+                        () => fetchStates(selectedCountry, inputValue),
+                        400
+                      );
                     }}
                     filterOption={() => true}
-                    placeholder={
-                      selectedCountry
-                        ? "Search and Select Province"
-                        : "Select a country first"
-                    }
+                    placeholder={selectedCountry ? "Search and Select Province" : "Select a country first"}
                     isSearchable
                     isClearable
                     isLoading={isStateLoading}
@@ -512,56 +519,73 @@ export default function SubLocation() {
                       inputValue ? "No provinces found" : "Type to search provinces"
                     }
                   />
-                  {error && (
-                    <div className="text-danger small mt-1">
-                      {error}
-                    </div>
-                  )}
                 </Form.Group>
 
+                {/* Destination */}
                 <Form.Group className="mb-3">
-                  <Form.Label>Destination</Form.Label>
+                  <Form.Label>Destination <span className="text-danger">*</span></Form.Label>
+                  <Select
+                    options={destinationOptions}
+                    value={selectedDestinationOption}
+                    onChange={(option) => {
+                      setSelectedDestinationOption(option);
+                      setSelectedDestination(option ? option.value : "");
+                      setError("");
+                    }}
+                    onInputChange={(inputValue) => {
+                      if (!selectedState) return;
+                      clearTimeout(destinationDebounceRef.current);
+                      destinationDebounceRef.current = setTimeout(
+                        () => fetchDestinations(selectedState, inputValue),
+                        400
+                      );
+                    }}
+                    filterOption={() => true}
+                    placeholder={selectedState ? "Search and Select Destination" : "Select a province first"}
+                    isSearchable
+                    isClearable
+                    isLoading={isDestinationLoading}
+                    isDisabled={!selectedState}
+                    styles={customSelectStyles}
+                    noOptionsMessage={({ inputValue }) =>
+                      inputValue ? "No destinations found" : "Type to search destinations"
+                    }
+                  />
+                </Form.Group>
+
+                {/* Sub-Location Name */}
+                <Form.Group className="mb-3">
+                  <Form.Label>Sub-Location Name <span className="text-danger">*</span></Form.Label>
                   <Form.Control
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter Destination"
-                    autoFocus
-                    isInvalid={!!error}
+                    onChange={(e) => { setName(e.target.value); setError(""); }}
+                    placeholder="Enter sub-location name"
+                    isInvalid={!!error && !name.trim()}
                   />
-                  {error && (
-                    <Form.Control.Feedback type="invalid">
-                      {error}
-                    </Form.Control.Feedback>
-                  )}
                 </Form.Group>
+
+                {/* Sub-Location Code */}
                 <Form.Group className="mb-3">
-                  <Form.Label>Destination Code</Form.Label>
+                  <Form.Label>Sub-Location Code</Form.Label>
                   <Form.Control
-                    value={destinationCode}
-                    onChange={(e) => setDestinationCode(e.target.value)}
-                    placeholder="Enter Destination code"
-                    autoFocus
-                    isInvalid={!!error}
+                    value={subLocationCode}
+                    onChange={(e) => setSubLocationCode(e.target.value)}
+                    placeholder="Enter sub-location code (optional)"
                   />
-                  {error && (
-                    <Form.Control.Feedback type="invalid">
-                      {error}
-                    </Form.Control.Feedback>
-                  )}
                 </Form.Group>
+
+                {error && (
+                  <div className="alert alert-danger py-2 small">{error}</div>
+                )}
               </Form>
             </Modal.Body>
             <Modal.Footer>
-              <Button
-                variant="secondary"
-                onClick={closeModal}
-                disabled={isLoading}
-              >
+              <Button variant="secondary" onClick={closeModal} disabled={isLoading}>
                 Cancel
               </Button>
               <Button
                 className="btn-indigo"
-                onClick={editing ? handleEdit : saveDestination}
+                onClick={editing ? handleEdit : saveSubLocation}
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -570,7 +594,7 @@ export default function SubLocation() {
                       className="spinner-border spinner-border-sm me-2"
                       role="status"
                       aria-hidden="true"
-                    ></span>
+                    />
                     {editing ? "Updating..." : "Saving..."}
                   </>
                 ) : editing ? (
