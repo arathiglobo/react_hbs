@@ -278,7 +278,7 @@ const HotelBookingPage = () => {
 
       const payload = {
         agentId: bookingData.payload.agentId || null,
-        apiId: "INHOUSE", //bookingData.payload.apiId || null,
+        apiId: bookingData.payload.apiId || null,
         hotelId: selectedRate.hotelId,
         hotelName: bookingData.hotelStaticData.hotelName,
         address: bookingData.hotelStaticData.address,

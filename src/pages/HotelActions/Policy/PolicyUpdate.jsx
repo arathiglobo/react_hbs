@@ -82,11 +82,28 @@ const PolicyUpdate = () => {
     }));
   };
 
+  // ✅ Normalise any datetime string to "yyyy-MM-ddTHH:mm" for datetime-local inputs.
+  // Handles: "2025-01-15T10:30:00", "2025-01-15T10:30:00.000Z", "2025-01-15 10:30", etc.
+  const normaliseDateTime = (value) => {
+    if (!value) return "";
+    // Already in the correct 16-char format
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return "";
+    // Use local time components to avoid timezone shift
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+      `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+    );
+  };
+
   // ✅ Helper function to get minimum date for Validity To (From date + 1 minute)
   const getMinValidityToDate = (fromDate) => {
     if (!fromDate) return "";
     const date = new Date(fromDate);
-    date.setMinutes(date.getMinutes() + 1); // Add 1 minute
+    if (isNaN(date.getTime())) return ""; // Guard against invalid dates from API
+    date.setMinutes(date.getMinutes() + 1);
     return date.toISOString().slice(0, 16);
   };
 
@@ -229,7 +246,7 @@ const PolicyUpdate = () => {
                         <Form.Control
                           type="datetime-local"
                           className="rounded-3"
-                          value={v.validityFrom || ""}
+                          value={normaliseDateTime(v.validityFrom)}
                           onChange={(e) =>
                             handleNestedChange(
                               "validityPeriods",
@@ -247,7 +264,7 @@ const PolicyUpdate = () => {
                         <Form.Control
                           type="datetime-local"
                           className="rounded-3"
-                          value={v.validityTo || ""}
+                          value={normaliseDateTime(v.validityTo)}
                           min={getMinValidityToDate(v.validityFrom)}
                           onChange={(e) =>
                             handleNestedChange(

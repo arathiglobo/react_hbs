@@ -22,12 +22,12 @@ import "../styles/HotelSearch.css";
 function SearchProgressBar({ pollStatus, completedChannels }) {
   const channels = [
     "inhouse",
-    // "iwtx",
-    // "x3",
-    // "ratehawk",
-    // "darina",
-    // "atharva",
-    // "jumeirah",
+    "iwtx",
+    "x3",
+    "ratehawk",
+    "darina",
+    "atharva",
+    "jumeirah",
   ];
   const [progress, setProgress] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -375,12 +375,12 @@ export default function HotelSearch() {
 
   const channelTypeOptions = [
     { value: "inhouse", label: "Inhouse" },
-    // { value: "iwtx", label: "Iwtx" },
-    // { value: "x3", label: "x3" },
-    // { value: "atharva", label: "Atharva" },
-    // { value: "jumeirah", label: "Jumeirah" },
-    // { value: "ratehawk", label: "Ratehawk" },
-    // { value: "darina", label: "Darina" },
+    { value: "iwtx", label: "Iwtx" },
+    { value: "x3", label: "x3" },
+    { value: "atharva", label: "Atharva" },
+    { value: "jumeirah", label: "Jumeirah" },
+    { value: "ratehawk", label: "Ratehawk" },
+    { value: "darina", label: "Darina" },
   ];
 
   useEffect(() => {
@@ -556,12 +556,11 @@ export default function HotelSearch() {
     if (destinationOptions.length > 0) return;
     try {
       setIsDestinationLoading(true);
-      const response = await axiosInstance.get("/api/province?limit=50");
+      const response = await axiosInstance.get("/api/province?limit=20");
       const cityApiRes = Array.isArray(response.data) ? response.data : [];
       const options = cityApiRes.map((city) => ({
         value: city.id,
-        // label: `${city.name}, ${city.state} , ${city.country}`,
-         label: `${city.stateName},${city.country}`,
+        label: `${city.stateName}, ${city.country}`,
         countryId: city.countryId,
       }));
       setDestinationOptions(options);
@@ -827,12 +826,12 @@ export default function HotelSearch() {
 
       const expectedChannels = [
         "inhouse",
-        // "iwtx",
-        // "x3",
-        // "ratehawk",
-        // "darina",
-        // "atharva",
-        // "jumeirah",
+        "iwtx",
+        "x3",
+        "ratehawk",
+        "darina",
+        "atharva",
+        "jumeirah",
       ];
 
       await pollUntilComplete(

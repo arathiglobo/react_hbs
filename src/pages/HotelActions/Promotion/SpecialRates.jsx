@@ -41,6 +41,7 @@ const SpecialRates = () => {
     bookByDate: "",
     bookByPriorDays: "",
     minimumStay: "",
+    maximumStay: "",
     validityList: [{ from: "", to: "" }],
     blackoutDates: [{ from: "", to: "" }],
     remarks: "",
@@ -72,8 +73,23 @@ const SpecialRates = () => {
     }
 
     // Minimum Stay validation
-    if (!formData.minimumStay || formData.minimumStay === "" || Number(formData.minimumStay) <= 0) {
-      errors.minimumStay = "Please enter a valid minimum stay (greater than 0)";
+    if (
+      !formData.minimumStay ||
+      formData.minimumStay === "" ||
+      Number(formData.minimumStay) <= 0
+    ) {
+      errors.minimumStay =
+        "Please enter a valid minimum  length of  stay (greater than 0)";
+    }
+
+    // Maximum Stay validation
+    if (
+      !formData.maximumStay ||
+      formData.maximumStay === "" ||
+      Number(formData.maximumStay) <= 0
+    ) {
+      errors.maximumStay =
+        "Please enter a valid maximum length of stay (greater than 0)";
     }
 
     console.log("Validation errors:", errors);
@@ -85,7 +101,7 @@ const SpecialRates = () => {
   const loadHotelRoomDatas = async () => {
     try {
       const response = await axiosInstance.get(
-        `/api/hotelRoomDetailsController/${id}`
+        `/api/hotelRoomDetailsController/${id}`,
       );
       console.log("Hotel Rooms Data:", response.data);
       setHotelRoomsData(response.data || []);
@@ -106,7 +122,7 @@ const SpecialRates = () => {
       // Add "All" option with value -1 at the beginning
       const marketsWithAll = [
         { marketTypeId: 100, name: "All" },
-        ...(marketRes.data || [])
+        ...(marketRes.data || []),
       ];
 
       setMarkets(marketsWithAll);
@@ -124,7 +140,7 @@ const SpecialRates = () => {
     } else {
       const selectedIds = formData.marketType.map((m) => m.value);
       const filtered = countries.filter((c) =>
-        selectedIds.includes(c.marketTypeId)
+        selectedIds.includes(c.marketTypeId),
       );
       setFilteredCountries(filtered);
     }
@@ -153,7 +169,6 @@ const SpecialRates = () => {
       if (seasonRes.data) {
         setSeasonData(seasonRes.data);
       }
-
     } catch {
       toast.error("Failed to load seasons");
     } finally {
@@ -195,7 +210,7 @@ const SpecialRates = () => {
     // Add 1 minute to the from date to ensure validityTo is after validityFrom
     date.setMinutes(date.getMinutes() + 1);
     // Format to YYYY-MM-DDTHH:MM for datetime-local input
-    const pad = (num) => num.toString().padStart(2, '0');
+    const pad = (num) => num.toString().padStart(2, "0");
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
@@ -256,8 +271,8 @@ const SpecialRates = () => {
                   adultrate: "",
                   childrate: "",
                 };
-              }) || []
-          ) || []
+              }) || [],
+          ) || [],
       );
 
       // Also include meal plan rates if they exist
@@ -271,7 +286,7 @@ const SpecialRates = () => {
           meal: true,
           adultrate: meal.extraAdult || "",
           childrate: meal.extraChild || "",
-        }))
+        })),
       );
 
       // Combine both room and meal rates
@@ -291,10 +306,16 @@ const SpecialRates = () => {
         isRefund: formData.isRefundable,
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
-        lengthStay: String(formData.minimumStay),
+        minlengthStay: String(formData.minimumStay),
+        maxlengthStay: String(formData.maximumStay),
         remark: formData.remarks || "",
-        combinedPromoId: formData.combinedStayPay || formData.combinedDiscount || "",
-        promotype: formData.combinedStayPay ? "SAP" : formData.combinedDiscount ? "DSR" : "",
+        combinedPromoId:
+          formData.combinedStayPay || formData.combinedDiscount || "",
+        promotype: formData.combinedStayPay
+          ? "SAP"
+          : formData.combinedDiscount
+            ? "DSR"
+            : "",
         specialRateValidityDTO: [...validityList, ...blackoutDates],
         promotionCompulsoryDTO: [],
         specialRateRoomDTO: allSpecialRateRoomDTO,
@@ -304,7 +325,7 @@ const SpecialRates = () => {
 
       const response = await axiosInstance.post(
         "/api/hotelSpecialRate/save",
-        specialratesaveReq
+        specialratesaveReq,
       );
 
       if (response.data) {
@@ -358,20 +379,24 @@ const SpecialRates = () => {
                             });
                             // Clear validation error when user selects
                             if (validationErrors.season) {
-                              setValidationErrors({ ...validationErrors, season: "" });
+                              setValidationErrors({
+                                ...validationErrors,
+                                season: "",
+                              });
                             }
                           }}
                           className="rounded-pill"
                           isInvalid={!!validationErrors.season}
                         >
                           <option value="">Select Season</option>
-                          {seasonData?.map(
-                            (season) => (
-                              <option key={season.seasonTypeId} value={season.seasonTypeId}>
-                                {season.season}
-                              </option>
-                            )
-                          )}
+                          {seasonData?.map((season) => (
+                            <option
+                              key={season.seasonTypeId}
+                              value={season.seasonTypeId}
+                            >
+                              {season.season}
+                            </option>
+                          ))}
                         </Form.Select>
                         {validationErrors.season && (
                           <Form.Control.Feedback type="invalid">
@@ -394,7 +419,10 @@ const SpecialRates = () => {
                             });
                             // Clear validation error when user types
                             if (validationErrors.rateCode) {
-                              setValidationErrors({ ...validationErrors, rateCode: "" });
+                              setValidationErrors({
+                                ...validationErrors,
+                                rateCode: "",
+                              });
                             }
                           }}
                           placeholder="Enter rate code"
@@ -423,18 +451,27 @@ const SpecialRates = () => {
                             setFormData({ ...formData, marketType: selected });
                             // Clear validation error when user selects
                             if (validationErrors.marketType) {
-                              setValidationErrors({ ...validationErrors, marketType: "" });
+                              setValidationErrors({
+                                ...validationErrors,
+                                marketType: "",
+                              });
                             }
                           }}
                           classNamePrefix="react-select"
                           placeholder="Select Market Type"
-                          className={validationErrors.marketType ? 'is-invalid' : ''}
+                          className={
+                            validationErrors.marketType ? "is-invalid" : ""
+                          }
                           styles={{
                             control: (base, state) => ({
                               ...base,
-                              borderColor: validationErrors.marketType ? '#dc3545' : base.borderColor,
-                              boxShadow: validationErrors.marketType ? '0 0 0 0.25rem rgba(220, 53, 69, 0.25)' : base.boxShadow,
-                            })
+                              borderColor: validationErrors.marketType
+                                ? "#dc3545"
+                                : base.borderColor,
+                              boxShadow: validationErrors.marketType
+                                ? "0 0 0 0.25rem rgba(220, 53, 69, 0.25)"
+                                : base.boxShadow,
+                            }),
                           }}
                         />
                         {validationErrors.marketType && (
@@ -559,7 +596,10 @@ const SpecialRates = () => {
                             });
                             // Clear validation error when user types
                             if (validationErrors.minimumStay) {
-                              setValidationErrors({ ...validationErrors, minimumStay: "" });
+                              setValidationErrors({
+                                ...validationErrors,
+                                minimumStay: "",
+                              });
                             }
                           }}
                           isInvalid={!!validationErrors.minimumStay}
@@ -568,6 +608,35 @@ const SpecialRates = () => {
                         {validationErrors.minimumStay && (
                           <Form.Control.Feedback type="invalid">
                             {validationErrors.minimumStay}
+                          </Form.Control.Feedback>
+                        )}
+                      </Form.Group>
+                    </Col>
+                    <Col md={2}>
+                      <Form.Group>
+                        <Form.Label>Max Stay *</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={formData.maximumStay}
+                          onChange={(e) => {
+                            setFormData({
+                              ...formData,
+                              maximumStay: e.target.value,
+                            });
+                            // Clear validation error when user types
+                            if (validationErrors.maximumStay) {
+                              setValidationErrors({
+                                ...validationErrors,
+                                maximumStay: "",
+                              });
+                            }
+                          }}
+                          isInvalid={!!validationErrors.maximumStay}
+                          min="1"
+                        />
+                        {validationErrors.maximumStay && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.maximumStay}
                           </Form.Control.Feedback>
                         )}
                       </Form.Group>
@@ -590,23 +659,28 @@ const SpecialRates = () => {
                         </div>
                         {formData.validityList.map((v, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
+                            {/* FROM DATE */}
+                            <Col md={5}>
                               <Form.Control
                                 type="datetime-local"
+                                size="sm"
                                 value={v.from}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
                                     i,
                                     "from",
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                               />
                             </Col>
-                            <Col>
+
+                            {/* TO DATE */}
+                            <Col md={5}>
                               <Form.Control
                                 type="datetime-local"
+                                size="sm"
                                 value={v.to}
                                 min={getMinValidityToDate(v.from)}
                                 onChange={(e) =>
@@ -614,12 +688,14 @@ const SpecialRates = () => {
                                     "validityList",
                                     i,
                                     "to",
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                               />
                             </Col>
-                            <Col xs="auto">
+
+                            {/* DELETE BUTTON */}
+                            <Col md={2} className="text-end">
                               {i > 0 && (
                                 <Button
                                   size="sm"
@@ -649,25 +725,31 @@ const SpecialRates = () => {
                             <FaPlus /> Add
                           </Button>
                         </div>
+
                         {formData.blackoutDates.map((b, i) => (
-                          <Row key={i} className="align-items-center mb-2">
-                            <Col>
+                          <Row key={i} className="align-items-center mb-2 g-2">
+                            {/* FROM DATE */}
+                            <Col md={5}>
                               <Form.Control
                                 type="datetime-local"
+                                size="sm"
                                 value={b.from}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
                                     i,
                                     "from",
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                               />
                             </Col>
-                            <Col>
+
+                            {/* TO DATE */}
+                            <Col md={5}>
                               <Form.Control
                                 type="datetime-local"
+                                size="sm"
                                 value={b.to}
                                 min={getMinValidityToDate(b.from)}
                                 onChange={(e) =>
@@ -675,12 +757,14 @@ const SpecialRates = () => {
                                     "blackoutDates",
                                     i,
                                     "to",
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                               />
                             </Col>
-                            <Col xs="auto">
+
+                            {/* DELETE BUTTON */}
+                            <Col md={2} className="text-end">
                               {i > 0 && (
                                 <Button
                                   size="sm"
@@ -733,7 +817,7 @@ const SpecialRates = () => {
                                   roomIndex,
                                   mealIndex,
                                   "single",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -748,7 +832,7 @@ const SpecialRates = () => {
                                   roomIndex,
                                   mealIndex,
                                   "double",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -763,7 +847,7 @@ const SpecialRates = () => {
                                   roomIndex,
                                   mealIndex,
                                   "extraAdult",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -778,7 +862,7 @@ const SpecialRates = () => {
                                   roomIndex,
                                   mealIndex,
                                   "extraChild",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -821,8 +905,10 @@ const SpecialRates = () => {
                                         <th key={occupancy.id}>
                                           {occupancy.occupanyType}
                                         </th>
-                                      )
+                                      ),
                                     )}
+                                    <th>Extra Bed Adult</th>
+                                    <th>Extra Bed Child</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -840,7 +926,7 @@ const SpecialRates = () => {
                                                 placeholder="0"
                                                 value={
                                                   roomRates[
-                                                  `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
+                                                    `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
                                                   ] || ""
                                                 }
                                                 onChange={(e) => {
@@ -853,10 +939,51 @@ const SpecialRates = () => {
                                                 size="sm"
                                               />
                                             </td>
-                                          )
+                                          ),
                                         )}
+                                        {/* ✅ Extra Bed Adult */}
+                                        <td>
+                                          <Form.Control
+                                            type="number"
+                                            placeholder="0"
+                                            value={
+                                              roomRates[
+                                                `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraAdult`
+                                              ] || ""
+                                            }
+                                            onChange={(e) => {
+                                              const key = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraAdult`;
+                                              setRoomRates((prev) => ({
+                                                ...prev,
+                                                [key]: e.target.value,
+                                              }));
+                                            }}
+                                            size="sm"
+                                          />
+                                        </td>
+
+                                        {/* ✅ Extra Bed Child */}
+                                        <td>
+                                          <Form.Control
+                                            type="number"
+                                            placeholder="0"
+                                            value={
+                                              roomRates[
+                                                `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraChild`
+                                              ] || ""
+                                            }
+                                            onChange={(e) => {
+                                              const key = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraChild`;
+                                              setRoomRates((prev) => ({
+                                                ...prev,
+                                                [key]: e.target.value,
+                                              }));
+                                            }}
+                                            size="sm"
+                                          />
+                                        </td>
                                       </tr>
-                                    )
+                                    ),
                                   )}
                                 </tbody>
                               </table>
@@ -904,7 +1031,9 @@ const SpecialRates = () => {
                                 ...formData,
                                 combinedStayPay: selectedValue,
                                 // Clear the other field when this one is selected
-                                combinedDiscount: selectedValue ? "" : formData.combinedDiscount,
+                                combinedDiscount: selectedValue
+                                  ? ""
+                                  : formData.combinedDiscount,
                               });
                             }}
                           >
@@ -912,7 +1041,7 @@ const SpecialRates = () => {
                             {Array.isArray(hotelPromotions) &&
                               hotelPromotions
                                 .filter(
-                                  (promo) => promo.promotionType === "StayPay"
+                                  (promo) => promo.promotionType === "StayPay",
                                 )
                                 .map((promo) => (
                                   <option key={promo.id} value={promo.id}>
@@ -935,7 +1064,9 @@ const SpecialRates = () => {
                                 ...formData,
                                 combinedDiscount: selectedValue,
                                 // Clear the other field when this one is selected
-                                combinedStayPay: selectedValue ? "" : formData.combinedStayPay,
+                                combinedStayPay: selectedValue
+                                  ? ""
+                                  : formData.combinedStayPay,
                               });
                             }}
                           >
@@ -943,7 +1074,7 @@ const SpecialRates = () => {
                             {Array.isArray(hotelPromotions) &&
                               hotelPromotions
                                 .filter(
-                                  (promo) => promo.promotionType === "Discount"
+                                  (promo) => promo.promotionType === "Discount",
                                 )
                                 .map((promo) => (
                                   <option key={promo.id} value={promo.id}>
