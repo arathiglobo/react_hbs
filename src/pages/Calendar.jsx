@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Card, Button, Row, Col, Modal, Badge, Spinner } from "react-bootstrap";
+import { Card, Button, Row, Col, Modal, Badge, Spinner, Table } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
@@ -312,424 +312,331 @@ export default function Calendar() {
           </Card>
 
           {/* Booking Details Modal */}
+          {/* Booking Details Modal */}
           <Modal
             show={showBookingModal}
             onHide={closeBookingModal}
             size="lg"
             centered
+            backdrop="static"
+            keyboard={false}
+            className="premium-modal"
           >
-            <Modal.Header
-              closeButton
-              className="border-bottom-0 pb-0"
-              style={{
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                color: "white",
-              }}
-            >
-              <div className="w-100">
-                <Modal.Title className="text-white mb-2">
-                  <FaCalendarAlt className="me-0" />
-                  Booking Details{" "}
-                  <h4 className="text-white mb-0 fw-bold">
-                    {bookingDetails?.bookingHeader?.bookingCode || selectedBooking?.bookingCode || "N/A"}
-                  </h4>
-                </Modal.Title>
-                <div className="d-flex align-items-center gap-3 flex-wrap">
-                  {/* <Badge 
-                     bg={
-                       selectedBooking?.bookingStatus === 'UPCOMING' ? 'warning' :
-                       selectedBooking?.bookingStatus === 'COMPLETED' ? 'success' :
-                       selectedBooking?.bookingStatus === 'CANCELLED' ? 'danger' : 'info'
-                     } 
-                     className="px-3 py-2"
-                     style={{ fontSize: '0.9rem' }}
-                   >
-                     {selectedBooking?.bookingStatus}
-                   </Badge> */}
-                  {/* {selectedBooking?.confirmationStatus && (
-                     <Badge 
-                       bg={selectedBooking.confirmationStatus === 'Confirmed' ? 'success' : 'warning'} 
-                       className="px-3 py-2"
-                       style={{ fontSize: '0.9rem' }}
-                     >
-                       {selectedBooking.confirmationStatus}
-                     </Badge>
-                   )} */}
+            <Modal.Header closeButton className="bg-primary text-white" style={{ borderBottom: "none" }}>
+              <div className="w-100 me-3">
+                <div className="d-flex justify-content-between align-items-center mb-1">
+                  <Modal.Title className="fw-bold fs-5">
+                    Booking Details
+                  </Modal.Title>
+                  <Badge
+                    bg={
+                      bookingDetails?.bookingHeader?.confirmationStatus === "Confirmed"
+                        ? "success"
+                        : "danger"
+                    }
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "0.4rem 0.8rem",
+                    }}
+                  >
+                    {bookingDetails?.bookingHeader?.confirmationStatus
+                      ? bookingDetails.bookingHeader.confirmationStatus.toUpperCase()
+                      : "-"}
+                  </Badge>
+                </div>
+                <div className="text-white-50 small">
+                  <span className="me-3">
+                    <strong>Booking ID:</strong>{" "}
+                    {bookingDetails?.bookingHeader?.bookingId || "-"}
+                  </span>
+                  <span>
+                    <strong>Reference:</strong>{" "}
+                    {bookingDetails?.bookingHeader?.referenceNumber || "-"}
+                  </span>
                 </div>
               </div>
             </Modal.Header>
-            <Modal.Body className="p-4">
+            <Modal.Body className="px-4 py-4">
               {loadingBookingDetails ? (
                 <div className="text-center py-5">
                   <Spinner animation="border" variant="primary" />
-                  <p className="mt-3 text-muted">Loading booking details...</p>
+                  <p className="mt-2 text-muted">Loading booking details...</p>
                 </div>
               ) : bookingDetails && bookingDetails.success ? (
                 <div className="booking-details">
-                  {/* Summary Card */}
-                  <Card
-                    className="mb-4 border-0 shadow-sm"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
-                    }}
-                  >
-                    <Card.Body className="p-4">
-                      <Row className="align-items-center">
-                        <Col md={8}>
-                          <div className="d-flex align-items-center mb-2">
-                            <div className="bg-white rounded-circle p-3 me-3 shadow-sm">
-                              <FaHotel className="text-primary" size={24} />
+                  {/* Booking Header - Prominent */}
+                  <div className="mb-4 p-3 bg-light rounded border">
+                    <Row className="align-items-center">
+                      <Col md={8}>
+                        <div className="d-flex align-items-center gap-3 mb-2">
+                          <h5 className="mb-0 fw-bold text-dark">
+                            {bookingDetails.bookingHeader?.bookingCode || "N/A"}
+                          </h5>
+                          <Badge
+                            bg={
+                              bookingDetails.bookingHeader?.confirmationStatus === "Confirmed"
+                                ? "success"
+                                : "danger"
+                            }
+                            style={{
+                              fontSize: "0.75rem",
+                              padding: "0.4rem 0.8rem",
+                            }}
+                          >
+                            {bookingDetails.bookingHeader?.confirmationStatus
+                              ? bookingDetails.bookingHeader.confirmationStatus.toUpperCase()
+                              : "-"}
+                          </Badge>
+                        </div>
+                        <div className="text-muted small">
+                          <span className="me-3">
+                            <strong>Booking ID:</strong>{" "}
+                            {bookingDetails.bookingHeader?.bookingId || "-"}
+                          </span>
+                          <span>
+                            <strong>Reference:</strong>{" "}
+                            {bookingDetails.bookingHeader?.referenceNumber || "-"}
+                          </span>
+                        </div>
+                      </Col>
+                      <Col md={4} className="text-end">
+                        <div className="text-muted small">
+                          <div>
+                            <strong>Booking Date:</strong>
+                          </div>
+                          <div>
+                            {bookingDetails.bookingHeader?.bookingDate
+                              ? new Date(bookingDetails.bookingHeader.bookingDate).toLocaleDateString("en-US", {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                })
+                              : "-"}
+                          </div>
+                          {bookingDetails.bookingHeader?.deadlineDate && (
+                            <>
+                              <div className="mt-2">
+                                <strong>Deadline:</strong>
+                              </div>
+                              <div>
+                                {new Date(bookingDetails.bookingHeader.deadlineDate).toLocaleDateString("en-US", {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </Col>
+                    </Row>
+                  </div>
+
+                  <Row>
+                    {/* Left Column */}
+                    <Col md={7}>
+                      {/* Guest Information */}
+                      <Card className="mb-3 border-0 shadow-sm">
+                        <Card.Header
+                          className="bg-light border-bottom fw-semibold"
+                          style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}
+                        >
+                          Guest Information
+                        </Card.Header>
+                        <Card.Body>
+                          <div className="mb-3">
+                            <div className="text-muted small mb-1">Guest Name</div>
+                            <div className="fw-semibold">
+                              {bookingDetails.guestInformation?.guestName || "-"}
                             </div>
+                          </div>
+                          <Row>
+                            <Col md={6}>
+                              <div className="mb-3">
+                                <div className="text-muted small mb-1">Email</div>
+                                <div>{bookingDetails.guestInformation?.email || "-"}</div>
+                              </div>
+                            </Col>
+                            <Col md={6}>
+                              <div className="mb-3">
+                                <div className="text-muted small mb-1">Mobile Number</div>
+                                <div>{bookingDetails.guestInformation?.mobileNumber || "-"}</div>
+                              </div>
+                            </Col>
+                          </Row>
+                          <div>
+                            <div className="text-muted small mb-1">Nationality</div>
+                            <div>{bookingDetails.guestInformation?.nativeCountry || "-"}</div>
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+
+                    {/* Right Column - Pricing Summary */}
+                    <Col md={5}>
+                      <Card className="border-0 shadow-sm mb-3">
+                        <Card.Header
+                          className="bg-light border-bottom fw-semibold"
+                          style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}
+                        >
+                          Pricing Summary
+                        </Card.Header>
+                        <Card.Body>
+                          <div className="mb-3">
+                            <div className="d-flex justify-content-between mb-2">
+                              <span className="text-muted">Room Rate</span>
+                              <span className="fw-semibold">
+                                {bookingDetails.bookingDetails?.currency || ""}{" "}
+                                {bookingDetails.bookingDetails?.total
+                                  ? bookingDetails.bookingDetails.total.toFixed(2)
+                                  : "0.00"}
+                              </span>
+                            </div>
+                          </div>
+                          <hr className="my-3" />
+                          <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
+                            <span className="fw-bold fs-5">Total Amount</span>
+                            <span className="text-success fw-bold fs-4">
+                              {bookingDetails.bookingDetails?.currency || "AED"}{" "}
+                              {bookingDetails.bookingDetails?.total?.toFixed(2) || "0.00"}
+                            </span>
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  {/* Reservation Details - Full Width */}
+                  <Card className="mb-3 border-0 shadow-sm">
+                    <Card.Header
+                      className="bg-light border-bottom fw-semibold"
+                      style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}
+                    >
+                      Reservation Details
+                    </Card.Header>
+                    <Card.Body>
+                      <div className="mb-3">
+                        <div className="text-muted small mb-1">Hotel Name</div>
+                        <div className="fw-semibold">
+                          {bookingDetails.bookingDetails?.hotelName || "-"}
+                        </div>
+                      </div>
+                      <Row>
+                        <Col md={6}>
+                          <div className="mb-3">
+                            <div className="text-muted small mb-1">Check-In Date</div>
+                            <div>{bookingDetails.bookingDetails?.checkInDate || "-"}</div>
+                          </div>
+                        </Col>
+                        <Col md={6}>
+                          <div className="mb-3">
+                            <div className="text-muted small mb-1">Check-Out Date</div>
+                            <div>{bookingDetails.bookingDetails?.checkOutDate || "-"}</div>
+                          </div>
+                        </Col>
+                      </Row>
+                      <Row>
+                        <Col md={4}>
+                          <div className="mb-3">
+                            <div className="text-muted small mb-1">Duration</div>
                             <div>
-                              <h5 className="mb-1 fw-bold">
-                                {bookingDetails.bookingDetails?.hotelName || "Hotel"}
-                              </h5>
+                              {bookingDetails.bookingDetails?.numberOfNights || "0"} Night(s)
                             </div>
                           </div>
                         </Col>
-                        <Col md={4} className="text-end">
-                          <div className="mb-2">
-                            <small className="text-muted d-block">
-                              Total Amount
-                            </small>
-                            <h3 className="mb-0 text-success fw-bold total-rate">
-                              {bookingDetails.bookingDetails?.currency || "AED"}{" "}
-                              {bookingDetails.bookingDetails?.total?.toLocaleString() || "0"}
-                            </h3>
+                        <Col md={4}>
+                          <div className="mb-3">
+                            <div className="text-muted small mb-1">Number of Rooms</div>
+                            <div>{bookingDetails.bookingDetails?.numberOfRooms || "0"}</div>
+                          </div>
+                        </Col>
+                        <Col md={4}>
+                          <div className="mb-3">
+                            <div className="text-muted small mb-1">Total Guests</div>
+                            <div>
+                              {bookingDetails.bookingDetails?.numberOfAdults || "0"} Adults
+                              {bookingDetails.bookingDetails?.numberOfChildren > 0 &&
+                                `, ${bookingDetails.bookingDetails.numberOfChildren} Children`}
+                            </div>
                           </div>
                         </Col>
                       </Row>
                     </Card.Body>
                   </Card>
 
-                  {/* Guest & Stay Information */}
-                  <Row className="g-3 mb-4">
-                    <Col md={6}>
-                      <Card className="h-100 border-0 shadow-sm">
-                        <Card.Header className="bg-secondary text-white">
-                          <h6 className="mb-0">
-                            <FaUser className="me-2" />
-                            Guest Information
-                          </h6>
-                        </Card.Header>
-                        <Card.Body className="p-3">
-                          <div className="mb-3">
-                            <small className="text-muted d-block mb-1">
-                              Primary Guest
-                            </small>
-                            <h6 className="mb-0 fw-bold">
-                              {bookingDetails.guestInformation?.guestName || "N/A"}
-                            </h6>
-                          </div>
-                          <div className="mb-3 pb-3 border-bottom">
-                            <FaEnvelope
-                              className="me-2 text-primary"
-                              size={14}
-                            />
-                            <small className="text-muted">
-                              {bookingDetails.guestInformation?.email || "N/A"}
-                            </small>
-                          </div>
-                          <div className="mb-3 pb-3 border-bottom">
-                            <FaPhone className="me-2 text-primary" size={14} />
-                            <small className="text-muted">
-                              {bookingDetails.guestInformation?.mobileNumber || "N/A"}
-                            </small>
-                          </div>
-                          {bookingDetails.guestInformation?.nativeCountry && (
-                            <div>
-                              <small className="text-muted d-block mb-1">
-                                Country Code
-                              </small>
-                              <Badge bg="info">
-                                {bookingDetails.guestInformation.nativeCountry}
-                              </Badge>
-                            </div>
-                          )}
-                        </Card.Body>
-                      </Card>
-                    </Col>
-                    <Col md={6}>
-                      <Card className="h-100 border-0 shadow-sm">
-                        <Card.Header className="bg-secondary text-white">
-                          <h6 className="mb-0">
-                            <FaClock className="me-2" />
-                            Stay Details
-                          </h6>
-                        </Card.Header>
-                        <Card.Body className="p-3">
-                          <Row className="g-2">
-                            <Col xs={6}>
-                              <small className="text-muted d-block mb-1">
-                                Check-in
-                              </small>
-                              <div className="fw-bold">
-                                {bookingDetails.bookingDetails?.checkInDate
-                                  ? new Date(
-                                      bookingDetails.bookingDetails.checkInDate
-                                    ).toLocaleDateString("en-US", {
-                                      weekday: "short",
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    })
-                                  : "N/A"}
-                              </div>
-                            </Col>
-                            <Col xs={6}>
-                              <small className="text-muted d-block mb-1">
-                                Check-out
-                              </small>
-                              <div className="fw-bold">
-                                {bookingDetails.bookingDetails?.checkOutDate
-                                  ? new Date(
-                                      bookingDetails.bookingDetails.checkOutDate
-                                    ).toLocaleDateString("en-US", {
-                                      weekday: "short",
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    })
-                                  : "N/A"}
-                              </div>
-                            </Col>
-                            <Col xs={6}>
-                              <small className="text-muted d-block mb-1">
-                                Duration
-                              </small>
-                              <div className="fw-bold">
-                                {bookingDetails.bookingDetails?.numberOfNights || 0} Night
-                                {bookingDetails.bookingDetails?.numberOfNights !== 1 ? "s" : ""}
-                              </div>
-                            </Col>
-                            <Col xs={6}>
-                              <small className="text-muted d-block mb-1">
-                                Rooms
-                              </small>
-                              <div className="fw-bold">
-                                {bookingDetails.bookingDetails?.numberOfRooms || 0} Room
-                                {bookingDetails.bookingDetails?.numberOfRooms !== 1 ? "s" : ""}
-                              </div>
-                            </Col>
-                            <Col xs={6}>
-                              <small className="text-muted d-block mb-1">
-                                Adults
-                              </small>
-                              <div className="fw-bold">
-                                {bookingDetails.bookingDetails?.numberOfAdults || 0}
-                              </div>
-                            </Col>
-                            <Col xs={6}>
-                              <small className="text-muted d-block mb-1">
-                                Children
-                              </small>
-                              <div className="fw-bold">
-                                {bookingDetails.bookingDetails?.numberOfChildren || 0}
-                              </div>
-                            </Col>
-                            {bookingDetails.bookingHeader?.deadlineDate && (
-                              <Col xs={12} className="mt-2 pt-2 border-top">
-                                <small className="text-muted d-block mb-1">
-                                  Cancellation Deadline
-                                </small>
-                                <div className="fw-bold text-danger">
-                                  {new Date(
-                                    bookingDetails.bookingHeader.deadlineDate
-                                  ).toLocaleDateString("en-US", {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                  })}
-                                </div>
-                              </Col>
-                            )}
-                          </Row>
-                        </Card.Body>
-                      </Card>
-                    </Col>
-                  </Row>
-
-                  {/* Room Details */}
-                  {bookingDetails.bookingDetails?.rooms && bookingDetails.bookingDetails.rooms.length > 0 && (
-                    <Card className="mb-4 border-0 shadow-sm">
-                      <Card.Header className="bg-secondary text-white">
-                        <h6 className="mb-0">
-                          <FaBed className="me-2" />
-                          Room Details
-                        </h6>
-                      </Card.Header>
-                      <Card.Body className="p-3">
-                        <Row className="g-3">
-                          {bookingDetails.bookingDetails.rooms.map((room, index) => (
-                            <Col md={6} key={index}>
-                              <Card className="h-100 border">
-                                <Card.Body className="p-3">
-                                  <div className="d-flex justify-content-between align-items-start mb-2">
-                                    <div>
-                                      <h6 className="mb-1 fw-bold">
-                                        Room {room.roomNo || index + 1}
-                                      </h6>
-                                      <Badge bg="primary" className="mb-2">
-                                        {room.roomCategory || "Standard Room"}
-                                      </Badge>
-                                    </div>
-                                    <div className="text-end">
-                                      <small className="text-muted d-block">Rate</small>
-                                      <strong className="text-success">
-                                        {bookingDetails.bookingDetails?.currency || "AED"} {room.rate?.toLocaleString() || "0"}
-                                      </strong>
-                                    </div>
-                                  </div>
-                                  <div className="mb-2">
-                                    <small className="text-muted d-block mb-1">Meal Plan</small>
-                                    <div className="fw-semibold">{room.mealPlan || "N/A"}</div>
-                                  </div>
-                                  <div className="d-flex gap-3">
-                                    <div>
-                                      <small className="text-muted d-block mb-1">Adults</small>
-                                      <div className="fw-bold">{room.adults || 0}</div>
-                                    </div>
-                                    <div>
-                                      <small className="text-muted d-block mb-1">Children</small>
-                                      <div className="fw-bold">{room.children || 0}</div>
-                                    </div>
-                                  </div>
-                                </Card.Body>
-                              </Card>
-                            </Col>
-                          ))}
-                        </Row>
-                      </Card.Body>
-                    </Card>
-                  )}
-
-                  {/* Booking Information */}
-                  <Row className="g-3">
-                    <Col md={6}>
-                      <Card className="border-0 shadow-sm">
-                        <Card.Header className="bg-secondary text-white">
-                          <h6 className="mb-0">
-                            <FaCalendarAlt className="me-2" />
-                            Booking Information
-                          </h6>
-                        </Card.Header>
-                        <Card.Body className="p-3">
-                          <div className="mb-3">
-                            <small className="text-muted d-block mb-1">
-                              Reference Number
-                            </small>
-                            <div className="fw-bold font-monospace">
-                              {bookingDetails.bookingHeader?.referenceNumber || "N/A"}
-                            </div>
-                          </div>
-                          <div className="mb-3 pb-3 border-bottom">
-                            <small className="text-muted d-block mb-1">
-                              Booking Date
-                            </small>
-                            <div className="fw-bold">
-                              {bookingDetails.bookingHeader?.bookingDate
-                                ? new Date(
-                                    bookingDetails.bookingHeader.bookingDate
-                                  ).toLocaleDateString("en-US", {
-                                    month: "long",
-                                    day: "numeric",
-                                    year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })
-                                : "N/A"}
-                            </div>
-                          </div>
-                          <div>
-                            <small className="text-muted d-block mb-1">
-                              Booking Code
-                            </small>
-                            <div className="fw-bold font-monospace">
-                              {bookingDetails.bookingHeader?.bookingCode || "N/A"}
-                            </div>
-                          </div>
-                        </Card.Body>
-                      </Card>
-                    </Col>
-                    <Col md={6}>
-                      <Card className="border-0 shadow-sm">
-                        <Card.Header className="bg-secondary text-white">
-                          <h6 className="mb-0">
-                            <FaBed className="me-2" />
-                            Booking Summary
-                          </h6>
-                        </Card.Header>
-                        <Card.Body className="p-3">
-                          <div className="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-                            <span className="text-muted">Booking Status</span>
-                            <span
-                              className={`px-3 py-2 rounded fw-semibold ${
-                                bookingDetails.bookingHeader?.bookingStatus === "UPCOMING"
-                                  ? "text-warning"
-                                  : bookingDetails.bookingHeader?.bookingStatus ===
-                                    "COMPLETED"
-                                  ? "text-success"
-                                  : bookingDetails.bookingHeader?.bookingStatus ===
-                                    "CANCELLED"
-                                  ? "text-danger"
-                                  : "text-info"
-                              }`}
-                            >
-                              {bookingDetails.bookingHeader?.bookingStatus || "N/A"}
-                            </span>
-                          </div>
-
-                          <div className="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-                            <span className="text-muted">Confirmation</span>
-                            <Badge
-                              bg={
-                                bookingDetails.bookingHeader?.confirmationStatus ===
-                                "Confirmed"
-                                  ? "success"
-                                  : "warning"
-                              }
-                              className="px-3 py-2"
-                            >
-                              {bookingDetails.bookingHeader?.confirmationStatus || "N/A"}
-                            </Badge>
-                          </div>
-                          <div className="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-                            <span className="text-muted">Base Rate</span>
-                            <div className="fw-bold">
-                              {bookingDetails.bookingDetails?.currency || "AED"}{" "}
-                              {bookingDetails.bookingDetails?.rate?.toLocaleString() || "0"}
-                            </div>
-                          </div>
-                          <div className="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-                            <span className="text-muted">Tax/Discount</span>
-                            <div className={`fw-bold ${(bookingDetails.bookingDetails?.taxDiscount || 0) < 0 ? "text-danger" : "text-success"}`}>
-                              {bookingDetails.bookingDetails?.currency || "AED"}{" "}
-                              {bookingDetails.bookingDetails?.taxDiscount?.toLocaleString() || "0"}
-                            </div>
-                          </div>
-                          <div className="d-flex justify-content-between align-items-center">
-                            <span className="text-muted fw-bold">Total Amount</span>
-                            <div className="fw-bold text-success fs-5">
-                              {bookingDetails.bookingDetails?.currency || "AED"}{" "}
-                              {bookingDetails.bookingDetails?.total?.toLocaleString() || "0"}
-                            </div>
-                          </div>
-                        </Card.Body>
-                      </Card>
-                    </Col>
-                  </Row>
+                  {/* Rooms Information - Full Width */}
+                  {bookingDetails.bookingDetails?.rooms &&
+                    bookingDetails.bookingDetails.rooms.length > 0 && (
+                      <div className="p-4 bg-light rounded border mt-3">
+                        <div className="mb-3">
+                          <h6 className="fw-bold text-dark mb-3">Room Details</h6>
+                        </div>
+                        <div className="table-responsive">
+                          <Table bordered hover className="mb-0 bg-white">
+                            <thead className="table-light">
+                              <tr>
+                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
+                                  Room No
+                                </th>
+                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
+                                  Room Category
+                                </th>
+                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
+                                  Meal Plan
+                                </th>
+                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
+                                  Adults
+                                </th>
+                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
+                                  Children
+                                </th>
+                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600", textAlign: "right" }}>
+                                  Rate
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {bookingDetails.bookingDetails.rooms.map((room, index) => (
+                                <tr key={index}>
+                                  <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                    <span className="fw-bold text-primary">
+                                      Room {room.roomNo || index + 1}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                    {room.roomCategory || "-"}
+                                  </td>
+                                  <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                    {room.mealPlan || "-"}
+                                  </td>
+                                  <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "center" }}>
+                                    {room.adults || "0"}
+                                  </td>
+                                  <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "center" }}>
+                                    {room.children || "0"}
+                                  </td>
+                                  <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "right" }}>
+                                    {bookingDetails.bookingDetails?.currency || "AED"}{" "}
+                                    {room.rate?.toFixed(2) || "0.00"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
                 </div>
               ) : (
                 <div className="text-center py-5">
-                  <p className="text-muted">Failed to load booking details. Please try again.</p>
-                  <Button variant="primary" size="sm" onClick={closeBookingModal} className="mt-2">
-                    Close
+                  <p className="text-muted">Information unavailable at this time.</p>
+                  <Button variant="outline-dark" size="sm" onClick={closeBookingModal} className="mt-2 rounded-pill px-4">
+                    Return to Calendar
                   </Button>
                 </div>
               )}
             </Modal.Body>
-            <Modal.Footer className="border-top-0 pt-0">
+            <Modal.Footer style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
               <Button variant="secondary" onClick={closeBookingModal}>
                 Close
               </Button>

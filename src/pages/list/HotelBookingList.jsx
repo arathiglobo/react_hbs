@@ -683,7 +683,13 @@ const HotelBookingList = () => {
                     <p className="mt-2 text-muted">Loading bookings...</p>
                   </div>
                 ) : (
-                  <div style={{ overflowX: "auto" }}>
+                  <div
+                    className="thin-scrollbar"
+                    style={{
+                      overflowX: "auto",
+                      // custom scrollbar via className below
+                    }}
+                  >
                     <Table
                       hover
                       size="sm"
@@ -1346,6 +1352,8 @@ const HotelBookingList = () => {
               onHide={() => setShowDetailsModal(false)}
               size="lg"
               centered
+              backdrop="static"
+              keyboard={false}
             >
               <Modal.Header
                 closeButton
