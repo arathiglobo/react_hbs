@@ -230,9 +230,14 @@ const SpecialRates = () => {
       return;
     }
     try {
+      // For datetime-local inputs (YYYY-MM-DDTHH:MM) → append :00 for seconds
+      // For date-only inputs (YYYY-MM-DD) → append T00:00:00 for full datetime
       const formatDate = (date) => {
         if (!date) return "";
-        return `${date}:00`;
+        if (date.includes("T")) {
+          return `${date}:00`;
+        }
+        return `${date}T00:00:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? 1 : 0;
@@ -254,8 +259,8 @@ const SpecialRates = () => {
       }));
 
       // Create special rate room DTO from dynamic hotel rooms data
-      const specialRateRoomDTO = hotelRoomsData.flatMap(
-        (roomCategory) =>
+      const specialRateRoomDTO = hotelRoomsData.flatMap((roomCategory) => {
+        const occupancyEntries =
           roomCategory.roomTypeDetailsDTOs?.flatMap(
             (roomType) =>
               roomCategory.occupancyDetailsDTOs?.map((occupancy) => {
@@ -266,14 +271,37 @@ const SpecialRates = () => {
                   hotelRoomTypeId: String(roomType.roomTypeId),
                   ocuppancyTypeIid: String(occupancy.id),
                   rate: rate,
-                  extraBed: false, // Set based on occupancy type if needed
-                  meal: false, // This is for room rates, not meal rates
+                  extraBed: false,
+                  meal: false,
                   adultrate: "",
                   childrate: "",
                 };
               }) || [],
-          ) || [],
-      );
+          ) || [];
+
+        // Extra Bed entries — one per room type
+        const extraBedEntries =
+          roomCategory.roomTypeDetailsDTOs?.map((roomType) => {
+            const extraAdultKey = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraAdult`;
+            const extraChildKey = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraChild`;
+            const extraAdultVal = roomRates[extraAdultKey] || "";
+            const extraChildVal = roomRates[extraChildKey] || "";
+            const hasExtraBed =
+              (Number(extraAdultVal) > 0) || (Number(extraChildVal) > 0);
+            return {
+              hotelRoomcategoryId: String(roomCategory.rommCategoryId),
+              hotelRoomTypeId: String(roomType.roomTypeId),
+              ocuppancyTypeIid: "",
+              rate: "0",
+              extraBed: hasExtraBed,
+              meal: false,
+              adultrate: hasExtraBed ? extraAdultVal : "",
+              childrate: hasExtraBed ? extraChildVal : "",
+            };
+          }) || [];
+
+        return [...occupancyEntries, ...extraBedEntries];
+      });
 
       // Also include meal plan rates if they exist
       const mealRateDTO = rooms.flatMap((room) =>

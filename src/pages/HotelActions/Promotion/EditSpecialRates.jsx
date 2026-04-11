@@ -20,7 +20,6 @@ export default function EditSpecialRates() {
   const navigate = useNavigate();
   const { id, editId } = useParams();
 
-
   const [loading, setLoading] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [countries, setCountries] = useState([]);
@@ -42,6 +41,7 @@ export default function EditSpecialRates() {
     bookByDate: "",
     bookByPriorDays: "",
     minimumStay: 0,
+    maximumStay: 0,
     validityList: [{ from: "", to: "" }],
     blackoutDates: [{ from: "", to: "" }],
     remarks: "",
@@ -53,7 +53,7 @@ export default function EditSpecialRates() {
   const loadHotelRoomDatas = async () => {
     try {
       const response = await axiosInstance.get(
-        `/api/hotelRoomDetailsController/${id}`
+        `/api/hotelRoomDetailsController/${id}`,
       );
       // console.log("Hotel Rooms Data:", response.data);
       setHotelRoomsData(response.data || []);
@@ -72,7 +72,7 @@ export default function EditSpecialRates() {
       // Add "All" option with value -1 at the beginning
       const marketsWithAll = [
         { marketTypeId: 100, name: "All" },
-        ...(marketRes.data || [])
+        ...(marketRes.data || []),
       ];
 
       setMarkets(marketsWithAll);
@@ -125,7 +125,7 @@ export default function EditSpecialRates() {
     } else {
       const selectedIds = formData.marketType.map((m) => m.value);
       const filtered = countries.filter((c) =>
-        selectedIds.includes(c.marketTypeId)
+        selectedIds.includes(c.marketTypeId),
       );
       setFilteredCountries(filtered);
     }
@@ -136,25 +136,35 @@ export default function EditSpecialRates() {
     try {
       setLoading(true);
       const response = await axiosInstance.get(
-        `/api/hotelSpecialRate/${editId}`
+        `/api/hotelSpecialRate/${editId}`,
       );
       const specialData = response.data;
       console.log("Special Rate Data for Edit:", specialData);
-      console.log("Combined fields from API - combinedPromoId:", specialData.combinedPromoId, "promotype:", specialData.promotype);
+      console.log(
+        "Combined fields from API - combinedPromoId:",
+        specialData.combinedPromoId,
+        "promotype:",
+        specialData.promotype,
+      );
 
-      // Convert date format from DD-MM-YYYY to YYYY-MM-DD for date inputs
-      // Convert date format for date inputs
-      const convertDateForInput = (dateStr) => {
+      // Convert date format from API (DD-MM-YYYY or YYYY-MM-DDTHH:MM:SS) to
+      // YYYY-MM-DD  for <input type="date">  (isDateOnly=true)
+      // YYYY-MM-DDTHH:MM for <input type="datetime-local">  (isDateOnly=false)
+      const convertDateForInput = (dateStr, isDateOnly = false) => {
         if (!dateStr) return "";
+        // Already ISO with T separator
         if (dateStr.includes("T")) {
-          return dateStr.substring(0, 16);
+          return isDateOnly
+            ? dateStr.substring(0, 10)
+            : dateStr.substring(0, 16);
         }
+        // DD-MM-YYYY  format
         const parts = dateStr.split("-");
         if (parts.length === 3) {
-          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(
-            2,
-            "0"
-          )}`;
+          const yyyy = parts[2].padStart(4, "0");
+          const mm   = parts[1].padStart(2, "0");
+          const dd   = parts[0].padStart(2, "0");
+          return isDateOnly ? `${yyyy}-${mm}-${dd}` : `${yyyy}-${mm}-${dd}T00:00`;
         }
         return dateStr;
       };
@@ -176,42 +186,69 @@ export default function EditSpecialRates() {
           })) || [],
         isRefundable: specialData.isRefund || false,
         weekType:
-          specialData.allDays === 1
+          specialData.allDays
             ? "all"
-            : specialData.weekDay === 1
+            : specialData.weekDay
               ? "weekdays"
               : "weekends",
-        bookByDate: convertDateForInput(specialData.bookDate) || "",
+        bookByDate: convertDateForInput(specialData.bookDate, true) || "",
         bookByPriorDays: specialData.bookDay || "",
-        minimumStay: specialData.lengthStay || 0,
+        minimumStay: specialData.minlengthStay || 0,
+        maximumStay: specialData.maxlengthStay || 0,
         validityList: specialData.specialRateValidityDTO
           ?.filter((v) => v.isType === "V")
           ?.map((v) => ({
-            from: convertDateForInput(v.validityFrom) || "",
-            to: convertDateForInput(v.validityTo) || "",
+            from: convertDateForInput(v.validityFrom, false) || "",
+            to: convertDateForInput(v.validityTo, false) || "",
           })) || [{ from: "", to: "" }],
         blackoutDates: specialData.specialRateValidityDTO
           ?.filter((v) => v.isType === "B")
           ?.map((b) => ({
-            from: convertDateForInput(b.validityFrom) || "",
-            to: convertDateForInput(b.validityTo) || "",
+            from: convertDateForInput(b.validityFrom, false) || "",
+            to: convertDateForInput(b.validityTo, false) || "",
           })) || [{ from: "", to: "" }],
         remarks: specialData.remark || "",
-        combinedStayPay: specialData.promotype === "SAP" ? specialData.combinedPromoId || "" : "",
-        combinedDiscount: specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "",
+        combinedStayPay:
+          specialData.promotype === "SAP"
+            ? specialData.combinedPromoId || ""
+            : "",
+        combinedDiscount:
+          specialData.promotype === "DSR"
+            ? specialData.combinedPromoId || ""
+            : "",
       });
 
-      console.log("Form data set - combinedStayPay:", specialData.promotype === "SAP" ? specialData.combinedPromoId || "" : "", "combinedDiscount:", specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "");
+      console.log(
+        "Form data set - combinedStayPay:",
+        specialData.promotype === "SAP"
+          ? specialData.combinedPromoId || ""
+          : "",
+        "combinedDiscount:",
+        specialData.promotype === "DSR"
+          ? specialData.combinedPromoId || ""
+          : "",
+      );
 
       // Load existing room rates if available
       if (specialData.specialRateRoomDTO) {
         const existingRates = {};
         specialData.specialRateRoomDTO.forEach((rate) => {
-          const key = `${rate.hotelRoomcategoryId}_${rate.hotelRoomTypeId}_${rate.ocuppancyTypeIid}`;
-          existingRates[key] = rate.rate;
+          if (rate.ocuppancyTypeIid === null || rate.ocuppancyTypeIid === "") {
+            // Extra bed entry — map adultrate / childrate to the extra-bed keys
+            const base = `${rate.hotelRoomcategoryId}_${rate.hotelRoomTypeId}`;
+            if (rate.adultrate != null && rate.adultrate !== "") {
+              existingRates[`${base}_extraAdult`] = String(rate.adultrate);
+            }
+            if (rate.childrate != null && rate.childrate !== "") {
+              existingRates[`${base}_extraChild`] = String(rate.childrate);
+            }
+          } else {
+            const key = `${rate.hotelRoomcategoryId}_${rate.hotelRoomTypeId}_${rate.ocuppancyTypeIid}`;
+            existingRates[key] = String(rate.rate);
+          }
         });
         setRoomRates(existingRates);
-        // console.log("Loaded existing room rates:", existingRates);
+        console.log("Loaded existing room rates:", existingRates);
       }
     } catch (err) {
       console.error("Error loading special rate data:", err);
@@ -237,22 +274,24 @@ export default function EditSpecialRates() {
 
       try {
         const response = await axiosInstance.get(
-          `/api/hotelSpecialRate/${editId}`
+          `/api/hotelSpecialRate/${editId}`,
         );
         const specialData = response.data;
 
         // Convert date format for date inputs
-        const convertDateForInput = (dateStr) => {
+        const convertDateForInput = (dateStr, isDateOnly = false) => {
           if (!dateStr) return "";
           if (dateStr.includes("T")) {
-            return dateStr.substring(0, 16);
+            return isDateOnly
+              ? dateStr.substring(0, 10)
+              : dateStr.substring(0, 16);
           }
           const parts = dateStr.split("-");
           if (parts.length === 3) {
-            return `${parts[2]}-${parts[1].padStart(
-              2,
-              "0"
-            )}-${parts[0].padStart(2, "0")}`;
+            const yyyy = parts[2].padStart(4, "0");
+            const mm   = parts[1].padStart(2, "0");
+            const dd   = parts[0].padStart(2, "0");
+            return isDateOnly ? `${yyyy}-${mm}-${dd}` : `${yyyy}-${mm}-${dd}T00:00`;
           }
           return dateStr;
         };
@@ -277,40 +316,56 @@ export default function EditSpecialRates() {
             })) || [],
           isRefundable: specialData.isRefund || false,
           weekType:
-            specialData.allDays === 1
+            specialData.allDays
               ? "all"
-              : specialData.weekDay === 1
+              : specialData.weekDay
                 ? "weekdays"
                 : "weekends",
-          bookByDate: convertDateForInput(specialData.bookDate) || "",
+          bookByDate: convertDateForInput(specialData.bookDate, true) || "",
           bookByPriorDays: specialData.bookDay || "",
-          minimumStay: specialData.lengthStay || 0,
+          minimumStay: specialData.minlengthStay || 0,
+          maximumStay: specialData.maxlengthStay || 0,
           validityList: specialData.specialRateValidityDTO
             ?.filter((v) => v.isType === "V")
             ?.map((v) => ({
-              from: convertDateForInput(v.validityFrom) || "",
-              to: convertDateForInput(v.validityTo) || "",
+              from: convertDateForInput(v.validityFrom, false) || "",
+              to: convertDateForInput(v.validityTo, false) || "",
             })) || [{ from: "", to: "" }],
           blackoutDates: specialData.specialRateValidityDTO
             ?.filter((v) => v.isType === "B")
             ?.map((b) => ({
-              from: convertDateForInput(b.validityFrom) || "",
-              to: convertDateForInput(b.validityTo) || "",
+              from: convertDateForInput(b.validityFrom, false) || "",
+              to: convertDateForInput(b.validityTo, false) || "",
             })) || [{ from: "", to: "" }],
           remarks: specialData.remark || "",
-          combinedStayPay: specialData.promotype === "SAP" ? specialData.combinedPromoId || "" : "",
-          combinedDiscount: specialData.promotype === "DSR" ? specialData.combinedPromoId || "" : "",
+          combinedStayPay:
+            specialData.promotype === "SAP"
+              ? specialData.combinedPromoId || ""
+              : "",
+          combinedDiscount:
+            specialData.promotype === "DSR"
+              ? specialData.combinedPromoId || ""
+              : "",
         }));
 
         // Load existing room rates if available
         if (specialData.specialRateRoomDTO) {
           const existingRates = {};
           specialData.specialRateRoomDTO.forEach((rate) => {
-            const key = `${rate.hotelRoomcategoryId}_${rate.hotelRoomTypeId}_${rate.ocuppancyTypeIid}`;
-            existingRates[key] = rate.rate;
+            if (rate.ocuppancyTypeIid === null || rate.ocuppancyTypeIid === "") {
+              const base = `${rate.hotelRoomcategoryId}_${rate.hotelRoomTypeId}`;
+              if (rate.adultrate != null && rate.adultrate !== "") {
+                existingRates[`${base}_extraAdult`] = String(rate.adultrate);
+              }
+              if (rate.childrate != null && rate.childrate !== "") {
+                existingRates[`${base}_extraChild`] = String(rate.childrate);
+              }
+            } else {
+              const key = `${rate.hotelRoomcategoryId}_${rate.hotelRoomTypeId}_${rate.ocuppancyTypeIid}`;
+              existingRates[key] = String(rate.rate);
+            }
           });
           setRoomRates(existingRates);
-          // console.log("Re-populated existing room rates:", existingRates);
         }
       } catch (err) {
         console.error("Error re-populating form data:", err);
@@ -322,7 +377,12 @@ export default function EditSpecialRates() {
 
   // ✅ Debug form data changes
   useEffect(() => {
-    console.log("Form data changed - combinedStayPay:", formData.combinedStayPay, "combinedDiscount:", formData.combinedDiscount);
+    console.log(
+      "Form data changed - combinedStayPay:",
+      formData.combinedStayPay,
+      "combinedDiscount:",
+      formData.combinedDiscount,
+    );
   }, [formData.combinedStayPay, formData.combinedDiscount]);
 
   // ✅ Handlers
@@ -358,7 +418,7 @@ export default function EditSpecialRates() {
     // Add 1 minute to the from date to ensure validityTo is after validityFrom
     date.setMinutes(date.getMinutes() + 1);
     // Format to YYYY-MM-DDTHH:MM for datetime-local input
-    const pad = (num) => num.toString().padStart(2, '0');
+    const pad = (num) => num.toString().padStart(2, "0");
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
@@ -372,9 +432,12 @@ export default function EditSpecialRates() {
   const handleUpdate = async (e) => {
     e.preventDefault();
     try {
+      // datetime-local input gives YYYY-MM-DDTHH:MM → append :00 for seconds
+      // date input gives YYYY-MM-DD → append T00:00:00 for full datetime
       const formatDate = (date) => {
         if (!date) return "";
-        return `${date}:00`;
+        if (date.includes("T")) return `${date}:00`;
+        return `${date}T00:00:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? 1 : 0;
@@ -413,8 +476,8 @@ export default function EditSpecialRates() {
                   adultrate: "",
                   childrate: "",
                 };
-              }) || []
-          ) || []
+              }) || [],
+          ) || [],
       );
 
       // Also include meal plan rates if they exist
@@ -428,7 +491,7 @@ export default function EditSpecialRates() {
           meal: true,
           adultrate: meal.extraAdult || "",
           childrate: meal.extraChild || "",
-        }))
+        })),
       );
 
       // Combine both room and meal rates
@@ -448,10 +511,16 @@ export default function EditSpecialRates() {
         isRefund: formData.isRefundable,
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
-        lengthStay: String(formData.minimumStay),
+        minlengthStay: String(formData.minimumStay),
+        maxlengthStay: String(formData.maximumStay),
         remark: formData.remarks || "",
-        combinedPromoId: formData.combinedStayPay || formData.combinedDiscount || "",
-        promotype: formData.combinedStayPay ? "SAP" : formData.combinedDiscount ? "DSR" : "",
+        combinedPromoId:
+          formData.combinedStayPay || formData.combinedDiscount || "",
+        promotype: formData.combinedStayPay
+          ? "SAP"
+          : formData.combinedDiscount
+            ? "DSR"
+            : "",
         specialRateValidityDTO: [...validityList, ...blackoutDates],
         promotionCompulsoryDTO: [],
         specialRateRoomDTO: allSpecialRateRoomDTO,
@@ -464,7 +533,7 @@ export default function EditSpecialRates() {
 
       const response = await axiosInstance.put(
         `/api/hotelSpecialRate/${editId}`,
-        specialratesaveReq
+        specialratesaveReq,
       );
 
       if (response.data) {
@@ -671,7 +740,7 @@ export default function EditSpecialRates() {
                     </Col>
                     <Col md={2}>
                       <Form.Group>
-                        <Form.Label>Min Stay</Form.Label>
+                        <Form.Label>Min Stay *</Form.Label>
                         <Form.Control
                           type="number"
                           value={formData.minimumStay}
@@ -684,10 +753,26 @@ export default function EditSpecialRates() {
                         />
                       </Form.Group>
                     </Col>
+                    <Col md={2}>
+                      <Form.Group>
+                        <Form.Label>Max Stay *</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={formData.maximumStay}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              maximumStay: e.target.value,
+                            })
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
                   </Row>
 
                   {/* ✅ Validity & Blackout */}
                   <Row className="mb-4">
+                    {/* ================= VALIDITY LIST ================= */}
                     <Col md={6}>
                       <Card className="p-3 border rounded-3">
                         <div className="d-flex justify-content-between mb-2">
@@ -700,38 +785,54 @@ export default function EditSpecialRates() {
                             <FaPlus /> Add
                           </Button>
                         </div>
+
                         {formData.validityList.map((v, i) => (
-                          <Row key={i} className="align-items-center mb-2">
-                            <Col>
-                              <Form.Control
-                                type="datetime-local"
-                                value={v.from}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "validityList",
-                                    i,
-                                    "from",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                          <Row key={i} className="align-items-center mb-3">
+                            {/* FROM DATE */}
+                            <Col md={5}>
+                              <Form.Group>
+                                <Form.Label className="small mb-1">
+                                  From
+                                </Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={v.from}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "validityList",
+                                      i,
+                                      "from",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col>
-                              <Form.Control
-                                type="datetime-local"
-                                value={v.to}
-                                min={getMinValidityToDate(v.from)}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "validityList",
-                                    i,
-                                    "to",
-                                    e.target.value
-                                  )
-                                }
-                              />
+
+                            {/* TO DATE */}
+                            <Col md={5}>
+                              <Form.Group>
+                                <Form.Label className="small mb-1">
+                                  To
+                                </Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={v.to}
+                                  min={getMinValidityToDate(v.from)}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "validityList",
+                                      i,
+                                      "to",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col xs="auto">
+
+                            {/* DELETE BUTTON */}
+                            <Col md={2} className="d-flex align-items-end">
                               {i > 0 && (
                                 <Button
                                   size="sm"
@@ -749,6 +850,7 @@ export default function EditSpecialRates() {
                       </Card>
                     </Col>
 
+                    {/* ================= BLACKOUT DATES ================= */}
                     <Col md={6}>
                       <Card className="p-3 border rounded-3">
                         <div className="d-flex justify-content-between mb-2">
@@ -761,38 +863,54 @@ export default function EditSpecialRates() {
                             <FaPlus /> Add
                           </Button>
                         </div>
+
                         {formData.blackoutDates.map((b, i) => (
-                          <Row key={i} className="align-items-center mb-2">
-                            <Col>
-                              <Form.Control
-                                type="datetime-local"
-                                value={b.from}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "blackoutDates",
-                                    i,
-                                    "from",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                          <Row key={i} className="align-items-center mb-3">
+                            {/* FROM DATE */}
+                            <Col md={5}>
+                              <Form.Group>
+                                <Form.Label className="small mb-1">
+                                  From
+                                </Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={b.from}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "blackoutDates",
+                                      i,
+                                      "from",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col>
-                              <Form.Control
-                                type="datetime-local"
-                                value={b.to}
-                                min={getMinValidityToDate(b.from)}
-                                onChange={(e) =>
-                                  handleDateChange(
-                                    "blackoutDates",
-                                    i,
-                                    "to",
-                                    e.target.value
-                                  )
-                                }
-                              />
+
+                            {/* TO DATE */}
+                            <Col md={5}>
+                              <Form.Group>
+                                <Form.Label className="small mb-1">
+                                  To
+                                </Form.Label>
+                                <Form.Control
+                                  type="datetime-local"
+                                  value={b.to}
+                                  min={getMinValidityToDate(b.from)}
+                                  onChange={(e) =>
+                                    handleDateChange(
+                                      "blackoutDates",
+                                      i,
+                                      "to",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </Form.Group>
                             </Col>
-                            <Col xs="auto">
+
+                            {/* DELETE BUTTON */}
+                            <Col md={2} className="d-flex align-items-end">
                               {i > 0 && (
                                 <Button
                                   size="sm"
@@ -845,7 +963,7 @@ export default function EditSpecialRates() {
                                   roomIndex,
                                   mealIndex,
                                   "single",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -860,7 +978,7 @@ export default function EditSpecialRates() {
                                   roomIndex,
                                   mealIndex,
                                   "double",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -875,7 +993,7 @@ export default function EditSpecialRates() {
                                   roomIndex,
                                   mealIndex,
                                   "extraAdult",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -890,7 +1008,7 @@ export default function EditSpecialRates() {
                                   roomIndex,
                                   mealIndex,
                                   "extraChild",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -933,8 +1051,10 @@ export default function EditSpecialRates() {
                                         <th key={occupancy.id}>
                                           {occupancy.occupanyType}
                                         </th>
-                                      )
+                                      ),
                                     )}
+                                    <th>Extra Bed Adult</th>
+                                    <th>Extra Bed Child</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -952,7 +1072,7 @@ export default function EditSpecialRates() {
                                                 placeholder="0"
                                                 value={
                                                   roomRates[
-                                                  `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
+                                                    `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`
                                                   ] || ""
                                                 }
                                                 onChange={(e) => {
@@ -965,10 +1085,51 @@ export default function EditSpecialRates() {
                                                 size="sm"
                                               />
                                             </td>
-                                          )
+                                          ),
                                         )}
+
+                                        {/* ✅ Extra Bed Adult */}
+                                        <td>
+                                          <Form.Control
+                                            type="number"
+                                            placeholder="0"
+                                            value={
+                                              roomRates[
+                                                `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraAdult`
+                                              ] || ""
+                                            }
+                                            onChange={(e) => {
+                                              const key = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraAdult`;
+                                              setRoomRates((prev) => ({
+                                                ...prev,
+                                                [key]: e.target.value,
+                                              }));
+                                            }}
+                                            size="sm"
+                                          />
+                                        </td>
+                                        {/* ✅ Extra Bed Child */}
+                                        <td>
+                                          <Form.Control
+                                            type="number"
+                                            placeholder="0"
+                                            value={
+                                              roomRates[
+                                                `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraChild`
+                                              ] || ""
+                                            }
+                                            onChange={(e) => {
+                                              const key = `${roomCategory.rommCategoryId}_${roomType.roomTypeId}_extraChild`;
+                                              setRoomRates((prev) => ({
+                                                ...prev,
+                                                [key]: e.target.value,
+                                              }));
+                                            }}
+                                            size="sm"
+                                          />
+                                        </td>
                                       </tr>
-                                    )
+                                    ),
                                   )}
                                 </tbody>
                               </table>
@@ -1017,7 +1178,9 @@ export default function EditSpecialRates() {
                                 ...formData,
                                 combinedStayPay: selectedValue,
                                 // Clear the other field when this one is selected
-                                combinedDiscount: selectedValue ? "" : formData.combinedDiscount,
+                                combinedDiscount: selectedValue
+                                  ? ""
+                                  : formData.combinedDiscount,
                               });
                             }}
                           >
@@ -1025,7 +1188,7 @@ export default function EditSpecialRates() {
                             {Array.isArray(hotelPromotions) &&
                               hotelPromotions
                                 .filter(
-                                  (promo) => promo.promotionType === "StayPay"
+                                  (promo) => promo.promotionType === "StayPay",
                                 )
                                 .map((promo) => (
                                   <option key={promo.id} value={promo.id}>
@@ -1049,7 +1212,9 @@ export default function EditSpecialRates() {
                                 ...formData,
                                 combinedDiscount: selectedValue,
                                 // Clear the other field when this one is selected
-                                combinedStayPay: selectedValue ? "" : formData.combinedStayPay,
+                                combinedStayPay: selectedValue
+                                  ? ""
+                                  : formData.combinedStayPay,
                               });
                             }}
                           >
@@ -1057,7 +1222,7 @@ export default function EditSpecialRates() {
                             {Array.isArray(hotelPromotions) &&
                               hotelPromotions
                                 .filter(
-                                  (promo) => promo.promotionType === "Discount"
+                                  (promo) => promo.promotionType === "Discount",
                                 )
                                 .map((promo) => (
                                   <option key={promo.id} value={promo.id}>
