@@ -103,6 +103,21 @@ const ExtranetHotelDashboard = () => {
                 <h5 className="fw-semibold mb-0 text-white">My Availability</h5>
               </div>
             </Link>
+
+            {/* Occupancy */}
+            {/* <Link
+              to={userId ? `/extranet/${userId}/occupancy-and-minimumlength` : "#"} 
+              className="text-decoration-none"
+              onClick={(e) => !userId && e.preventDefault()}
+            >
+              <div
+                className="card bg-dark text-white p-2 rounded-4 shadow-sm flex-grow-1 d-flex align-items-center justify-content-center flex-column hover-shadow"
+                style={{ minWidth: "200px", cursor: "pointer", backgroundColor: "#6f42c1" }}
+              >
+                <FaUser size={45} className="mb-3" />
+                <h5 className="fw-semibold mb-0 text-white">Occupancy</h5>
+              </div>
+            </Link> */}
           </div>
 
           {/* Bottom Stats Cards */}

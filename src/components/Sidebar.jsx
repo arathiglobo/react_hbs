@@ -403,9 +403,10 @@ export default function Sidebar() {
     // {Extranet menus}
     {
       label: "Occupancy",
-      to: hotelId ? `/extranet/${hotelId}/extranet-occupancy-and-minimumlength` : "#",
+      to: hotelId ? `/extranet/${hotelId}/occupancy-and-minimumlength` : "#",
       roles: ["extranet"],
     },
+
 
   ];
 

@@ -127,6 +127,7 @@ import HotelMappingBulkList from "./pages/master/HotelMappingBulkList";
 import UnMappingCity from "./pages/master/UnMappingCity";
 import SubLocation from "./pages/master/SubLocation";
 import ExtranetImgUpload from "./pages/extranet/ExtranetImgUpload";
+import ExtranetOccupancyAndMinimumLength from "./pages/extranet/ExtranetOccupancyAndMinimumLength";
 
 
 export default function App() {
@@ -325,6 +326,8 @@ export default function App() {
 
         {/* Extranet login */}
         <Route path="/extranet-images" element={<PrivateRoute><ExtranetImgUpload /></PrivateRoute>} />
+        <Route path="/extranet/:id/occupancy-and-minimumlength" element={<PrivateRoute><ExtranetOccupancyAndMinimumLength /></PrivateRoute>} />
+        
        
 
       </Routes>
