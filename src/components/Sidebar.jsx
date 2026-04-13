@@ -19,6 +19,9 @@ import {
   ImagePlus,
   Dot,
 } from "lucide-react";
+import { FaUser } from "react-icons/fa";
+import axiosInstance from "./AxiosInstance";
+
 
 let labelForDashboard = " ";
 
@@ -29,6 +32,34 @@ export default function Sidebar() {
   const [openGroups, setOpenGroups] = useState({});
   const sidebarRef = useRef(null);
   const offcanvasRef = useRef(null);
+  const [hotelId, setHotelId] = useState(null);
+
+  const storedRoles = (localStorage.getItem("userRole") || "")
+    .split(",")
+    .map((role) => role.trim().toLowerCase());
+
+  const currentRole =
+    localStorage.getItem("currentActiveRole")?.toLowerCase() ||
+    storedRoles[0] ||
+    "";
+
+  useEffect(() => {
+    const fetchHotelId = async () => {
+      try {
+        const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        if (userName && currentRole === "extranet") {
+          const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+          if (response.data && response.data.id) {
+            setHotelId(response.data.id);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching hotelId for sidebar:", error);
+      }
+    };
+
+    fetchHotelId();
+  }, [currentRole]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -52,16 +83,7 @@ export default function Sidebar() {
     };
   }, []);
 
-  // Get roles as an array
-  const storedRoles = (localStorage.getItem("userRole") || "")
-    .split(",")
-    .map((role) => role.trim().toLowerCase());
 
-  // Get current active role (this could also come from localStorage as "currentActiveRole")
-  const currentRole =
-    localStorage.getItem("currentActiveRole")?.toLowerCase() ||
-    storedRoles[0] ||
-    "";
   console.log("currentRole in sidebar::", currentRole);
 
   // Set dashboard path based on current active role
@@ -375,6 +397,16 @@ export default function Sidebar() {
       to: "/upload-offer-image",
       roles: ["admin"],
     },
+
+
+
+    // {Extranet menus}
+    {
+      label: "Occupancy",
+      to: hotelId ? `/extranet/${hotelId}/extranet-occupancy-and-minimumlength` : "#",
+      roles: ["extranet"],
+    },
+
   ];
 
   // Filter menu based on allowed roles
@@ -787,6 +819,9 @@ function getIcon(label) {
 
     case "Upload Offer Image":
       return <ImagePlus {...iconProps} />;
+
+     case "Occupancy":
+      return <FaUser {...iconProps} />;
 
     default:
       return <Dot {...iconProps} />;

@@ -126,6 +126,7 @@ import HotelMapping from "./pages/master/HotelMapping";
 import HotelMappingBulkList from "./pages/master/HotelMappingBulkList";
 import UnMappingCity from "./pages/master/UnMappingCity";
 import SubLocation from "./pages/master/SubLocation";
+import ExtranetImgUpload from "./pages/extranet/ExtranetImgUpload";
 
 
 export default function App() {
@@ -321,6 +322,10 @@ export default function App() {
         <Route path="/invoice" element={<PrivateRoute><Invoice /></PrivateRoute>} />
         <Route path="/offer" element={<PrivateRoute><OfferZone /></PrivateRoute>} />
         <Route path="/upload-offer-image" element={<PrivateRoute><OfferImageUpload /></PrivateRoute>} />
+
+        {/* Extranet login */}
+        <Route path="/extranet-images" element={<PrivateRoute><ExtranetImgUpload /></PrivateRoute>} />
+       
 
       </Routes>
 

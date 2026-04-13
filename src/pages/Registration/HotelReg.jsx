@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import Select from "react-select";
+
 import {
   Card,
   Button,
@@ -596,9 +598,11 @@ const loadHotelData = async () => {
   };
 
   // Load room categories
-  const loadRoomCategories = async () => {
+  const loadRoomCategories = async (searchTerm = "") => {
     try {
-      const response = await axiosInstance.get("/api/roomCategory");
+      const response = await axiosInstance.get("/api/roomCategory", {
+        params: { searchterm: searchTerm }
+      });
       // console.log("Room Categories response:", response.data);
       setRoomCategories(response.data || []);
     } catch (error) {
@@ -606,6 +610,7 @@ const loadHotelData = async () => {
       toast.error("Failed to load room categories");
     }
   };
+
 
   // Load room types
   const loadRoomTypes = async () => {
@@ -811,7 +816,18 @@ const handleAmenityChange = (e) => {
   const [selectedRoomCategory, setSelectedRoomCategory] = useState("");
   const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
   const [availableRoomTypes, setAvailableRoomTypes] = useState([]);
+  
+  // Handle searching for room categories
+  const handleRoomCategorySearch = (inputValue) => {
+    if (inputValue) {
+      loadRoomCategories(inputValue);
+    } else {
+      loadRoomCategories(); // Load default list if empty
+    }
+  };
+
   const usedRoomCategoryIds = useMemo(() => {
+
     return new Set(
       (formData.rooms || []).map((room) => String(room.roomCategoryId))
     );
@@ -2666,38 +2682,64 @@ const handleAmenityChange = (e) => {
                                     <span className="text-danger">*</span> Room
                                     Category
                                   </Form.Label>
-                                  <div className="d-flex align-items-center">
-                                    <Form.Select
-                                      value={selectedRoomCategory}
-                                      onChange={(e) =>
-                                        handleRoomCategoryChange(e.target.value)
-                                      }
-                                      className="me-2"
-                                    >
-                                      <option value="">SELECT</option>
-                                      {roomCategories.map((category) => {
-                                        const categoryId = String(
-                                          category.roomCategoryId
-                                        );
-                                        const isCategoryUsed =
-                                          usedRoomCategoryIds.has(categoryId);
+                                  <div className="flex-grow-1">
+                                    <Select
+  placeholder="SEARCH ROOM CATEGORY..."
+  options={roomCategories.map(category => ({
+    value: String(category.roomCategoryId),
+    label: category.roomCategory,
+    isDisabled:
+      usedRoomCategoryIds.has(String(category.roomCategoryId)) &&
+      String(selectedRoomCategory) !== String(category.roomCategoryId)
+  }))}
+  value={
+    selectedRoomCategory
+      ? {
+          value: selectedRoomCategory,
+          label:
+            roomCategories.find(
+              cat =>
+                String(cat.roomCategoryId) === String(selectedRoomCategory)
+            )?.roomCategory || "SELECT"
+        }
+      : null
+  }
+  onChange={(selectedOption) =>
+    handleRoomCategoryChange(selectedOption?.value || "")
+  }
+  onInputChange={(newValue, { action }) => {
+    if (action === "input-change") {
+      handleRoomCategorySearch(newValue);
+    }
+  }}
+  isClearable
 
-                                        return (
-                                          <option
-                                            key={category.roomCategoryId}
-                                            value={category.roomCategoryId}
-                                            disabled={
-                                              isCategoryUsed &&
-                                              String(selectedRoomCategory) !==
-                                                categoryId
-                                            }
-                                          >
-                                            {category.roomCategory}
-                                          </option>
-                                        );
-                                      })}
-                                    </Form.Select>
+  // ✅ FIX START
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  menuPlacement="auto"
+  // ✅ FIX END
+
+  className="react-select-container"
+  classNamePrefix="react-select"
+  styles={{
+    control: (base) => ({
+      ...base,
+      borderColor: "#dee2e6",
+      "&:hover": { borderColor: "#007bff" }
+    }),
+    menuPortal: (base) => ({
+      ...base,
+      zIndex: 9999   // 🔥 VERY IMPORTANT
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999
+    })
+  }}
+/>
                                   </div>
+
                                 </Form.Group>
                               </Col>
                               <Col md={8}>

@@ -46,6 +46,7 @@ import {
   FaWifi,
   FaHotel,
   FaSearch,
+  FaEyeSlash,
 } from "react-icons/fa";
 import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
@@ -150,6 +151,9 @@ const HotelRegistrationActions = () => {
   const [isLoadingLoginData, setIsLoadingLoginData] = useState(false);
   const [loginFormKey, setLoginFormKey] = useState(0);
   const [formTimestamp, setFormTimestamp] = useState(Date.now());
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRePassword, setShowRePassword] = useState(false);
+
 
 
  
@@ -1172,11 +1176,18 @@ const HotelRegistrationActions = () => {
       isValid = false;
     }
 
-    // User roles validation - set default if not provided
+    // User roles validation
     if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
-      // Set default user role for hotel extranet users
-      loginFormData.userroles = [1]; // Assuming 1 is the default hotel role ID
+      errors.userroles = "At least one user role is required";
+      isValid = false;
     }
+
+
+    // User roles validation - set default if not provided
+    // if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
+    //   // Set default user role for hotel extranet users
+    //   loginFormData.userroles = [1]; // Assuming 1 is the default hotel role ID
+    // }
 
     setLoginErrors(errors);
 
@@ -1185,12 +1196,13 @@ const HotelRegistrationActions = () => {
         // setIsLoading(true);
 
         let activeUserRole = localStorage.getItem("currentActiveRole");
-        // console.log("currentActiveRole::", activeUserRole);
+         console.log("currentActiveRole::", activeUserRole);
         // console.log("roleslist::", rolesList);
 
         let activeRoleObj = rolesList.find(
-          (role) => role.roleName === "EXTRANET"
+          (role) => role.roleName.toUpperCase() === "EXTRANET"
         );
+
 
         let loginPayload = null;
 
@@ -1209,8 +1221,11 @@ const HotelRegistrationActions = () => {
             loginPayload.password = loginFormData.password;
           }
         } else {
-          // // console.log("Active role not found in rolesList");
+          toast.error("Required role 'EXTRANET' not found. Please contact administrator.");
+          setIsLoading(false);
+          return;
         }
+
 
         const response = await axiosInstance.post(
           "/auth/register",
@@ -1253,7 +1268,11 @@ const HotelRegistrationActions = () => {
   const handleLoginCancel = () => {
     setShowLoginDetailsModal(false);
     setLoginFormData({ username: "", password: "", repassword: "", userroles: [] });
+    setLoginErrors({ username: "", password: "", repassword: "", userroles: "" });
+    setShowPassword(false);
+    setShowRePassword(false);
   };
+
 
   // Image upload handlers
   const handleFileSelect = (event) => {
@@ -1767,40 +1786,118 @@ const HotelRegistrationActions = () => {
                 placeholder="Enter username"
                 value={loginFormData.username}
                 autoComplete="off"
+                isInvalid={!!loginErrors.username}
                 onChange={(e) => {
                   // console.log("Username field onChange triggered with value:", e.target.value);
                   handleLoginFormChange("username", e.target.value);
                 }}
               />
+              {loginErrors.username && (
+                <Form.Control.Feedback type="invalid">
+                  {loginErrors.username}
+                </Form.Control.Feedback>
+              )}
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Password</Form.Label>
-              <Form.Control
-                key={`password-${loginFormKey}-${id}-${formTimestamp}`}
-                name={`password-${id}-${formTimestamp}`}
-                type="password"
-                placeholder="Enter password"
-                value={loginFormData.password}
-                autoComplete="new-password"
-                onChange={(e) =>
-                  handleLoginFormChange("password", e.target.value)
-                }
-              />
+              <div className="position-relative">
+                <Form.Control
+                  key={`password-${loginFormKey}-${id}-${formTimestamp}`}
+                  name={`password-${id}-${formTimestamp}`}
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter password"
+                  value={loginFormData.password}
+                  autoComplete="new-password"
+                  isInvalid={!!loginErrors.password}
+                  onChange={(e) =>
+                    handleLoginFormChange("password", e.target.value)
+                  }
+                />
+                <Button
+                  variant="link"
+                  className="position-absolute end-0 top-50 translate-middle-y text-muted text-decoration-none"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{ zIndex: 10 }}
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </Button>
+                {loginErrors.password && (
+                  <Form.Control.Feedback type="invalid">
+                    {loginErrors.password}
+                  </Form.Control.Feedback>
+                )}
+              </div>
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Re-enter Password</Form.Label>
-              <Form.Control
-                key={`repassword-${loginFormKey}-${id}-${formTimestamp}`}
-                name={`repassword-${id}-${formTimestamp}`}
-                type="password"
-                placeholder="Re-enter password"
-                value={loginFormData.repassword}
-                autoComplete="new-password"
-                onChange={(e) =>
-                  handleLoginFormChange("repassword", e.target.value)
-                }
-              />
+              <div className="position-relative">
+                <Form.Control
+                  key={`repassword-${loginFormKey}-${id}-${formTimestamp}`}
+                  name={`repassword-${id}-${formTimestamp}`}
+                  type={showRePassword ? "text" : "password"}
+                  placeholder="Re-enter password"
+                  value={loginFormData.repassword}
+                  autoComplete="new-password"
+                  isInvalid={!!loginErrors.repassword}
+                  onChange={(e) =>
+                    handleLoginFormChange("repassword", e.target.value)
+                  }
+                />
+                <Button
+                  variant="link"
+                  className="position-absolute end-0 top-50 translate-middle-y text-muted text-decoration-none"
+                  onClick={() => setShowRePassword(!showRePassword)}
+                  style={{ zIndex: 10 }}
+                >
+                  {showRePassword ? <FaEyeSlash /> : <FaEye />}
+                </Button>
+                {loginErrors.repassword && (
+                  <Form.Control.Feedback type="invalid">
+                    {loginErrors.repassword}
+                  </Form.Control.Feedback>
+                )}
+              </div>
             </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>User Roles</Form.Label>
+              <Select
+                isMulti
+                options={rolesList.map(role => ({
+                  value: role.id,
+                  label: role.roleName
+                }))}
+                value={rolesList
+                  .filter(role => loginFormData.userroles.includes(role.id))
+                  .map(role => ({
+                    value: role.id,
+                    label: role.roleName
+                  }))
+                }
+                onChange={(selectedOptions) => {
+                  const values = selectedOptions ? selectedOptions.map(opt => opt.value) : [];
+                  handleLoginFormChange("userroles", values);
+                }}
+                placeholder="Select user roles..."
+                className={loginErrors.userroles ? "is-invalid" : ""}
+                menuPortalTarget={document.body}
+                styles={{
+                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                  control: (base) => ({
+                    ...base,
+                    borderColor: loginErrors.userroles ? "#dc3545" : base.borderColor,
+                    '&:hover': {
+                      borderColor: loginErrors.userroles ? "#dc3545" : base.borderColor,
+                    }
+                  })
+                }}
+              />
+              {loginErrors.userroles && (
+                <div className="text-danger small mt-1">
+                  {loginErrors.userroles}
+                </div>
+              )}
+            </Form.Group>
+
           </Form>
           )}
         </Modal.Body>
