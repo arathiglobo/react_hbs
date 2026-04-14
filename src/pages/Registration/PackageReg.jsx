@@ -239,6 +239,8 @@ const PackageReg = () => {
   const [isCountryLoading, setIsCountryLoading] = useState(false);
   const countryDebounceRef = useRef(null);
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState(null);
 
 
   // Helper function to get image URL from path
@@ -548,7 +550,7 @@ const PackageReg = () => {
       if (editing) {
         // Update existing package
         packageSaveRes = await axiosInstance.put(
-          `/api/TravelPackage/${editing.id}`,
+          `/api/TravelPackage/${editing.packageId}`,
           formDataPayload,
           {
             headers: {
@@ -743,6 +745,43 @@ const PackageReg = () => {
     }
   };
 
+  // Handle status toggle
+  const handleStatusToggle = (pkg) => {
+    setSelectedPackage(pkg);
+    setShowStatusModal(true);
+  };
+
+  const updatePackageStatus = async () => {
+    if (!selectedPackage) return;
+    try {
+      setIsLoading(true);
+      // Determine the new status (if liveStatus is false, it's currently Active, so toggle to true for InActive)
+      const newStatus = !selectedPackage.liveStatus;
+      
+      const res = await axiosInstance.patch(
+        `/api/TravelPackage/status/${selectedPackage.packageId}`,
+        { liveStatus: newStatus }
+      );
+
+      if (res.data) {
+        toast.success(`Package ${newStatus ? 'deactivated' : 'activated'} successfully`);
+      }
+
+      await fetchPackageList(page, search);
+      setShowStatusModal(false);
+      setSelectedPackage(null);
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast.error(
+        `Failed to update status: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Handle place change
   const handlePlaceChange = (e) => {
     const value = e.target.value;
@@ -772,231 +811,214 @@ const PackageReg = () => {
   };
 
   // CRUD Operations
-  const openEdit = (item) => {
-    setEditing(item);
-    setIsViewMode(false);
-    setFormData({
-      packageName: item.packageName || "",
-      packageCode: item.packageCode || "",
-      packageBasicRate: item.packageBasicRate || "",
-      currencyId: item.currencyId || "",
-      packageType: item.packageType || "",
-      packageCategory: Array.isArray(item.packageCategory) ? item.packageCategory : (item.packageCategory ? [item.packageCategory] : []),
-      packageImage: item.packageImagePath || null, // Preserve existing image
-      containHotel: item.containHotel === 1 || item.containHotel === true,
-      containCab: item.containCab === 1 || item.containCab === true,
-      containActivity:
-        item.containActivity === 1 || item.containActivity === true,
-      status: item.liveStatus || "Enable",
-      countryId: item.arriveCountry || item.countryId || "", // Map from arriveCountry
-      placeId:
-        Array.isArray(item.arrivePlace) && item.arrivePlace.length > 0
-          ? item.arrivePlace[0]
-          : item.placeId || "", // Map from arrivePlace array
-      overview: item.overview || "",
-      noOfNights: item.noOfNights || "1",
-    });
-
-    // Load places for the selected country when editing
-    const countryId = item.arriveCountry || item.countryId;
-    if (countryId) {
-      cityList(countryId);
-      // Preload country options and set selected country option
-      fetchCountries("").then((options) => {
-        const matched = (options || []).find(
-          (c) => String(c.id) === String(countryId)
-        );
-        if (matched) {
-          setSelectedCountryOption({ value: matched.id, label: matched.name });
-        }
+  const openEdit = async (item) => {
+    try {
+      setIsLoading(true);
+      const res = await axiosInstance.get(`/api/TravelPackage/${item.packageId}`);
+      if (!res.data) throw new Error("No data received from server");
+      
+      const data = res.data;
+      setEditing(data);
+      setIsViewMode(false);
+      
+      setFormData({
+        packageName: data.packageName || "",
+        packageCode: data.packageCode || "",
+        packageBasicRate: data.packageBasicRate || "",
+        currencyId: data.currencyId || "",
+        packageType: data.packageType || "",
+        packageCategory: Array.isArray(data.packageCategory) ? data.packageCategory : (data.packageCategory ? [data.packageCategory] : []),
+        packageImage: data.packageImagePath || null, // Preserve existing image
+        containHotel: data.containHotel === 1 || data.containHotel === true,
+        containCab: data.containCab === 1 || data.containCab === true,
+        containActivity:
+          data.containActivity === 1 || data.containActivity === true,
+        status: data.liveStatus === true ? "true" : "false",
+        countryId: data.arriveCountry || data.countryId || "", // Map from arriveCountry
+        placeId:
+          Array.isArray(data.arrivePlace) && data.arrivePlace.length > 0
+            ? data.arrivePlace[0]
+            : data.placeId || "", // Map from arrivePlace array
+        overview: data.overview || "",
+        noOfNights: data.noOfNights || "1",
       });
-    } else {
-      setSelectedCountryOption(null);
-      fetchCountries("");
-    }
 
-    // Load itinerary data if available
-    if (
-      item.packageItinearyDTOList &&
-      Array.isArray(item.packageItinearyDTOList)
-    ) {
-      const updatedItinerary = item.packageItinearyDTOList.map((itinerary) => ({
-        day: itinerary.day,
-        heading: itinerary.heading || "",
-        placeId: itinerary.placeId || "",
-        dayActivities: itinerary.dayActivities || "",
-        packageItinearyImage:
-          itinerary.packageItinearyImagePath ||
-          itinerary.packageItinearyImage ||
-          null, // Use image path
-      }));
-      setPackageItinearyDTOList(updatedItinerary);
-    } else {
-      // Set default itinerary if none exists
-      setPackageItinearyDTOList([
-        {
-          day: 1,
-          heading: "",
-          placeId: "",
-          dayActivities: "",
-          packageItinearyImage: null,
-        },
-      ]);
-    }
-
-    // Load others data - merge with terms and conditions data
-    if (
-      item.packageOthersDTOList &&
-      Array.isArray(item.packageOthersDTOList) &&
-      termsAndConditions.length > 0
-    ) {
-      const mergedOthersList = termsAndConditions.map((term) => {
-        // Find matching item from backend data
-        const backendItem = item.packageOthersDTOList.find(
-          (backend) => backend.otherId === term.termsAndConditionsId
-        );
-
-        return {
-          otherId: term.termsAndConditionsId,
-          type: term.description,
-          descriptionType: term.descriptionType,
-          termsCode: term.termsCode,
-          isDeleted: backendItem
-            ? backendItem.isDeleted === true || backendItem.isDeleted === "true"
-            : true, // Default to selected if not found in backend
-        };
-      });
-      setPackageOthersDTOList(mergedOthersList);
-    } else {
-      // Set default others data from terms and conditions
-      if (termsAndConditions.length > 0) {
-        const defaultOthersList = termsAndConditions.map((term) => ({
-          otherId: term.termsAndConditionsId,
-          type: term.description,
-          descriptionType: term.descriptionType,
-          termsCode: term.termsCode,
-          isDeleted: false,
-        }));
-        setPackageOthersDTOList(defaultOthersList);
+      // Load places for the selected country when editing
+      const countryId = data.arriveCountry || data.countryId;
+      if (countryId) {
+        cityList(countryId);
+        // Preload country options and set selected country option
+        fetchCountries("").then((options) => {
+          const matched = (options || []).find(
+            (c) => String(c.id) === String(countryId)
+          );
+          if (matched) {
+            setSelectedCountryOption({ value: matched.id, label: matched.name });
+          }
+        });
+      } else {
+        setSelectedCountryOption(null);
+        fetchCountries("");
       }
-    }
 
-    setValidationErrors({});
-    setShowModal(true);
+      // Load itinerary data if available
+      if (
+        data.packageItinearyDTOList &&
+        Array.isArray(data.packageItinearyDTOList)
+      ) {
+        const updatedItinerary = data.packageItinearyDTOList.map((itinerary) => ({
+          day: itinerary.day,
+          heading: itinerary.heading || "",
+          placeId: itinerary.placeId || "",
+          dayActivities: itinerary.dayActivities || "",
+          packageItinearyImage:
+            itinerary.packageItinearyImagePath ||
+            itinerary.packageItinearyImage ||
+            null, // Use image path
+        }));
+        setPackageItinearyDTOList(updatedItinerary);
+      } else {
+        // Set default itinerary if none exists
+        setPackageItinearyDTOList([
+          {
+            day: 1,
+            heading: "",
+            placeId: "",
+            dayActivities: "",
+            packageItinearyImage: null,
+          },
+        ]);
+      }
+
+      // Load others data - merge with terms and conditions data
+      if (
+        data.packageOthersDTOList &&
+        Array.isArray(data.packageOthersDTOList) &&
+        termsAndConditions.length > 0
+      ) {
+        const mergedOthersList = termsAndConditions.map((term) => {
+          // Find matching item from backend data
+          const backendItem = data.packageOthersDTOList.find(
+            (backend) => backend.otherId === term.termsAndConditionsId
+          );
+
+          return {
+            otherId: term.termsAndConditionsId,
+            type: term.description,
+            descriptionType: term.descriptionType,
+            termsCode: term.termsCode,
+            isDeleted: backendItem
+              ? backendItem.isDeleted === true || backendItem.isDeleted === "true"
+              : true, // Default to selected if not found in backend
+          };
+        });
+        setPackageOthersDTOList(mergedOthersList);
+      } else {
+        // Set default others data from terms and conditions
+        if (termsAndConditions.length > 0) {
+          const defaultOthersList = termsAndConditions.map((term) => ({
+            otherId: term.termsAndConditionsId,
+            type: term.description,
+            descriptionType: term.descriptionType,
+            termsCode: term.termsCode,
+            isDeleted: false,
+          }));
+          setPackageOthersDTOList(defaultOthersList);
+        }
+      }
+
+      setValidationErrors({});
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error fetching package details:", error);
+      toast.error("Failed to load package details");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleView = (item) => {
-    setEditing(item);
-    setIsViewMode(true);
-    setFormData({
-      packageName: item.packageName || "",
-      packageCode: item.packageCode || "",
-      packageBasicRate: item.packageBasicRate || "",
-      currencyId: item.currencyId || "",
-      packageType: item.packageType || "",
-      packageCategory: Array.isArray(item.packageCategory) ? item.packageCategory : (item.packageCategory ? [item.packageCategory] : []),
-      packageImage: item.packageImagePath || null, // Preserve existing image
-      containHotel: item.containHotel === 1 || item.containHotel === true,
-      containCab: item.containCab === 1 || item.containCab === true,
-      containActivity:
-        item.containActivity === 1 || item.containActivity === true,
-      status: item.liveStatus,
-      countryId: item.arriveCountry || item.countryId || "", // Map from arriveCountry
-      placeId:
-        Array.isArray(item.arrivePlace) && item.arrivePlace.length > 0
-          ? item.arrivePlace[0]
-          : item.placeId || "", // Map from arrivePlace array
-      overview: item.overview || "",
-      noOfNights: item.noOfNights || "1",
-    });
-
-    // Load places for the selected country when viewing
-    const countryId = item.arriveCountry || item.countryId;
-    if (countryId) {
-      cityList(countryId);
-      // Preload country options and set selected country option
-      fetchCountries("").then((options) => {
-        const matched = (options || []).find(
-          (c) => String(c.id) === String(countryId)
-        );
-        if (matched) {
-          setSelectedCountryOption({ value: matched.id, label: matched.name });
-        }
+  const handleView = async (item) => {
+    try {
+      setIsLoading(true);
+      const res = await axiosInstance.get(`/api/TravelPackage/${item.packageId}`);
+      if (!res.data) throw new Error("No data received from server");
+      
+      const data = res.data;
+      setEditing(data);
+      setIsViewMode(true);
+      setFormData({
+        packageName: data.packageName || "",
+        packageCode: data.packageCode || "",
+        packageBasicRate: data.packageBasicRate || "",
+        currencyId: data.currencyId || "",
+        packageType: data.packageType || "",
+        packageCategory: Array.isArray(data.packageCategory) ? data.packageCategory : (data.packageCategory ? [data.packageCategory] : []),
+        packageImage: data.packageImagePath || null, // Preserve existing image
+        containHotel: data.containHotel === 1 || data.containHotel === true,
+        containCab: data.containCab === 1 || data.containCab === true,
+        containActivity:
+          data.containActivity === 1 || data.containActivity === true,
+        status: data.liveStatus === true ? "true" : "false",
+        countryId: data.arriveCountry || data.countryId || "", // Map from arriveCountry
+        placeId:
+          Array.isArray(data.arrivePlace) && data.arrivePlace.length > 0
+            ? data.arrivePlace[0]
+            : data.placeId || "", // Map from arrivePlace array
+        overview: data.overview || "",
+        noOfNights: data.noOfNights || "1",
       });
-    } else {
-      setSelectedCountryOption(null);
-      fetchCountries("");
-    }
 
-    // Load itinerary data if available
-    if (
-      item.packageItinearyDTOList &&
-      Array.isArray(item.packageItinearyDTOList)
-    ) {
-      const updatedItinerary = item.packageItinearyDTOList.map((itinerary) => ({
-        day: itinerary.day,
-        heading: itinerary.heading || "",
-        placeId: itinerary.placeId || "",
-        dayActivities: itinerary.dayActivities || "",
-        packageItinearyImage:
-          itinerary.packageItinearyImagePath ||
-          itinerary.packageItinearyImage ||
-          null, // Use image path
-      }));
-      setPackageItinearyDTOList(updatedItinerary);
-    } else {
-      // Set default itinerary if none exists
-      setPackageItinearyDTOList([
-        {
-          day: 1,
-          heading: "",
-          placeId: "",
-          dayActivities: "",
-          packageItinearyImage: null,
-        },
-      ]);
-    }
-
-    // Load others data - merge with terms and conditions data
-    if (
-      item.packageOthersDTOList &&
-      Array.isArray(item.packageOthersDTOList) &&
-      termsAndConditions.length > 0
-    ) {
-      const mergedOthersList = termsAndConditions.map((term) => {
-        // Find matching item from backend data
-        const backendItem = item.packageOthersDTOList.find(
-          (backend) => backend.otherId === term.termsAndConditionsId
-        );
-
-        return {
-          otherId: term.termsAndConditionsId,
-          type: term.description,
-          descriptionType: term.descriptionType,
-          termsCode: term.termsCode,
-          isDeleted: backendItem
-            ? backendItem.isDeleted === true || backendItem.isDeleted === "true"
-            : true, // Default to selected if not found in backend
-        };
-      });
-      setPackageOthersDTOList(mergedOthersList);
-    } else {
-      // Set default others data from terms and conditions
-      if (termsAndConditions.length > 0) {
-        const defaultOthersList = termsAndConditions.map((term) => ({
-          otherId: term.termsAndConditionsId,
-          type: term.description,
-          descriptionType: term.descriptionType,
-          termsCode: term.termsCode,
-          isDeleted: false,
-        }));
-        setPackageOthersDTOList(defaultOthersList);
+      // Load places for the selected country
+      const countryId = data.arriveCountry || data.countryId;
+      if (countryId) {
+        cityList(countryId);
+        fetchCountries("").then((options) => {
+          const matched = (options || []).find(
+            (c) => String(c.id) === String(countryId)
+          );
+          if (matched) {
+            setSelectedCountryOption({ value: matched.id, label: matched.name });
+          }
+        });
       }
-    }
 
-    setValidationErrors({});
-    setShowModal(true);
+      // Load itinerary data
+      if (data.packageItinearyDTOList && Array.isArray(data.packageItinearyDTOList)) {
+        const updatedItinerary = data.packageItinearyDTOList.map((itinerary) => ({
+          day: itinerary.day,
+          heading: itinerary.heading || "",
+          placeId: itinerary.placeId || "",
+          dayActivities: itinerary.dayActivities || "",
+          packageItinearyImage: itinerary.packageItinearyImagePath || itinerary.packageItinearyImage || null,
+        }));
+        setPackageItinearyDTOList(updatedItinerary);
+      }
+
+      // Load others data
+      if (data.packageOthersDTOList && Array.isArray(data.packageOthersDTOList) && termsAndConditions.length > 0) {
+        const mergedOthersList = termsAndConditions.map((term) => {
+          const backendItem = data.packageOthersDTOList.find((backend) => backend.otherId === term.termsAndConditionsId);
+          return {
+            otherId: term.termsAndConditionsId,
+            type: term.description,
+            descriptionType: term.descriptionType,
+            termsCode: term.termsCode,
+            isDeleted: backendItem ? (backendItem.isDeleted === true || backendItem.isDeleted === "true") : true,
+          };
+        });
+        setPackageOthersDTOList(mergedOthersList);
+      }
+
+      setValidationErrors({});
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error fetching package details:", error);
+      toast.error("Failed to load package details");
+    } finally {
+      setIsLoading(false);
+    }
   };
+
 
   const handleDelete = async (item) => {
     // console.log("Deleting item:", item);
@@ -1279,7 +1301,7 @@ const PackageReg = () => {
                 <tbody>
                   {console.log("items list:::package cat::", items)}
                   {items.map((item, index) => (
-                    <tr key={item.id}>
+                    <tr key={item.packageId}>
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.packageName || "N/A"}</td>
                       <td>{item.packageCode || "N/A"}</td>
@@ -1287,12 +1309,15 @@ const PackageReg = () => {
                       <td>{item.noOfNights || "N/A"}</td>
                       <td>
                         <span
-                          className={`badge ${item.liveStatus === false
+                          className={`badge ${item.liveStatus === true
                               ? "bg-success"
                               : "bg-danger"
                             }`}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => handleStatusToggle(item)}
+                          title={`Click to ${item.liveStatus === true ? "deactivate" : "activate"} package`}
                         >
-                          {item.liveStatus === false ? "Active" : "InActive"}
+                          {item.liveStatus === true ? "Active" : "InActive"}
                         </span>
                       </td>
                       <td>
@@ -1820,8 +1845,8 @@ const PackageReg = () => {
                               }))
                             }
                           >
-                            <option value="false">Enable</option>
-                            <option value="true">Disable</option>
+                            <option value="false">Disable</option>
+                            <option value="true">Enable</option>
                           </Form.Select>
                         </Form.Group>
                         <Form.Group className="mb-3">
@@ -2256,6 +2281,53 @@ const PackageReg = () => {
                   {editing ? "Update" : "Create"}
                 </Button>
               )}
+            </Modal.Footer>
+          </Modal>
+
+          {/* Status Toggle Modal */}
+          <Modal
+            show={showStatusModal}
+            onHide={() => !isLoading && setShowStatusModal(false)}
+            centered
+            size="sm"
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton={!isLoading}>
+              <Modal.Title>Confirm Status Change</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p>
+                Are you sure you want to{" "}
+                {selectedPackage?.liveStatus === true ? "deactivate" : "activate"} this package?
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setShowStatusModal(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={updatePackageStatus}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Processing...
+                  </>
+                ) : (
+                  "Confirm"
+                )}
+              </Button>
             </Modal.Footer>
           </Modal>
         </main>
