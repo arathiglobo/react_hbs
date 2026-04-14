@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card,
@@ -19,6 +19,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
+import Select from "react-select";
 import {
   FaEdit,
   FaTrash,
@@ -235,6 +236,9 @@ const PackageReg = () => {
   const [packageCategoryDropdownOpen, setPackageCategoryDropdownOpen] = useState(false);
   const [packageTypes, setPackageTypes] = useState([]);
   const [isLoadingPackageTypes, setIsLoadingPackageTypes] = useState(false);
+  const [isCountryLoading, setIsCountryLoading] = useState(false);
+  const countryDebounceRef = useRef(null);
+  const [selectedCountryOption, setSelectedCountryOption] = useState(null);
 
 
   // Helper function to get image URL from path
@@ -394,6 +398,9 @@ const PackageReg = () => {
       }));
       setPackageOthersDTOList(resetOthersList);
     }
+    setCountries([]); // Clear previous country options
+    setSelectedCountryOption(null); // Reset selection
+    fetchCountries(""); // Load initial countries
     setValidationErrors({});
     setShowModal(true);
   };
@@ -440,7 +447,7 @@ const PackageReg = () => {
 
   useEffect(() => {
     fetchPackageList();
-    countryList();
+    fetchCountries("");
     loadCurrencies();
     loadAllDestinations();
     loadTermsAndConditions();
@@ -585,12 +592,25 @@ const PackageReg = () => {
     }
   };
 
-  const countryList = async () => {
+  const fetchCountries = async (searchTerm = "") => {
+    setIsCountryLoading(true);
     try {
-      const response = await axiosInstance.get("/api/country");
-      setCountries(response.data);
+      const res = await axiosInstance.get(
+        `/api/country?page=0&limit=20&search=${encodeURIComponent(searchTerm)}`
+      );
+      if (Array.isArray(res.data)) {
+        setCountries(res.data);
+        return res.data;
+      } else {
+        setCountries([]);
+        return [];
+      }
     } catch (error) {
-      console.log("error for country list :", error);
+      console.error("Error fetching countries:", error);
+      setCountries([]);
+      return [];
+    } finally {
+      setIsCountryLoading(false);
     }
   };
 
@@ -681,17 +701,14 @@ const PackageReg = () => {
   };
 
   // Handle country change
-  const handleCountryChange = (e) => {
+  const handleCountryChange = (option) => {
     try {
-      const value = e.target.value;
-      const stringValue = String(value); // Convert to string to avoid trim error
-      const selectedCountry = countries.find(
-        (country) => String(country.id) === String(value)
-      );
-      const countryName =
-        selectedCountry?.name || selectedCountry?.countryName || "Unknown";
-
-      console.log("Country selected:", value, "Country name:", countryName);
+      const value = option ? option.value : "";
+      const selectedCountryName = option ? option.label : "";
+      
+      setSelectedCountryOption(option);
+      
+      console.log("Country selected:", value, "Country name:", selectedCountryName);
 
       // Clear places and place selection when country changes
       setPlaces([]);
@@ -699,12 +716,12 @@ const PackageReg = () => {
 
       setFormData((prev) => ({
         ...prev,
-        countryId: stringValue,
+        countryId: value,
         placeId: "", // Clear place selection
       }));
 
       // Fetch cities for the selected country
-      if (value && stringValue.trim() !== "") {
+      if (value) {
         cityList(value);
       }
 
@@ -784,6 +801,18 @@ const PackageReg = () => {
     const countryId = item.arriveCountry || item.countryId;
     if (countryId) {
       cityList(countryId);
+      // Preload country options and set selected country option
+      fetchCountries("").then((options) => {
+        const matched = (options || []).find(
+          (c) => String(c.id) === String(countryId)
+        );
+        if (matched) {
+          setSelectedCountryOption({ value: matched.id, label: matched.name });
+        }
+      });
+    } else {
+      setSelectedCountryOption(null);
+      fetchCountries("");
     }
 
     // Load itinerary data if available
@@ -885,6 +914,18 @@ const PackageReg = () => {
     const countryId = item.arriveCountry || item.countryId;
     if (countryId) {
       cityList(countryId);
+      // Preload country options and set selected country option
+      fetchCountries("").then((options) => {
+        const matched = (options || []).find(
+          (c) => String(c.id) === String(countryId)
+        );
+        if (matched) {
+          setSelectedCountryOption({ value: matched.id, label: matched.name });
+        }
+      });
+    } else {
+      setSelectedCountryOption(null);
+      fetchCountries("");
     }
 
     // Load itinerary data if available
@@ -1788,19 +1829,30 @@ const PackageReg = () => {
                             Arrive Country{" "}
                             <span className="text-danger">*</span>
                           </Form.Label>
-                          <SearchableSelect
-                            name="countryId"
-                            value={formData.countryId}
+                          <Select
+                            options={Array.isArray(countries) ? countries.map(c => ({ value: c.id, label: c.name })) : []}
+                            value={selectedCountryOption}
                             onChange={handleCountryChange}
+                            onInputChange={(inputValue) => {
+                              clearTimeout(countryDebounceRef.current);
+                              countryDebounceRef.current = setTimeout(() => {
+                                fetchCountries(inputValue);
+                              }, 400);
+                            }}
+                            filterOption={() => true} // Server-side filtering
                             placeholder="Search and select country"
-                            options={countries}
-                            isInvalid={!!validationErrors.countryId}
-                            disabled={isViewMode}
+                            isSearchable
+                            isClearable
+                            isLoading={isCountryLoading}
+                            readOnly={isViewMode}
+                            isDisabled={isViewMode}
+                            className={`react-select-container ${validationErrors.countryId ? "is-invalid" : ""}`}
+                            classNamePrefix="react-select"
                           />
                           {validationErrors.countryId && (
-                            <Form.Control.Feedback type="invalid">
+                            <div className="text-danger small mt-1">
                               {validationErrors.countryId}
-                            </Form.Control.Feedback>
+                            </div>
                           )}
                         </Form.Group>
                         <Form.Group className="mb-3">

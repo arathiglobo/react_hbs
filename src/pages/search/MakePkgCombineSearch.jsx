@@ -8,8 +8,6 @@ import {
   Tabs,
   Tab,
   Spinner,
-  ButtonGroup,
-  ToggleButton,
   Pagination,
   Badge,
   Modal,
@@ -22,22 +20,16 @@ import {
   FaHotel,
   FaCar,
   FaTicketAlt,
-  FaMapMarkerAlt,
   FaStar,
   FaBuilding,
   FaGlobe,
   FaSort,
-  FaUsers,
   FaEye,
   FaBed,
   FaUtensils,
   FaInfoCircle,
   FaShieldAlt,
-  FaPhone,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaChevronDown,
-  FaChevronUp,
+  FaChevronDown
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -46,6 +38,100 @@ import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import "../../styles/RoomList.css";
 
+// ─────────────────────────────────────────────
+// Search Progress Bar (same as HotelSearch)
+// ─────────────────────────────────────────────
+function SearchProgressBar({ isLoading, pollStatus }) {
+  const [progress, setProgress] = useState(0);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (isLoading || pollStatus === "IN_PROGRESS") {
+      setVisible(true);
+      setProgress((prev) => Math.min(85, prev + 15));
+    } else if (pollStatus === "COMPLETED" || !isLoading) {
+      setProgress(100);
+      const timer = setTimeout(() => {
+        setVisible(false);
+        setProgress(0);
+      }, 900);
+      return () => clearTimeout(timer);
+    } else {
+      setVisible(false);
+      setProgress(0);
+    }
+  }, [isLoading, pollStatus]);
+
+  if (!visible) return null;
+
+  return (
+    <div className="search-progress-bar-wrap mb-3">
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <span className="search-progress-label">Searching hotels...</span>
+        <span className="search-progress-percent">{Math.round(progress)}%</span>
+      </div>
+      <div className="search-progress-track">
+        <div
+          className="search-progress-fill"
+          style={{ width: `${progress}%`, transition: "width 0.6s ease" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Skeleton Hotel Card
+// ─────────────────────────────────────────────
+function SkeletonHotelCard() {
+  return (
+    <Col xs={12}>
+      <div
+        style={{
+          backgroundColor: "white",
+          border: "1px solid #dee2e6",
+          borderRadius: "12px",
+          overflow: "hidden",
+        }}
+      >
+        <Row className="g-0">
+          <Col md={4} lg={3}>
+            <div
+              className="skeleton w-100"
+              style={{ minHeight: "180px", borderRadius: "0" }}
+            />
+          </Col>
+          <Col md={8} lg={9}>
+            <div className="p-3">
+              <div
+                className="skeleton mb-2"
+                style={{ height: "18px", width: "65%", borderRadius: "4px" }}
+              />
+              <div
+                className="skeleton mb-2"
+                style={{ height: "13px", width: "45%", borderRadius: "4px" }}
+              />
+              <div
+                className="skeleton mb-3"
+                style={{ height: "13px", width: "30%", borderRadius: "4px" }}
+              />
+              <div style={{ borderTop: "1px solid #eee", paddingTop: "10px" }}>
+                <div
+                  className="skeleton"
+                  style={{ height: "13px", width: "20%", borderRadius: "4px" }}
+                />
+              </div>
+            </div>
+          </Col>
+        </Row>
+      </div>
+    </Col>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Lazy Image
+// ─────────────────────────────────────────────
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
   const [inView, setInView] = useState(false);
@@ -94,8 +180,7 @@ function LazyImage({ src, alt, className }) {
   return (
     <div
       ref={containerRef}
-      className={`ratio ratio-16x9 rounded-top overflow-hidden ${className || ""
-        }`}
+      className={`ratio ratio-16x9 rounded-top overflow-hidden ${className || ""}`}
       style={{ height: "100%" }}
     >
       {!loaded && <div className="skeleton w-100 h-100" />}
@@ -110,17 +195,16 @@ function LazyImage({ src, alt, className }) {
           alt={alt}
           onLoad={() => setLoaded(true)}
           className={`img-cover ${loaded ? "img-loaded" : "img-loading"}`}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       )}
     </div>
   );
 }
 
+// ─────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────
 export default function MakePkgCombineSearch() {
   const location = useLocation();
   const searchCriteria = location.state;
@@ -134,7 +218,7 @@ export default function MakePkgCombineSearch() {
     childAges: initialChildAges = [],
     nights,
   } = searchCriteria || {};
-
+const [activeAccordion, setActiveAccordion] = useState({});
   const [checkIn, setCheckIn] = useState(travelDate || "");
   const [checkOut, setCheckOut] = useState("");
   const [nightsCount, setNightsCount] = useState(nights || 1);
@@ -160,19 +244,20 @@ export default function MakePkgCombineSearch() {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [pollStatus, setPollStatus] = useState("IDLE");
-  const [completedChannels, setCompletedChannels] = useState(new Set()); // Track completed channels
+  const [completedChannels, setCompletedChannels] = useState(new Set());
   const [searchId, setSearchId] = useState(null);
   const resultsRef = useRef(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [sortBy, setSortBy] = useState("priceAsc");
-  const [starRating, setStarRating] = useState([]);
+
+  // ── FIXED: starRating is now single-select (null | option) ──
+  const [starRating, setStarRating] = useState(null);
   const [hotelType, setHotelType] = useState([]);
   const [channelType, setChannelType] = useState([]);
   const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
   const [clickedHotelIds, setClickedHotelIds] = useState([]);
-  const [view, setView] = useState("card");
 
   // Inline Room View State
   const [hotelRooms, setHotelRooms] = useState({});
@@ -186,12 +271,8 @@ export default function MakePkgCombineSearch() {
   const [hasTransferSearched, setHasTransferSearched] = useState(false);
   const [transferAdults, setTransferAdults] = useState(adults || 1);
   const [transferChildren, setTransferChildren] = useState(children || 0);
-  const [transferChildAges, setTransferChildAges] = useState(
-    initialChildAges || []
-  );
-  const [transferPickupDate, setTransferPickupDate] = useState(
-    travelDate || ""
-  );
+  const [transferChildAges, setTransferChildAges] = useState(initialChildAges || []);
+  const [transferPickupDate, setTransferPickupDate] = useState(travelDate || "");
   const [transferDropoffDate, setTransferDropoffDate] = useState("");
 
   // Tours and Activities search state
@@ -235,10 +316,10 @@ export default function MakePkgCombineSearch() {
 
   const channelTypeOptions = [
     { value: "inhouse", label: "Inhouse" },
-    { value: "iwtx", label: "Iwtx" },
-    { value: "x3", label: "x3" },
-    { value: "ratehawk", label: "Ratehawk" },
-    { value: "darina", label: "Darina" },
+    // { value: "iwtx", label: "Iwtx" },
+    // { value: "x3", label: "x3" },
+    // { value: "ratehawk", label: "Ratehawk" },
+    // { value: "darina", label: "Darina" },
   ];
 
   useEffect(() => {
@@ -257,31 +338,26 @@ export default function MakePkgCombineSearch() {
     }
   }, [agentId]);
 
-  // Store travel date in sessionStorage for use in booking page
   useEffect(() => {
     if (travelDate) {
       sessionStorage.setItem("makePkgTravelDate", travelDate);
     }
   }, [travelDate]);
 
-  // Update transfer child ages when number of children changes
   useEffect(() => {
     if (transferChildren > 0) {
       setTransferChildAges((prevAges) => {
         const currentAges = [...prevAges];
-        // If we have initial child ages and they match the count, use them
         if (initialChildAges && initialChildAges.length === transferChildren) {
           return [...initialChildAges];
         }
-        // Ensure we have the right number of age inputs
         while (currentAges.length < transferChildren) {
           currentAges.push(
             initialChildAges && currentAges.length < initialChildAges.length
               ? initialChildAges[currentAges.length]
               : 5
-          ); // Default age or from initial
+          );
         }
-        // Remove extra ages if children count decreased
         if (currentAges.length > transferChildren) {
           currentAges.splice(transferChildren);
         }
@@ -292,7 +368,6 @@ export default function MakePkgCombineSearch() {
     }
   }, [transferChildren, initialChildAges]);
 
-  // Initialize rooms and child ages from search criteria
   useEffect(() => {
     if (adults || children) {
       const initialRooms = [
@@ -309,24 +384,20 @@ export default function MakePkgCombineSearch() {
     }
   }, [adults, children, initialChildAges]);
 
-  // Update tour child ages when number of children changes
   useEffect(() => {
     if (tourChildren > 0) {
       setTourChildAges((prevAges) => {
         const currentAges = [...prevAges];
-        // If we have initial child ages and they match the count, use them
         if (initialChildAges && initialChildAges.length === tourChildren) {
           return [...initialChildAges];
         }
-        // Ensure we have the right number of age inputs
         while (currentAges.length < tourChildren) {
           currentAges.push(
             initialChildAges && currentAges.length < initialChildAges.length
               ? initialChildAges[currentAges.length]
               : 5
-          ); // Default age or from initial
+          );
         }
-        // Remove extra ages if children count decreased
         if (currentAges.length > tourChildren) {
           currentAges.splice(tourChildren);
         }
@@ -343,55 +414,50 @@ export default function MakePkgCombineSearch() {
     setChildAges(updatedAges);
   };
 
-  const fetchHotels = async (page, searchId, agentId) => {
+  const fetchHotels = async (page, sid, agtId) => {
     try {
       const params = {
-        agentId: agentId || agent || 1, // Use passed agentId, or state agent, or default to 1
+        agentId: agtId || agent || 1,
         page,
         pageSize,
         sortBy:
           sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
         sortOrder:
-          sortBy === "priceAsc" ||
-            sortBy === "ratingAsc" ||
-            sortBy === "nameAsc"
+          sortBy === "priceAsc" || sortBy === "ratingAsc" || sortBy === "nameAsc"
             ? "asc"
             : "desc",
-        starRating: starRating.map((s) => s.value).join(",") || undefined,
+        // ── FIXED: single-select star ──
+        starRating: starRating ? starRating.value : undefined,
         apiType:
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
       };
 
-      const res = await axiosInstance.get(`/hotel-search/results/${searchId}`, {
-        params,
-      });
+      const res = await axiosInstance.get(`/hotel-search/results/${sid}`, { params });
 
       const mappedResults = Array.isArray(res.data.result)
         ? res.data.result.map((hotel, index) => ({
-          id: hotel.hotelCode
-            ? `${searchId}-${hotel.hotelCode}`
-            : `${searchId}-h${index + 1}`,
-          searchId,
-          hotelCode: hotel.hotelCode || null,
-          name: hotel.hotelName || "Unknown Hotel",
-          address: hotel.hotelAddress || "",
-          city: hotel.hotelAddress
-            ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-            : "Unknown City",
-          price: hotel.baseRate || null,
-          badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-          image:
-            hotel.hotelImage ||
-            "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-          rating: hotel.starRating || 0,
-          hotelType: "hotel",
-          channelType: hotel.apiType?.toLowerCase() || "inhouse",
-        }))
+            id: hotel.hotelCode
+              ? `${sid}-${hotel.hotelCode}`
+              : `${sid}-h${index + 1}`,
+            searchId: sid,
+            hotelCode: hotel.hotelCode || null,
+            name: hotel.hotelName || "Unknown Hotel",
+            address: hotel.hotelAddress || "",
+            city: hotel.hotelAddress
+              ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+              : "Unknown City",
+            price: hotel.baseRate || null,
+            badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+            image:
+              hotel.hotelImage ||
+              "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
+            rating: hotel.starRating || 0,
+            hotelType: "hotel",
+            channelType: hotel.apiType?.toLowerCase() || "inhouse",
+          }))
         : [];
 
-      // Clear previous results and set new results for the current page
       setAllResults(mappedResults);
-
       setTotalElements(Number(res.data.totalResults) || mappedResults.length);
       setTotalPages(
         Math.max(
@@ -410,105 +476,42 @@ export default function MakePkgCombineSearch() {
     }
   };
 
-  const pollUntilComplete = async (
-    url,
-    params,
-    checkComplete,
-    onUpdate,
-    intervalMs = 4000,
-    timeoutMs = 20000,
-    initialDelay = 2000
-  ) => {
-    return new Promise((resolve, reject) => {
-      const startTime = Date.now();
-      let localPollCount = 0;
-
-      const poll = async () => {
-        try {
-          localPollCount++;
-          const res = await axiosInstance.get(url, { params });
-
-          if (onUpdate) {
-            onUpdate(res.data, localPollCount);
-          }
-
-          if (checkComplete(res.data)) {
-            setPollStatus("COMPLETED");
-            return resolve(res.data);
-          }
-
-          if (Date.now() - startTime >= timeoutMs) {
-            setPollStatus("TIMEOUT");
-            return reject(new Error("Polling timed out"));
-          }
-
-          setTimeout(poll, intervalMs);
-        } catch (err) {
-          console.error("Poll failed:", err);
-          setPollStatus("ERROR");
-          reject(err);
-        }
-      };
-
-      setPollStatus("IN_PROGRESS");
-      setTimeout(poll, initialDelay);
-    });
-  };
-
-  // Show results during polling if we have partial data
-  const showResultsDuringPolling =
-    hasSearchResult &&
-    isInitialResultsLoaded &&
-    (pollStatus === "IN_PROGRESS" || pollStatus === "COMPLETED");
-
-  // Filtered results based on search term and filters
+  // Filtered results — FIXED: starRating is now single null | option
   const filteredResults = useMemo(() => {
     let results = allResults;
 
-    // Filter by hotel name search
     if (hotelSearchTerm && hotelSearchTerm.trim()) {
       const searchTerm = hotelSearchTerm.trim().toLowerCase();
       results = results.filter((hotel) => {
-        const hotelName = (hotel.name || hotel.hotelName || "")
-          .trim()
-          .toLowerCase();
+        const hotelName = (hotel.name || hotel.hotelName || "").trim().toLowerCase();
         return hotelName.includes(searchTerm);
       });
     }
 
-    // Filter by star rating
-    if (starRating.length > 0) {
-      const selectedStars = starRating.map((s) => s.value);
-      results = results.filter((hotel) => selectedStars.includes(hotel.rating));
+    // ── FIXED: single-select check ──
+    if (starRating) {
+      results = results.filter(
+        (hotel) => Number(hotel.rating) === Number(starRating.value)
+      );
     }
 
-    // Filter by hotel type
     if (hotelType.length > 0) {
       const selectedTypes = hotelType.map((t) => t.value);
-      results = results.filter((hotel) =>
-        selectedTypes.includes(hotel.hotelType)
-      );
+      results = results.filter((hotel) => selectedTypes.includes(hotel.hotelType));
     }
 
-    // Filter by channel type
     if (channelType.length > 0) {
       const selectedChannels = channelType.map((c) => c.value);
-      results = results.filter((hotel) =>
-        selectedChannels.includes(hotel.channelType)
-      );
+      results = results.filter((hotel) => selectedChannels.includes(hotel.channelType));
     }
 
     return results;
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType]);
 
-  const effectiveTotalPages = useMemo(
-    () => Math.max(1, totalPages),
-    [totalPages]
-  );
+  const effectiveTotalPages = useMemo(() => Math.max(1, totalPages), [totalPages]);
 
   const pageNumbers = useMemo(() => {
     const maxPagesToShow = 5;
-    // Convert to 1-based for display
     const currentPage = pageIndex + 1;
     const start = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
     const end = Math.min(totalPages, start + maxPagesToShow - 1);
@@ -518,35 +521,29 @@ export default function MakePkgCombineSearch() {
   const goToPage = (page) => {
     if (page >= 0 && page < totalPages) {
       setPageIndex(page);
+      setTimeout(() => {
+        if (resultsRef.current) {
+          resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 0);
     }
   };
 
   useEffect(() => {
     if (!searchId || !hasSearched) return;
-
     setIsLoading(true);
     fetchHotels(pageIndex, searchId, agent).finally(() => setIsLoading(false));
-  }, [
-    pageIndex,
-    sortBy,
-    starRating,
-    channelType,
-    searchId,
-    agent,
-    hasSearched,
-  ]);
+  }, [pageIndex, sortBy, starRating, channelType, searchId, agent, hasSearched]);
 
   useEffect(() => {
     const style = document.createElement("style");
     style.textContent = `
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          .animate-fadeIn {
-            animation: fadeIn 0.5s ease-in;
-          }
-        `;
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fadeIn { animation: fadeIn 0.5s ease-in; }
+    `;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
   }, []);
@@ -579,12 +576,12 @@ export default function MakePkgCombineSearch() {
           room.childAges && room.childAges.length > 0
             ? room.childAges.map((age) => parseInt(age) || 0)
             : room.children > 0
-              ? Array(room.children).fill(0)
-              : [0],
+            ? Array(room.children).fill(0)
+            : [0],
         adultAges: room.adultAges?.length ? room.adultAges : [25],
       }));
 
-      const agentIdFinal = agentId || agent || 1; // Use selected agent or default to 1
+      const agentIdFinal = agentId || agent || 1;
 
       const searchPayloadReq = {
         nationalityId,
@@ -599,41 +596,29 @@ export default function MakePkgCombineSearch() {
         apiType: ["INHOUSE"],
       };
 
-      // const searchKeyRes = await axiosInstance.post(
-      //   "/hotel-search/search",
-      //   searchPayloadReq
-      // );
       const searchRes = await axiosInstance.post(
         "/api/makeYourOwnPackageHotel/search",
         searchPayloadReq
       );
-      console.log("searchRes", searchRes);
 
       const ensureHttpImage = (imageUrl) => {
         if (!imageUrl) {
           return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
         }
-
-        if (/^https?:\/\//i.test(imageUrl)) {
-          return imageUrl;
-        }
-
+        if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
         if (typeof imageUrl === "string") {
           const fileName = imageUrl.split(/[/\\]/).pop();
           if (fileName) {
             return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
           }
         }
-
         return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
       };
 
       const responseData = Array.isArray(searchRes.data) ? searchRes.data : [];
 
       const mappedResults = responseData.map((hotel, index) => ({
-        id: hotel.hotelCode
-          ? `local-${hotel.hotelCode}`
-          : `local-h${index + 1}`,
+        id: hotel.hotelCode ? `local-${hotel.hotelCode}` : `local-h${index + 1}`,
         searchId: "local",
         hotelCode: hotel.hotelCode || null,
         name: hotel.hotelName || "Unknown Hotel",
@@ -656,104 +641,6 @@ export default function MakePkgCombineSearch() {
       setIsInitialResultsLoaded(true);
       setPollStatus("COMPLETED");
       setSearchId(null);
-      // const searchIdRes = searchKeyRes.data.searchId;
-      // if (!searchIdRes) throw new Error("No searchId returned");
-      // setSearchId(searchIdRes);
-
-      // const params = {
-      //   agentId: agentIdFinal, // Use the dynamic agentId
-      //   page: 0,
-      //   pageSize,
-      //   sortBy:
-      //     sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
-      //   sortOrder:
-      //     sortBy === "priceAsc" ||
-      //     sortBy === "ratingAsc" ||
-      //     sortBy === "nameAsc"
-      //       ? "asc"
-      //       : "desc",
-      //   starRating: starRating.map((s) => s.value).join(",") || undefined,
-      //   apiType:
-      //     channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
-      // };
-
-      // const expectedChannels = ["inhouse", "iwtx", "x3", "ratehawk"];
-
-      // await pollUntilComplete(
-      //   `/hotel-search/results/${searchIdRes}`,
-      //   params,
-      //   (data) => {
-      //     // Check if any individual API is completed OR if finalStatus is completed
-      //     const currentStatuses = data.status || {};
-      //     const hasAnyCompleted = expectedChannels.some(ch => currentStatuses[ch] === "COMPLETED");
-      //     return hasAnyCompleted || data.finalStatus === "COMPLETED";
-      //   },
-      //   (data, pollCount) => {
-
-      //     const mappedResults = Array.isArray(data.result)
-      //       ? data.result.map((hotel, index) => ({
-      //           id: hotel.hotelCode
-      //             ? `${searchIdRes}-${hotel.hotelCode}`
-      //             : `${searchIdRes}-h${index + 1}`,
-      //           searchId: searchIdRes,
-      //           hotelCode: hotel.hotelCode || null,
-      //           name: hotel.hotelName || "Unknown Hotel",
-      //           address: hotel.hotelAddress || "",
-      //           city: hotel.hotelAddress
-      //             ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-      //             : "Unknown City",
-      //           price: hotel.baseRate || null,
-      //           badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-      //           image:
-      //             hotel.hotelImage ||
-      //             "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-      //           rating: hotel.starRating || 0,
-      //           hotelType: "hotel",
-      //           channelType: hotel.apiType?.toLowerCase() ,
-      //         }))
-      //       : [];
-
-      //     // Update results for the current page
-      //     setAllResults(mappedResults);
-
-      //     const currentStatuses = data.status || {};
-      //     const newCompleted = new Set(completedChannels);
-      //     expectedChannels.forEach((ch) => {
-      //       if (
-      //         currentStatuses[ch] === "COMPLETED" &&
-      //         !completedChannels.has(ch)
-      //       ) {
-      //         newCompleted.add(ch);
-      //         // console.log(`Channel ${ch} completed at poll ${pollCount}`);
-      //       }
-      //     });
-      //     setCompletedChannels(newCompleted);
-
-      //     // Show results immediately if any channel is completed or we have results
-      //     if (pollCount === 1 || mappedResults.length > 0) {
-      //       setHasSearchResult(true);
-      //       // Show results as soon as any channel completes or we have data
-      //       if (newCompleted.size >= 1 || mappedResults.length > 0) {
-      //         setIsInitialResultsLoaded(true);
-      //       }
-      //     }
-
-      //     setTotalElements(
-      //       Number(data.totalResults) || mappedResults.length
-      //     );
-      //     setTotalPages(
-      //       Math.max(
-      //         1,
-      //         Math.ceil(
-      //           (Number(data.totalResults) || mappedResults.length) / pageSize
-      //         )
-      //       )
-      //     );
-      //   },
-      //   4000,
-      //   20000,
-      //   2000
-      // );
     } catch (err) {
       console.error("Search failed:", err);
       setHasSearched(false);
@@ -793,7 +680,6 @@ export default function MakePkgCombineSearch() {
     setTourResults([]);
 
     try {
-      // Format date to DD/MM/YYYY format
       const formatDate = (dateString) => {
         if (!dateString) return "";
         const date = new Date(dateString);
@@ -803,22 +689,19 @@ export default function MakePkgCombineSearch() {
         return `${day}/${month}/${year}`;
       };
 
-      console.log;
-      // Prepare payload for activity search matching backend DTO
       const activityPayload = {
         activityDate: formatDate(tourDate || travelDate || checkIn),
         nativeCountryId: nationality?.value ? String(nationality.value) : "",
-        // searchCityorCountryId: destination?.value || "",
         destinationCountryId: destination?.countryId || "",
         destinationCityId: destination?.value || "",
-        searchCorCtype: destination?.type || "State", // Use destination type or default to "State"
+        searchCorCtype: destination?.type || "State",
         agentId: String(agentId || agent || 1),
         childAge:
           tourChildAges && tourChildAges.length > 0
             ? tourChildAges.map((age) => String(parseInt(age) || 0))
             : tourChildren > 0
-              ? Array(tourChildren).fill("0")
-              : [],
+            ? Array(tourChildren).fill("0")
+            : [],
         adult: String(tourAdults || adults || 1),
         child: String(tourChildren || children || 0),
       };
@@ -828,35 +711,32 @@ export default function MakePkgCombineSearch() {
         activityPayload
       );
 
-      // Map API response to activity results format
       const mappedResults = Array.isArray(response.data)
         ? response.data.map((activity, index) => ({
-          id: activity.activityId || `activity-${index}`,
-          activityName: activity.activityname || "",
-          activityDetails: activity.activityDetails || "",
-          starRating: activity.starRating || 0,
-          totalRate: activity.totalRate || activity.activityRate || 0,
-          totalRateWithoutMrk:
-            activity.totalRateWithoutmrk || activity.activityRate || 0,
-          activityImage:
-            activity.activityImage ||
-            "https://via.placeholder.com/400x225?text=Activity",
-          childMax: activity.childMax || 0,
-          childMin: activity.childMin || 0,
-          adultRate: activity.adultRate || 0,
-          childRate: activity.childRate || 0,
-          activityType: activity.activityType || 1,
-          maxPax: activity.maxPax || 0,
-          minPaxsic: activity.minPaxsic || 0,
-          currency: activity.currencyCode || "AED",
-          duration:
-            activity.viatorActivityDurationFrom &&
-              activity.viatorActivityDurationTo
-              ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
-              : null,
-          apiType: activity.apiType || null,
-          viatorProductCode: activity.viatorProductCode || null,
-        }))
+            id: activity.activityId || `activity-${index}`,
+            activityName: activity.activityname || "",
+            activityDetails: activity.activityDetails || "",
+            starRating: activity.starRating || 0,
+            totalRate: activity.totalRate || activity.activityRate || 0,
+            totalRateWithoutMrk: activity.totalRateWithoutmrk || activity.activityRate || 0,
+            activityImage:
+              activity.activityImage ||
+              "https://via.placeholder.com/400x225?text=Activity",
+            childMax: activity.childMax || 0,
+            childMin: activity.childMin || 0,
+            adultRate: activity.adultRate || 0,
+            childRate: activity.childRate || 0,
+            activityType: activity.activityType || 1,
+            maxPax: activity.maxPax || 0,
+            minPaxsic: activity.minPaxsic || 0,
+            currency: activity.currencyCode || "AED",
+            duration:
+              activity.viatorActivityDurationFrom && activity.viatorActivityDurationTo
+                ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
+                : null,
+            apiType: activity.apiType || null,
+            viatorProductCode: activity.viatorProductCode || null,
+          }))
         : [];
 
       setTourResults(mappedResults);
@@ -869,21 +749,14 @@ export default function MakePkgCombineSearch() {
   };
 
   const handleViewRooms = async (hotel) => {
-    // Toggle expansion
-    setExpandedHotels((prev) => ({
-      ...prev,
-      [hotel.id]: !prev[hotel.id],
-    }));
-
-    // If closing, return
+    setExpandedHotels((prev) => ({ ...prev, [hotel.id]: !prev[hotel.id] }));
     if (expandedHotels[hotel.id]) return;
-
-    // If already loaded, return
     if (hotelRooms[hotel.id]) return;
 
     setLoadingRooms((prev) => ({ ...prev, [hotel.id]: true }));
 
-    const nationalityCode = (nationality?.code || "").length === 2 ? nationality.code : " ";
+    const nationalityCode =
+      (nationality?.code || "").length === 2 ? nationality.code : " ";
     const agentIdToUse = agentId || agent || 1;
 
     const roomsPayload = rooms.map((r) => ({
@@ -910,7 +783,7 @@ export default function MakePkgCombineSearch() {
       hotelCode: hotel.hotelCode || hotel.id?.split("-").slice(1).join("-") || "",
       nationality: nationalityCode,
       agentId: String(agentIdToUse),
-      apiId: apiId,
+      apiId,
       rooms: roomsPayload,
     };
 
@@ -968,23 +841,26 @@ export default function MakePkgCombineSearch() {
         adult: String(room.adults || room.adult || 1),
         child: String(room.children || room.child || 0),
         childAge: Array.isArray(room.childAges)
-          ? room.childAges.map(age => Number(age))
-          : (Array.isArray(room.childAge) ? room.childAge.map(age => Number(age)) : [])
+          ? room.childAges.map((age) => Number(age))
+          : Array.isArray(room.childAge)
+          ? room.childAge.map((age) => Number(age))
+          : [],
       }));
 
       const available = rate.roomStatus === "Available" ? "True" : "False";
-
       const refundstatus =
         rate.nonRefundable === true ||
-          rate.nonRefundable === "true" ||
-          String(rate.nonRefundable).toLowerCase() === "true"
+        rate.nonRefundable === "true" ||
+        String(rate.nonRefundable).toLowerCase() === "true"
           ? "N"
           : "Y";
 
       const cancellationPolicyList = Array.isArray(hotelsdetail.cancellationPolicies)
-        ? hotelsdetail.cancellationPolicies.map(policy =>
-          typeof policy === 'string' ? policy : (policy.policyText || policy.text || JSON.stringify(policy))
-        )
+        ? hotelsdetail.cancellationPolicies.map((policy) =>
+            typeof policy === "string"
+              ? policy
+              : policy.policyText || policy.text || JSON.stringify(policy)
+          )
         : [];
 
       const cartItem = {
@@ -996,7 +872,7 @@ export default function MakePkgCombineSearch() {
         roomcategory: rate.roomCategory || "",
         roomCategory: rate.roomCategory || "",
         roomType: rate.mealPlan || "",
-        available: available,
+        available,
         api: Number(payload.apiId || payload.api || 0),
         destinationCityId: String(payload.destinationCityId || payload.cityId || ""),
         destinationCountryId: String(payload.destinationCountryId || payload.countryId || ""),
@@ -1005,18 +881,21 @@ export default function MakePkgCombineSearch() {
         nativeContryId: Number(hotelsdetail.nationalityId) || null,
         nationality: String(payload.nationality || ""),
         noOfRoom: String(hotelsdetail.numberOfRooms || payload.noOfRoom || "1"),
-        refundstatus: refundstatus,
-        searchRoomDTOs: searchRoomDTOs,
+        refundstatus,
+        searchRoomDTOs,
         agentId: String(payload.agentId || ""),
         totalRate: Number(rate.totalRate) || 0,
         totalRateWithoutmrk: Number(rate.rateBeforeTax || rate.totalRate) || 0,
         cancellationPolicy: cancellationPolicyList,
       };
 
-      const response = await axiosInstance.post("/api/makeYourOwnPackageHotel/saveHotelDetailsToCart", cartItem);
+      const response = await axiosInstance.post(
+        "/api/makeYourOwnPackageHotel/saveHotelDetailsToCart",
+        cartItem
+      );
       if (response.data && response.data.success !== false) {
         toast.success("Room added to cart successfully!");
-        window.dispatchEvent(new CustomEvent('cartUpdated'));
+        window.dispatchEvent(new CustomEvent("cartUpdated"));
       } else {
         toast.error(response.data?.message || "Failed to add item to cart");
       }
@@ -1029,39 +908,52 @@ export default function MakePkgCombineSearch() {
   const getMealPlanIcon = (mealPlan) => {
     if (!mealPlan) return <FaUtensils className="text-primary" />;
     switch (mealPlan.toLowerCase()) {
-      case "room only": return <FaBed className="text-muted" />;
-      case "breakfast": return <FaUtensils className="text-warning" />;
-      case "full board": return <FaUtensils className="text-success" />;
-      default: return <FaUtensils className="text-primary" />;
+      case "room only":
+        return <FaBed className="text-muted" />;
+      case "breakfast":
+        return <FaUtensils className="text-warning" />;
+      case "full board":
+        return <FaUtensils className="text-success" />;
+      default:
+        return <FaUtensils className="text-primary" />;
     }
   };
 
   const getRefundStatusBadge = (nonRefundable) => {
     const value = String(nonRefundable).toLowerCase();
     switch (value) {
-      case "false": return <Badge bg="success">Flexible</Badge>;
-      case "true": return <Badge bg="danger">Non-Refundable</Badge>;
-      default: return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
+      case "false":
+        return <Badge bg="success">Flexible</Badge>;
+      case "true":
+        return <Badge bg="danger">Non-Refundable</Badge>;
+      default:
+        return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
     }
   };
 
   const getRoomStatusBadge = (roomStatus) => {
     switch (roomStatus) {
       case "On Request":
-        return <small>This room can be booked <span className="bg-warning text-dark px-2 py-0 rounded">On Request</span></small>;
+        return (
+          <small>
+            This room can be booked{" "}
+            <span className="bg-warning text-dark px-2 py-0 rounded">On Request</span>
+          </small>
+        );
       case "Available":
-        return <small>This room is <span className="bg-success text-white px-3 py-0 rounded">Available</span></small>;
+        return (
+          <small>
+            This room is{" "}
+            <span className="bg-success text-white px-3 py-0 rounded">Available</span>
+          </small>
+        );
       default:
         return <Badge bg="secondary">{roomStatus}</Badge>;
     }
   };
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat("en-AE", {
-      style: "currency",
-      currency: "AED",
-    }).format(price);
-  };
+  const formatPrice = (price) =>
+    new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED" }).format(price);
 
   const handleAddActivityToCart = async (activity) => {
     if (!activity) return;
@@ -1076,7 +968,6 @@ export default function MakePkgCombineSearch() {
       toast.error("Select a valid activity date before adding to cart.");
       return;
     }
-
     if (!nationality?.value) {
       toast.error("Select a nationality before adding to cart.");
       return;
@@ -1110,7 +1001,6 @@ export default function MakePkgCombineSearch() {
         "/api/makeYourOwnPackage/saveActivityDetailsToCart",
         payload
       );
-
       if (response.data === "1" || response.data === 1) {
         toast.success("Activity added to cart successfully.");
         window.dispatchEvent(new Event("cartUpdated"));
@@ -1125,11 +1015,10 @@ export default function MakePkgCombineSearch() {
     }
   };
 
-  const renderStars = (rating) => {
-    return Array.from({ length: Math.floor(rating || 0) }, (_, i) => (
+  const renderStars = (rating) =>
+    Array.from({ length: Math.floor(rating || 0) }, (_, i) => (
       <FaStar key={i} className="text-warning" size={14} />
     ));
-  };
 
   const handleTransferSearchSubmit = async (e) => {
     e.preventDefault();
@@ -1138,22 +1027,20 @@ export default function MakePkgCombineSearch() {
     setTransferResults([]);
 
     try {
-      // Prepare payload for transfer search matching backend DTO
       const transferPayload = {
         checkIn: transferPickupDate || travelDate || checkIn,
         checkOut: transferDropoffDate || checkOut,
         nativeCountryId: nationality?.value ? Number(nationality.value) : null,
-        // searchCityorCountryId: destination?.value || "",
         destinationCountryId: destination?.countryId || "",
         destinationCityId: destination?.value || "",
-        searchCorCtype: "city", // Assuming city search - adjust if needed (could be "city" or "country")
+        searchCorCtype: "city",
         agentid: String(agentId || agent || 1),
         childAge:
           transferChildAges && transferChildAges.length > 0
             ? transferChildAges.map((age) => parseInt(age) || 0)
             : transferChildren > 0
-              ? Array(transferChildren).fill(0)
-              : [],
+            ? Array(transferChildren).fill(0)
+            : [],
         adult: transferAdults || adults || 1,
         child: transferChildren || children || 0,
       };
@@ -1163,34 +1050,28 @@ export default function MakePkgCombineSearch() {
         transferPayload
       );
 
-      // Map API response to transfer results format based on new structure
       const ensureHttpImage = (imageUrl) => {
-        if (!imageUrl) {
-          return "https://via.placeholder.com/400x225?text=Transfer";
-        }
-        if (/^https?:\/\//i.test(imageUrl)) {
-          return imageUrl;
-        }
+        if (!imageUrl) return "https://via.placeholder.com/400x225?text=Transfer";
+        if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
         if (typeof imageUrl === "string") {
           const fileName = imageUrl.split(/[/\\]/).pop();
-          if (fileName) {
+          if (fileName)
             return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
-          }
         }
         return "https://via.placeholder.com/400x225?text=Transfer";
       };
 
       const mappedResults = Array.isArray(response.data)
         ? response.data.map((cab, index) => ({
-          cabid: cab.cabid || cab.cabId || `cab-${index}`,
-          cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
-          cabdetails: cab.cabdetails || "",
-          cabpic: ensureHttpImage(cab.cabpic || cab.cabPic),
-          noOfCabs: cab.noOfCabs || 1,
-          searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
-            ? cab.searchCabDetailsDTO
-            : [],
-        }))
+            cabid: cab.cabid || cab.cabId || `cab-${index}`,
+            cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
+            cabdetails: cab.cabdetails || "",
+            cabpic: ensureHttpImage(cab.cabpic || cab.cabPic),
+            noOfCabs: cab.noOfCabs || 1,
+            searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
+              ? cab.searchCabDetailsDTO
+              : [],
+          }))
         : [];
 
       setTransferResults(mappedResults);
@@ -1205,49 +1086,34 @@ export default function MakePkgCombineSearch() {
   const handleAddTransferToCart = async (cab, cabDetail) => {
     if (!cab || !cabDetail) return;
 
-    console.log("Adding transfer to cab:", cab);
-
     const agentValue = String(agentId || agent || 1);
-    const pickupDateValue = formatDateToDDMMYYYY(
-      transferPickupDate || travelDate || checkIn
-    );
-    const dropoffDateValue = formatDateToDDMMYYYY(
-      transferDropoffDate || checkOut
-    );
+    const pickupDateValue = formatDateToDDMMYYYY(transferPickupDate || travelDate || checkIn);
+    const dropoffDateValue = formatDateToDDMMYYYY(transferDropoffDate || checkOut);
 
     if (!pickupDateValue) {
       toast.error("Select a valid pickup date before adding to cart.");
       return;
     }
-
     if (!nationality?.value) {
       toast.error("Select a nationality before adding to cart.");
       return;
     }
 
-    // Calculate rate based on transfer type (SIC or Private)
     const rate =
-      cabDetail.types === "SIC"
-        ? cabDetail.sicRate || 0
-        : cabDetail.privateRate || 0;
-
-    // Get totalRateWithoutMrk from cabDetail or fallback to calculated rate
+      cabDetail.types === "SIC" ? cabDetail.sicRate || 0 : cabDetail.privateRate || 0;
     const totalRateWithoutMrk =
       cabDetail.totalRateWithoutMrk !== undefined &&
-        cabDetail.totalRateWithoutMrk !== null &&
-        cabDetail.totalRateWithoutMrk !== 0
+      cabDetail.totalRateWithoutMrk !== null &&
+      cabDetail.totalRateWithoutMrk !== 0
         ? cabDetail.totalRateWithoutMrk
         : rate;
-
-    // Get totalRate from cabDetail or use totalRateWithoutMrk as fallback
     const totalRate =
       cabDetail.totalRate !== undefined &&
-        cabDetail.totalRate !== null &&
-        cabDetail.totalRate !== 0
+      cabDetail.totalRate !== null &&
+      cabDetail.totalRate !== 0
         ? cabDetail.totalRate
         : totalRateWithoutMrk;
 
-    // Prepare payload matching CartCabDTO structure
     const payload = {
       pickupDate: pickupDateValue,
       dropoffDate: dropoffDateValue || pickupDateValue,
@@ -1286,7 +1152,6 @@ export default function MakePkgCombineSearch() {
         "/api/makeYourOwnPackage/saveCabDetailsToCart",
         payload
       );
-
       if (
         response.data === "1" ||
         response.data === 1 ||
@@ -1304,6 +1169,21 @@ export default function MakePkgCombineSearch() {
       setAddingTransferId(null);
     }
   };
+
+  // ── Helper: clear all hotel filters ──
+  const clearAllFilters = () => {
+    setStarRating(null);
+    setHotelType([]);
+    setChannelType([]);
+    setSortBy("priceAsc");
+    setHotelSearchTerm("");
+  };
+
+  const hasActiveFilters =
+    hotelSearchTerm || starRating || hotelType.length > 0 || channelType.length > 0;
+
+  const startEntry = totalElements === 0 ? 0 : pageIndex * pageSize + 1;
+  const endEntry = Math.min((pageIndex + 1) * pageSize, totalElements);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -1323,7 +1203,9 @@ export default function MakePkgCombineSearch() {
                 onSelect={(k) => setActiveTab(k)}
                 className="mb-3 nav-tabs-custom"
               >
-                {/* --------------- Accommodation Tab ---------------- */}
+                {/* ═══════════════════════════════════════
+                    ACCOMMODATION TAB
+                ═══════════════════════════════════════ */}
                 <Tab
                   eventKey="accommodation"
                   title={
@@ -1334,10 +1216,8 @@ export default function MakePkgCombineSearch() {
                 >
                   <Card className="border-0 shadow-sm">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">
-                        Hotel Search
-                      </h5>
-                      <Form>
+                      <h5 className="fw-bold text-primary mb-3">Hotel Search</h5>
+                      <Form onSubmit={handleHotelSearchSubmit}>
                         <Row className="g-3">
                           <Col md={3}>
                             <Form.Group>
@@ -1384,808 +1264,637 @@ export default function MakePkgCombineSearch() {
                               {adultCount} adults
                               {childCount ? `, ${childCount} child` : ""} ·{" "}
                               {rooms.length} room
-                              <span className="float-end">
-                                {roomsOpen ? "▴" : "▾"}
-                              </span>
+                              <span className="float-end">{roomsOpen ? "▴" : "▾"}</span>
                             </Button>
                           </Col>
                         </Row>
 
                         <div className="text-center mt-4">
                           <Button
+                            type="submit"
                             variant="warning"
                             className="px-4 py-2"
-                            onClick={handleHotelSearchSubmit}
+                            disabled={isLoading}
                           >
-                            <FaSearch className="me-2" />
-                            Search
+                            {isLoading ? (
+                              <>
+                                <Spinner animation="border" size="sm" className="me-2" />
+                                Searching...
+                              </>
+                            ) : (
+                              <>
+                                <FaSearch className="me-2" />
+                                Search
+                              </>
+                            )}
                           </Button>
                         </div>
                       </Form>
 
-                      {hasSearched && !showResultsDuringPolling && (
-                        <Card className="shadow-sm rounded-xl mb-4">
-                          <Card.Body className="text-center py-5">
-                            <div className="results-loader">
-                              <div className="loader-ring">
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                              </div>
-                              <h4 className="text-primary fw-bold mt-3 mb-1">
-                                Fetching Best Results...
-                              </h4>
-                              <p className="text-muted small mb-0">
-                                Comparing rates across multiple providers
-                              </p>
-                            </div>
-                          </Card.Body>
-                        </Card>
-                      )}
-
+                      {/* ── Empty pre-search state ── */}
                       {!hasSearched && !hasSearchResult && (
-                        <Card className="shadow-sm rounded-xl">
+                        <Card className="shadow-sm rounded-xl mt-4">
                           <Card.Body className="text-center text-muted py-5">
                             <FaSearch className="display-4 text-muted mb-3" />
                             <h4>Ready to Find Your Perfect Stay?</h4>
                             <p>
-                              Use the search form above to discover amazing
-                              hotels and exclusive deals.
+                              Use the search form above to discover amazing hotels
+                              and exclusive deals.
                             </p>
                           </Card.Body>
                         </Card>
                       )}
 
+                      {/* ══════════════════════════════════════════════════
+                          RESULTS SECTION — two-column layout
+                      ══════════════════════════════════════════════════ */}
                       {hasSearched && (
-                        <div ref={resultsRef}>
-                          {/* Progress bar for channels */}
-                          {/* {pollStatus === "IN_PROGRESS" && (
-                <Card className="shadow-sm rounded-xl mb-3">
-                  <Card.Body className="p-3">
-                    <div className="d-flex align-items-center">
-                      <ProgressBar
-                        now={(completedChannels.size / 4) * 100} // Assuming 4 channels
-                        className="flex-grow-1 me-3"
-                        variant="primary"
-                      />
-                      <small className="text-muted">
-                        {progressMessage}
-                      </small>
-                    </div>
-                  </Card.Body>
-                </Card>
-              )} */}
+                        <div ref={resultsRef} className="mt-4">
 
-                          <Card className="shadow-sm rounded-xl mb-3 filtersection">
-                            <Card.Body className="p-3">
-                              <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-3">
-                                <h6 className="mb-2 mb-md-0 fw-bold text-primary">
-                                  <FaSearch className="me-2" />
-                                  {/* Filters & Sort ({completedChannels.size} channels complete) */}
-                                  Filters & Sort
-                                </h6>
-                                <div className="d-flex flex-wrap gap-2">
-                                  <ButtonGroup size="sm">
-                                    <ToggleButton
-                                      id="view-card"
-                                      type="radio"
-                                      variant={
-                                        view === "card"
-                                          ? "primary"
-                                          : "outline-secondary"
-                                      }
-                                      checked={view === "card"}
-                                      value="card"
-                                      onChange={() => setView("card")}
-                                    >
-                                      <FaBuilding className="me-1" />
-                                      Cards
-                                    </ToggleButton>
-                                    <ToggleButton
-                                      id="view-map"
-                                      type="radio"
-                                      variant={
-                                        view === "map"
-                                          ? "primary"
-                                          : "outline-secondary"
-                                      }
-                                      checked={view === "map"}
-                                      value="map"
-                                      onChange={() => setView("map")}
-                                      disabled
-                                    >
-                                      🗺️ Map
-                                    </ToggleButton>
-                                  </ButtonGroup>
-                                </div>
-                              </div>
+                          {/* ── Progress bar (visible during loading) ── */}
+                          <SearchProgressBar
+                            isLoading={isLoading}
+                            pollStatus={pollStatus}
+                          />
 
-                              <Row className="g-3">
-                                <Col lg={3} md={4} sm={6}>
-                                  <Form.Group>
-                                    <Form.Label className="mb-1 small fw-semibold text-dark">
-                                      <FaSearch className="me-1 text-info" />
-                                      Hotel Name
-                                    </Form.Label>
-                                    <Form.Control
-                                      type="text"
-                                      placeholder="Search hotels..."
-                                      className="form-control-modern-sm"
-                                      value={hotelSearchTerm}
-                                      onChange={(e) =>
-                                        setHotelSearchTerm(e.target.value)
-                                      }
-                                    />
-                                  </Form.Group>
-                                </Col>
+                          <div className="search-layout">
+                            <Row className="g-4" style={{ alignItems: "flex-start" }}>
 
-                                <Col lg={3} md={4} sm={6}>
-                                  <Form.Group>
-                                    <Form.Label className="mb-1 small fw-semibold text-dark">
-                                      <FaStar className="me-1 text-warning" />
-                                      Star Rating
-                                    </Form.Label>
-                                    <Select
-                                      isMulti
-                                      options={starOptions}
-                                      value={starRating}
-                                      onChange={setStarRating}
-                                      placeholder="All Stars"
-                                      className="modern-select-sm"
-                                      menuPosition="absolute"
-                                      menuPlacement="auto"
-                                      menuPortalTarget={document.body} // 👈 force portal
-                                      styles={{
-                                        menuPortal: (base) => ({
-                                          ...base,
-                                          zIndex: 9999,
-                                        }), // 👈 keep menu on top
-                                        control: (base) => ({
-                                          ...base,
-                                          minHeight: "36px",
-                                          border: "1px solid #dee2e6",
-                                          borderRadius: "6px",
-                                          fontSize: "0.875rem",
-                                          "&:hover": {
-                                            borderColor: "#86b7fe",
-                                          },
-                                        }),
-                                        menu: (base) => ({
-                                          ...base,
-                                          zIndex: 99999,
-                                          position: "absolute",
-                                          marginTop: "2px",
-                                          boxShadow:
-                                            "0 4px 12px rgba(0, 0, 0, 0.15)",
-                                          border: "1px solid #dee2e6",
-                                          borderRadius: "6px",
-                                        }),
-                                      }}
-                                    />
-                                  </Form.Group>
-                                </Col>
+                              {/* ────────────────────────────────────
+                                  LEFT SIDEBAR (mirrors HotelSearch)
+                              ──────────────────────────────────── */}
+                             <Col lg={3} className="leftside d-none d-lg-block" style={{
+      position: "sticky",
+      top: "90px", // adjust based on TopBar height
+      maxHeight: "calc(100vh - 100px)",
+      overflowY: "auto",
+    }}>
+  <div className="left-fixed">
+    <Card className="shadow-sm rounded-xl filtersection">
+      <Card.Body className="p-2">
+        {/* Map Preview */}
+        <div className="map-preview-wrapper mb-2">
+          <img
+            src="/images/map.jpg"
+            alt="Map preview"
+            className="map-preview-img"
+          />
+          <button className="map-overlay-btn">
+            EXPLORE ON MAP 📍
+          </button>
+        </div>
 
-                                <Col lg={3} md={4} sm={6}>
-                                  <Form.Group>
-                                    <Form.Label className="mb-1 small fw-semibold text-dark">
-                                      <FaBuilding className="me-1 text-info" />
-                                      Hotel Type
-                                    </Form.Label>
-                                    <Select
-                                      isMulti
-                                      options={hotelTypeOptions}
-                                      value={hotelType}
-                                      onChange={setHotelType}
-                                      placeholder="All Types"
-                                      className="modern-select-sm"
-                                      menuPosition="absolute"
-                                      menuPlacement="auto"
-                                      menuPortalTarget={document.body}
-                                      styles={{
-                                        menuPortal: (base) => ({
-                                          ...base,
-                                          zIndex: 9999,
-                                        }), // 👈 keep menu on top
-                                        control: (base) => ({
-                                          ...base,
-                                          minHeight: "36px",
-                                          border: "1px solid #dee2e6",
-                                          borderRadius: "6px",
-                                          fontSize: "0.875rem",
-                                          "&:hover": {
-                                            borderColor: "#86b7fe",
-                                          },
-                                        }),
-                                        menu: (base) => ({
-                                          ...base,
-                                          zIndex: 99999,
-                                          position: "absolute",
-                                          marginTop: "2px",
-                                          boxShadow:
-                                            "0 4px 12px rgba(0, 0, 0, 0.15)",
-                                          border: "1px solid #dee2e6",
-                                          borderRadius: "6px",
-                                        }),
-                                      }}
-                                    />
-                                  </Form.Group>
-                                </Col>
+        {/* Hotel name search */}
+        <Form.Control
+          type="text"
+          placeholder="Search hotel name..."
+          className="mb-3"
+          value={hotelSearchTerm}
+          onChange={(e) => setHotelSearchTerm(e.target.value)}
+        />
 
-                                <Col lg={3} md={4} sm={6}>
-                                  <Form.Group>
-                                    <Form.Label className="mb-1 small fw-semibold text-dark">
-                                      <FaGlobe className="me-1 text-success" />
-                                      Channel
-                                    </Form.Label>
-                                    <Select
-                                      isMulti
-                                      options={channelTypeOptions}
-                                      value={channelType}
-                                      onChange={setChannelType}
-                                      placeholder="All Channels"
-                                      className="modern-select-sm"
-                                      menuPosition="absolute"
-                                      menuPlacement="auto"
-                                      menuPortalTarget={document.body}
-                                      styles={{
-                                        menuPortal: (base) => ({
-                                          ...base,
-                                          zIndex: 9999,
-                                        }), // 👈 keep menu on top
-                                        control: (base) => ({
-                                          ...base,
-                                          minHeight: "36px",
-                                          border: "1px solid #dee2e6",
-                                          borderRadius: "6px",
-                                          fontSize: "0.875rem",
-                                          "&:hover": {
-                                            borderColor: "#86b7fe",
-                                          },
-                                        }),
-                                        menu: (base) => ({
-                                          ...base,
-                                          zIndex: 99999,
-                                          position: "absolute",
-                                          marginTop: "2px",
-                                          boxShadow:
-                                            "0 4px 12px rgba(0, 0, 0, 0.15)",
-                                          border: "1px solid #dee2e6",
-                                          borderRadius: "6px",
-                                          maxHeight: "300px", // Increased from 200px
-                                          overflowY: "auto", // Enable scrolling if needed
-                                        }),
-                                        option: (base, state) => ({
-                                          ...base,
-                                          backgroundColor: state.isFocused
-                                            ? "#f8f9fa"
-                                            : "white",
-                                          color: state.isSelected
-                                            ? "white"
-                                            : "#212529",
-                                          "&:active": {
-                                            backgroundColor: "#0d6efd",
-                                          },
-                                        }),
-                                      }}
-                                    />
-                                  </Form.Group>
-                                </Col>
+        {/* Star Rating */}
+        <Form.Group className="mb-3">
+          <Form.Label className="fw-semibold small">Star Rating</Form.Label>
+          <Select
+            options={starOptions}
+            value={starRating}
+            onChange={setStarRating}
+            placeholder="All Stars"
+            isClearable
+            className="modern-select-sm"
+            menuPortalTarget={document.body}
+            styles={{
+              control: (base) => ({
+                ...base,
+                height: "36px",
+                minHeight: "36px",
+                width: "100%",
+              }),
+              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+              menu: (base) => ({ ...base, zIndex: 9999 }),
+            }}
+          />
+        </Form.Group>
 
-                                <Col lg={2} md={4} sm={6}>
-                                  <Form.Group>
-                                    <Form.Label className="mb-1 small fw-semibold text-dark">
-                                      <FaSort className="me-1 text-secondary" />
-                                      Sort By
-                                    </Form.Label>
-                                    <Form.Select
-                                      size="sm"
-                                      value={sortBy}
-                                      onChange={(e) =>
-                                        setSortBy(e.target.value)
-                                      }
-                                      className="form-control-modern-sm"
-                                    >
-                                      <option value="priceAsc">
-                                        Price: Low to High
-                                      </option>
-                                      <option value="priceDesc">
-                                        Price: High to Low
-                                      </option>
-                                    </Form.Select>
-                                  </Form.Group>
-                                </Col>
+        <hr className="my-2" />
 
-                                <Col
-                                  lg={2}
-                                  md={4}
-                                  sm={6}
-                                  className="d-flex align-items-end"
-                                >
-                                  <Button
-                                    variant="outline-primary"
-                                    size="sm"
-                                    className="w-100"
-                                    onClick={() => {
-                                      setStarRating([]);
-                                      setHotelType([]);
-                                      setChannelType([]);
-                                      setSortBy("priceAsc");
-                                      setHotelSearchTerm("");
-                                    }}
-                                  >
-                                    Clear
-                                  </Button>
-                                </Col>
-                              </Row>
-                            </Card.Body>
-                          </Card>
+        {/* Sort */}
+        <Form.Group className="mb-3">
+          <Form.Label className="fw-semibold small">Sort By Price</Form.Label>
+          <div className="d-flex gap-2">
+            <Button
+              size="sm"
+              className={`sort-pill w-50 ${sortBy === "priceAsc" ? "active" : ""}`}
+              onClick={() => setSortBy("priceAsc")}
+            >
+              Price ↑
+            </Button>
+            <Button
+              size="sm"
+              className={`sort-pill w-50 ${sortBy === "priceDesc" ? "active" : ""}`}
+              onClick={() => setSortBy("priceDesc")}
+            >
+              Price ↓
+            </Button>
+          </div>
+        </Form.Group>
 
-                          {/* New Pagination Section After Filters */}
-                          {hasSearched && (
-                            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-                              <small className="text-muted fw-semibold">
-                                {filteredResults.length > 0 ? (
-                                  <>
-                                    Showing{" "}
-                                    {hotelSearchTerm?.trim() ||
-                                      hotelType.length > 0 ||
-                                      channelType.length > 0 ||
-                                      starRating.length > 0
-                                      ? `1-${filteredResults.length}`
-                                      : `${pageIndex * pageSize + 1}-${Math.min(
-                                        pageIndex * pageSize + pageSize,
-                                        totalElements
-                                      )}`}{" "}
-                                    of{" "}
-                                    {hotelSearchTerm?.trim() ||
-                                      hotelType.length > 0 ||
-                                      channelType.length > 0 ||
-                                      starRating.length > 0
-                                      ? filteredResults.length
-                                      : totalElements}{" "}
-                                    results{" "}
-                                    {pollStatus === "IN_PROGRESS"
-                                      ? "(updating...)"
-                                      : ""}
-                                  </>
-                                ) : (
-                                  <>
-                                    No results found{" "}
-                                    {pollStatus === "IN_PROGRESS"
-                                      ? "(updating...)"
-                                      : ""}
-                                  </>
-                                )}
-                              </small>
-                              {filteredResults.length > 0 &&
-                                !(
-                                  hotelSearchTerm?.trim() ||
-                                  hotelType.length > 0 ||
-                                  channelType.length > 0 ||
-                                  starRating.length > 0
-                                ) && (
-                                  <Pagination className="mb-0 pagination-modern">
-                                    <Pagination.Prev
-                                      disabled={pageIndex === 0}
-                                      onClick={() => goToPage(pageIndex - 1)}
-                                    />
-                                    {pageNumbers.map((n) => (
-                                      <Pagination.Item
-                                        key={n}
-                                        active={n === pageIndex + 1}
-                                        onClick={() => goToPage(n - 1)}
-                                      >
-                                        {n}
-                                      </Pagination.Item>
+        <hr className="my-2" />
+
+        {/* Hotel Type */}
+        <Form.Group className="mb-3">
+          <Form.Label className="fw-semibold small">Hotel Type</Form.Label>
+          <div className="filter-checkbox-list">
+            {hotelTypeOptions.map((item) => (
+              <Form.Check
+                key={item.value}
+                type="checkbox"
+                id={`pkg-hotel-type-${item.value}`}
+                label={item.label}
+                checked={hotelType.some((t) => t.value === item.value)}
+                onChange={(e) => {
+                  if (e.target.checked)
+                    setHotelType([...hotelType, item]);
+                  else
+                    setHotelType(hotelType.filter((t) => t.value !== item.value));
+                }}
+              />
+            ))}
+          </div>
+        </Form.Group>
+
+        <hr className="my-2" />
+
+        {/* Channel
+        <Form.Group className="mb-3">
+          <Form.Label className="fw-semibold small">Channel</Form.Label>
+          <div className="filter-checkbox-list">
+            {channelTypeOptions.map((item) => (
+              <Form.Check
+                key={item.value}
+                type="checkbox"
+                id={`pkg-channel-${item.value}`}
+                label={item.label}
+                checked={channelType.some((c) => c.value === item.value)}
+                onChange={(e) => {
+                  if (e.target.checked)
+                    setChannelType([...channelType, item]);
+                  else
+                    setChannelType(channelType.filter((c) => c.value !== item.value));
+                }}
+              />
+            ))}
+          </div>
+        </Form.Group> */}
+
+        <hr className="my-2" />
+
+        {/* Clear All */}
+        <Button
+          className="clear-pill w-100"
+          variant="outline-primary"
+          size="sm"
+          onClick={clearAllFilters}
+        >
+          Clear All Filters
+        </Button>
+
+      </Card.Body>
+    </Card>
+  </div>
+</Col>
+
+                              {/* ────────────────────────────────────
+                                  RIGHT COLUMN
+                              ──────────────────────────────────── */}
+                              <Col lg={9}>
+
+                            
+
+
+                                {/* ── Skeleton cards — first load only ── */}
+                                {isLoading && allResults.length === 0 && (
+                                  <Row xs={1} className="g-4">
+                                    {[1, 2, 3].map((i) => (
+                                      <SkeletonHotelCard key={i} />
                                     ))}
-                                    <Pagination.Next
-                                      disabled={
-                                        pageIndex >= effectiveTotalPages - 1
-                                      }
-                                      onClick={() => goToPage(pageIndex + 1)}
-                                    />
-                                  </Pagination>
+                                  </Row>
                                 )}
-                            </div>
-                          )}
 
-                          {isLoading && (
-                            <Card className="shadow-sm rounded-xl mb-4">
-                              <Card.Body className="text-center py-5">
-                                <div className="loading-animation mb-3">
-                                  <Spinner
-                                    animation="border"
-                                    variant="primary"
-                                    size="lg"
-                                  />
-                                </div>
-                                <h4 className="text-primary fw-bold">
-                                  Searching the Best Results...
-                                </h4>
-                                <p className="text-muted">
-                                  Please wait while we find the perfect hotels
-                                  for you
-                                </p>
-                              </Card.Body>
-                            </Card>
-                          )}
-
-                          <div>
-                            {view === "card" && (
-                              <Row
-                                xs={1}
-                                className="g-4"
-                              >
-                                {filteredResults.length > 0 ? (
-                                  filteredResults.map((hotel, index) => {
-                                    // console.log('Hotel data:', hotel);
-                                    // console.log('Rendering hotel index:', index, 'Hotel name:', hotel.name);
-                                    return (
-                                      <Col key={hotel.id}>
-                                        <div
-                                          style={{
-                                            backgroundColor: "white",
-                                            border: "1px solid #dee2e6",
-                                            borderRadius: "12px",
-                                            boxShadow:
-                                              "0 2px 8px rgba(0,0,0,0.1)",
-                                            marginBottom: "20px",
-                                            overflow: "hidden",
-                                          }}
-                                        >
-                                          <Row className="g-0">
-                                            <Col md={4} lg={3}>
-                                              <div
-                                                style={{
-                                                  position: "relative",
-                                                  height: "100%",
-                                                  minHeight: "200px",
-                                                  overflow: "hidden",
-                                                }}
-                                              >
-                                                <LazyImage
-                                                  src={hotel.image}
-                                                  alt={hotel.name}
-                                                  className="h-100 w-100 object-fit-cover"
-                                                />
+                                {/* ── Hotel result cards ── */}
+                                {(!isLoading || allResults.length > 0) && (
+                                  <Row xs={1} className="g-4">
+                                    {filteredResults.length > 0 ? (
+                                      filteredResults.map((hotel) => (
+                                        <Col key={hotel.id}>
+                                          <div
+                                            style={{
+                                              backgroundColor: "white",
+                                              border: "1px solid #dee2e6",
+                                              borderRadius: "12px",
+                                              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                                              overflow: "hidden",
+                                            }}
+                                          >
+                                            <Row className="g-0">
+                                              <Col md={4} lg={3}>
                                                 <div
                                                   style={{
-                                                    position: "absolute",
-                                                    top: "10px",
-                                                    left: "10px",
-                                                    backgroundColor:
-                                                      "rgba(0,0,0,0.7)",
-                                                    color: "white",
-                                                    padding: "5px 10px",
-                                                    borderRadius: "15px",
-                                                    fontSize: "12px",
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: "5px",
+                                                    position: "relative",
+                                                    height: "100%",
+                                                    minHeight: "180px",
+                                                    padding: "12px",
                                                   }}
                                                 >
-                                                  <FaStar className="text-warning me-1" />
-                                                  {hotel.rating}
-                                                  <span
+                                                  <LazyImage
+                                                    src={hotel.image}
+                                                    alt={hotel.name}
                                                     style={{
-                                                      marginLeft: "5px",
-                                                      backgroundColor: "#6c757d",
-                                                      padding: "2px 6px",
-                                                      borderRadius: "10px",
+                                                      width: "100%",
+                                                      height: "100%",
+                                                      objectFit: "cover",
+                                                      borderRadius: "8px",
+                                                    }}
+                                                  />
+                                                  {/* Star + channel badge */}
+                                                  <div
+                                                    style={{
+                                                      position: "absolute",
+                                                      top: "22px",
+                                                      left: "22px",
+                                                      backgroundColor: "rgba(0,0,0,0.7)",
+                                                      color: "white",
+                                                      padding: "4px 8px",
+                                                      borderRadius: "15px",
+                                                      fontSize: "12px",
+                                                      display: "flex",
+                                                      alignItems: "center",
+                                                      gap: "4px",
                                                     }}
                                                   >
-                                                    {hotel.channelType.toUpperCase()}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            </Col>
-                                            <Col md={8} lg={9}>
-                                              <div
-                                                style={{
-                                                  padding: "10px",
-                                                  backgroundColor: "white",
-                                                  height: "100%",
-                                                  display: "flex",
-                                                  flexDirection: "column",
-                                                  justifyContent: "space-between"
-                                                }}
-                                              >
-                                                <div>
-                                                  <div className="d-flex align-items-center mb-1">
-                                                    <h6
+                                                    <FaStar className="text-warning" />
+                                                    {hotel.rating}
+                                                    <span
                                                       style={{
-                                                        fontSize: "1.2rem",
-                                                        fontWeight: "600",
-                                                        marginBottom: "0",
-                                                        color: "#333",
-                                                        lineHeight: "1.2",
-                                                        marginRight: "8px"
+                                                        marginLeft: "4px",
+                                                        backgroundColor: "#6c757d",
+                                                        padding: "1px 6px",
+                                                        borderRadius: "10px",
                                                       }}
                                                     >
-                                                      {hotel.name ||
-                                                        "Hotel Name Not Available"}
-                                                    </h6>
-                                                    <div className="d-flex gap-1">
-                                                      {renderStars(hotel.rating)}
-                                                    </div>
-                                                  </div>
-
-                                                  <p
-                                                    style={{
-                                                      fontSize: "0.8rem",
-                                                      color: "#666",
-                                                      marginBottom: "4px",
-                                                      lineHeight: "1.2",
-                                                    }}
-                                                  >
-                                                    📍{" "}
-                                                    {hotel.address ||
-                                                      "Address Not Available"}
-                                                  </p>
-
-                                                  <div
-                                                    style={{
-                                                      backgroundColor: "#28a745",
-                                                      color: "white",
-                                                      padding: "2px 6px",
-                                                      borderRadius: "4px",
-                                                      fontSize: "0.7rem",
-                                                      fontWeight: "500",
-                                                      display: "inline-block",
-                                                      marginBottom: "6px",
-                                                    }}
-                                                  >
-                                                    {hotel.badge}
+                                                      {(
+                                                        hotel.channelType || ""
+                                                      ).toUpperCase()}
+                                                    </span>
                                                   </div>
                                                 </div>
+                                              </Col>
 
+                                              <Col md={8} lg={9}>
                                                 <div
                                                   style={{
+                                                    padding: "16px",
+                                                    height: "100%",
                                                     display: "flex",
+                                                    flexDirection: "column",
                                                     justifyContent: "space-between",
-                                                    alignItems: "center",
-                                                    marginTop: "8px",
-                                                    paddingTop: "8px",
-                                                    borderTop: "1px solid #eee",
                                                   }}
                                                 >
-                                                  <div
-                                                    style={{
-                                                      fontSize: "1.3rem",
-                                                      fontWeight: "600",
-                                                      color: "#333",
-                                                    }}
-                                                  >
-                                                    {hotel.price
-                                                      ? `AED ${hotel.price.toLocaleString()}`
-                                                      : "Price on request"}
+                                                  <div>
+                                                    <div className="d-flex align-items-center mb-1 gap-2">
+                                                      <h6
+                                                        style={{
+                                                          fontSize: "1rem",
+                                                          fontWeight: "600",
+                                                          marginBottom: 0,
+                                                          color: "#333",
+                                                        }}
+                                                      >
+                                                        {hotel.name || "Hotel Name Not Available"}
+                                                      </h6>
+                                                      <div className="d-flex gap-1">
+                                                        {renderStars(hotel.rating)}
+                                                      </div>
+                                                    </div>
+
+                                                    <p
+                                                      style={{
+                                                        fontSize: "0.85rem",
+                                                        color: "#666",
+                                                        marginBottom: "6px",
+                                                      }}
+                                                    >
+                                                      📍{" "}
+                                                      {hotel.address || "Address Not Available"}
+                                                    </p>
+
+                                                    {hotel.badge && (
+                                                      <span
+                                                        style={{
+                                                          backgroundColor: "#28a745",
+                                                          color: "white",
+                                                          padding: "3px 8px",
+                                                          borderRadius: "4px",
+                                                          fontSize: "0.72rem",
+                                                          fontWeight: "500",
+                                                          display: "inline-block",
+                                                          marginBottom: "8px",
+                                                        }}
+                                                      >
+                                                        {hotel.badge}
+                                                      </span>
+                                                    )}
                                                   </div>
 
-                                                  <Button
-                                                    className="btn-view-rooms"
-                                                    size="sm"
-                                                    onClick={() => handleViewRooms(hotel)}
+                                                  <div
+                                                    style={{
+                                                      display: "flex",
+                                                      justifyContent: "space-between",
+                                                      alignItems: "center",
+                                                      paddingTop: "10px",
+                                                      borderTop: "1px solid #eee",
+                                                    }}
                                                   >
-                                                    {expandedHotels[hotel.id]
-                                                      ? "Hide Rooms"
-                                                      : "View Rooms"}
-                                                  </Button>
+                                                    <div
+                                                      style={{
+                                                        fontSize: "1.1rem",
+                                                        fontWeight: "600",
+                                                        color: "#333",
+                                                      }}
+                                                    >
+                                                      {hotel.price
+                                                        ? `AED ${hotel.price.toLocaleString()}`
+                                                        : "Price on request"}
+                                                    </div>
+
+                                                    <Button
+                                                      className="btn-view-rooms"
+                                                      size="sm"
+                                                      onClick={() => handleViewRooms(hotel)}
+                                                    >
+                                                      {expandedHotels[hotel.id]
+                                                        ? "Hide Rooms"
+                                                        : "View Rooms"}
+                                                    </Button>
+                                                  </div>
                                                 </div>
+                                              </Col>
+                                            </Row>
+
+                                            {/* ── Inline Room List ── */}
+                                            {expandedHotels[hotel.id] && (
+                                              <div className="border-top p-3 bg-light">
+                                                {loadingRooms[hotel.id] ? (
+                                                  <div className="text-center py-4">
+                                                    <Spinner
+                                                      animation="border"
+                                                      variant="primary"
+                                                    />
+                                                    <p className="mt-2 text-muted">
+                                                      Fetching rooms...
+                                                    </p>
+                                                  </div>
+                                                ) : hotelRooms[hotel.id] ? (
+                                                  <div className="room-categories-section">
+                                                    {(
+                                                      hotelRooms[hotel.id].hotels[0]
+                                                        .roomCategories || []
+                                                    ).map((category, idx) => (
+                                                     <Accordion
+  activeKey={activeAccordion[hotel.id + "-" + idx] || null}
+  onSelect={(eventKey) => {
+    const key = hotel.id + "-" + idx;
+    setActiveAccordion((prev) => ({
+      ...prev,
+      [key]: prev[key] === eventKey ? null : eventKey,
+    }));
+  }}
+  className="mb-3"
+>
+  <Accordion.Item
+    eventKey="0"
+    className="room-category-item border-0 shadow-sm"
+  >
+    <Accordion.Header className="room-category-header">
+      <div className="d-flex justify-content-between align-items-center w-100">
+
+        {/* LEFT CONTENT */}
+        <div>
+          <h6 className="mb-1 fw-bold">{category.roomCategory}</h6>
+          <p className="mb-0 text-muted small">
+            {category.baseRoomType}
+          </p>
+        </div>
+
+        {/* RIGHT CONTENT WITH ARROW */}
+        <div className="d-flex align-items-center gap-3">
+          <div className="text-end">
+            <span className="fw-bold text-primary">
+              From {formatPrice(Math.min(...category.availableRates.map(r => r.rate)))}
+            </span>
+            <div className="small text-muted">
+              {category.availableRates.length} rates
+            </div>
+          </div>
+
+          {/* 🔥 ARROW ICON */}
+          <FaChevronDown
+            style={{
+              transition: "transform 0.3s ease",
+              transform:
+                activeAccordion[hotel.id + "-" + idx] === "0"
+                  ? "rotate(180deg)"
+                  : "rotate(0deg)",
+            }}
+          />
+        </div>
+      </div>
+    </Accordion.Header>
+                                                          <Accordion.Body className="room-rates-section p-3">
+                                                            <Row>
+                                                              {category.availableRates.map(
+                                                                (rate, rIdx) => (
+                                                                  <Col
+                                                                    key={rIdx}
+                                                                  md={6} lg={4} xl={5} className="mb-3"
+                                                                  >
+                                                                    <Card className="rate-card h-100 border-0 shadow-sm">
+                                                                      <Card.Body className="p-3">
+                                                                        <div className="rate-header mb-3 pb-2 border-bottom">
+                                                                          <div className="d-flex align-items-center gap-2 mb-2">
+                                                                            {getMealPlanIcon(
+                                                                              rate.mealPlan
+                                                                            )}
+                                                                            <span className="fw-semibold small">
+                                                                              {rate.mealPlan}
+                                                                            </span>
+                                                                          </div>
+                                                                          <div className="mb-1">
+                                                                            {getRoomStatusBadge(
+                                                                              rate.roomStatus
+                                                                            )}
+                                                                          </div>
+                                                                          <div>
+                                                                            {getRefundStatusBadge(
+                                                                              rate.nonRefundable
+                                                                            )}
+                                                                          </div>
+                                                                        </div>
+
+                                                                        <div className="rate-pricing mb-3 text-center">
+                                                                          <div className="current-price fs-4 fw-bold text-success">
+                                                                            {formatPrice(
+                                                                              rate.totalRate
+                                                                            )}
+                                                                          </div>
+                                                                          {rate.recommendedRetailPrice >
+                                                                            rate.totalRate && (
+                                                                            <div className="original-price text-muted text-decoration-line-through small">
+                                                                              {formatPrice(
+                                                                                rate.recommendedRetailPrice
+                                                                              )}
+                                                                            </div>
+                                                                          )}
+                                                                          <div className="price-per-night text-muted small">
+                                                                            per night
+                                                                          </div>
+                                                                        </div>
+
+                                                                        <div className="rate-features mb-3">
+                                                                          <div className="feature-item d-flex align-items-start gap-2 mb-1">
+                                                                            <FaInfoCircle
+                                                                              className="text-muted mt-1"
+                                                                              size={12}
+                                                                            />
+                                                                            <span className="small">
+                                                                              {rate.contractLabel}
+                                                                            </span>
+                                                                          </div>
+                                                                          {rate.cancellationPolicies &&
+                                                                            rate.cancellationPolicies
+                                                                              .length > 0 &&
+                                                                            typeof rate
+                                                                              .cancellationPolicies[0] ===
+                                                                              "object" && (
+                                                                              <div className="feature-item d-flex align-items-start gap-2">
+                                                                                <FaShieldAlt
+                                                                                  className="text-muted mt-1"
+                                                                                  size={12}
+                                                                                />
+                                                                                <span
+                                                                                  className="small"
+                                                                                  title={
+                                                                                    rate
+                                                                                      .cancellationPolicies[0]
+                                                                                      .policyText
+                                                                                  }
+                                                                                >
+                                                                                  Cancellation Policy
+                                                                                  Applies
+                                                                                </span>
+                                                                              </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        <div className="d-grid gap-2">
+                                                                          <Button
+                                                                            variant="primary"
+                                                                            size="sm"
+                                                                            onClick={() =>
+                                                                              handleAddToCart(
+                                                                                hotel.id,
+                                                                                rate
+                                                                              )
+                                                                            }
+                                                                          >
+                                                                            Add to Package
+                                                                          </Button>
+                                                                        </div>
+                                                                      </Card.Body>
+                                                                    </Card>
+                                                                  </Col>
+                                                                )
+                                                              )}
+                                                            </Row>
+                                                          </Accordion.Body>
+                                                        </Accordion.Item>
+                                                      </Accordion>
+                                                    ))}
+                                                  </div>
+                                                ) : (
+                                                  <div className="text-center py-3 text-muted">
+                                                    No rooms available.
+                                                  </div>
+                                                )}
                                               </div>
-                                            </Col>
-                                          </Row>
-
-                                          {/* Inline Room List */}
-                                          {expandedHotels[hotel.id] && (
-                                            <div className="border-top p-3 bg-light">
-                                              {loadingRooms[hotel.id] ? (
-                                                <div className="text-center py-4">
-                                                  <Spinner animation="border" variant="primary" />
-                                                  <p className="mt-2 text-muted">Fetching rooms...</p>
-                                                </div>
-                                              ) : hotelRooms[hotel.id] ? (
-                                                <div className="room-categories-section">
-                                                  {(hotelRooms[hotel.id].hotels[0].roomCategories || []).map((category, idx) => (
-                                                    <Accordion key={idx} defaultActiveKey="0" className="mb-3">
-                                                      <Accordion.Item eventKey="0" className="room-category-item border-0 shadow-sm">
-                                                        <Accordion.Header className="room-category-header">
-                                                          <div className="d-flex justify-content-between align-items-center w-100 me-3">
-                                                            <div className="room-category-info">
-                                                              <h6 className="mb-1 fw-bold">{category.roomCategory}</h6>
-                                                              <p className="mb-0 text-muted small">{category.baseRoomType}</p>
-                                                            </div>
-                                                            <div className="room-category-price text-end">
-                                                              <span className="price-range d-block fw-bold text-primary">
-                                                                From {formatPrice(Math.min(...category.availableRates.map((r) => r.rate)))}
-                                                              </span>
-                                                              <span className="rates-count d-block small text-muted">
-                                                                {category.availableRates.length} rate{category.availableRates.length !== 1 ? "s" : ""} available
-                                                              </span>
-                                                            </div>
-                                                          </div>
-                                                        </Accordion.Header>
-                                                        <Accordion.Body className="room-rates-section p-3">
-                                                          <Row>
-                                                            {category.availableRates.map((rate, rIdx) => (
-                                                              <Col key={rIdx} lg={6} xl={4} className="mb-3">
-                                                                <Card className="rate-card h-100 border-0 shadow-sm">
-                                                                  <Card.Body className="p-3">
-                                                                    <div className="rate-header mb-3 pb-2 border-bottom">
-                                                                      <div className="d-flex align-items-center gap-2 mb-2">
-                                                                        {getMealPlanIcon(rate.mealPlan)}
-                                                                        <span className="fw-semibold small">{rate.mealPlan}</span>
-                                                                      </div>
-                                                                      <div className="mb-1">{getRoomStatusBadge(rate.roomStatus)}</div>
-                                                                      <div>{getRefundStatusBadge(rate.nonRefundable)}</div>
-                                                                    </div>
-
-                                                                    <div className="rate-pricing mb-3 text-center">
-                                                                      <div className="current-price fs-4 fw-bold text-success">
-                                                                        {formatPrice(rate.totalRate)}
-                                                                      </div>
-                                                                      {rate.recommendedRetailPrice > rate.totalRate && (
-                                                                        <div className="original-price text-muted text-decoration-line-through small">
-                                                                          {formatPrice(rate.recommendedRetailPrice)}
-                                                                        </div>
-                                                                      )}
-                                                                      <div className="price-per-night text-muted small">per night</div>
-                                                                    </div>
-
-                                                                    <div className="rate-features mb-3">
-                                                                      <div className="feature-item d-flex align-items-start gap-2 mb-1">
-                                                                        <FaInfoCircle className="text-muted mt-1" size={12} />
-                                                                        <span className="small">{rate.contractLabel}</span>
-                                                                      </div>
-                                                                      {rate.cancellationPolicies && rate.cancellationPolicies.length > 0 && typeof rate.cancellationPolicies[0] === 'object' && (
-                                                                        <div className="feature-item d-flex align-items-start gap-2">
-                                                                          <FaShieldAlt className="text-muted mt-1" size={12} />
-                                                                          <span className="small" title={rate.cancellationPolicies[0].policyText}>
-                                                                            Cancellation Policy Applies
-                                                                          </span>
-                                                                        </div>
-                                                                      )}
-                                                                    </div>
-
-                                                                    <div className="d-grid gap-2">
-                                                                      <Button
-                                                                        variant="primary"
-                                                                        size="sm"
-                                                                        onClick={() => handleAddToCart(hotel.id, rate)}
-                                                                      >
-                                                                        Add to Package
-                                                                      </Button>
-                                                                    </div>
-                                                                  </Card.Body>
-                                                                </Card>
-                                                              </Col>
-                                                            ))}
-                                                          </Row>
-                                                        </Accordion.Body>
-                                                      </Accordion.Item>
-                                                    </Accordion>
-                                                  ))}
-                                                </div>
-                                              ) : (
-                                                <div className="text-center py-3 text-muted">
-                                                  No rooms available.
-                                                </div>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
+                                            )}
+                                          </div>
+                                        </Col>
+                                      ))
+                                    ) : (
+                                      <Col xs={12}>
+                                        <Card className="shadow-sm rounded-xl">
+                                          <Card.Body className="text-center text-muted py-5">
+                                            <FaSearch className="display-4 text-muted mb-3" />
+                                            <h5>No results found</h5>
+                                            <p>
+                                              {channelType.length > 0
+                                                ? `No hotels found for selected channel(s): ${channelType
+                                                    .map((c) => c.label)
+                                                    .join(", ")}`
+                                                : hasActiveFilters
+                                                ? "No hotels match your current filters. Try adjusting or clearing some filters."
+                                                : "Try adjusting your search criteria."}
+                                            </p>
+                                            {hasActiveFilters && (
+                                              <Button
+                                                variant="outline-primary"
+                                                size="sm"
+                                                onClick={clearAllFilters}
+                                              >
+                                                Clear All Filters
+                                              </Button>
+                                            )}
+                                          </Card.Body>
+                                        </Card>
                                       </Col>
-                                    );
-                                  })
-                                ) : (
-                                  <Col xs={12}>
-                                    <Card className="shadow-sm rounded-xl">
-                                      <Card.Body className="text-center text-muted py-5">
-                                        <FaSearch className="display-4 text-muted mb-3" />
-                                        <h5>No results found</h5>
-                                        <p>
-                                          {channelType.length > 0
-                                            ? `No hotels found for the selected channel${channelType.length > 1
-                                              ? "s"
-                                              : ""
-                                            }: ${channelType
-                                              .map((c) => c.label)
-                                              .join(
-                                                ", "
-                                              )}. Try selecting different channels or clearing the channel filter.`
-                                            : hotelSearchTerm ||
-                                              starRating.length > 0 ||
-                                              hotelType.length > 0
-                                              ? "No hotels match your current filters. Try adjusting your search criteria or clearing some filters."
-                                              : "Try adjusting your filters or search criteria."}
-                                        </p>
-                                        {(hotelSearchTerm ||
-                                          starRating.length > 0 ||
-                                          hotelType.length > 0 ||
-                                          channelType.length > 0) && (
-                                            <Button
-                                              variant="outline-primary"
-                                              size="sm"
-                                              onClick={() => {
-                                                setStarRating([]);
-                                                setHotelType([]);
-                                                setChannelType([]);
-                                                setSortBy("priceAsc");
-                                                setHotelSearchTerm("");
-                                              }}
-                                            >
-                                              Clear All Filters
-                                            </Button>
-                                          )}
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
+                                    )}
+                                  </Row>
                                 )}
-                              </Row>
-                            )}
 
-                            {hasSearched &&
-                              (() => {
-                                if (filteredResults.length === 0) {
-                                  return null; // Don't show pagination when no results
-                                }
-
-                                const hasClientOnlyFilters =
-                                  Boolean(hotelSearchTerm?.trim()) ||
-                                  hotelType.length > 0 ||
-                                  channelType.length > 0 ||
-                                  starRating.length > 0;
-                                const showingStart = hasClientOnlyFilters
-                                  ? 1
-                                  : pageIndex * pageSize + 1;
-                                const showingEnd = hasClientOnlyFilters
-                                  ? filteredResults.length
-                                  : Math.min(
-                                    pageIndex * pageSize + pageSize,
-                                    totalElements
-                                  );
-                                const totalCount = hasClientOnlyFilters
-                                  ? filteredResults.length
-                                  : totalElements;
-                                return (
+                                {/* ── Bottom pagination ── */}
+                                {filteredResults.length > 0 && !hasActiveFilters && (
                                   <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
                                     <small className="text-muted fw-semibold">
-                                      Showing {showingStart}-{showingEnd} of{" "}
-                                      {totalCount} results{" "}
-                                      {pollStatus === "IN_PROGRESS"
-                                        ? "(updating...)"
-                                        : ""}
+                                      Showing {startEntry}–{endEntry} of {totalElements}{" "}
+                                      results
                                     </small>
-                                    {!hasClientOnlyFilters && (
-                                      <Pagination className="mb-0 pagination-modern">
-                                        <Pagination.Prev
-                                          disabled={pageIndex === 0}
-                                          onClick={() =>
-                                            goToPage(pageIndex - 1)
-                                          }
-                                        />
-                                        {pageNumbers.map((n) => (
-                                          <Pagination.Item
-                                            key={n}
-                                            active={n === pageIndex + 1}
-                                            onClick={() => goToPage(n - 1)}
-                                          >
-                                            {n}
-                                          </Pagination.Item>
-                                        ))}
-                                        <Pagination.Next
-                                          disabled={
-                                            pageIndex >= effectiveTotalPages - 1
-                                          }
-                                          onClick={() =>
-                                            goToPage(pageIndex + 1)
-                                          }
-                                        />
-                                      </Pagination>
-                                    )}
+                                    <Pagination className="mb-0 pagination-modern">
+                                      <Pagination.Prev
+                                        disabled={pageIndex === 0}
+                                        onClick={() => goToPage(pageIndex - 1)}
+                                      />
+                                      {pageNumbers.map((n) => (
+                                        <Pagination.Item
+                                          key={n}
+                                          active={n === pageIndex + 1}
+                                          onClick={() => goToPage(n - 1)}
+                                        >
+                                          {n}
+                                        </Pagination.Item>
+                                      ))}
+                                      <Pagination.Next
+                                        disabled={pageIndex >= effectiveTotalPages - 1}
+                                        onClick={() => goToPage(pageIndex + 1)}
+                                      />
+                                    </Pagination>
                                   </div>
-                                );
-                              })()}
+                                )}
+
+                              </Col>
+                              {/* end right Col */}
+                            </Row>
                           </div>
                         </div>
                       )}
@@ -2193,7 +1902,9 @@ export default function MakePkgCombineSearch() {
                   </Card>
                 </Tab>
 
-                {/* --------------- Transfer Tab ---------------- */}
+                {/* ═══════════════════════════════════════
+                    TRANSFER TAB
+                ═══════════════════════════════════════ */}
                 <Tab
                   eventKey="transfer"
                   title={
@@ -2204,9 +1915,7 @@ export default function MakePkgCombineSearch() {
                 >
                   <Card className="border-0 shadow-sm rounded-4">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">
-                        Transfer Search
-                      </h5>
+                      <h5 className="fw-bold text-primary mb-3">Transfer Search</h5>
                       <Form onSubmit={handleTransferSearchSubmit}>
                         <Row className="g-3">
                           <Col md={2}>
@@ -2214,9 +1923,7 @@ export default function MakePkgCombineSearch() {
                             <Form.Control
                               type="date"
                               value={transferPickupDate}
-                              onChange={(e) =>
-                                setTransferPickupDate(e.target.value)
-                              }
+                              onChange={(e) => setTransferPickupDate(e.target.value)}
                               min={new Date().toISOString().split("T")[0]}
                             />
                           </Col>
@@ -2225,9 +1932,7 @@ export default function MakePkgCombineSearch() {
                             <Form.Control
                               type="date"
                               value={transferDropoffDate}
-                              onChange={(e) =>
-                                setTransferDropoffDate(e.target.value)
-                              }
+                              onChange={(e) => setTransferDropoffDate(e.target.value)}
                               min={transferPickupDate || undefined}
                             />
                           </Col>
@@ -2239,13 +1944,11 @@ export default function MakePkgCombineSearch() {
                                 setTransferAdults(parseInt(e.target.value) || 1)
                               }
                             >
-                              {Array.from({ length: 9 }, (_, i) => i + 1).map(
-                                (num) => (
-                                  <option key={num} value={num}>
-                                    {num}
-                                  </option>
-                                )
-                              )}
+                              {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                                <option key={num} value={num}>
+                                  {num}
+                                </option>
+                              ))}
                             </Form.Select>
                           </Col>
                           <Col md={2}>
@@ -2253,25 +1956,19 @@ export default function MakePkgCombineSearch() {
                             <Form.Select
                               value={transferChildren}
                               onChange={(e) =>
-                                setTransferChildren(
-                                  parseInt(e.target.value) || 0
-                                )
+                                setTransferChildren(parseInt(e.target.value) || 0)
                               }
                             >
-                              {Array.from({ length: 6 }, (_, i) => i).map(
-                                (num) => (
-                                  <option key={num} value={num}>
-                                    {num}
-                                  </option>
-                                )
-                              )}
+                              {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                                <option key={num} value={num}>
+                                  {num}
+                                </option>
+                              ))}
                             </Form.Select>
                           </Col>
                           {transferChildren > 0 && (
                             <Col md={4}>
-                              <Form.Label className="mb-2">
-                                Child Ages
-                              </Form.Label>
+                              <Form.Label className="mb-2">Child Ages</Form.Label>
                               <Row className="g-2">
                                 {transferChildAges.map((age, index) => (
                                   <Col key={index} md={3} sm={4} xs={6}>
@@ -2282,10 +1979,7 @@ export default function MakePkgCombineSearch() {
                                       placeholder={`Child ${index + 1} age`}
                                       value={age}
                                       onChange={(e) =>
-                                        handleTransferChildAgeChange(
-                                          index,
-                                          e.target.value
-                                        )
+                                        handleTransferChildAgeChange(index, e.target.value)
                                       }
                                     />
                                   </Col>
@@ -2293,10 +1987,7 @@ export default function MakePkgCombineSearch() {
                               </Row>
                             </Col>
                           )}
-                          <Col
-                            md={3}
-                            className="d-flex align-items-end cab-search"
-                          >
+                          <Col md={3} className="d-flex align-items-end cab-search">
                             <Button
                               variant="warning"
                               className="w-100 py-2"
@@ -2305,11 +1996,7 @@ export default function MakePkgCombineSearch() {
                             >
                               {transferLoading ? (
                                 <>
-                                  <Spinner
-                                    animation="border"
-                                    size="sm"
-                                    className="me-2"
-                                  />
+                                  <Spinner animation="border" size="sm" className="me-2" />
                                   Searching...
                                 </>
                               ) : (
@@ -2322,16 +2009,12 @@ export default function MakePkgCombineSearch() {
                         </Row>
                       </Form>
 
-                      {/* Loading State */}
                       {transferLoading && (
                         <Card className="shadow-sm rounded-xl mb-4 mt-4">
                           <Card.Body className="text-center py-5">
                             <div className="results-loader">
                               <div className="loader-ring">
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                                <span></span>
+                                <span></span><span></span><span></span><span></span>
                               </div>
                               <h4 className="text-primary fw-bold mt-3 mb-1">
                                 Searching Transfers...
@@ -2344,269 +2027,206 @@ export default function MakePkgCombineSearch() {
                         </Card>
                       )}
 
-                      {/* Empty State */}
                       {!hasTransferSearched && !transferLoading && (
                         <div className="text-center text-muted mt-5">
                           <FaCar className="fs-1 mb-3 text-secondary" />
                           <h6>
-                            No transfer results yet. Run a search to view
-                            available transfers.
+                            No transfer results yet. Run a search to view available
+                            transfers.
                           </h6>
                         </div>
                       )}
 
-                      {/* Results Display */}
-                      {hasTransferSearched &&
-                        !transferLoading &&
-                        transferResults.length > 0 && (
-                          <div className="mt-4">
-                            <h6 className="fw-bold mb-3">
-                              Transfer Results ({transferResults.length})
-                            </h6>
-                            <Row className="g-4">
-                              {transferResults.map((cab) => (
-                                <Col key={cab.cabid} lg={10} xl={9} className="mx-auto">
-                                  <Card
-                                    className="mb-4 shadow-sm"
-                                    style={{ borderRadius: "12px" }}
-                                  >
-                                    <Card.Body>
-                                      {/* Cab Header with Image and Name */}
-                                      <Row className="mb-3">
-                                        <Col
-                                          md={3}
-                                          sm={4}
-                                          xs={12}
-                                          className="mb-3 mb-md-0"
+                      {hasTransferSearched && !transferLoading && transferResults.length > 0 && (
+                        <div className="mt-4">
+                          <h6 className="fw-bold mb-3">
+                            Transfer Results ({transferResults.length})
+                          </h6>
+                          <Row className="g-4">
+                            {transferResults.map((cab) => (
+                              <Col key={cab.cabid} lg={10} xl={9} className="mx-auto">
+                                <Card className="mb-4 shadow-sm" style={{ borderRadius: "12px" }}>
+                                  <Card.Body>
+                                    <Row className="mb-3">
+                                      <Col md={3} sm={4} xs={12} className="mb-3 mb-md-0">
+                                        <div
+                                          style={{
+                                            width: "100%",
+                                            height: "200px",
+                                            borderRadius: "8px",
+                                            overflow: "hidden",
+                                            backgroundColor: "#f5f5f5",
+                                          }}
                                         >
-                                          <div
-                                            style={{
-                                              width: "100%",
-                                              height: "200px",
-                                              borderRadius: "8px",
-                                              overflow: "hidden",
-                                              backgroundColor: "#f5f5f5",
-                                            }}
+                                          <LazyImage src={cab.cabpic} alt={cab.cabname} />
+                                        </div>
+                                      </Col>
+                                      <Col
+                                        md={9}
+                                        sm={8}
+                                        xs={12}
+                                        className="d-flex align-items-center"
+                                      >
+                                        <div>
+                                          <h5
+                                            className="fw-bold mb-2"
+                                            style={{ fontSize: "1.5rem", color: "#333" }}
                                           >
-                                            <LazyImage
-                                              src={cab.cabpic}
-                                              alt={cab.cabname}
-                                            />
-                                          </div>
-                                        </Col>
-                                        <Col
-                                          md={9}
-                                          sm={8}
-                                          xs={12}
-                                          className="d-flex align-items-center"
-                                        >
-                                          <div>
-                                            <h5
-                                              className="fw-bold mb-2"
-                                              style={{
-                                                fontSize: "1.5rem",
-                                                color: "#333",
-                                              }}
+                                            {cab.cabname || "Transfer Vehicle"}
+                                          </h5>
+                                          {cab.cabdetails && (
+                                            <p
+                                              className="text-muted mb-0"
+                                              style={{ fontSize: "0.9rem" }}
                                             >
-                                              {cab.cabname || "Transfer Vehicle"}
-                                            </h5>
-                                            {cab.cabdetails && (
-                                              <p
-                                                className="text-muted mb-0"
-                                                style={{ fontSize: "0.9rem" }}
-                                              >
-                                                {cab.cabdetails}
-                                              </p>
-                                            )}
-                                          </div>
-                                        </Col>
-                                      </Row>
+                                              {cab.cabdetails}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </Col>
+                                    </Row>
 
-                                      {/* Transfer Options Table */}
-                                      {cab.searchCabDetailsDTO &&
-                                        cab.searchCabDetailsDTO.length > 0 && (
-                                          <div className="table-responsive">
-                                            <Table
-                                              striped
-                                              bordered
-                                              hover
-                                              className="mb-0"
-                                            >
-                                              <thead
-                                                style={{
-                                                  backgroundColor: "#f8f9fa",
-                                                }}
-                                              >
-                                                <tr>
-                                                  <th
-                                                    style={{
-                                                      fontWeight: "600",
-                                                      padding: "12px",
-                                                    }}
-                                                  >
-                                                    Transfer Option
-                                                  </th>
-                                                  <th
-                                                    style={{
-                                                      fontWeight: "600",
-                                                      padding: "12px",
-                                                    }}
-                                                  >
-                                                    Share Type
-                                                  </th>
-                                                  <th
-                                                    style={{
-                                                      fontWeight: "600",
-                                                      padding: "12px",
-                                                    }}
-                                                  >
-                                                    Total Price
-                                                  </th>
-                                                  <th
-                                                    style={{
-                                                      fontWeight: "600",
-                                                      padding: "12px",
-                                                      width: "150px",
-                                                    }}
-                                                  >
-                                                    Action
-                                                  </th>
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                {cab.searchCabDetailsDTO.map(
-                                                  (detail, idx) => {
-                                                    const rate =
-                                                      detail.types === "SIC"
-                                                        ? detail.sicRate
-                                                        : detail.privateRate;
-                                                    const totalRate =
-                                                      detail.totalRateWithoutMrk ||
-                                                      rate ||
-                                                      0;
-                                                    const uniqueId = `${cab.cabid}-${detail.dropDetails}-${detail.paxDetails}-${detail.types}`;
-                                                    const isAdding =
-                                                      addingTransferId === uniqueId;
+                                    {cab.searchCabDetailsDTO &&
+                                      cab.searchCabDetailsDTO.length > 0 && (
+                                        <div className="table-responsive">
+                                          <Table striped bordered hover className="mb-0">
+                                            <thead style={{ backgroundColor: "#f8f9fa" }}>
+                                              <tr>
+                                                <th style={{ fontWeight: "600", padding: "12px" }}>
+                                                  Transfer Option
+                                                </th>
+                                                <th style={{ fontWeight: "600", padding: "12px" }}>
+                                                  Share Type
+                                                </th>
+                                                <th style={{ fontWeight: "600", padding: "12px" }}>
+                                                  Total Price
+                                                </th>
+                                                <th
+                                                  style={{
+                                                    fontWeight: "600",
+                                                    padding: "12px",
+                                                    width: "150px",
+                                                  }}
+                                                >
+                                                  Action
+                                                </th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {cab.searchCabDetailsDTO.map((detail, idx) => {
+                                                const rate =
+                                                  detail.types === "SIC"
+                                                    ? detail.sicRate
+                                                    : detail.privateRate;
+                                                const totalRate =
+                                                  detail.totalRateWithoutMrk || rate || 0;
+                                                const uniqueId = `${cab.cabid}-${detail.dropDetails}-${detail.paxDetails}-${detail.types}`;
+                                                const isAdding = addingTransferId === uniqueId;
 
-                                                    return (
-                                                      <tr key={idx}>
-                                                        <td
-                                                          style={{
-                                                            padding: "12px",
-                                                            verticalAlign: "middle",
-                                                          }}
-                                                        >
-                                                          {detail.location || "N/A"}{" "}
-                                                          -{" "}
-                                                          {detail.dropOff || "N/A"}
-                                                        </td>
-                                                        <td
-                                                          style={{
-                                                            padding: "12px",
-                                                            verticalAlign: "middle",
-                                                          }}
-                                                        >
-                                                          <span
-                                                            style={{
-                                                              display:
-                                                                "inline-block",
-                                                              fontSize: "0.9rem",
-                                                              fontWeight: 600,
-                                                              color: "#333",
-                                                            }}
-                                                          >
-                                                            {detail.types}
-                                                          </span>
-                                                        </td>
+                                                return (
+                                                  <tr key={idx}>
+                                                    <td
+                                                      style={{
+                                                        padding: "12px",
+                                                        verticalAlign: "middle",
+                                                      }}
+                                                    >
+                                                      {detail.location || "N/A"} -{" "}
+                                                      {detail.dropOff || "N/A"}
+                                                    </td>
+                                                    <td
+                                                      style={{
+                                                        padding: "12px",
+                                                        verticalAlign: "middle",
+                                                      }}
+                                                    >
+                                                      <span
+                                                        style={{
+                                                          fontSize: "0.9rem",
+                                                          fontWeight: 600,
+                                                          color: "#333",
+                                                        }}
+                                                      >
+                                                        {detail.types}
+                                                      </span>
+                                                    </td>
+                                                    <td
+                                                      style={{
+                                                        padding: "12px",
+                                                        verticalAlign: "middle",
+                                                      }}
+                                                    >
+                                                      <span
+                                                        style={{
+                                                          fontSize: "1rem",
+                                                          fontWeight: "600",
+                                                          color: "#333",
+                                                        }}
+                                                      >
+                                                        AED {totalRate.toLocaleString()}
+                                                      </span>
+                                                    </td>
+                                                    <td
+                                                      style={{
+                                                        padding: "12px",
+                                                        verticalAlign: "middle",
+                                                        textAlign: "center",
+                                                      }}
+                                                    >
+                                                      <Button
+                                                        variant="success"
+                                                        size="sm"
+                                                        className="add-transfer-to-cart"
+                                                        onClick={() =>
+                                                          handleAddTransferToCart(cab, detail)
+                                                        }
+                                                        disabled={isAdding}
+                                                        style={{ minWidth: "120px" }}
+                                                      >
+                                                        {isAdding ? (
+                                                          <>
+                                                            <Spinner
+                                                              size="sm"
+                                                              className="me-2"
+                                                            />
+                                                            Adding...
+                                                          </>
+                                                        ) : (
+                                                          "Add to cart"
+                                                        )}
+                                                      </Button>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </Table>
+                                        </div>
+                                      )}
+                                  </Card.Body>
+                                </Card>
+                              </Col>
+                            ))}
+                          </Row>
+                        </div>
+                      )}
 
-                                                        <td
-                                                          style={{
-                                                            padding: "12px",
-                                                            verticalAlign: "middle",
-                                                          }}
-                                                        >
-                                                          <span
-                                                            style={{
-                                                              fontSize: "1rem",
-                                                              fontWeight: "600",
-                                                              color: "#333",
-                                                            }}
-                                                          >
-                                                            AED{" "}
-                                                            {totalRate.toLocaleString()}
-                                                          </span>
-                                                        </td>
-                                                        <td
-                                                          style={{
-                                                            padding: "12px",
-                                                            verticalAlign: "middle",
-                                                            textAlign: "center",
-                                                          }}
-                                                        >
-                                                          <Button
-                                                            variant="success"
-                                                            size="sm"
-                                                            className="add-transfer-to-cart"
-                                                            onClick={() =>
-                                                              handleAddTransferToCart(
-                                                                cab,
-                                                                detail
-                                                              )
-                                                            }
-                                                            disabled={isAdding}
-                                                            style={{
-                                                              minWidth: "120px",
-                                                            }}
-                                                          >
-                                                            {isAdding ? (
-                                                              <>
-                                                                <Spinner
-                                                                  size="sm"
-                                                                  className="me-2"
-                                                                />
-                                                                Adding...
-                                                              </>
-                                                            ) : (
-                                                              <>
-
-                                                                Add to cart
-                                                              </>
-                                                            )}
-                                                          </Button>
-                                                        </td>
-                                                      </tr>
-                                                    );
-                                                  }
-                                                )}
-                                              </tbody>
-                                            </Table>
-                                          </div>
-                                        )}
-                                    </Card.Body>
-                                  </Card>
-                                </Col>
-                              ))}
-                            </Row>
-                          </div>
-                        )}
-
-                      {/* No Results State */}
-                      {hasTransferSearched &&
-                        !transferLoading &&
-                        transferResults.length === 0 && (
-                          <div className="text-center text-muted mt-5">
-                            <FaCar className="fs-1 mb-3 text-secondary" />
-                            <h6>No transfers found for the selected dates.</h6>
-                            <p className="small">
-                              Please try different dates or contact support.
-                            </p>
-                          </div>
-                        )}
+                      {hasTransferSearched && !transferLoading && transferResults.length === 0 && (
+                        <div className="text-center text-muted mt-5">
+                          <FaCar className="fs-1 mb-3 text-secondary" />
+                          <h6>No transfers found for the selected dates.</h6>
+                          <p className="small">
+                            Please try different dates or contact support.
+                          </p>
+                        </div>
+                      )}
                     </Card.Body>
                   </Card>
                 </Tab>
 
-                {/* --------------- Tours Tab ---------------- */}
+                {/* ═══════════════════════════════════════
+                    TOURS & ACTIVITIES TAB
+                ═══════════════════════════════════════ */}
                 <Tab
                   eventKey="tours"
                   title={
@@ -2617,9 +2237,7 @@ export default function MakePkgCombineSearch() {
                 >
                   <Card className="border-0 shadow-sm rounded-4">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">
-                        Activities Search
-                      </h5>
+                      <h5 className="fw-bold text-primary mb-3">Activities Search</h5>
                       <Form onSubmit={handleTourSearchSubmit}>
                         <Row className="g-3">
                           <Col md={2}>
@@ -2639,13 +2257,11 @@ export default function MakePkgCombineSearch() {
                                 setTourAdults(parseInt(e.target.value) || 1)
                               }
                             >
-                              {Array.from({ length: 9 }, (_, i) => i + 1).map(
-                                (num) => (
-                                  <option key={num} value={num}>
-                                    {num}
-                                  </option>
-                                )
-                              )}
+                              {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                                <option key={num} value={num}>
+                                  {num}
+                                </option>
+                              ))}
                             </Form.Select>
                           </Col>
                           <Col md={2}>
@@ -2656,20 +2272,16 @@ export default function MakePkgCombineSearch() {
                                 setTourChildren(parseInt(e.target.value) || 0)
                               }
                             >
-                              {Array.from({ length: 6 }, (_, i) => i).map(
-                                (num) => (
-                                  <option key={num} value={num}>
-                                    {num}
-                                  </option>
-                                )
-                              )}
+                              {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                                <option key={num} value={num}>
+                                  {num}
+                                </option>
+                              ))}
                             </Form.Select>
                           </Col>
                           {tourChildren > 0 && (
                             <Col md={4}>
-                              <Form.Label className="mb-2">
-                                Child Ages
-                              </Form.Label>
+                              <Form.Label className="mb-2">Child Ages</Form.Label>
                               <Row className="g-2">
                                 {tourChildAges.map((age, index) => (
                                   <Col key={index} md={3} sm={4} xs={6}>
@@ -2680,10 +2292,7 @@ export default function MakePkgCombineSearch() {
                                       placeholder={`Child ${index + 1} age`}
                                       value={age}
                                       onChange={(e) =>
-                                        handleTourChildAgeChange(
-                                          index,
-                                          e.target.value
-                                        )
+                                        handleTourChildAgeChange(index, e.target.value)
                                       }
                                     />
                                   </Col>
@@ -2691,10 +2300,7 @@ export default function MakePkgCombineSearch() {
                               </Row>
                             </Col>
                           )}
-                          <Col
-                            md={3}
-                            className="d-flex align-items-end activity-search"
-                          >
+                          <Col md={3} className="d-flex align-items-end activity-search">
                             <Button
                               variant="warning"
                               className="w-100 py-2"
@@ -2703,11 +2309,7 @@ export default function MakePkgCombineSearch() {
                             >
                               {tourLoading ? (
                                 <>
-                                  <Spinner
-                                    animation="border"
-                                    size="sm"
-                                    className="me-2"
-                                  />
+                                  <Spinner animation="border" size="sm" className="me-2" />
                                   Searching...
                                 </>
                               ) : (
@@ -2720,16 +2322,12 @@ export default function MakePkgCombineSearch() {
                         </Row>
                       </Form>
 
-                      {/* Loading State */}
                       {tourLoading && (
                         <Card className="shadow-sm rounded-xl mb-4 mt-4">
                           <Card.Body className="text-center py-5">
                             <div className="results-loader">
                               <div className="loader-ring">
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                                <span></span>
+                                <span></span><span></span><span></span><span></span>
                               </div>
                               <h4 className="text-primary fw-bold mt-3 mb-1">
                                 Searching Activities...
@@ -2742,287 +2340,223 @@ export default function MakePkgCombineSearch() {
                         </Card>
                       )}
 
-                      {/* Empty State */}
                       {!hasTourSearched && !tourLoading && (
                         <div className="text-center text-muted mt-5">
                           <FaTicketAlt className="fs-1 mb-3 text-secondary" />
                           <h6>
-                            No activities yet. Run a search to view available
-                            activities.
+                            No activities yet. Run a search to view available activities.
                           </h6>
                         </div>
                       )}
 
-                      {/* Results Display */}
-                      {hasTourSearched &&
-                        !tourLoading &&
-                        tourResults.length > 0 && (
-                          <div className="mt-4">
-                            <h6 className="fw-bold mb-3">
-                              Tour & Activity Results ({tourResults.length})
-                            </h6>
-                            <Row
-                              xs={1}
-                              sm={2}
-                              md={3}
-                              lg={3}
-                              xl={3}
-                              className="g-4"
-                            >
-                              {tourResults.map((activity) => (
-                                <Col key={activity.id}>
+                      {hasTourSearched && !tourLoading && tourResults.length > 0 && (
+                        <div className="mt-4">
+                          <h6 className="fw-bold mb-3">
+                            Tour & Activity Results ({tourResults.length})
+                          </h6>
+                          <Row xs={1} sm={2} md={3} lg={3} xl={3} className="g-4">
+                            {tourResults.map((activity) => (
+                              <Col key={activity.id}>
+                                <div
+                                  style={{
+                                    backgroundColor: "white",
+                                    border: "1px solid #dee2e6",
+                                    borderRadius: "12px",
+                                    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                                    overflow: "hidden",
+                                  }}
+                                >
                                   <div
                                     style={{
-                                      backgroundColor: "white",
-                                      border: "1px solid #dee2e6",
-                                      borderRadius: "12px",
-                                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                                      marginBottom: "20px",
+                                      position: "relative",
+                                      height: "200px",
                                       overflow: "hidden",
                                     }}
                                   >
+                                    <LazyImage
+                                      src={activity.activityImage}
+                                      alt={activity.activityName}
+                                    />
                                     <div
                                       style={{
-                                        position: "relative",
-                                        height: "200px",
-                                        overflow: "hidden",
+                                        position: "absolute",
+                                        top: "10px",
+                                        right: "10px",
+                                        backgroundColor: "rgba(0,0,0,0.7)",
+                                        color: "white",
+                                        padding: "4px 8px",
+                                        borderRadius: "15px",
+                                        fontSize: "12px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "4px",
                                       }}
                                     >
-                                      <LazyImage
-                                        src={activity.activityImage}
-                                        alt={activity.activityName}
-                                      />
+                                      {activity.starRating > 0 && (
+                                        <>
+                                          <FaStar className="text-warning me-1" />
+                                          {activity.starRating}
+                                        </>
+                                      )}
+                                      {activity.apiType && (
+                                        <span
+                                          style={{
+                                            marginLeft: "4px",
+                                            backgroundColor: "#6c757d",
+                                            padding: "1px 6px",
+                                            borderRadius: "10px",
+                                          }}
+                                        >
+                                          {activity.apiType.toUpperCase()}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div style={{ padding: "16px", backgroundColor: "white" }}>
+                                    <h6
+                                      style={{
+                                        fontSize: "1rem",
+                                        fontWeight: "600",
+                                        marginBottom: "8px",
+                                        color: "#333",
+                                        lineHeight: "1.3",
+                                      }}
+                                    >
+                                      {activity.activityName || "Activity Name Not Available"}
+                                    </h6>
+
+                                    {activity.duration && (
                                       <div
                                         style={{
-                                          position: "absolute",
-                                          top: "10px",
-                                          right: "10px",
-                                          backgroundColor: "rgba(0,0,0,0.7)",
-                                          color: "white",
-                                          padding: "5px 10px",
-                                          borderRadius: "15px",
-                                          fontSize: "12px",
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "5px",
+                                          fontSize: "0.875rem",
+                                          color: "#666",
+                                          marginBottom: "10px",
                                         }}
                                       >
-                                        {activity.starRating > 0 && (
-                                          <>
-                                            <FaStar className="text-warning me-1" />
-                                            {activity.starRating}
-                                          </>
-                                        )}
-                                        {activity.apiType && (
-                                          <span
-                                            style={{
-                                              marginLeft: "5px",
-                                              backgroundColor: "#6c757d",
-                                              padding: "2px 6px",
-                                              borderRadius: "10px",
-                                            }}
-                                          >
-                                            {activity.apiType.toUpperCase()}
-                                          </span>
-                                        )}
+                                        <FaTicketAlt className="text-info me-2" />
+                                        Duration: {activity.duration}
                                       </div>
+                                    )}
+
+                                    <div
+                                      style={{
+                                        backgroundColor:
+                                          activity.totalRate > 0 ? "#28a745" : "#6c757d",
+                                        color: "white",
+                                        padding: "3px 8px",
+                                        borderRadius: "4px",
+                                        fontSize: "0.72rem",
+                                        fontWeight: "500",
+                                        display: "inline-block",
+                                        marginBottom: "10px",
+                                      }}
+                                    >
+                                      {activity.totalRate > 0
+                                        ? "Rate Available"
+                                        : "Rate on Request"}
                                     </div>
 
                                     <div
                                       style={{
-                                        padding: "16px",
-                                        backgroundColor: "white",
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        marginTop: "10px",
+                                        paddingTop: "10px",
+                                        borderTop: "1px solid #eee",
                                       }}
                                     >
-                                      <h6
+                                      <div
                                         style={{
-                                          fontSize: "1.3rem",
+                                          fontSize: "1.2rem",
                                           fontWeight: "600",
-                                          marginBottom: "8px",
                                           color: "#333",
-                                          lineHeight: "1.3",
-                                        }}
-                                      >
-                                        {activity.activityName ||
-                                          "Activity Name Not Available"}
-                                      </h6>
-
-                                      {/* {activity.activityDetails && (
-                                        <p style={{
-                                          fontSize: '0.875rem',
-                                          color: '#666',
-                                          marginBottom: '8px',
-                                          lineHeight: '1.4'
-                                        }}>
-                                          {activity.activityDetails}
-                                        </p>
-                                      )} */}
-
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          flexWrap: "wrap",
-                                          gap: "8px",
-                                          marginBottom: "12px",
-                                        }}
-                                      >
-                                        {/* {activity.minPaxsic > 0 && (
-                                          <Badge bg="info" className="small">
-                                            Min Pax: {activity.minPaxsic}
-                                          </Badge>
-                                        )}
-                                        {activity.maxPax > 0 && (
-                                          <Badge bg="info" className="small">
-                                            Max Pax: {activity.maxPax}
-                                          </Badge>
-                                        )}
-                                        {activity.childMin > 0 && (
-                                          <Badge bg="warning" className="small">
-                                            Child Age: {activity.childMin}-{activity.childMax} years
-                                          </Badge>
-                                        )} */}
-                                      </div>
-
-                                      {activity.duration && (
-                                        <div
-                                          style={{
-                                            fontSize: "0.875rem",
-                                            color: "#666",
-                                            marginBottom: "12px",
-                                          }}
-                                        >
-                                          <FaTicketAlt className="text-info me-2" />
-                                          Duration: {activity.duration}
-                                        </div>
-                                      )}
-
-                                      <div
-                                        style={{
-                                          backgroundColor:
-                                            activity.totalRate > 0
-                                              ? "#28a745"
-                                              : "#6c757d",
-                                          color: "white",
-                                          padding: "4px 8px",
-                                          borderRadius: "4px",
-                                          fontSize: "0.75rem",
-                                          fontWeight: "500",
-                                          display: "inline-block",
-                                          marginBottom: "12px",
                                         }}
                                       >
                                         {activity.totalRate > 0
-                                          ? "Rate Available"
-                                          : "Rate on Request"}
+                                          ? `${activity.currency} ${activity.totalRate.toLocaleString()}`
+                                          : "-"}
                                       </div>
 
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          justifyContent: "space-between",
-                                          alignItems: "center",
-                                          marginTop: "12px",
-                                          paddingTop: "12px",
-                                          borderTop: "1px solid #eee",
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            fontSize: "1.5rem",
-                                            fontWeight: "600",
-                                            color: "#333",
+                                      <div className="d-flex gap-2 align-items-center">
+                                        <Button
+                                          variant="info"
+                                          size="sm"
+                                          onClick={() => {
+                                            setSelectedActivity(activity);
+                                            setShowActivityModal(true);
                                           }}
+                                          style={{
+                                            minWidth: "36px",
+                                            padding: "5px 7px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                          title="View Details"
                                         >
-                                          {activity.totalRate > 0
-                                            ? `${activity.currency
-                                            } ${activity.totalRate.toLocaleString()}`
-                                            : "-"}
-                                        </div>
-
-                                        <div className="d-flex gap-2 align-items-center">
-                                          <Button
-                                            variant="info"
-                                            size="sm"
-                                            onClick={() => {
-                                              setSelectedActivity(activity);
-                                              setShowActivityModal(true);
-                                            }}
-                                            style={{
-                                              minWidth: "40px",
-                                              padding: "6px 8px",
-                                              display: "flex",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                            }}
-                                            title="View Details"
-                                          >
-                                            <FaEye size={14} />
-                                          </Button>
-                                          <Button
-                                            variant="primary"
-                                            size="sm"
-                                            className="activity-add-to-cart"
-                                            disabled={
-                                              addingActivityId ===
-                                              (activity.id ||
-                                                activity.activityId)
-                                            }
-                                            onClick={() =>
-                                              handleAddActivityToCart(activity)
-                                            }
-                                          >
-                                            {addingActivityId ===
-                                              (activity.id ||
-                                                activity.activityId) ? (
-                                              <>
-                                                <Spinner
-                                                  animation="border"
-                                                  size="sm"
-                                                  className="me-2"
-                                                />
-                                                Adding...
-                                              </>
-                                            ) : (
-                                              "Add to Cart"
-                                            )}
-                                          </Button>
-                                        </div>
+                                          <FaEye size={13} />
+                                        </Button>
+                                        <Button
+                                          variant="primary"
+                                          size="sm"
+                                          className="activity-add-to-cart"
+                                          disabled={
+                                            addingActivityId ===
+                                            (activity.id || activity.activityId)
+                                          }
+                                          onClick={() => handleAddActivityToCart(activity)}
+                                        >
+                                          {addingActivityId ===
+                                          (activity.id || activity.activityId) ? (
+                                            <>
+                                              <Spinner
+                                                animation="border"
+                                                size="sm"
+                                                className="me-2"
+                                              />
+                                              Adding...
+                                            </>
+                                          ) : (
+                                            "Add to Cart"
+                                          )}
+                                        </Button>
                                       </div>
                                     </div>
                                   </div>
-                                </Col>
-                              ))}
-                            </Row>
-                          </div>
-                        )}
+                                </div>
+                              </Col>
+                            ))}
+                          </Row>
+                        </div>
+                      )}
 
-                      {/* No Results State */}
-                      {hasTourSearched &&
-                        !tourLoading &&
-                        tourResults.length === 0 && (
-                          <div className="text-center text-muted mt-5">
-                            <FaTicketAlt className="fs-1 mb-3 text-secondary" />
-                            <h6>No activities found for the selected date.</h6>
-                            <p className="small">
-                              Please try different dates or contact support.
-                            </p>
-                          </div>
-                        )}
+                      {hasTourSearched && !tourLoading && tourResults.length === 0 && (
+                        <div className="text-center text-muted mt-5">
+                          <FaTicketAlt className="fs-1 mb-3 text-secondary" />
+                          <h6>No activities found for the selected date.</h6>
+                          <p className="small">
+                            Please try different dates or contact support.
+                          </p>
+                        </div>
+                      )}
                     </Card.Body>
                   </Card>
                 </Tab>
               </Tabs>
             </Card.Body>
-          </Card >
+          </Card>
 
-          {/* Activity Details Modal */}
-          < Modal
+          {/* ═══════════════════════════════════════
+              ACTIVITY DETAILS MODAL
+          ═══════════════════════════════════════ */}
+          <Modal
             show={showActivityModal}
             onHide={() => {
               setShowActivityModal(false);
               setSelectedActivity(null);
-            }
-            }
+            }}
             size="lg"
             centered
           >
@@ -3064,10 +2598,7 @@ export default function MakePkgCombineSearch() {
                   {selectedActivity.activityDetails && (
                     <div className="mb-3">
                       <h6 className="fw-semibold mb-2">Description</h6>
-                      <p
-                        className="text-muted"
-                        style={{ whiteSpace: "pre-wrap" }}
-                      >
+                      <p className="text-muted" style={{ whiteSpace: "pre-wrap" }}>
                         {selectedActivity.activityDetails}
                       </p>
                     </div>
@@ -3091,8 +2622,7 @@ export default function MakePkgCombineSearch() {
                     {selectedActivity.childMin > 0 && (
                       <Col md={6}>
                         <div>
-                          <strong>Child Age Range:</strong>{" "}
-                          {selectedActivity.childMin} -{" "}
+                          <strong>Child Age Range:</strong> {selectedActivity.childMin} -{" "}
                           {selectedActivity.childMax} years
                         </div>
                       </Col>
@@ -3108,8 +2638,7 @@ export default function MakePkgCombineSearch() {
                     {selectedActivity.adultRate > 0 && (
                       <Col md={6}>
                         <div>
-                          <strong>Adult Rate:</strong>{" "}
-                          {selectedActivity.currency}{" "}
+                          <strong>Adult Rate:</strong> {selectedActivity.currency}{" "}
                           {selectedActivity.adultRate.toLocaleString()}
                         </div>
                       </Col>
@@ -3117,8 +2646,7 @@ export default function MakePkgCombineSearch() {
                     {selectedActivity.childRate > 0 && (
                       <Col md={6}>
                         <div>
-                          <strong>Child Rate:</strong>{" "}
-                          {selectedActivity.currency}{" "}
+                          <strong>Child Rate:</strong> {selectedActivity.currency}{" "}
                           {selectedActivity.childRate.toLocaleString()}
                         </div>
                       </Col>
@@ -3137,29 +2665,20 @@ export default function MakePkgCombineSearch() {
                       <div>
                         <h5 className="mb-0">
                           {selectedActivity.totalRate > 0
-                            ? `${selectedActivity.currency
-                            } ${selectedActivity.totalRate.toLocaleString()}`
+                            ? `${selectedActivity.currency} ${selectedActivity.totalRate.toLocaleString()}`
                             : "Price on request"}
                         </h5>
                         {selectedActivity.totalRateWithoutMrk > 0 &&
                           selectedActivity.totalRateWithoutMrk !==
-                          selectedActivity.totalRate && (
+                            selectedActivity.totalRate && (
                             <small className="text-muted">
                               Without markup: {selectedActivity.currency}{" "}
                               {selectedActivity.totalRateWithoutMrk.toLocaleString()}
                             </small>
                           )}
                       </div>
-                      <Badge
-                        bg={
-                          selectedActivity.totalRate > 0
-                            ? "success"
-                            : "secondary"
-                        }
-                      >
-                        {selectedActivity.totalRate > 0
-                          ? "Rate Available"
-                          : "Rate on Request"}
+                      <Badge bg={selectedActivity.totalRate > 0 ? "success" : "secondary"}>
+                        {selectedActivity.totalRate > 0 ? "Rate Available" : "Rate on Request"}
                       </Badge>
                     </div>
                   </div>
@@ -3179,7 +2698,6 @@ export default function MakePkgCombineSearch() {
               <Button
                 variant="primary"
                 onClick={() => {
-                  // Handle select activity action here if needed
                   setShowActivityModal(false);
                   setSelectedActivity(null);
                 }}
@@ -3187,9 +2705,9 @@ export default function MakePkgCombineSearch() {
                 Select Activity
               </Button>
             </Modal.Footer>
-          </Modal >
-        </main >
-      </div >
-    </div >
+          </Modal>
+        </main>
+      </div>
+    </div>
   );
 }

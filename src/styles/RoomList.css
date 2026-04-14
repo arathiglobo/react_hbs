@@ -14,6 +14,16 @@
   }
 }
 
+.left-fixed {
+  position: sticky;
+  top: 80px; /* adjust based on your TopBar height */
+  height: fit-content;
+}
+
+.leftside {
+  align-self: flex-start;
+}
+
 /* Accordion Arrow Animation */
 .accordion-arrow {
   transition: transform 0.3s ease;
