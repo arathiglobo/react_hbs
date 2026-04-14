@@ -128,6 +128,21 @@ import UnMappingCity from "./pages/master/UnMappingCity";
 import SubLocation from "./pages/master/SubLocation";
 import ExtranetImgUpload from "./pages/extranet/ExtranetImgUpload";
 import ExtranetOccupancyAndMinimumLength from "./pages/extranet/ExtranetOccupancyAndMinimumLength";
+import ExtranetContractRate from "./pages/extranet/ExtranetContractRate";
+import { EditIcon } from "lucide-react";
+import EditExtranetContractRate from "./pages/extranet/EditExtranetContractRate";
+import ExtranetCreateContractRate from "./pages/extranet/ExtranetCreateContractRate";
+import ExtranetPolicy from "./pages/extranet/Extranet-Policy/ExtranetPolicy";
+import ExtranetPolicyCreate from "./pages/extranet/Extranet-Policy/ExtranetPolicyCreate";
+import ExtranetPolicyUpdate from "./pages/extranet/Extranet-Policy/ExtranetPolicyUpdate";
+import ExtranetPromotion from "./pages/extranet/Extranet-Promotion/ExtranetPromotion";
+import ExtranetSpecialRates from "./pages/extranet/Extranet-Promotion/ExtranetSpecialRates";
+import ExtranetDiscountPromotion from "./pages/extranet/Extranet-Promotion/ExtranetDiscountPromotion";
+import ExtranetStayPayPromotion from "./pages/extranet/Extranet-Promotion/ExtranetStayPayPromotion";
+import ExtranetSpecialRateEdit from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
+import EditDiscountPromotionExtranet from "./pages/extranet/Extranet-Promotion/EditDiscountPromotionExtranet";
+import EditStayPayPromotionExtranet from "./pages/extranet/Extranet-Promotion/EditStayPayPromotionExtranet";
+import EditSpecialRateExtranet from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
 
 
 export default function App() {
@@ -325,8 +340,27 @@ export default function App() {
         <Route path="/upload-offer-image" element={<PrivateRoute><OfferImageUpload /></PrivateRoute>} />
 
         {/* Extranet login */}
-        <Route path="/extranet-images" element={<PrivateRoute><ExtranetImgUpload /></PrivateRoute>} />
+        <Route path="/extranet/:id/gallery" element={<PrivateRoute><ExtranetImgUpload /></PrivateRoute>} />
         <Route path="/extranet/:id/occupancy-and-minimumlength" element={<PrivateRoute><ExtranetOccupancyAndMinimumLength /></PrivateRoute>} />
+       
+        <Route path="/extranet/:id/contract-rate" element={<PrivateRoute><ExtranetContractRate/></PrivateRoute>} />
+        <Route path="/extranet/:id/create-contract-rate" element={<PrivateRoute><ExtranetCreateContractRate/></PrivateRoute>} />
+        <Route path="/extranet/:id/edit-contract-rate/:editId" element={<PrivateRoute><EditExtranetContractRate/></PrivateRoute>} />
+       
+        <Route path="/extranet/:id/policy" element={<PrivateRoute><ExtranetPolicy/></PrivateRoute>} />
+        <Route path="/extranet/:id/policy-create" element={<PrivateRoute><ExtranetPolicyCreate/></PrivateRoute>} />
+        <Route path="/extranet/:id/policy-update/:editId" element={<PrivateRoute><ExtranetPolicyUpdate/></PrivateRoute>} />
+        
+        <Route path="/extranet/:id/promotions" element={<PrivateRoute><ExtranetPromotion/></PrivateRoute>} />
+        <Route path="/extranet/:id/promotions-special-rate-create" element={<PrivateRoute><ExtranetSpecialRates/></PrivateRoute>} />
+        <Route path="/extranet/:id/edit-special-rate/:editId" element={<PrivateRoute><  EditSpecialRateExtranet/></PrivateRoute>} />
+
+        <Route path="/extranet/:id/promotions-discount-create" element={<PrivateRoute><ExtranetDiscountPromotion/></PrivateRoute>} />
+        <Route path="/extranet/:id/edit-discount-promotion/:editId" element={<PrivateRoute><EditDiscountPromotionExtranet/></PrivateRoute>} />
+
+        <Route path="/extranet/:id/promotions-staypay-create" element={<PrivateRoute><ExtranetStayPayPromotion/></PrivateRoute>} />
+        <Route path="/extranet/:id/edit-staypay-promotion/:editId" element={<PrivateRoute><EditStayPayPromotionExtranet/></PrivateRoute>} />
+
         
        
 

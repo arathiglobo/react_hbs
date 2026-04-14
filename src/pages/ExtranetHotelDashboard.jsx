@@ -66,7 +66,7 @@ const ExtranetHotelDashboard = () => {
             </Link>
 
             {/* My Pics */}
-            <Link to={`/extranet-images`} className="text-decoration-none">
+            <Link to={`/extranet/${userId}/gallery`} className="text-decoration-none">
               <div
                 className="card bg-success text-white p-2 rounded-4 shadow-sm flex-grow-1 d-flex align-items-center justify-content-center flex-column hover-shadow"
                 style={{ minWidth: "200px", cursor: "pointer" }}

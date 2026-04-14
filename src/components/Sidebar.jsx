@@ -19,7 +19,7 @@ import {
   ImagePlus,
   Dot,
 } from "lucide-react";
-import { FaUser } from "react-icons/fa";
+import { FaFileAlt, FaImages, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 
 
@@ -404,6 +404,26 @@ export default function Sidebar() {
     {
       label: "Occupancy",
       to: hotelId ? `/extranet/${hotelId}/occupancy-and-minimumlength` : "#",
+      roles: ["extranet"],
+    },
+    {
+      label: "Contract Rate",
+      to: hotelId ? `/extranet/${hotelId}/contract-rate` : "#",
+      roles: ["extranet"],
+    },
+    {
+      label: "Promotions",
+      to: hotelId ? `/extranet/${hotelId}/promotions` : "#",
+      roles: ["extranet"],
+    },
+    {
+      label: "Policy",
+      to: hotelId ? `/extranet/${hotelId}/policy` : "#",
+      roles: ["extranet"],
+    },
+    {
+      label: "Gallery",
+      to: hotelId ? `/extranet/${hotelId}/gallery` : "#",
       roles: ["extranet"],
     },
 
@@ -821,8 +841,20 @@ function getIcon(label) {
     case "Upload Offer Image":
       return <ImagePlus {...iconProps} />;
 
-     case "Occupancy":
+    case "Occupancy":
       return <FaUser {...iconProps} />;
+
+    case "Contract Rate":
+      return <FileSignature {...iconProps} />;
+    
+    case "Promotions":
+     return <FaTags {...iconProps} />;
+
+    case "Policy":
+      return <FaFileAlt {...iconProps} />;
+
+    case "Gallery":
+      return <FaImages {...iconProps} />;
 
     default:
       return <Dot {...iconProps} />;

@@ -233,6 +233,8 @@ const PackageReg = () => {
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
   const [packageCategories, setPackageCategories] = useState([]);
   const [packageCategoryDropdownOpen, setPackageCategoryDropdownOpen] = useState(false);
+  const [packageTypes, setPackageTypes] = useState([]);
+  const [isLoadingPackageTypes, setIsLoadingPackageTypes] = useState(false);
 
 
   // Helper function to get image URL from path
@@ -443,6 +445,7 @@ const PackageReg = () => {
     loadAllDestinations();
     loadTermsAndConditions();
     packageCategoryList();
+    fetchPackageTypes();
   }, []);
 
   const handleSave = async (e) => {
@@ -661,6 +664,19 @@ const PackageReg = () => {
       setPackageCategories(response.data);
     } catch (error) {
       console.log("error for package category  list :", error);
+    }
+  };
+
+  const fetchPackageTypes = async () => {
+    try {
+      setIsLoadingPackageTypes(true);
+      const response = await axiosInstance.get("/api/packageType");
+      setPackageTypes(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Error fetching package types:", error);
+      toast.error("Failed to load package types");
+    } finally {
+      setIsLoadingPackageTypes(false);
     }
   };
 
@@ -1504,8 +1520,18 @@ const PackageReg = () => {
                             isInvalid={!!validationErrors.packageType}
                           >
                             <option value="">SELECT</option>
-                            <option value="1">Domestic</option>
-                            <option value="2">International</option>
+                            {isLoadingPackageTypes ? (
+                              <option disabled>Loading...</option>
+                            ) : (
+                              packageTypes.map((type) => (
+                                <option
+                                  key={type.packageTypeId}
+                                  value={type.packageTypeId}
+                                >
+                                  {type.name}
+                                </option>
+                              ))
+                            )}
                           </Form.Select>
                           {validationErrors.packageType && (
                             <Form.Control.Feedback type="invalid">

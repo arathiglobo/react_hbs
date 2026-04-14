@@ -1433,7 +1433,7 @@ const ExtranetOccupancyAndMinimumLength = () => {
               <FaArrowLeft />
               Back
             </Button>
-            <h3 className="mb-0">Occupancy And Minimum Length</h3>
+            <h3 className="mb-0">Extranet Occupancy And Minimum Length</h3>
           </div>
 
           <Tabs
