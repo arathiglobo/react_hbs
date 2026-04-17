@@ -835,6 +835,8 @@ const [activeAccordion, setActiveAccordion] = useState({});
     const { payload, hotels } = roomData;
     const hotelsdetail = hotels[0];
 
+    console.log("hotels rate::", rate);
+
     try {
       const searchRoomDTOs = (payload.rooms || []).map((room) => ({
         roomCount: 1,

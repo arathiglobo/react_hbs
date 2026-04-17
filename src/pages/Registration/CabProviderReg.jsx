@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card,
@@ -16,6 +16,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
+import Select from "react-select";
 import {
   FaEdit,
   FaTrash,
@@ -194,6 +195,9 @@ const CabProviderReg = () => {
   const [pickupDropoffList, setPickupDropoffList] = useState([]);
   const [editingCab, setEditingCab] = useState(null);
   const [placeLookup, setPlaceLookup] = useState({});
+  const [selectedCountryOption, setSelectedCountryOption] = useState(null);
+  const [isCountryLoading, setIsCountryLoading] = useState(false);
+  const countryDebounceRef = useRef(null);
   const placeOptions = useMemo(() => {
     return Array.isArray(places) ? places : [];
   }, [places]);
@@ -283,7 +287,8 @@ const CabProviderReg = () => {
     });
     setCabList([]);
     setPlaces([]);
-    setPickupDropoffList([]);
+    setSelectedCountryOption(null);
+    fetchCountries("");
     setIsLoadingPlaces(false);
     setValidationErrors({});
     setError("");
@@ -343,6 +348,8 @@ const CabProviderReg = () => {
     setPlaces([]);
     setPickupDropoffList([]);
     setEditingCab(null); // Clear any previous editing cab
+    setSelectedCountryOption(null);
+    fetchCountries("");
 
     setValidationErrors({});
     setShowModal(true);
@@ -428,6 +435,21 @@ const CabProviderReg = () => {
     
     setPlaces([]);
     // Don't clear pickupDropoffList here - it's set above
+    
+    // Resolve country for view
+    if (firstCab && firstCab.countryid) {
+      fetchCountries("").then((options) => {
+        const matched = (options || []).find(
+          (c) => String(c.value) === String(firstCab.countryid)
+        );
+        if (matched) {
+          setSelectedCountryOption(matched);
+        }
+      });
+    } else {
+      setSelectedCountryOption(null);
+      fetchCountries("");
+    }
 
     setValidationErrors({});
     setShowModal(true);
@@ -439,12 +461,26 @@ const CabProviderReg = () => {
     }, 100);
   };
 
-  const countryList = async () => {
+  const fetchCountries = async (searchTerm = "") => {
+    setIsCountryLoading(true);
     try {
-      const response = await axiosInstance.get("/api/country");
-      setCountries(response.data);
+      const res = await axiosInstance.get(
+        `/api/country?page=0&limit=20&search=${encodeURIComponent(searchTerm)}`
+      );
+      if (Array.isArray(res.data)) {
+        const options = res.data.map((country) => ({
+          value: country.id,
+          label: country.name,
+        }));
+        setCountries(options);
+        return options;
+      }
+      return [];
     } catch (error) {
-      console.log("error for country list :", error);
+      console.error("Error fetching countries:", error);
+      return [];
+    } finally {
+      setIsCountryLoading(false);
     }
   };
 
@@ -603,18 +639,14 @@ const CabProviderReg = () => {
   }, [cabList, placeLookup]);
 
   // Handle country change
-  const handleCountryChange = (e) => {
+  const handleCountryChange = (option) => {
     try {
-      const value = e.target.value;
-      const stringValue = String(value); // Convert to string to avoid trim error
-      const selectedCountry = countries.find(country => String(country.id) === String(value));
-      const countryName = selectedCountry?.name || selectedCountry?.countryName || "Unknown";
+      const value = option ? String(option.value) : "";
+      setSelectedCountryOption(option);
       
       console.log(
         "Country selected:",
-        value,
-        "Country name:",
-        countryName
+        value
       );
       
       // Clear places and place selection when country changes
@@ -623,12 +655,12 @@ const CabProviderReg = () => {
       
       setFormData((prev) => ({
         ...prev,
-        countryId: stringValue,
+        countryId: value,
         placeId: "", // Clear place selection
       }));
       
       // Fetch cities for the selected country
-      if (value && stringValue.trim() !== "") {
+      if (value) {
         cityList(value);
       }
       
@@ -773,6 +805,21 @@ const CabProviderReg = () => {
 
     // Remove the cab from the list temporarily while editing
     setCabList(cabList.filter(c => (c.cabId || c.id) !== (cab.cabId || cab.id)));
+
+    // Resolve country for editing
+    if (cab.countryid) {
+      fetchCountries("").then((options) => {
+        const matched = (options || []).find(
+          (c) => String(c.value) === String(cab.countryid)
+        );
+        if (matched) {
+          setSelectedCountryOption(matched);
+        }
+      });
+    } else {
+      setSelectedCountryOption(null);
+      fetchCountries("");
+    }
   };
 
   // Add pickup/dropoff location
@@ -1088,7 +1135,7 @@ const CabProviderReg = () => {
 
   useEffect(() => {
     fetchCabList();
-    countryList();
+    fetchCountries("");
   }, []);
 
   useEffect(() => {
@@ -1505,14 +1552,33 @@ const CabProviderReg = () => {
                           <Form.Label>
                             <span style={{ color: 'red' }}>*</span>Country
                           </Form.Label>
-                          <SearchableSelect
-                            name="countryId"
-                            value={formData.countryId}
+                          <Select
+                            value={selectedCountryOption}
                             onChange={handleCountryChange}
+                            onInputChange={(inputValue) => {
+                              if (countryDebounceRef.current) {
+                                clearTimeout(countryDebounceRef.current);
+                              }
+                              countryDebounceRef.current = setTimeout(() => {
+                                fetchCountries(inputValue);
+                              }, 400);
+                            }}
+                            menuPortalTarget={document.body}
+                            styles={{
+                              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                              menu: (base) => ({ ...base, zIndex: 9999 })
+                            }}
+                            filterOption={() => true} // Server-side filtering
                             placeholder="Search and select country"
+                            isSearchable
+                            isClearable
+                            isLoading={isCountryLoading}
                             options={countries}
-                            isInvalid={!!validationErrors.countryId}
-                            disabled={isViewMode}
+                            isDisabled={isViewMode}
+                            className={`react-select-container ${
+                              validationErrors.countryId ? "is-invalid" : ""
+                            }`}
+                            classNamePrefix="react-select"
                           />
                           {validationErrors.countryId && (
                             <Form.Control.Feedback type="invalid">

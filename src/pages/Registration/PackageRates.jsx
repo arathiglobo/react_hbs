@@ -16,6 +16,7 @@ import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
+import Select from "react-select";
 import {
   FaEdit,
   FaTrash,
@@ -60,10 +61,19 @@ const PackageRates = () => {
   const [isLoadingPackageCategories, setIsLoadingPackageCategories] = useState(false);
   const [isAddingValidity, setIsAddingValidity] = useState(false);
   const [isAddingOccupancy, setIsAddingOccupancy] = useState(false);
+  const [showRateDetails, setShowRateDetails] = useState(false);
+  const [hotelOptions, setHotelOptions] = useState([]);
+  const [hotelCache, setHotelCache] = useState({});
+  const [isHotelsLoading, setIsHotelsLoading] = useState(false);
 
   // Refs to track last execution time
   const lastValidityAddTime = useRef(0);
   const lastOccupancyAddTime = useRef(0);
+  const countryDebounceRef = useRef(null);
+  const hotelDebounceRef = useRef(null);
+
+  const [selectedCountryOption, setSelectedCountryOption] = useState(null);
+  const [isCountryLoading, setIsCountryLoading] = useState(false);
 
   // Get package info from navigation state
   const packageInfo = location.state || {};
@@ -304,12 +314,10 @@ const PackageRates = () => {
 
     const rates = {};
     packageCategories.forEach((category) => {
-      const key = category.packageCategoryId || category.id;
+      const key = (category.packageCategoryId || category.id).toString();
       rates[key] = {
         enabled: false,
-        adultRate: "",
-        childWithBed: "",
-        childWithoutBed: "",
+        occupancyRates: {}
       };
     });
 
@@ -325,6 +333,8 @@ const PackageRates = () => {
       placeId: "",
       noOfNights: "",
     });
+    setCountries([]);
+    setSelectedCountryOption(null);
     setValidityList([
       {
         id: Date.now(),
@@ -340,7 +350,14 @@ const PackageRates = () => {
       },
     ]);
     setValidationErrors({});
+    setShowRateDetails(false);
     setShowModal(true);
+    
+    // Fetch data on modal open
+    fetchCountries("");
+    marketTypeList();
+    fetchPackageDetails();
+    fetchHotels("");
   };
 
   const fetchPackageRatesList = async (pageNum = 0, searchTerm = search) => {
@@ -383,12 +400,26 @@ const PackageRates = () => {
     }
   };
 
-  const countryList = async () => {
+  const fetchCountries = async (searchTerm = "") => {
+    setIsCountryLoading(true);
     try {
-      const response = await axiosInstance.get("/api/country");
-      setCountries(response.data);
+      const res = await axiosInstance.get(
+        `/api/country?page=0&limit=20&search=${encodeURIComponent(searchTerm)}`
+      );
+      if (Array.isArray(res.data)) {
+        const options = res.data.map((country) => ({
+          value: country.id,
+          label: country.name,
+        }));
+        setCountries(options);
+        return options;
+      }
+      return [];
     } catch (error) {
-      console.log("error for country list :", error);
+      console.error("Error fetching countries:", error);
+      return [];
+    } finally {
+      setIsCountryLoading(false);
     }
   };
 
@@ -405,6 +436,39 @@ const PackageRates = () => {
       setPlaces([]);
     } finally {
       setIsLoadingPlaces(false);
+    }
+  };
+
+  const fetchHotels = async (searchTerm = "") => {
+    setIsHotelsLoading(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/hotels?page=0&limit=20&search=${encodeURIComponent(searchTerm)}`
+      );
+      if (Array.isArray(res.data)) {
+        const options = res.data.map((hotel) => ({
+          value: hotel.id,
+          label: hotel.hotelName || hotel.name || "Unknown Hotel",
+        }));
+        
+        // Update cache
+        setHotelCache(prev => {
+          const newCache = { ...prev };
+          options.forEach(opt => {
+            newCache[opt.value] = opt.label;
+          });
+          return newCache;
+        });
+
+        setHotelOptions(options);
+        return options;
+      }
+      return [];
+    } catch (error) {
+      console.error("Error fetching hotels:", error);
+      return [];
+    } finally {
+      setIsHotelsLoading(false);
     }
   };
 
@@ -437,20 +501,20 @@ const PackageRates = () => {
     }
   };
 
-  const handleCountryChange = (e) => {
-    const value = e.target.value;
-    const stringValue = String(value);
+  const handleCountryChange = (option) => {
+    const value = option ? String(option.value) : "";
+    setSelectedCountryOption(option);
 
     setFormData((prev) => ({
       ...prev,
-      countryId: stringValue,
+      countryId: value,
       placeId: "",
     }));
 
     setPlaces([]);
     setIsLoadingPlaces(false);
 
-    if (value && stringValue.trim() !== "") {
+    if (value) {
       cityList(value);
     }
 
@@ -494,7 +558,7 @@ const PackageRates = () => {
 
       const packageAccommodationrateDTO = occupancyList.map((occupancy) => {
         const enabledCategories = packageCategories.filter((category) => {
-          const categoryKey = category.packageCategoryId || category.id;
+          const categoryKey = (category.packageCategoryId || category.id).toString();
           return formData.rates?.[categoryKey]?.enabled === true;
         });
 
@@ -504,16 +568,16 @@ const PackageRates = () => {
           noofnight: formData.noOfNights || "",
           packageAccommodationrateDetailsDTO: enabledCategories.map(
             (category) => {
-              const categoryKey = category.packageCategoryId || category.id;
+              const categoryKey = (category.packageCategoryId || category.id).toString();
+              const occRate = formData.rates?.[categoryKey]?.occupancyRates?.[occupancy.id] || {};
               return {
-                packagecategoryId: categoryKey.toString(),
+                packagecategoryId: categoryKey,
                 minpax: occupancy.minimumPax,
                 maxpax: occupancy.maximumPax,
-                hotelId: [],
-                adultRate: formData.rates?.[categoryKey]?.adultRate || "",
-                childRate: formData.rates?.[categoryKey]?.childWithBed || "",
-                childRateWithoutbed:
-                  formData.rates?.[categoryKey]?.childWithoutBed || "",
+                hotelId: occRate.hotelIds || [],
+                adultRate: occRate.adultRate || "",
+                childRate: occRate.childWithBed || "",
+                childRateWithoutbed: occRate.childWithoutBed || "",
               };
             }
           ),
@@ -574,7 +638,7 @@ const PackageRates = () => {
 
       const packageAccommodationrateDTO = occupancyList.map((occupancy) => {
         const enabledCategories = packageCategories.filter((category) => {
-          const categoryKey = category.packageCategoryId || category.id;
+          const categoryKey = (category.packageCategoryId || category.id).toString();
           return formData.rates?.[categoryKey]?.enabled === true;
         });
 
@@ -585,16 +649,16 @@ const PackageRates = () => {
           noofnight: formData.noOfNights || "",
           packageAccommodationrateDetailsDTO: enabledCategories.map(
             (category) => {
-              const categoryKey = category.packageCategoryId || category.id;
+              const categoryKey = (category.packageCategoryId || category.id).toString();
+              const occRate = formData.rates?.[categoryKey]?.occupancyRates?.[occupancy.id] || {};
               return {
-                packagecategoryId: categoryKey.toString(),
+                packagecategoryId: categoryKey,
                 minpax: occupancy.minimumPax,
                 maxpax: occupancy.maximumPax,
-                hotelId: [],
-                adultRate: formData.rates?.[categoryKey]?.adultRate || "",
-                childRate: formData.rates?.[categoryKey]?.childWithBed || "",
-                childRateWithoutbed:
-                  formData.rates?.[categoryKey]?.childWithoutBed || "",
+                hotelId: occRate.hotelIds || [],
+                adultRate: occRate.adultRate || "",
+                childRate: occRate.childWithBed || "",
+                childRateWithoutbed: occRate.childWithoutBed || "",
               };
             }
           ),
@@ -644,6 +708,7 @@ const PackageRates = () => {
     setIsAddingValidity(false);
     setIsAddingOccupancy(false);
     setViewMode(false);
+    setShowRateDetails(false);
   };
 
   const openEdit = (item) => {
@@ -651,12 +716,10 @@ const PackageRates = () => {
 
     const rates = {};
     packageCategories.forEach((category) => {
-      const key = category.packageCategoryId || category.id;
+      const key = (category.packageCategoryId || category.id).toString();
       rates[key] = {
         enabled: false,
-        adultRate: "",
-        childWithBed: "",
-        childWithoutBed: "",
+        occupancyRates: {}
       };
     });
 
@@ -664,22 +727,24 @@ const PackageRates = () => {
       item.packageAccommodationrateDTO &&
       item.packageAccommodationrateDTO.length > 0
     ) {
-      const firstAccommodation = item.packageAccommodationrateDTO[0];
-      if (firstAccommodation.packageAccommodationrateDetailsDTO) {
-        firstAccommodation.packageAccommodationrateDetailsDTO.forEach(
-          (detail) => {
-            const categoryKey = detail.packagecategoryId;
-            if (rates[categoryKey]) {
-              rates[categoryKey] = {
-                enabled: true,
-                adultRate: detail.adultRate || "",
-                childWithBed: detail.childRate || "",
-                childWithoutBed: detail.childRateWithoutbed || "",
-              };
+      item.packageAccommodationrateDTO.forEach((accommodation) => {
+        const occupancyId = accommodation.packageaccommodationrateId || `old_${Math.random()}`;
+        if (accommodation.packageAccommodationrateDetailsDTO) {
+          accommodation.packageAccommodationrateDetailsDTO.forEach((detail) => {
+            const categoryKey = detail.packagecategoryId.toString();
+            if (!rates[categoryKey]) {
+              rates[categoryKey] = { enabled: true, occupancyRates: {} };
             }
-          }
-        );
-      }
+            rates[categoryKey].enabled = true;
+            rates[categoryKey].occupancyRates[occupancyId] = {
+              hotelIds: detail.hotelId || [],
+              adultRate: detail.adultRate || "",
+              childWithBed: detail.childRate || "",
+              childWithoutBed: detail.childRateWithoutbed || "",
+            };
+          });
+        }
+      });
     }
 
     const countryId = item.packageAccommodationrateDTO?.[0]?.countryId || "";
@@ -723,9 +788,26 @@ const PackageRates = () => {
     // Fetch places for the countryId
     if (countryId) {
       cityList(countryId);
+      fetchCountries("").then((options) => {
+        const matched = (options || []).find(
+          (c) => String(c.value) === String(countryId)
+        );
+        if (matched) {
+          setSelectedCountryOption(matched);
+        }
+      });
+    } else {
+      setSelectedCountryOption(null);
+      fetchCountries("");
     }
 
     setShowModal(true);
+    setShowRateDetails(true);
+
+    // Fetch data on modal open
+    marketTypeList();
+    fetchPackageDetails();
+    fetchHotels("");
   };
 
   const handleDelete = async (item) => {
@@ -789,12 +871,10 @@ const PackageRates = () => {
 
     const rates = {};
     packageCategories.forEach((category) => {
-      const key = category.packageCategoryId || category.id;
+      const key = (category.packageCategoryId || category.id).toString();
       rates[key] = {
         enabled: false,
-        adultRate: "",
-        childWithBed: "",
-        childWithoutBed: "",
+        occupancyRates: {}
       };
     });
 
@@ -802,22 +882,24 @@ const PackageRates = () => {
       item.packageAccommodationrateDTO &&
       item.packageAccommodationrateDTO.length > 0
     ) {
-      const firstAccommodation = item.packageAccommodationrateDTO[0];
-      if (firstAccommodation.packageAccommodationrateDetailsDTO) {
-        firstAccommodation.packageAccommodationrateDetailsDTO.forEach(
-          (detail) => {
-            const categoryKey = detail.packagecategoryId;
-            if (rates[categoryKey]) {
-              rates[categoryKey] = {
-                enabled: true,
-                adultRate: detail.adultRate || "",
-                childWithBed: detail.childRate || "",
-                childWithoutBed: detail.childRateWithoutbed || "",
-              };
+      item.packageAccommodationrateDTO.forEach((accommodation) => {
+        const occupancyId = `copy_${Math.random()}`; // Use random ID for copy
+        if (accommodation.packageAccommodationrateDetailsDTO) {
+          accommodation.packageAccommodationrateDetailsDTO.forEach((detail) => {
+            const categoryKey = detail.packagecategoryId.toString();
+            if (!rates[categoryKey]) {
+              rates[categoryKey] = { enabled: true, occupancyRates: {} };
             }
-          }
-        );
-      }
+            rates[categoryKey].enabled = true;
+            rates[categoryKey].occupancyRates[occupancyId] = {
+              hotelIds: detail.hotelId || [],
+              adultRate: detail.adultRate || "",
+              childWithBed: detail.childRate || "",
+              childWithoutBed: detail.childRateWithoutbed || "",
+            };
+          });
+        }
+      });
     }
 
     setFormData({
@@ -852,7 +934,14 @@ const PackageRates = () => {
     setValidityList(validityList);
     setOccupancyList(occupancyList);
     setValidationErrors({});
+    setShowRateDetails(false);
     setShowModal(true);
+
+    // Fetch data on modal open
+    fetchCountries("");
+    marketTypeList();
+    fetchPackageDetails();
+    fetchHotels("");
   };
 
   const addValidityPeriod = useCallback(
@@ -960,36 +1049,72 @@ const PackageRates = () => {
   };
 
   const handleSharingTypeChange = (categoryId, checked) => {
-    setFormData((prev) => ({
-      ...prev,
-      rates: {
-        ...prev.rates,
-        [categoryId]: {
-          ...prev.rates[categoryId],
-          enabled: checked,
-        },
-      },
-    }));
+    setFormData((prev) => {
+      const newRates = { ...prev.rates };
+      if (!newRates[categoryId]) {
+        newRates[categoryId] = { enabled: false, occupancyRates: {} };
+      }
+      
+      newRates[categoryId] = {
+        ...newRates[categoryId],
+        enabled: checked,
+      };
+
+      // Initialize occupancyRates for this category if not exists
+      occupancyList.forEach(occ => {
+        if (!newRates[categoryId].occupancyRates[occ.id]) {
+          newRates[categoryId].occupancyRates[occ.id] = {
+            hotelIds: [],
+            adultRate: "",
+            childWithBed: "",
+            childWithoutBed: ""
+          };
+        }
+      });
+
+      return { ...prev, rates: newRates };
+    });
   };
 
-  const handleRateChange = (categoryId, rateType, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      rates: {
-        ...prev.rates,
-        [categoryId]: {
-          ...prev.rates[categoryId],
-          [rateType]: value,
-        },
-      },
-    }));
+  const handleOccupancyRateChange = (categoryId, occupancyId, field, value) => {
+    setFormData((prev) => {
+      const newRates = { ...prev.rates };
+      if (!newRates[categoryId]) {
+        newRates[categoryId] = { enabled: false, occupancyRates: {} };
+      }
+      if (!newRates[categoryId].occupancyRates[occupancyId]) {
+        newRates[categoryId].occupancyRates[occupancyId] = {
+          hotelIds: [],
+          adultRate: "",
+          childWithBed: "",
+          childWithoutBed: ""
+        };
+      }
+      
+      newRates[categoryId].occupancyRates[occupancyId][field] = value;
+      return { ...prev, rates: newRates };
+    });
+  };
+
+  const handleHotelChange = (categoryId, occupancyId, selectedOptions) => {
+    const hotelIds = selectedOptions ? selectedOptions.map(opt => opt.value) : [];
+    
+    // Ensure selected hotels are in cache
+    if (selectedOptions) {
+      setHotelCache(prev => {
+        const newCache = { ...prev };
+        selectedOptions.forEach(opt => {
+          newCache[opt.value] = opt.label;
+        });
+        return newCache;
+      });
+    }
+
+    handleOccupancyRateChange(categoryId, occupancyId, "hotelIds", hotelIds);
   };
 
   useEffect(() => {
-    fetchPackageRatesList();
-    countryList();
-    marketTypeList();
-    fetchPackageDetails();
+    // API calls moved to action buttons (Create/Edit) as per requirement
   }, []);
 
   useEffect(() => {
@@ -1437,9 +1562,26 @@ const PackageRates = () => {
                           {validationErrors.occupancyList}
                         </div>
                       )}
+                      
+                      {!showRateDetails && (
+                        <div className="d-flex justify-content-end mt-4">
+                          <Button 
+                            variant="primary" 
+                            onClick={() => {
+                              // Optional: validate top sections before showing details
+                              setShowRateDetails(true);
+                            }}
+                          >
+                            Add Rates
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </Col>
                 </Row>
+
+                {showRateDetails && (
+                  <>
 
                 <div className="mb-3">
                   <h6 className="border-bottom pb-2 mb-3">RATE DETAILS</h6>
@@ -1449,19 +1591,33 @@ const PackageRates = () => {
                         <Form.Label>
                           Country <span className="text-danger">*</span>
                         </Form.Label>
-                        <SearchableSelect
-                          name="countryId"
-                          value={formData.countryId}
+                        <Select
+                          value={selectedCountryOption}
                           onChange={handleCountryChange}
+                          onInputChange={(inputValue) => {
+                            if (countryDebounceRef.current) {
+                              clearTimeout(countryDebounceRef.current);
+                            }
+                            countryDebounceRef.current = setTimeout(() => {
+                              fetchCountries(inputValue);
+                            }, 400);
+                          }}
+                          filterOption={() => true} // Server-side filtering
                           placeholder="Search and select country"
+                          isSearchable
+                          isClearable
+                          isLoading={isCountryLoading}
                           options={countries}
-                          isInvalid={!!validationErrors.countryId}
-                          disabled={viewMode}
+                          isDisabled={viewMode}
+                          className={`react-select-container ${
+                            validationErrors.countryId ? "is-invalid" : ""
+                          }`}
+                          classNamePrefix="react-select"
                         />
                         {validationErrors.countryId && (
-                          <Form.Control.Feedback type="invalid">
+                          <div className="text-danger small mt-1">
                             {validationErrors.countryId}
-                          </Form.Control.Feedback>
+                          </div>
                         )}
                       </Form.Group>
                     </Col>
@@ -1515,9 +1671,9 @@ const PackageRates = () => {
                           readOnly={viewMode}
                         >
                           <option value="">SELECT</option>
-                          {[...Array(15)].map((_, i) => (
-                            <option key={i + 1} value={i + 1}>
-                              {i + 1}
+                          {[1, 2, 3, 4].map((val) => (
+                            <option key={val} value={val}>
+                              {val}
                             </option>
                           ))}
                         </Form.Select>
@@ -1581,94 +1737,93 @@ const PackageRates = () => {
                             />
                           </Card.Header>
                           <Card.Body>
-                            <Row>
-                              <Col md={12}>
-                                <p className="mb-2">
-                                  Occupancy Type: Select Hotel or Similar
-                                </p>
-                              </Col>
-                            </Row>
-                            <Row>
-                              <Col md={4}>
-                                <Form.Group className="mb-3">
-                                  <Form.Label>Adult Rate per person</Form.Label>
-                                  <Form.Control
-                                    type="number"
-                                    placeholder="Enter rate"
-                                    value={
-                                      formData.rates?.[categoryKey]
-                                        ?.adultRate || ""
-                                    }
-                                    onChange={(e) =>
-                                      handleRateChange(
-                                        categoryKey,
-                                        "adultRate",
-                                        e.target.value
-                                      )
-                                    }
-                                    disabled={
-                                      !formData.rates?.[categoryKey]?.enabled ||
-                                      viewMode
-                                    }
-                                    readOnly={viewMode}
-                                  />
-                                </Form.Group>
-                              </Col>
-                              <Col md={4}>
-                                <Form.Group className="mb-3">
-                                  <Form.Label>
-                                    Child With Bed Rate per person
-                                  </Form.Label>
-                                  <Form.Control
-                                    type="number"
-                                    placeholder="Enter rate"
-                                    value={
-                                      formData.rates?.[categoryKey]
-                                        ?.childWithBed || ""
-                                    }
-                                    onChange={(e) =>
-                                      handleRateChange(
-                                        categoryKey,
-                                        "childWithBed",
-                                        e.target.value
-                                      )
-                                    }
-                                    disabled={
-                                      !formData.rates?.[categoryKey]?.enabled ||
-                                      viewMode
-                                    }
-                                    readOnly={viewMode}
-                                  />
-                                </Form.Group>
-                              </Col>
-                              <Col md={4}>
-                                <Form.Group className="mb-3">
-                                  <Form.Label>
-                                    Child Without Bed Rate per person
-                                  </Form.Label>
-                                  <Form.Control
-                                    type="number"
-                                    placeholder="Enter rate"
-                                    value={
-                                      formData.rates?.[categoryKey]
-                                        ?.childWithoutBed || ""
-                                    }
-                                    onChange={(e) =>
-                                      handleRateChange(
-                                        categoryKey,
-                                        "childWithoutBed",
-                                        e.target.value
-                                      )
-                                    }
-                                    disabled={
-                                      !formData.rates?.[categoryKey]?.enabled ||
-                                      viewMode
-                                    }
-                                    readOnly={viewMode}
-                                  />
-                                </Form.Group>
-                              </Col>
-                            </Row>
+                            {formData.rates?.[categoryKey]?.enabled && (
+                              <div className="table-responsive">
+                                <Table bordered hover size="sm" className="mb-0">
+                                  <thead>
+                                    <tr className="bg-light">
+                                      <th style={{ minWidth: "100px" }}>Occupancy Type</th>
+                                      <th style={{ minWidth: "250px" }}>Select Hotel or Similar</th>
+                                      <th>Adult Rate</th>
+                                      <th>Child With Bed</th>
+                                      <th>Child Without Bed</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {occupancyList.map((occ) => {
+                                      const occRate = formData.rates?.[categoryKey]?.occupancyRates?.[occ.id] || {};
+                                      return (
+                                        <tr key={occ.id}>
+                                          <td className="align-middle fw-semibold">
+                                            {occ.minimumPax} - {occ.maximumPax}
+                                          </td>
+                                          <td className="align-middle">
+                                            <Select
+                                              isMulti
+                                              options={hotelOptions}
+                                              value={(occRate.hotelIds || []).map(id => ({
+                                                value: id,
+                                                label: hotelCache[id] || (isHotelsLoading ? "Loading..." : `Hotel #${id}`)
+                                              }))}
+                                              onChange={(selectedOptions) => handleHotelChange(categoryKey, occ.id, selectedOptions)}
+                                              onInputChange={(inputValue) => {
+                                                if (hotelDebounceRef.current) clearTimeout(hotelDebounceRef.current);
+                                                hotelDebounceRef.current = setTimeout(() => {
+                                                  fetchHotels(inputValue);
+                                                }, 400);
+                                              }}
+                                              filterOption={() => true}
+                                              isLoading={isHotelsLoading}
+                                              placeholder="Click to Choose..."
+                                              isDisabled={viewMode}
+                                              className="react-select-container"
+                                              classNamePrefix="react-select"
+                                              menuPortalTarget={document.body}
+                                              styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
+                                            />
+                                          </td>
+                                          <td className="align-middle">
+                                            <Form.Control
+                                              type="number"
+                                              value={occRate.adultRate || ""}
+                                              onChange={(e) => handleOccupancyRateChange(categoryKey, occ.id, "adultRate", e.target.value)}
+                                              placeholder="0"
+                                              disabled={viewMode}
+                                              readOnly={viewMode}
+                                            />
+                                          </td>
+                                          <td className="align-middle">
+                                            <Form.Control
+                                              type="number"
+                                              value={occRate.childWithBed || ""}
+                                              onChange={(e) => handleOccupancyRateChange(categoryKey, occ.id, "childWithBed", e.target.value)}
+                                              placeholder="0"
+                                              disabled={viewMode}
+                                              readOnly={viewMode}
+                                            />
+                                          </td>
+                                          <td className="align-middle">
+                                            <Form.Control
+                                              type="number"
+                                              value={occRate.childWithoutBed || ""}
+                                              onChange={(e) => handleOccupancyRateChange(categoryKey, occ.id, "childWithoutBed", e.target.value)}
+                                              placeholder="0"
+                                              disabled={viewMode}
+                                              readOnly={viewMode}
+                                            />
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </Table>
+                              </div>
+                            )}
+                            {!formData.rates?.[categoryKey]?.enabled && (
+                              <div className="text-muted text-center py-2 italic text-sm">
+                                Enable sharing option above to enter rates.
+                              </div>
+                            )}
                           </Card.Body>
                         </Card>
                       );
@@ -1688,7 +1843,9 @@ const PackageRates = () => {
                     </div>
                   )}
                 </div>
-              </Form>
+              </>
+            )}
+            </Form>
             </Modal.Body>
             <Modal.Footer>
               {!viewMode && (

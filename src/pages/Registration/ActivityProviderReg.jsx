@@ -203,39 +203,71 @@ const ActivityProviderReg = () => {
   };
 
   const openEdit = async (item) => {
-    setEditing(item);
-    setIsViewMode(false);
-    
-    setFormData({
-      providerName: item.providerName || "",
-      providerCode: item.providerCode || "",
-      firstName: item.firstName || "",
-      lastName: item.lastName || "",
-      mobileNo: item.mobileNo || "",
-      emailId: item.emailId || "",
-      address: item.address || "",
-    });
+    setIsLoading(true);
+    try {
+      const response = await axiosInstance.get(`/api/activityProvider/${item.providerId}`);
+      const data = response.data;
+      
+      if (!data) {
+        toast.error("Failed to fetch provider details");
+        return;
+      }
 
-    setValidationErrors({});
-    setShowModal(true);
+      setEditing(data);
+      setIsViewMode(false);
+      
+      setFormData({
+        providerName: data.providerName || "",
+        providerCode: data.providerCode || "",
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
+        mobileNo: data.mobileNo || "",
+        emailId: data.emailId || "",
+        address: data.address || "",
+      });
+
+      setValidationErrors({});
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error fetching provider details:", error);
+      toast.error("Failed to fetch provider details");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleView = async (item) => {
-    setEditing(item);
-    setIsViewMode(true);
-    
-    setFormData({
-      providerName: item.providerName || "",
-      providerCode: item.providerCode || "",
-      firstName: item.firstName || "",
-      lastName: item.lastName || "",
-      mobileNo: item.mobileNo || "",
-      emailId: item.emailId || "",
-      address: item.address || "",
-    });
+    setIsLoading(true);
+    try {
+      const response = await axiosInstance.get(`/api/activityProvider/${item.providerId}`);
+      const data = response.data;
 
-    setValidationErrors({});
-    setShowModal(true);
+      if (!data) {
+        toast.error("Failed to fetch provider details");
+        return;
+      }
+
+      setEditing(data);
+      setIsViewMode(true);
+      
+      setFormData({
+        providerName: data.providerName || "",
+        providerCode: data.providerCode || "",
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
+        mobileNo: data.mobileNo || "",
+        emailId: data.emailId || "",
+        address: data.address || "",
+      });
+
+      setValidationErrors({});
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error fetching provider details:", error);
+      toast.error("Failed to fetch provider details");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDelete = (item) => {
@@ -534,7 +566,14 @@ const ActivityProviderReg = () => {
           </Card>
 
           {/* Modal */}
-          <Modal show={showModal} onHide={closeModal} centered size="lg">
+          <Modal 
+            show={showModal} 
+            onHide={closeModal} 
+            centered 
+            size="lg"
+            backdrop="static"
+            keyboard={false}
+          >
             <Modal.Header closeButton={!isLoading} style={{ backgroundColor: '#1e3a8a', color: 'white' }}>
               <Modal.Title>
                 {isViewMode

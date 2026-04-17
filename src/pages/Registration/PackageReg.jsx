@@ -457,18 +457,8 @@ const PackageReg = () => {
     fetchPackageTypes();
   }, []);
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    const errors = validateForm(formData);
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
-
-    // Prepare form data payload according to the backend DTO structure
+  const prepareFormDataPayload = () => {
     const formDataPayload = new FormData();
-
-    // Basic package details
     formDataPayload.append("packageName", formData.packageName);
     formDataPayload.append("packageType", formData.packageType);
     formDataPayload.append("packageCode", formData.packageCode);
@@ -478,117 +468,101 @@ const PackageReg = () => {
     formDataPayload.append("currencyId", formData.currencyId);
     formDataPayload.append("arriveCountry", formData.countryId);
 
-    // Arrive places as array of Long values
     if (formData.placeId) {
       formDataPayload.append("arrivePlace", formData.placeId);
     }
 
-    // Include flags as Integer values
     formDataPayload.append("containHotel", formData.containHotel ? 1 : 0);
     formDataPayload.append("containCab", formData.containCab ? 1 : 0);
     formDataPayload.append("containActivity", formData.containActivity ? 1 : 0);
 
-    // Package categories as array with proper indexing
     formData.packageCategory.forEach((category, index) => {
       formDataPayload.append(`packageCategory[${index}]`, String(category));
     });
 
-    // Package itinerary with proper structure
     packageItinearyDTOList.forEach((itinerary, index) => {
-      formDataPayload.append(
-        `packageItinearyDTOList[${index}].day`,
-        itinerary.day
-      );
-      formDataPayload.append(
-        `packageItinearyDTOList[${index}].heading`,
-        itinerary.heading || ""
-      );
-      formDataPayload.append(
-        `packageItinearyDTOList[${index}].placeId`,
-        itinerary.placeId
-      );
-      formDataPayload.append(
-        `packageItinearyDTOList[${index}].dayActivities`,
-        itinerary.dayActivities || ""
-      );
-
-      // Add itinerary image if exists
+      formDataPayload.append(`packageItinearyDTOList[${index}].day`, itinerary.day);
+      formDataPayload.append(`packageItinearyDTOList[${index}].heading`, itinerary.heading || "");
+      formDataPayload.append(`packageItinearyDTOList[${index}].placeId`, itinerary.placeId);
+      formDataPayload.append(`packageItinearyDTOList[${index}].dayActivities`, itinerary.dayActivities || "");
       if (itinerary.packageItinearyImage) {
-        formDataPayload.append(
-          `packageItinearyDTOList[${index}].packageItinearyImage`,
-          itinerary.packageItinearyImage
-        );
+        formDataPayload.append(`packageItinearyDTOList[${index}].packageItinearyImage`, itinerary.packageItinearyImage);
       }
     });
 
-    // Package others with proper structure
     packageOthersDTOList.forEach((other, index) => {
-      formDataPayload.append(
-        `packageOthersDTOList[${index}].otherId`,
-        other.otherId
-      );
-      formDataPayload.append(
-        `packageOthersDTOList[${index}].type`,
-        other.type || ""
-      );
-      formDataPayload.append(
-        `packageOthersDTOList[${index}].isDeleted`,
-        other.isDeleted ? "true" : "false"
-      );
+      formDataPayload.append(`packageOthersDTOList[${index}].otherId`, other.otherId);
+      formDataPayload.append(`packageOthersDTOList[${index}].type`, other.type || "");
+      formDataPayload.append(`packageOthersDTOList[${index}].isDeleted`, other.isDeleted ? "true" : "false");
     });
 
-    // Package image if exists
+    formDataPayload.append("liveStatus", formData.status === "true" ? 1 : 0);
+
     if (formData.packageImage) {
       formDataPayload.append("packageImage", formData.packageImage);
     }
 
+    return formDataPayload;
+  };
+
+  const handleSave = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const errors = validateForm(formData);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
+    const formDataPayload = prepareFormDataPayload();
+
     try {
       setIsLoading(true);
-      console.log("package save payload::", formDataPayload);
+      const res = await axiosInstance.post("/api/TravelPackage/save", formDataPayload, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
-      let packageSaveRes;
-      if (editing) {
-        // Update existing package
-        packageSaveRes = await axiosInstance.put(
-          `/api/TravelPackage/${editing.packageId}`,
-          formDataPayload,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
-        );
-      } else {
-        // Create new package
-        packageSaveRes = await axiosInstance.post(
-          "/api/TravelPackage/save",
-          formDataPayload,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
-        );
-      }
-
-      if (packageSaveRes.data) {
-        toast.success(
-          editing
-            ? "Package updated successfully!"
-            : "Package added successfully!"
-        );
+      if (res.data) {
+        toast.success("Package added successfully!");
         setValidationErrors({});
-        setEditing(null);
         await fetchPackageList(page, search);
         closeModal();
       } else {
         toast.error("Failed to save data!!");
       }
     } catch (error) {
-      toast.error(
-        `Error!! Something went wrong: ${error.response?.data?.message || error.message
-        }`
-      );
+      toast.error(`Error!! Something went wrong: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdatePackage = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const errors = validateForm(formData);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
+    const formDataPayload = prepareFormDataPayload();
+
+    try {
+      setIsLoading(true);
+      const res = await axiosInstance.put(`/api/TravelPackage/${editing.packageId}`, formDataPayload, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (res.data) {
+        toast.success("Package updated successfully!");
+        setValidationErrors({});
+        setEditing(null);
+        await fetchPackageList(page, search);
+        closeModal();
+      } else {
+        toast.error("Failed to update data!!");
+      }
+    } catch (error) {
+      toast.error(`Error!! Something went wrong: ${error.response?.data?.message || error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -811,7 +785,7 @@ const PackageReg = () => {
   };
 
   // CRUD Operations
-  const openEdit = async (item) => {
+  const fetchAndShowDetail = async (item, viewMode = false) => {
     try {
       setIsLoading(true);
       const res = await axiosInstance.get(`/api/TravelPackage/${item.packageId}`);
@@ -819,7 +793,7 @@ const PackageReg = () => {
       
       const data = res.data;
       setEditing(data);
-      setIsViewMode(false);
+      setIsViewMode(viewMode);
       
       setFormData({
         packageName: data.packageName || "",
@@ -828,142 +802,13 @@ const PackageReg = () => {
         currencyId: data.currencyId || "",
         packageType: data.packageType || "",
         packageCategory: Array.isArray(data.packageCategory) ? data.packageCategory : (data.packageCategory ? [data.packageCategory] : []),
-        packageImage: data.packageImagePath || null, // Preserve existing image
+        packageImage: data.packageImagePath || null,
         containHotel: data.containHotel === 1 || data.containHotel === true,
         containCab: data.containCab === 1 || data.containCab === true,
-        containActivity:
-          data.containActivity === 1 || data.containActivity === true,
+        containActivity: data.containActivity === 1 || data.containActivity === true,
         status: data.liveStatus === true ? "true" : "false",
-        countryId: data.arriveCountry || data.countryId || "", // Map from arriveCountry
-        placeId:
-          Array.isArray(data.arrivePlace) && data.arrivePlace.length > 0
-            ? data.arrivePlace[0]
-            : data.placeId || "", // Map from arrivePlace array
-        overview: data.overview || "",
-        noOfNights: data.noOfNights || "1",
-      });
-
-      // Load places for the selected country when editing
-      const countryId = data.arriveCountry || data.countryId;
-      if (countryId) {
-        cityList(countryId);
-        // Preload country options and set selected country option
-        fetchCountries("").then((options) => {
-          const matched = (options || []).find(
-            (c) => String(c.id) === String(countryId)
-          );
-          if (matched) {
-            setSelectedCountryOption({ value: matched.id, label: matched.name });
-          }
-        });
-      } else {
-        setSelectedCountryOption(null);
-        fetchCountries("");
-      }
-
-      // Load itinerary data if available
-      if (
-        data.packageItinearyDTOList &&
-        Array.isArray(data.packageItinearyDTOList)
-      ) {
-        const updatedItinerary = data.packageItinearyDTOList.map((itinerary) => ({
-          day: itinerary.day,
-          heading: itinerary.heading || "",
-          placeId: itinerary.placeId || "",
-          dayActivities: itinerary.dayActivities || "",
-          packageItinearyImage:
-            itinerary.packageItinearyImagePath ||
-            itinerary.packageItinearyImage ||
-            null, // Use image path
-        }));
-        setPackageItinearyDTOList(updatedItinerary);
-      } else {
-        // Set default itinerary if none exists
-        setPackageItinearyDTOList([
-          {
-            day: 1,
-            heading: "",
-            placeId: "",
-            dayActivities: "",
-            packageItinearyImage: null,
-          },
-        ]);
-      }
-
-      // Load others data - merge with terms and conditions data
-      if (
-        data.packageOthersDTOList &&
-        Array.isArray(data.packageOthersDTOList) &&
-        termsAndConditions.length > 0
-      ) {
-        const mergedOthersList = termsAndConditions.map((term) => {
-          // Find matching item from backend data
-          const backendItem = data.packageOthersDTOList.find(
-            (backend) => backend.otherId === term.termsAndConditionsId
-          );
-
-          return {
-            otherId: term.termsAndConditionsId,
-            type: term.description,
-            descriptionType: term.descriptionType,
-            termsCode: term.termsCode,
-            isDeleted: backendItem
-              ? backendItem.isDeleted === true || backendItem.isDeleted === "true"
-              : true, // Default to selected if not found in backend
-          };
-        });
-        setPackageOthersDTOList(mergedOthersList);
-      } else {
-        // Set default others data from terms and conditions
-        if (termsAndConditions.length > 0) {
-          const defaultOthersList = termsAndConditions.map((term) => ({
-            otherId: term.termsAndConditionsId,
-            type: term.description,
-            descriptionType: term.descriptionType,
-            termsCode: term.termsCode,
-            isDeleted: false,
-          }));
-          setPackageOthersDTOList(defaultOthersList);
-        }
-      }
-
-      setValidationErrors({});
-      setShowModal(true);
-    } catch (error) {
-      console.error("Error fetching package details:", error);
-      toast.error("Failed to load package details");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleView = async (item) => {
-    try {
-      setIsLoading(true);
-      const res = await axiosInstance.get(`/api/TravelPackage/${item.packageId}`);
-      if (!res.data) throw new Error("No data received from server");
-      
-      const data = res.data;
-      setEditing(data);
-      setIsViewMode(true);
-      setFormData({
-        packageName: data.packageName || "",
-        packageCode: data.packageCode || "",
-        packageBasicRate: data.packageBasicRate || "",
-        currencyId: data.currencyId || "",
-        packageType: data.packageType || "",
-        packageCategory: Array.isArray(data.packageCategory) ? data.packageCategory : (data.packageCategory ? [data.packageCategory] : []),
-        packageImage: data.packageImagePath || null, // Preserve existing image
-        containHotel: data.containHotel === 1 || data.containHotel === true,
-        containCab: data.containCab === 1 || data.containCab === true,
-        containActivity:
-          data.containActivity === 1 || data.containActivity === true,
-        status: data.liveStatus === true ? "true" : "false",
-        countryId: data.arriveCountry || data.countryId || "", // Map from arriveCountry
-        placeId:
-          Array.isArray(data.arrivePlace) && data.arrivePlace.length > 0
-            ? data.arrivePlace[0]
-            : data.placeId || "", // Map from arrivePlace array
+        countryId: data.arriveCountry || data.countryId || "",
+        placeId: Array.isArray(data.arrivePlace) && data.arrivePlace.length > 0 ? data.arrivePlace[0] : (data.placeId || ""),
         overview: data.overview || "",
         noOfNights: data.noOfNights || "1",
       });
@@ -973,13 +818,13 @@ const PackageReg = () => {
       if (countryId) {
         cityList(countryId);
         fetchCountries("").then((options) => {
-          const matched = (options || []).find(
-            (c) => String(c.id) === String(countryId)
-          );
+          const matched = (options || []).find(c => String(c.id) === String(countryId));
           if (matched) {
             setSelectedCountryOption({ value: matched.id, label: matched.name });
           }
         });
+      } else {
+        setSelectedCountryOption(null);
       }
 
       // Load itinerary data
@@ -992,6 +837,8 @@ const PackageReg = () => {
           packageItinearyImage: itinerary.packageItinearyImagePath || itinerary.packageItinearyImage || null,
         }));
         setPackageItinearyDTOList(updatedItinerary);
+      } else {
+        setPackageItinearyDTOList([{ day: 1, heading: "", placeId: "", dayActivities: "", packageItinearyImage: null }]);
       }
 
       // Load others data
@@ -1325,13 +1172,13 @@ const PackageReg = () => {
                           <FaEdit
                             className="text-primary edit"
                             style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => openEdit(item)}
+                            onClick={() => fetchAndShowDetail(item, false)}
                             title="Edit"
                           />
                           <FaEye
                             className="text-info view"
                             style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => handleView(item)}
+                            onClick={() => fetchAndShowDetail(item, true)}
                             title="View"
                           />
                           <FaCopy
@@ -2276,7 +2123,7 @@ const PackageReg = () => {
                 {isViewMode ? "Close" : "Cancel"}
               </Button>
               {!isViewMode && (
-                <Button variant="success" onClick={handleSave}>
+                <Button variant="success" onClick={editing ? handleUpdatePackage : handleSave}>
                   <i className="fas fa-arrow-right me-2"></i>
                   {editing ? "Update" : "Create"}
                 </Button>

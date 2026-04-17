@@ -13,6 +13,7 @@ import {
   Row,
   Col,
   Spinner,
+  Form
 } from "react-bootstrap";
 import {
   FaKey,
@@ -36,7 +37,7 @@ export default function TopBar() {
   const [cartItems, setCartItems] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
   const [cartCount, setCartCount] = useState(0);
-  
+  const [markups, setMarkups] = useState({});
 
   const getCartAgentId = () =>
     sessionStorage.getItem("makeYourOwnPackageAgentId") ||
@@ -63,209 +64,162 @@ export default function TopBar() {
     if (!activity) return null;
 
     return (
-      <Card key={key} className="shadow-sm">
-        <Card.Body>
-          <div className="d-flex justify-content-between align-items-start mb-2">
-            <div>
-              <Badge bg="info" className="mb-2">
-                Activity
-              </Badge>
-              <h6 className="fw-bold mb-2">
-                {activity.activityName || "Activity"}
-              </h6>
+      <Card key={key} className="border-0 shadow-sm mb-3 overflow-hidden" style={{ borderRadius: "12px", borderLeft: "4px solid #0dcaf0" }}>
+        <Card.Body className="p-3">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div className="d-flex align-items-center gap-2">
+              <div className="bg-light p-2 rounded-3 text-info">
+                <FaTicketAlt size={18} />
+              </div>
+              <div>
+                <span className="text-muted x-small text-uppercase fw-bold ls-1" style={{ fontSize: "10px" }}>Activity</span>
+                <h6 className="fw-bold mb-0 text-dark">
+                  {activity.activityName || "Activity"}
+                </h6>
+              </div>
             </div>
             <Button
-              variant="outline-danger"
-              size="sm"
+              variant="link"
+              className="text-danger p-0 text-decoration-none small d-flex align-items-center"
               onClick={() => handleRemoveFromCart(item)}
             >
-              <FaTrash className="me-1" /> Remove
+              <FaTrash size={12} className="me-1" /> <span style={{ fontSize: "13px" }}>Remove</span>
             </Button>
           </div>
 
-          <Row className="g-2 small text-muted">
-            <Col sm={6} className="d-flex align-items-center">
-              <FaTicketAlt className="me-2 text-primary" />
-              <span>
-                <strong>Date:</strong> {activity.activityDate || "-"}
-              </span>
+          <Row className="g-3 align-items-end">
+            <Col md={8}>
+              <Row className="g-2 text-muted" style={{ fontSize: "13px" }}>
+                <Col xs={6} className="d-flex align-items-center">
+                  <FaCalendarAlt className="me-2 opacity-50" />
+                  <span>{activity.activityDate || "-"}</span>
+                </Col>
+                <Col xs={6} className="d-flex align-items-center">
+                  <FaUsers className="me-2 opacity-50" />
+                  <span>{activity.adult || 0} Adults, {activity.child || 0} Children</span>
+                </Col>
+                <Col xs={12} className="d-flex align-items-center">
+                  <FaMapMarkerAlt className="me-2 opacity-50" />
+                  <span className="text-truncate">Rate: <span className="text-dark fw-bold">AED {activity.totalRate || "-"}</span></span>
+                </Col>
+              </Row>
             </Col>
-            <Col sm={6} className="d-flex align-items-center">
-              <FaUsers className="me-2 text-success" />
-              <span>
-                <strong>Adults:</strong> {activity.adult ?? "-"}
-              </span>
-            </Col>
-            <Col sm={6} className="d-flex align-items-center">
-              <FaChild className="me-2 text-warning" />
-              <span>
-                <strong>Children:</strong> {activity.child ?? "-"}
-              </span>
-            </Col>
-            <Col sm={6} className="d-flex align-items-center">
-              <FaMapMarkerAlt className="me-2 text-danger" />
-              <span>
-                <strong>Country ID:</strong> {activity.nativeCountryId || "-"}
-              </span>
+            <Col md={4}>
+              <div className="bg-light p-2 rounded-3 border">
+                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ENTER MARKUP %</Form.Label>
+                <div className="input-group input-group-sm">
+                  <Form.Control
+                    type="number"
+                    placeholder="0"
+                    className="fw-bold text-primary shadow-none border-0 bg-transparent"
+                    style={{ fontSize: "15px" }}
+                    value={markups[getCartKey(item)] || ""}
+                    onChange={(e) =>
+                      setMarkups((prev) => ({
+                        ...prev,
+                        [getCartKey(item)]: e.target.value,
+                      }))
+                    }
+                  />
+                  <span className="input-group-text bg-transparent border-0 text-muted fw-bold">%</span>
+                </div>
+              </div>
             </Col>
           </Row>
-
-          {Array.isArray(activity.childAge) && activity.childAge.length > 0 && (
-            <div className="mt-2 small text-muted">
-              <strong>Child Ages:</strong> {activity.childAge.join(", ")}
-            </div>
-          )}
         </Card.Body>
       </Card>
     );
   };
 
   const renderHotelItem = (item, key) => {
-    console.log("renderHotelItem:::", item);
     const hotel = item.hotel || {};
-    const meta = hotel.meta || {};
     const details = hotel.details || {};
 
-    // Get values from hotel or details
     const hotelName = hotel.hotelName || "Hotel";
-    const hotelAddress = hotel.hotelAddress || details.hotelAddress || "";
     const checkIn = hotel.checkIn || details.checkInDate || details.checkIn || "";
     const checkOut = hotel.checkOut || details.checkOutDate || details.checkOut || "";
     const roomCategory = hotel.roomCategory || details.roomCategory || "";
     const roomType = hotel.roomType || details.mealPlan || "";
     const totalRate = hotel.totalRate || "";
     
-    // Calculate adult and child counts from searchRoomDTOs
     const searchRoomDTOs = hotel.searchRoomDTOs || details.searchRoomDTOs || [];
     let totalAdults = 0;
     let totalChildren = 0;
-    let childAges = [];
     
     if (searchRoomDTOs.length > 0) {
-      // Sum up adults and children from all rooms
       searchRoomDTOs.forEach((room) => {
-        const adults = parseInt(room.adult || room.adults || 0);
-        const children = parseInt(room.child || room.children || 0);
-        totalAdults += adults;
-        totalChildren += children;
-        
-        // Collect child ages
-        if (room.childAge) {
-          if (Array.isArray(room.childAge)) {
-            childAges.push(...room.childAge);
-          } else {
-            childAges.push(room.childAge);
-          }
-        }
+        totalAdults += parseInt(room.adult || room.adults || 0);
+        totalChildren += parseInt(room.child || room.children || 0);
       });
     } else {
-      // Fallback to hotel-level properties if searchRoomDTOs is not available
       totalAdults = parseInt(hotel.adult || details.adult || 0);
       totalChildren = parseInt(hotel.child || details.child || 0);
-      
-      // Handle childAges from hotel level
-      if (hotel.childAge) {
-        childAges = Array.isArray(hotel.childAge) ? hotel.childAge : [hotel.childAge];
-      } else if (hotel.childAges) {
-        childAges = Array.isArray(hotel.childAges) ? hotel.childAges : [hotel.childAges];
-      } else if (details.childAge) {
-        childAges = Array.isArray(details.childAge) ? details.childAge : [details.childAge];
-      } else if (details.childAges) {
-        childAges = Array.isArray(details.childAges) ? details.childAges : [details.childAges];
-      }
     }
 
     return (
-      <Card key={key} className="shadow-sm">
-        <Card.Body>
-          <div className="d-flex justify-content-between align-items-start mb-2">
-            <div>
-              <Badge bg="primary" className="mb-2">
-                Hotel
-              </Badge>
-              <h6 className="fw-bold mb-2">
-                {hotelName}
-              </h6>
+      <Card key={key} className="border-0 shadow-sm mb-3 overflow-hidden" style={{ borderRadius: "12px", borderLeft: "4px solid #0d6efd" }}>
+        <Card.Body className="p-3">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div className="d-flex align-items-center gap-2">
+              <div className="bg-light p-2 rounded-3 text-primary">
+                <FaBed size={18} />
+              </div>
+              <div>
+                <span className="text-muted x-small text-uppercase fw-bold ls-1" style={{ fontSize: "10px" }}>Hotel</span>
+                <h6 className="fw-bold mb-0 text-dark">{hotelName}</h6>
+              </div>
             </div>
             <Button
-              variant="outline-danger"
-              size="sm"
+              variant="link"
+              className="text-danger p-0 text-decoration-none small d-flex align-items-center"
               onClick={() => handleRemoveFromCart(item)}
             >
-              <FaTrash className="me-1" /> Remove
+              <FaTrash size={12} className="me-1" /> <span style={{ fontSize: "13px" }}>Remove</span>
             </Button>
           </div>
 
-          <Row className="g-2 small text-muted">
-            {hotelAddress && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaMapMarkerAlt className="me-2 text-danger" />
-                <span>
-                  <strong>Address:</strong> {hotelAddress}
-                </span>
-              </Col>
-            )}
-            {checkIn && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaCalendarAlt className="me-2 text-primary" />
-                <span>
-                  <strong>Check-in:</strong> {checkIn}
-                </span>
-              </Col>
-            )}
-            {checkOut && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaCalendarAlt className="me-2 text-primary" />
-                <span>
-                  <strong>Check-out:</strong> {checkOut}
-                </span>
-              </Col>
-            )}
-            {roomCategory && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaBed className="me-2 text-success" />
-                <span>
-                  <strong>Room:</strong> {roomCategory}
-                </span>
-              </Col>
-            )}
-            {roomType && (
-              <Col sm={6} className="d-flex align-items-center">
-                <span>
-                  <strong>Meal Plan:</strong> {roomType}
-                </span>
-              </Col>
-            )}
-             {totalRate && (
-              <Col sm={6} className="d-flex align-items-center">
-                <span>
-                  <strong>Total Rate:</strong>  AED  {totalRate}
-                </span>
-              </Col>
-            )}
-            {totalAdults > 0 && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaUsers className="me-2 text-success" />
-                <span>
-                  <strong>Adults:</strong> {totalAdults}
-                </span>
-              </Col>
-            )}
-            {totalChildren > 0 && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaChild className="me-2 text-warning" />
-                <span>
-                  <strong>Children:</strong> {totalChildren}
-                </span>
-              </Col>
-            )}
+          <Row className="g-3 align-items-end">
+            <Col md={8}>
+              <div className="mb-2 border-bottom pb-2">
+                <span className="text-muted small d-block">Room & Plan</span>
+                <span className="fw-bold small text-dark">{roomCategory} • {roomType}</span>
+              </div>
+              <Row className="g-2 text-muted" style={{ fontSize: "13px" }}>
+                <Col xs={6} className="d-flex align-items-center">
+                  <FaCalendarAlt className="me-2 opacity-50" />
+                  <span>{checkIn} → {checkOut}</span>
+                </Col>
+                <Col xs={6} className="d-flex align-items-center">
+                  <FaUsers className="me-2 opacity-50" />
+                  <span>{totalAdults} Adults {totalChildren > 0 ? `, ${totalChildren} Child` : ""}</span>
+                </Col>
+                <Col xs={12} className="d-flex align-items-center mt-2">
+                  <span className="text-muted">Total Rate: <span className="text-dark fw-bold">AED {totalRate}</span></span>
+                </Col>
+              </Row>
+            </Col>
+            <Col md={4}>
+              <div className="bg-light p-2 rounded-3 border">
+                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ENTER MARKUP %</Form.Label>
+                <div className="input-group input-group-sm">
+                  <Form.Control
+                    type="number"
+                    placeholder="0"
+                    className="fw-bold text-primary shadow-none border-0 bg-transparent"
+                    style={{ fontSize: "15px" }}
+                    value={markups[getCartKey(item)] || ""}
+                    onChange={(e) =>
+                      setMarkups((prev) => ({
+                        ...prev,
+                        [getCartKey(item)]: e.target.value,
+                      }))
+                    }
+                  />
+                  <span className="input-group-text bg-transparent border-0 text-muted fw-bold">%</span>
+                </div>
+              </div>
+            </Col>
           </Row>
-
-          {childAges.length > 0 && (
-            <div className="mt-2 small text-muted">
-              <strong>Child Ages:</strong> {childAges.join(", ")}
-            </div>
-          )}
         </Card.Body>
       </Card>
     );
@@ -275,101 +229,73 @@ export default function TopBar() {
     const cab = item.cab || {};
     const cabName = cab.cabName || cab.vehicleName || "Transfer";
     const pickupDate = cab.pickupDate || "";
-    const dropoffDate = cab.dropoffDate || "";
     const adult = cab.adult || "";
     const child = cab.child || "";
     
-    // Handle childAge - could be array or string
-    let childAges = [];
-    if (cab.childAge) {
-      childAges = Array.isArray(cab.childAge) ? cab.childAge : [cab.childAge];
-    } else if (cab.childAges) {
-      childAges = Array.isArray(cab.childAges) ? cab.childAges : [cab.childAges];
-    }
-    
     return (
-      <Card key={key} className="shadow-sm">
-        <Card.Body>
-          <div className="d-flex justify-content-between align-items-start mb-2">
-            <div>
-              <Badge bg="secondary" className="mb-2">
-                Transfer
-              </Badge>
-              <h6 className="fw-bold mb-2">{cabName}</h6>
+      <Card key={key} className="border-0 shadow-sm mb-3 overflow-hidden" style={{ borderRadius: "12px", borderLeft: "4px solid #6c757d" }}>
+        <Card.Body className="p-3">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div className="d-flex align-items-center gap-2">
+              <div className="bg-light p-2 rounded-3 text-secondary">
+                <FaMapMarkerAlt size={18} />
+              </div>
+              <div>
+                <span className="text-muted x-small text-uppercase fw-bold ls-1" style={{ fontSize: "10px" }}>Transfer</span>
+                <h6 className="fw-bold mb-0 text-dark">{cabName}</h6>
+              </div>
             </div>
             <Button
-              variant="outline-danger"
-              size="sm"
+              variant="link"
+              className="text-danger p-0 text-decoration-none small d-flex align-items-center"
               onClick={() => handleRemoveFromCart(item)}
             >
-              <FaTrash className="me-1" /> Remove
+              <FaTrash size={12} className="me-1" /> <span style={{ fontSize: "13px" }}>Remove</span>
             </Button>
           </div>
 
-          <Row className="g-2 small text-muted">
-            {cab.pickupLocation && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaMapMarkerAlt className="me-2 text-primary" />
-                <span>
-                  <strong>Pickup:</strong> {cab.pickupLocation}
-                </span>
-              </Col>
-            )}
-            {pickupDate && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaCalendarAlt className="me-2 text-primary" />
-                <span>
-                  <strong>Pickup Date:</strong> {pickupDate}
-                </span>
-              </Col>
-            )}
-            {cab.dropoffLocation && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaMapMarkerAlt className="me-2 text-success" />
-                <span>
-                  <strong>Dropoff:</strong> {cab.dropoffLocation}
-                </span>
-              </Col>
-            )}
-            {dropoffDate && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaCalendarAlt className="me-2 text-success" />
-                <span>
-                  <strong>Dropoff Date:</strong> {dropoffDate}
-                </span>
-              </Col>
-            )}
-            {adult && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaUsers className="me-2 text-success" />
-                <span>
-                  <strong>Adults:</strong> {adult}
-                </span>
-              </Col>
-            )}
-            {child && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaChild className="me-2 text-warning" />
-                <span>
-                  <strong>Children:</strong> {child}
-                </span>
-              </Col>
-            )}
-            {cab.capacity && (
-              <Col sm={6} className="d-flex align-items-center">
-                <FaUsers className="me-2 text-info" />
-                <span>
-                  <strong>Capacity:</strong> {cab.capacity}
-                </span>
-              </Col>
-            )}
+          <Row className="g-3 align-items-end">
+            <Col md={8}>
+              <div className="mb-2 border-bottom pb-2">
+                <span className="text-muted small d-block">Route</span>
+                <span className="fw-bold small text-dark text-truncate d-block">{cab.pickupLocation} → {cab.dropoffLocation}</span>
+              </div>
+              <Row className="g-2 text-muted" style={{ fontSize: "13px" }}>
+                <Col xs={6} className="d-flex align-items-center">
+                  <FaCalendarAlt className="me-2 opacity-50" />
+                  <span>{pickupDate}</span>
+                </Col>
+                <Col xs={6} className="d-flex align-items-center">
+                  <FaUsers className="me-2 opacity-50" />
+                  <span>{adult} Adults {child > 0 ? `, ${child} Child` : ""}</span>
+                </Col>
+                <Col xs={12} className="d-flex align-items-center mt-2">
+                  <span className="text-muted">Total Rate: <span className="text-dark fw-bold">AED {cab.totalRate}</span></span>
+                </Col>
+              </Row>
+            </Col>
+            <Col md={4}>
+              <div className="bg-light p-2 rounded-3 border">
+                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ENTER MARKUP %</Form.Label>
+                <div className="input-group input-group-sm">
+                  <Form.Control
+                    type="number"
+                    placeholder="0"
+                    className="fw-bold text-primary shadow-none border-0 bg-transparent"
+                    style={{ fontSize: "15px" }}
+                    value={markups[getCartKey(item)] || ""}
+                    onChange={(e) =>
+                      setMarkups((prev) => ({
+                        ...prev,
+                        [getCartKey(item)]: e.target.value,
+                      }))
+                    }
+                  />
+                  <span className="input-group-text bg-transparent border-0 text-muted fw-bold">%</span>
+                </div>
+              </div>
+            </Col>
           </Row>
-
-          {childAges.length > 0 && (
-            <div className="mt-2 small text-muted">
-              <strong>Child Ages:</strong> {childAges.join(", ")}
-            </div>
-          )}
         </Card.Body>
       </Card>
     );
@@ -547,10 +473,38 @@ export default function TopBar() {
       );
 
       if (Array.isArray(response.data) && response.data.length > 0) {
+        // Apply markups to cart data
+        const cartWithMarkups = response.data.map((item) => {
+          const key = getCartKey(item);
+          const markupPercent = parseFloat(markups[key]) || 0;
+          
+          const newItem = JSON.parse(JSON.stringify(item));
+          
+          if (markupPercent > 0) {
+            if (newItem.hotel) {
+              const originalRate = parseFloat(newItem.hotel.totalRate || 0);
+              newItem.hotel.totalRateWithoutmrk = originalRate;
+              newItem.hotel.totalRate = originalRate * (1 + markupPercent / 100);
+              newItem.hotel.markupPercent = markupPercent;
+            } else if (newItem.activity) {
+              const originalRate = parseFloat(newItem.activity.totalRate || 0);
+              newItem.activity.totalRateWithoutmrk = originalRate;
+              newItem.activity.totalRate = originalRate * (1 + markupPercent / 100);
+              newItem.activity.markupPercent = markupPercent;
+            } else if (newItem.cab) {
+              const originalRate = parseFloat(newItem.cab.totalRate || 0);
+              newItem.cab.totalRateWithoutmrk = originalRate;
+              newItem.cab.totalRate = originalRate * (1 + markupPercent / 100);
+              newItem.cab.markupPercent = markupPercent;
+            }
+          }
+          return newItem;
+        });
+
         // Store cart data in sessionStorage for the booking page
-        sessionStorage.setItem("makePkgCartData", JSON.stringify(response.data));
+        sessionStorage.setItem("makePkgCartData", JSON.stringify(cartWithMarkups));
         sessionStorage.setItem("makePkgAgentId", agentId);
-       window.open("/make-your-own-package/generate-quotation-booking");
+        window.open("/make-your-own-package/generate-quotation-booking");
       } else {
         toast.error("Your cart is empty. Please add items to cart first.");
       }
@@ -576,10 +530,38 @@ export default function TopBar() {
       );
 
       if (Array.isArray(response.data) && response.data.length > 0) {
+        // Apply markups to cart data
+        const cartWithMarkups = response.data.map((item) => {
+          const key = getCartKey(item);
+          const markupPercent = parseFloat(markups[key]) || 0;
+          
+          const newItem = JSON.parse(JSON.stringify(item));
+          
+          if (markupPercent > 0) {
+            if (newItem.hotel) {
+              const originalRate = parseFloat(newItem.hotel.totalRate || 0);
+              newItem.hotel.totalRateWithoutmrk = originalRate;
+              newItem.hotel.totalRate = originalRate * (1 + markupPercent / 100);
+              newItem.hotel.markupPercent = markupPercent;
+            } else if (newItem.activity) {
+              const originalRate = parseFloat(newItem.activity.totalRate || 0);
+              newItem.activity.totalRateWithoutmrk = originalRate;
+              newItem.activity.totalRate = originalRate * (1 + markupPercent / 100);
+              newItem.activity.markupPercent = markupPercent;
+            } else if (newItem.cab) {
+              const originalRate = parseFloat(newItem.cab.totalRate || 0);
+              newItem.cab.totalRateWithoutmrk = originalRate;
+              newItem.cab.totalRate = originalRate * (1 + markupPercent / 100);
+              newItem.cab.markupPercent = markupPercent;
+            }
+          }
+          return newItem;
+        });
+
         // Store cart data in sessionStorage for the booking page
-        sessionStorage.setItem("makePkgCartData", JSON.stringify(response.data));
+        sessionStorage.setItem("makePkgCartData", JSON.stringify(cartWithMarkups));
         sessionStorage.setItem("makePkgAgentId", agentId);
-       window.open("/new-booking/make-your-own-package/booking-page");
+        window.open("/new-booking/make-your-own-package/booking-page");
       } else {
         toast.error("Your cart is empty. Please add items to cart first.");
       }
@@ -675,10 +657,11 @@ export default function TopBar() {
         backdrop="static"
         keyboard={false}
       >
-        <Modal.Header closeButton>
-          <Modal.Title>
-            <FaShoppingCart className="me-2" />
-            Shopping Cart {cartCount > 0 && `(${cartCount})`}
+        <Modal.Header closeButton className="border-bottom pb-3" style={{ background: "white", color: "#333" }}>
+          <Modal.Title className="fw-bold d-flex align-items-center gap-2" style={{ fontSize: "1.25rem" }}>
+            <FaShoppingCart className="text-primary" size={24} />
+            <span className="text-dark">Shopping Cart</span>
+            <Badge bg="primary" pill style={{ fontSize: "0.8rem", padding: "0.4em 0.8em" }}>{cartCount}</Badge>
           </Modal.Title>
         </Modal.Header>
         <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
@@ -701,43 +684,43 @@ export default function TopBar() {
             </div>
           )}
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer className="border-top-0 pt-3">
           <div className="d-flex justify-content-between w-100 align-items-center">
             <div>
               {cartItems.length > 0 && (
                 <Button
-                  variant="outline-danger"
+                  variant="link"
                   onClick={handleClearCart}
-                  className="me-2"
+                  className="text-danger p-0 text-decoration-none small fw-bold"
                 >
-                  Clear
+                  Clear All
                 </Button>
               )}
-              <strong>Total Items:</strong> {cartCount}
             </div>
-            <div>
-              
+            <div className="d-flex gap-2">
               <Button
-                variant="secondary"
+                variant="light"
                 onClick={() => setShowCartModal(false)}
-                className="me-2"
+                className="px-4 fw-bold text-muted rounded-pill border-0"
               >
                 Close
               </Button>
               {cartItems.length > 0 && (
                 <Button
-                  variant="outline-success continue-booking"
+                  variant="primary"
                   onClick={handleContinueBooking}
+                  className="px-4 fw-bold rounded-pill"
                 >
-                  Proceed to Checkout
+                  Checkout
                 </Button>
               )}
-               {cartItems.length > 0 && (
+              {cartItems.length > 0 && (
                 <Button
-                  variant="outline-primary generate-quotation"
+                  variant="outline-primary"
                   onClick={handleQuotationBooking}
+                  className="px-4 fw-bold rounded-pill"
                 >
-                  Generate Quotation
+                  Get Quote
                 </Button>
               )}
             </div>

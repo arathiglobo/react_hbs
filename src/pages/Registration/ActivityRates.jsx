@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -17,6 +17,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
+import Select from "react-select";
 import {
   FaEdit,
   FaTrash,
@@ -267,6 +268,9 @@ const ActivityRates = () => {
   const [activityTypes, setActivityTypes] = useState([]);
   const [marketTypes, setMarketTypes] = useState([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
+  const [selectedCountryOption, setSelectedCountryOption] = useState(null);
+  const [isCountryLoading, setIsCountryLoading] = useState(false);
+  const countryDebounceRef = useRef(null);
 
   // Form state for modal
   const [formData, setFormData] = useState({
@@ -304,12 +308,26 @@ const ActivityRates = () => {
 
   // Fetch dropdown data
   // Load countries
-  const countryList = async () => {
+  const fetchCountries = async (searchTerm = "") => {
+    setIsCountryLoading(true);
     try {
-      const response = await axios.get("/api/country");
-      setCountries(response.data);
+      const res = await axiosInstance.get(
+        `/api/country?page=0&limit=250&search=${encodeURIComponent(searchTerm)}`
+      );
+      if (Array.isArray(res.data)) {
+        const options = res.data.map((country) => ({
+          value: country.id,
+          label: country.name,
+        }));
+        setCountries(options);
+        return options;
+      }
+      return [];
     } catch (error) {
-      console.log("error for country list :", error);
+      console.error("Error fetching countries:", error);
+      return [];
+    } finally {
+      setIsCountryLoading(false);
     }
   };
 
@@ -339,18 +357,14 @@ const ActivityRates = () => {
   };
 
   // Handle country change
-  const handleCountryChange = (e) => {
+  const handleCountryChange = (option) => {
     try {
-      const value = e.target.value;
-      const stringValue = String(value); // Convert to string to avoid trim error
-      const selectedCountry = countries.find(country => String(country.id) === String(value));
-      const countryName = selectedCountry?.name || selectedCountry?.countryName || "Unknown";
+      const value = option ? String(option.value) : "";
+      setSelectedCountryOption(option);
       
       console.log(
         "Country selected:",
-        value,
-        "Country name:",
-        countryName
+        value
       );
       
       // Clear places and place selection when country changes
@@ -359,12 +373,12 @@ const ActivityRates = () => {
       
       setFormData((prev) => ({
         ...prev,
-        countryId: stringValue,
+        countryId: value,
         placeId: "", // Clear place selection
       }));
       
       // Fetch cities for the selected country
-      if (value && stringValue.trim() !== "") {
+      if (value) {
         cityList(value);
       }
       
@@ -408,25 +422,32 @@ const ActivityRates = () => {
 
   // Fetch activity rates list
   const fetchActivityRatesList = async (pageNum = 0, searchTerm = search) => {
+    if (!providerId) {
+      console.warn("No providerId found, cannot fetch activity rates");
+      return;
+    }
+
     try {
       setIsLoading(true);
       const params = new URLSearchParams({
         page: pageNum.toString(),
-        limit: "10",
+        limit: "20",
       });
 
       if (searchTerm && searchTerm.trim()) {
         params.append("search", searchTerm.trim());
       }
 
-      const response = await axiosInstance.get(`/api/activityRate?${params.toString()}`);
-      console.log("Activity rates list:", response.data);
+      const response = await axiosInstance.get(`/api/activityRate/list/${providerId}?${params.toString()}`);
+      console.log("Activity rates list for provider:", providerId, response.data);
 
       if (response.data && Array.isArray(response.data)) {
         setRates(response.data);
-        if (response.data.length < 10) {
+        // Estimate total pages: if we get fewer items than the limit, this is the last page
+        if (response.data.length < 20) {
           setTotalPages(pageNum + 1);
         } else {
+          // Otherwise, allow navigation to at least the next page
           setTotalPages(Math.max(totalPages, pageNum + 2));
         }
         setPage(pageNum);
@@ -437,7 +458,6 @@ const ActivityRates = () => {
       }
     } catch (error) {
       console.error("Error fetching activity rates:", error);
-      // toast.error("Failed to fetch activity rates");
       setRates([]);
       setTotalPages(0);
       setPage(0);
@@ -448,11 +468,11 @@ const ActivityRates = () => {
 
 
   useEffect(() => {
-    fetchActivityRatesList();
+    fetchActivityRatesList(providerId);
   }, [providerId]);
 
   useEffect(() => {
-    countryList();
+    fetchCountries("");
     loadMarketTypes();
   }, []);
 
@@ -495,6 +515,9 @@ const ActivityRates = () => {
       activityImage: null,
       activityImagePreview: null,
     });
+    setCountries([]);
+    setSelectedCountryOption(null);
+    fetchCountries("");
     setValidityDates([
       {
         id: 1,
@@ -694,146 +717,166 @@ const ActivityRates = () => {
   const isPrivateActivity = activityTypeValue === "1";
   const isSicActivity = activityTypeValue === "2";
 
-  const handleEdit = (item) => {
-    console.log("Edit item data:", item);
+  const handleEdit = async (item) => {
+    console.log("Edit item data original:", item);
+    setIsLoading(true);
     
-    setEditing(item);
-    setIsViewMode(false);
-    setFormData({
-      activityName: item.activityName || "",
-      activityCode: item.activityCode || "",
-      activityDetails: item.activityDetails || "",
-      childAgeMin: item.childAgeMin !== undefined && item.childAgeMin !== null ? item.childAgeMin : "",
-      childAgeMax: item.childAgeMax !== undefined && item.childAgeMax !== null ? item.childAgeMax : "",
-      totalUsersAllowed: item.totalUsersAllowed || item.total_users_allowed || "",
-      activityRate: item.activityRate || item.activity_rate || "",
-      maxPax: item.maxPax || item.max_pax || "",
-      adultRate: item.adultRate || item.adult_rate || "",
-      childRate: item.childRate || item.child_rate || "",
-      minPax:
-        item.minPax || item.min_pax || item.minPaxsic || item.min_pax_sic || "",
-      activityType:
-        item.activityType !== undefined && item.activityType !== null
-          ? String(item.activityType)
-          : item.activity_type !== undefined && item.activity_type !== null
-          ? String(item.activity_type)
-          : "",
-      countryId: item.countryId || item.country_id || "",
-      placeId: item.placeId || item.place_id || "",
-      durationHr: item.durationHr || item.duration_hr || "",
-      durationMin: item.durationMin || item.duration_min || "",
-      reportingPoint: item.reportingPoint || item.reporting_point || "", 
-      rating: item.rating || "",
-      marketType: item.marketType || item.market_type || "",
-      activityImage: null,
-      activityImagePreview: item.imagePath || item.activityImage || item.activity_image || null,
-    });
-    
-    // Handle validity dates - check for different possible field names
-    const validityData = item.validity || item.validityDates || item.validity_periods || item.validityPeriods || [];
-    console.log("Validity data found:", validityData);
-    
-    if (validityData && Array.isArray(validityData) && validityData.length > 0) {
-      console.log("Processing validity data:", validityData);
-      setValidityDates(validityData.map((validity, index) => ({
-        id: validity.validityId || validity.id || Date.now() + index,
-        validityFrom: formatDateForInput(validity.validityFrom) || "",
-        validityTo: formatDateForInput(validity.validityTo) || "",
-      })));
-    } else {
-      console.log("No validity data found, using default");
-      setValidityDates([
-        {
-          id: 1,
-          validityFrom: "",
-          validityTo: "",
-        },
-      ]);
+    try {
+      const response = await axiosInstance.get(`/api/activityRate/${item.activityRateId}`);
+      const data = response.data;
+      console.log("Fetched Edit data:", data);
+
+      if (!data) {
+        toast.error("Failed to fetch activity rate details");
+        return;
+      }
+
+      setEditing(data);
+      setIsViewMode(false);
+      
+      setFormData({
+        activityName: data.activityName || "",
+        activityCode: data.activityCode || "",
+        activityDetails: data.activityDetails || "",
+        childAgeMin: data.childAgeMin !== undefined && data.childAgeMin !== null ? data.childAgeMin : "",
+        childAgeMax: data.childAgeMax !== undefined && data.childAgeMax !== null ? data.childAgeMax : "",
+        totalUsersAllowed: data.totalUsersAllowed || "",
+        activityRate: data.activityRate || "",
+        maxPax: data.maxPax || "",
+        adultRate: data.adultRate || "",
+        childRate: data.childRate || "",
+        minPax: data.minimunPax || data.minPax || data.minPaxsic || "", // Handle minimunPax typo from API
+        activityType: data.activityType !== undefined && data.activityType !== null ? String(data.activityType) : "",
+        countryId: data.countryId || "",
+        placeId: data.placeId || "",
+        durationHr: data.durationHr || "",
+        durationMin: data.durationMin || "",
+        reportingPoint: data.reportingPoint || "", 
+        rating: data.rating || "",
+        // If marketType is an array, take the first element
+        marketType: Array.isArray(data.marketType) ? data.marketType[0] : (data.marketType || ""),
+        activityImage: null,
+        activityImagePreview: data.imagePath || data.activityImage || null,
+      });
+      
+      // Handle validity dates
+      const validityData = data.validity || [];
+      if (Array.isArray(validityData) && validityData.length > 0) {
+        setValidityDates(validityData.map((v, index) => ({
+          id: v.validityId || v.id || Date.now() + index,
+          validityFrom: formatDateForInput(v.validityFrom) || "",
+          validityTo: formatDateForInput(v.validityTo) || "",
+        })));
+      } else {
+        setValidityDates([{ id: 1, validityFrom: "", validityTo: "" }]);
+      }
+      
+      setValidationErrors({});
+      
+      // Load places and resolve country
+      if (data.countryId) {
+        cityList(data.countryId);
+        fetchCountries("").then((options) => {
+          const matched = (options || []).find(
+            (c) => String(c.value) === String(data.countryId)
+          );
+          if (matched) {
+            setSelectedCountryOption(matched);
+          }
+        });
+      } else {
+        setSelectedCountryOption(null);
+        fetchCountries("");
+      }
+      
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error fetching activity rate details:", error);
+      toast.error("Failed to fetch activity rate details");
+    } finally {
+      setIsLoading(false);
     }
-    
-    setValidationErrors({});
-    
-    // Load places for the selected country when editing
-    if (item.countryId) {
-      cityList(item.countryId);
-    }
-    
-    setShowModal(true);
   };
 
-  const handleView = (item) => {
-    console.log("View item data:", item);
-    console.log("All item keys:", Object.keys(item));
-    console.log("Child Age Min:", item.childAgeMin);
-    console.log("Child Age Max:", item.childAgeMax);
-    console.log("Child age min (snake):", item.child_age_min);
-    console.log("Child age max (snake):", item.child_age_max);
-    console.log("Validity data:", item.validity);
-    console.log("Validity periods:", item.validity_periods);
-    console.log("Validity dates:", item.validityDates);
+  const handleView = async (item) => {
+    console.log("View item data original:", item);
+    setIsLoading(true);
     
-    setEditing(item);
-    setIsViewMode(true);
-    setFormData({
-      activityName: item.activityName || "",
-      activityCode: item.activityCode || "",
-      activityDetails: item.activityDetails || "",
-      childAgeMin: item.childAgeMin !== undefined && item.childAgeMin !== null ? item.childAgeMin : "",
-      childAgeMax: item.childAgeMax !== undefined && item.childAgeMax !== null ? item.childAgeMax : "",
-      totalUsersAllowed: item.totalUsersAllowed || item.total_users_allowed || "",
-      activityRate: item.activityRate || item.activity_rate || "",
-      maxPax: item.maxPax || item.max_pax || "",
-      adultRate: item.adultRate || item.adult_rate || "",
-      childRate: item.childRate || item.child_rate || "",
-      minPax:
-        item.minPax || item.min_pax || item.minPaxsic || item.min_pax_sic || "",
-      activityType:
-        item.activityType !== undefined && item.activityType !== null
-          ? String(item.activityType)
-          : item.activity_type !== undefined && item.activity_type !== null
-          ? String(item.activity_type)
-          : "",
-      countryId: item.countryId || item.country_id || "",
-      placeId: item.placeId || item.place_id || "",
-      durationHr: item.durationHr || item.duration_hr || "",
-      durationMin: item.durationMin || item.duration_min || "",
-      reportingPoint: item.reportingPoint || item.reporting_point || "",
-      rating: item.rating || "",
-      marketType: item.marketType || item.market_type || "",
-      activityImage: null,
-      activityImagePreview: item.imagePath || item.activityImage || item.activity_image || null,
-    });
-    
-    // Handle validity dates - check for different possible field names
-    const validityData = item.validity || item.validityDates || item.validity_periods || item.validityPeriods || [];
-    console.log("Validity data found:", validityData);
-    
-    if (validityData && Array.isArray(validityData) && validityData.length > 0) {
-      console.log("Processing validity data:", validityData);
-      setValidityDates(validityData.map((validity, index) => ({
-        id: validity.validityId || validity.id || Date.now() + index,
-        validityFrom: formatDateForInput(validity.validityFrom) || "",
-        validityTo: formatDateForInput(validity.validityTo) || "",
-      })));
-    } else {
-      console.log("No validity data found, using default");
-      setValidityDates([
-        {
-          id: 1,
-          validityFrom: "",
-          validityTo: "",
-        },
-      ]);
+    try {
+      const response = await axiosInstance.get(`/api/activityRate/${item.activityRateId}`);
+      const data = response.data;
+      console.log("Fetched View data:", data);
+
+      if (!data) {
+        toast.error("Failed to fetch activity rate details");
+        return;
+      }
+
+      setEditing(data);
+      setIsViewMode(true);
+      
+      setFormData({
+        activityName: data.activityName || "",
+        activityCode: data.activityCode || "",
+        activityDetails: data.activityDetails || "",
+        childAgeMin: data.childAgeMin !== undefined && data.childAgeMin !== null ? data.childAgeMin : "",
+        childAgeMax: data.childAgeMax !== undefined && data.childAgeMax !== null ? data.childAgeMax : "",
+        totalUsersAllowed: data.totalUsersAllowed || "",
+        activityRate: data.activityRate || "",
+        maxPax: data.maxPax || "",
+        adultRate: data.adultRate || "",
+        childRate: data.childRate || "",
+        minPax: data.minimunPax || data.minPax || data.minPaxsic || "", // Handle minimunPax typo from API
+        activityType: data.activityType !== undefined && data.activityType !== null ? String(data.activityType) : "",
+        countryId: data.countryId || "",
+        placeId: data.placeId || "",
+        durationHr: data.durationHr || "",
+        durationMin: data.durationMin || "",
+        reportingPoint: data.reportingPoint || "", 
+        rating: data.rating || "",
+        // If marketType is an array, take the first element
+        marketType: Array.isArray(data.marketType) ? data.marketType[0] : (data.marketType || ""),
+        activityImage: null,
+        activityImagePreview: data.imagePath || data.activityImage || null,
+      });
+      
+      // Handle validity dates
+      const validityData = data.validity || [];
+      if (Array.isArray(validityData) && validityData.length > 0) {
+        setValidityDates(validityData.map((v, index) => ({
+          id: v.validityId || v.id || Date.now() + index,
+          validityFrom: formatDateForInput(v.validityFrom) || "",
+          validityTo: formatDateForInput(v.validityTo) || "",
+        })));
+      } else {
+        setValidityDates([{ id: 1, validityFrom: "", validityTo: "" }]);
+      }
+      
+      setValidationErrors({});
+      
+      // Load places and resolve country
+      if (data.countryId) {
+        cityList(data.countryId);
+        fetchCountries("").then((options) => {
+          const matched = (options || []).find(
+            (c) => String(c.value) === String(data.countryId)
+          );
+          if (matched) {
+            setSelectedCountryOption(matched);
+          }
+        });
+      } else {
+        setSelectedCountryOption(null);
+        fetchCountries("");
+      }
+      
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error fetching activity rate details:", error);
+      toast.error("Failed to fetch activity rate details");
+    } finally {
+      setIsLoading(false);
     }
-    
-    setValidationErrors({});
-    
-    // Load places for the selected country when viewing
-    if (item.countryId) {
-      cityList(item.countryId);
-    }
-    
-    setShowModal(true);
   };
 
   const handleDelete = (item) => {
@@ -1102,9 +1145,7 @@ const ActivityRates = () => {
       formDataPayload.append('adult_rate', isSic ? formData.adultRate : "0");
       formDataPayload.append('childRate', isSic ? formData.childRate : "0");
       formDataPayload.append('child_rate', isSic ? formData.childRate : "0");
-      formDataPayload.append('minPax', isSic ? formData.minPax : "0");
-      formDataPayload.append('minPaxsic', isSic ? formData.minPax : "0");
-      formDataPayload.append('minPaxsic', isSic ? formData.minPax : "0");
+      formDataPayload.append('minimunPax', isSic ? formData.minPax : "0");
       formDataPayload.append('activityType', formData.activityType);
       formDataPayload.append('countryId', formData.countryId);
       formDataPayload.append('placeId', formData.placeId);
@@ -1190,7 +1231,7 @@ const ActivityRates = () => {
       formDataPayload.append('adult_rate', isSic ? formData.adultRate : "0");
       formDataPayload.append('childRate', isSic ? formData.childRate : "0");
       formDataPayload.append('child_rate', isSic ? formData.childRate : "0");
-      formDataPayload.append('minPax', isSic ? formData.minPax : "0");
+      formDataPayload.append('minimunPax', isSic ? formData.minPax : "0");
       formDataPayload.append('activityType', formData.activityType);
       formDataPayload.append('countryId', formData.countryId);
       formDataPayload.append('placeId', formData.placeId);
@@ -1420,7 +1461,14 @@ const ActivityRates = () => {
           </Card>
 
           {/* Modal */}
-          <Modal show={showModal} onHide={closeModal} centered size="xl">
+          <Modal 
+            show={showModal} 
+            onHide={closeModal} 
+            centered 
+            size="xl"
+            backdrop="static"
+            keyboard={false}
+          >
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
                 {isViewMode
@@ -1649,19 +1697,38 @@ const ActivityRates = () => {
                       <Form.Label>
                         <span style={{ color: 'red' }}>*</span>Country
                       </Form.Label>
-                      <SearchableSelect
-                        name="countryId"
-                        value={formData.countryId}
+                      <Select
+                        value={selectedCountryOption}
                         onChange={handleCountryChange}
+                        onInputChange={(inputValue) => {
+                          if (countryDebounceRef.current) {
+                            clearTimeout(countryDebounceRef.current);
+                          }
+                          countryDebounceRef.current = setTimeout(() => {
+                            fetchCountries(inputValue);
+                          }, 400);
+                        }}
+                        menuPortalTarget={document.body}
+styles={{
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  menu: (base) => ({ ...base, zIndex: 9999 })
+}}
+                        filterOption={() => true} // Server-side filtering
                         placeholder="Search and select country"
+                        isSearchable
+                        isClearable
+                        isLoading={isCountryLoading}
                         options={countries}
-                        isInvalid={!!validationErrors.countryId}
-                        disabled={isViewMode}
+                        isDisabled={isViewMode}
+                        className={`react-select-container ${
+                          validationErrors.countryId ? "is-invalid" : ""
+                        }`}
+                        classNamePrefix="react-select"
                       />
                       {validationErrors.countryId && (
-                        <Form.Control.Feedback type="invalid">
+                        <div className="text-danger small mt-1">
                           {validationErrors.countryId}
-                        </Form.Control.Feedback>
+                        </div>
                       )}
                     </Form.Group>
 
@@ -1938,6 +2005,8 @@ const ActivityRates = () => {
             onHide={handleCloseSettings}
             size="lg"
             centered
+            backdrop="static"
+            keyboard={false}
           >
             <Modal.Header 
               style={{ 
