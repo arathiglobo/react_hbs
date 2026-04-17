@@ -224,7 +224,7 @@ export default function Sidebar() {
           label: "Make Your Own Package",
           to: "/new-booking/make-your-own-package",
         },
-        // { label: "Package Booking", to: "/new-booking/package" },
+        { label: "Package Booking", to: "/new-booking/package" },
         { label: "Cab Booking", to: "/new-booking/cab" },
         {
           label: "Tours and Activity",

@@ -1,0 +1,107 @@
+/* PackageSearch.css - Styles for the Package Search Page */
+
+.package-search-container {
+    padding: 2rem;
+    background-color: #f8fafc;
+    min-height: calc(100vh - 80px);
+}
+
+.search-card-modern {
+    background: #ffffff;
+    border: none;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+    overflow: visible;
+    position: relative;
+    z-index: 10;
+}
+
+.search-card-modern .card-body {
+    padding: 2.5rem;
+}
+
+.search-card-modern .form-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.modern-select .react-select__control {
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    min-height: 48px;
+    transition: all 0.2s ease;
+}
+
+.modern-select .react-select__control:hover {
+    border-color: #cbd5e0;
+}
+
+.modern-select .react-select__control--is-focused {
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+}
+
+.form-control-modern {
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    height: 48px;
+    padding: 0 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.form-control-modern:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.btn-search-modern {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    border-radius: 50px;
+    padding: 14px 40px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    margin-top: 1rem;
+}
+
+.btn-search-modern:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+}
+
+.btn-search-modern:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.empty-state-card {
+    border: none;
+    border-radius: 20px;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: #e2e8f0;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .package-search-container {
+        padding: 1rem;
+    }
+    
+    .search-card-modern .card-body {
+        padding: 1.5rem;
+    }
+}

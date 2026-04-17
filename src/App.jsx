@@ -143,6 +143,7 @@ import ExtranetSpecialRateEdit from "./pages/extranet/Extranet-Promotion/EditSpe
 import EditDiscountPromotionExtranet from "./pages/extranet/Extranet-Promotion/EditDiscountPromotionExtranet";
 import EditStayPayPromotionExtranet from "./pages/extranet/Extranet-Promotion/EditStayPayPromotionExtranet";
 import EditSpecialRateExtranet from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
+import PackageSearch from "./pages/search/package/PackageSearch";
 
 
 export default function App() {
@@ -277,6 +278,8 @@ export default function App() {
         <Route path="/cab-booking-page" element={<PrivateRoute><CabBookingPage /> </PrivateRoute>}/>
         <Route path="/new-booking/tours-and-activities" element={<PrivateRoute><ActivitySearch /> </PrivateRoute>}/>
         <Route path="/new-booking/tours-and-activities/booking" element={<PrivateRoute><ActivityBookingPage /> </PrivateRoute>}/>
+
+        <Route path="/new-booking/package" element={<PrivateRoute><PackageSearch /> </PrivateRoute>}/>
 
         {/* Booking List/Details */}
         <Route path="/booking-details/cab-booking-list" element={<PrivateRoute><CabBookingList /></PrivateRoute>} />
