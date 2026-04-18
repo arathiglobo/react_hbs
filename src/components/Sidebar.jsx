@@ -142,6 +142,7 @@ export default function Sidebar() {
             // { label: "Country", to: "/masters/country-mapping" },
             { label: "City", to: "/masters/city-mapping" },
             { label: "Hotel", to: "/masters/hotel-mapping" }, 
+            { label: "Fetch Hotels", to: "/masters/fetch-new-hotels" },
           ],
         },
         {

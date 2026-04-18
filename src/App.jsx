@@ -144,6 +144,7 @@ import EditDiscountPromotionExtranet from "./pages/extranet/Extranet-Promotion/E
 import EditStayPayPromotionExtranet from "./pages/extranet/Extranet-Promotion/EditStayPayPromotionExtranet";
 import EditSpecialRateExtranet from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
 import PackageSearch from "./pages/search/package/PackageSearch";
+import FetchNewHotels from "./pages/master/FetchNewHotels";
 
 
 export default function App() {
@@ -238,7 +239,7 @@ export default function App() {
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping" element={<PrivateRoute><HotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
-     
+        <Route path="/masters/fetch-new-hotels" element={<FetchNewHotels />} />
      
         {/* :bar_chart: Reports */}
         <Route path="/report/booking" element={<ReportBooking />} />
