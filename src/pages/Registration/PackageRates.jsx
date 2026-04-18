@@ -714,6 +714,23 @@ const PackageRates = () => {
   const openEdit = (item) => {
     setEditing(item);
 
+    // Update hotel cache from the response
+    if (item.packageAccommodationrateDTO) {
+      const newCache = { ...hotelCache };
+      item.packageAccommodationrateDTO.forEach(acc => {
+        if (acc.packageAccommodationrateDetailsDTO) {
+          acc.packageAccommodationrateDetailsDTO.forEach(detail => {
+            if (detail.hotels && Array.isArray(detail.hotels)) {
+              detail.hotels.forEach(h => {
+                newCache[h.id] = h.name;
+              });
+            }
+          });
+        }
+      });
+      setHotelCache(newCache);
+    }
+
     const rates = {};
     packageCategories.forEach((category) => {
       const key = (category.packageCategoryId || category.id).toString();
@@ -728,9 +745,9 @@ const PackageRates = () => {
       item.packageAccommodationrateDTO.length > 0
     ) {
       item.packageAccommodationrateDTO.forEach((accommodation) => {
-        const occupancyId = accommodation.packageaccommodationrateId || `old_${Math.random()}`;
+        const occupancyId = accommodation.packageaccommodationrateId;
         if (accommodation.packageAccommodationrateDetailsDTO) {
-          accommodation.packageAccommodationrateDetailsDTO.forEach((detail) => {
+           accommodation.packageAccommodationrateDetailsDTO.forEach((detail) => {
             const categoryKey = detail.packagecategoryId.toString();
             if (!rates[categoryKey]) {
               rates[categoryKey] = { enabled: true, occupancyRates: {} };
@@ -747,22 +764,23 @@ const PackageRates = () => {
       });
     }
 
-    const countryId = item.packageAccommodationrateDTO?.[0]?.countryId || "";
-    const placeId = item.packageAccommodationrateDTO?.[0]?.placeId?.[0] || "";
+    const firstAcc = item.packageAccommodationrateDTO?.[0];
+    const countryId = firstAcc?.countryId || "";
+    const placeId = Array.isArray(firstAcc?.placeId) ? firstAcc.placeId[0] : (firstAcc?.placeId || "");
 
-    console.log("openEdit formData:", { countryId, placeId });
+    console.log("openEdit formData conversion:", { countryId, placeId });
 
     setFormData({
       packageratesId: item.packageratesId || "",
       packageId: item.packageId || packageId,
-      markettypeId: item.markettypeId?.[0] || null,
+      markettypeId: Array.isArray(item.markettypeId) ? item.markettypeId[0] : (item.markettypeId || null),
       packagerateCode: item.packagerateCode || "",
       packageRateValidityDTO: item.packageRateValidityDTO || [],
       packageAccommodationrateDTO: item.packageAccommodationrateDTO || [],
       rates: rates,
       countryId: countryId,
       placeId: placeId,
-      noOfNights: item.packageAccommodationrateDTO?.[0]?.noofnight || "",
+      noOfNights: firstAcc?.noofnight || "",
     });
 
     const validityList = item.packageRateValidityDTO?.map((validity) => ({
@@ -772,13 +790,15 @@ const PackageRates = () => {
     })) || [{ id: Date.now(), validityFrom: "", validityTo: "" }];
 
     const occupancyList = item.packageAccommodationrateDTO?.map(
-      (accommodation) => ({
-        id: accommodation.packageaccommodationrateId,
-        minimumPax:
-          accommodation.packageAccommodationrateDetailsDTO?.[0]?.minpax || "",
-        maximumPax:
-          accommodation.packageAccommodationrateDetailsDTO?.[0]?.maxpax || "",
-      })
+      (accommodation) => {
+        // Find first detail to get min/max pax for this occupancy level
+        const firstDetail = accommodation.packageAccommodationrateDetailsDTO?.[0];
+        return {
+          id: accommodation.packageaccommodationrateId,
+          minimumPax: firstDetail?.minpax || "",
+          maximumPax: firstDetail?.maxpax || "",
+        };
+      }
     ) || [{ id: Date.now(), minimumPax: "", maximumPax: "" }];
 
     setValidityList(validityList);
@@ -852,6 +872,29 @@ const PackageRates = () => {
 
       if (response.data) {
         setViewMode(true);
+        openEdit(response.data);
+        toast.success("Package rate details loaded successfully!");
+      }
+    } catch (error) {
+      toast.error(
+        `Failed to fetch package rate details: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditClick = async (item) => {
+    try {
+      setIsLoading(true);
+      const response = await axiosInstance.get(
+        `/api/packageRates/${item.packageratesId}`
+      );
+
+      if (response.data) {
+        setViewMode(false);
         openEdit(response.data);
         toast.success("Package rate details loaded successfully!");
       }
@@ -1225,10 +1268,7 @@ const PackageRates = () => {
                           <FaEdit
                             className="text-primary edit"
                             style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => {
-                              setViewMode(false);
-                              openEdit(item);
-                            }}
+                            onClick={() => handleEditClick(item)}
                             title="Edit"
                           />
                           <FaCopy
