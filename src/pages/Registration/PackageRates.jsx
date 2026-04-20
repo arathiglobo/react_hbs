@@ -70,6 +70,7 @@ const PackageRates = () => {
   const lastValidityAddTime = useRef(0);
   const lastOccupancyAddTime = useRef(0);
   const countryDebounceRef = useRef(null);
+  const placeDebounceRef = useRef(null);
   const hotelDebounceRef = useRef(null);
 
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
@@ -104,6 +105,7 @@ const PackageRates = () => {
     name,
     disabled = false,
     isLoading = false,
+    onInputChange,
   }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
@@ -146,6 +148,7 @@ const PackageRates = () => {
         });
         setIsOpen(false);
         setSearchTerm("");
+        if (onInputChange) onInputChange("");
       } catch (error) {
         console.error(`Error in handleSelect (${name}):`, error);
       }
@@ -171,12 +174,14 @@ const PackageRates = () => {
           value={isOpen ? searchTerm : displayValue}
           onChange={(e) => {
             if (disabled) return;
+            const val = e.target.value;
             if (isOpen) {
-              setSearchTerm(e.target.value);
+              setSearchTerm(val);
             } else {
               setIsOpen(true);
-              setSearchTerm(e.target.value);
+              setSearchTerm(val);
             }
+            if (onInputChange) onInputChange(val);
           }}
           onFocus={() => !disabled && setIsOpen(true)}
           placeholder={placeholder}
@@ -423,11 +428,11 @@ const PackageRates = () => {
     }
   };
 
-  const cityList = async (countryId) => {
+  const cityList = async (countryId, searchTerm = "") => {
     try {
       setIsLoadingPlaces(true);
-      const response = await axiosInstance.post(
-        `/api/destination/getCitiesByCountryId/${countryId}`
+      const response = await axiosInstance.get(
+        `/api/province?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(searchTerm)}`
       );
       console.log("cityList response:", response.data);
       setPlaces(Array.isArray(response.data) ? response.data : []);
@@ -1670,12 +1675,22 @@ const PackageRates = () => {
                           name="placeId"
                           value={formData.placeId}
                           onChange={handlePlaceChange}
+                          onInputChange={(inputValue) => {
+                            if (placeDebounceRef.current) {
+                              clearTimeout(placeDebounceRef.current);
+                            }
+                            placeDebounceRef.current = setTimeout(() => {
+                              if (formData.countryId) {
+                                cityList(formData.countryId, inputValue);
+                              }
+                            }, 400);
+                          }}
                           placeholder={
                             !formData.countryId
                               ? "Select country first"
                               : "Search and select place"
                           }
-                          options={places}
+                          options={Array.isArray(places) ? places.map(p => ({ id: p.id, name: p.name || p.stateName })) : []}
                           disabled={!formData.countryId || viewMode}
                           isLoading={isLoadingPlaces}
                           isInvalid={!!validationErrors.placeId}

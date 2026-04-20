@@ -144,7 +144,9 @@ import EditDiscountPromotionExtranet from "./pages/extranet/Extranet-Promotion/E
 import EditStayPayPromotionExtranet from "./pages/extranet/Extranet-Promotion/EditStayPayPromotionExtranet";
 import EditSpecialRateExtranet from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
 import PackageSearch from "./pages/search/package/PackageSearch";
+import PackageBooking from "./pages/booking/packagebooking/PackageBooking";
 import FetchNewHotels from "./pages/master/FetchNewHotels";
+import PackageBookingList from "./pages/list/PackageBookingList";
 
 
 export default function App() {
@@ -280,12 +282,14 @@ export default function App() {
         <Route path="/new-booking/tours-and-activities" element={<PrivateRoute><ActivitySearch /> </PrivateRoute>}/>
         <Route path="/new-booking/tours-and-activities/booking" element={<PrivateRoute><ActivityBookingPage /> </PrivateRoute>}/>
 
-        <Route path="/new-booking/package" element={<PrivateRoute><PackageSearch /> </PrivateRoute>}/>
+        <Route path="/new-booking/package-search" element={<PrivateRoute><PackageSearch /> </PrivateRoute>}/>
+        <Route path="/new-booking/package-booking/:id" element={<PrivateRoute><PackageBooking /> </PrivateRoute>}/>
+        
 
         {/* Booking List/Details */}
         <Route path="/booking-details/cab-booking-list" element={<PrivateRoute><CabBookingList /></PrivateRoute>} />
         <Route path="/booking-details/activity-booking-list" element={<PrivateRoute><ActivityBookingList /></PrivateRoute>} />
-
+        <Route path="/booking-details/package-booking-list" element={<PrivateRoute><PackageBookingList /></PrivateRoute>} />
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
 

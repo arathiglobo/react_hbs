@@ -300,28 +300,31 @@ const HotelBookingList = () => {
     }
   };
 
-  // Generate confirmation PDF
-  const generateConfirmationPdf = async () => {
-    if (!selectedBooking || selectedVoucherType !== "Confirmation") return;
+  // Generate PDF (Request, Confirmation, or Voucher)
+  const handleGeneratePdf = async (type) => {
+    if (!selectedBooking) return;
 
     try {
       setGeneratingPdf(true);
       setPdfUrl(null);
       const response = await axiosInstance.get(
-        `/api/booking-confirmation/generate/${selectedBooking.bookingId}`
+        `/api/bookings/${selectedBooking.bookingId}/pdf`,
+        {
+          params: { type: type.toUpperCase() },
+        }
       );
 
       if (response.data && response.data.status === "SUCCESS") {
         setPdfUrl(response.data.pdfUrl);
-        toast.success(response.data.message || "PDF generated successfully!");
+        toast.success(response.data.message || `${type} Generated successfully!`);
       } else {
-        toast.error(response.data?.message || "Failed to generate PDF.");
+        toast.error(response.data?.message || `Failed to generate ${type}.`);
       }
     } catch (error) {
-      console.error("Error generating PDF:", error);
+      console.error(`Error generating ${type}:`, error);
       toast.error(
         error.response?.data?.message ||
-          "Failed to generate PDF. Please try again."
+          `Failed to generate ${type}. Please try again.`
       );
     } finally {
       setGeneratingPdf(false);
@@ -1952,39 +1955,39 @@ const HotelBookingList = () => {
                       </div>
                     )} */}
 
-                    {pdfUrl && selectedVoucherType === "Confirmation" && (
-  <div
-    className="mb-3"
-    style={{
-      border: "1px solid #dee2e6",
-      borderRadius: "8px",
-      overflow: "hidden",
-      background: "#fff",
-    }}
-  >
-    <div
-      style={{
-        padding: "8px 12px",
-        background: "#f8f9fa",
-        borderBottom: "1px solid #dee2e6",
-        fontWeight: "600",
-        fontSize: "14px",
-      }}
-    >
-      Confirmation PDF Preview
-    </div>
+                    {pdfUrl && (
+                      <div
+                        className="mb-3"
+                        style={{
+                          border: "1px solid #dee2e6",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          background: "#fff",
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: "8px 12px",
+                            background: "#f8f9fa",
+                            borderBottom: "1px solid #dee2e6",
+                            fontWeight: "600",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {selectedVoucherType} PDF Preview
+                        </div>
 
-    <iframe
-      src={pdfUrl}
-      title="Confirmation PDF"
-      width="100%"
-      height="500px"
-      style={{
-        border: "none",
-      }}
-    />
-  </div>
-)}
+                        <iframe
+                          src={pdfUrl}
+                          title={`${selectedVoucherType} PDF`}
+                          width="100%"
+                          height="500px"
+                          style={{
+                            border: "none",
+                          }}
+                        />
+                      </div>
+                    )}
 
                     {/* Table */}
                     <div className="table-responsive">
@@ -2321,19 +2324,15 @@ const HotelBookingList = () => {
                                   }}
                                   title="Send"
                                   onClick={() => {
-                                    // Check if booking is confirmed
+                                    // Check if booking is confirmed for Confirmation and Voucher
                                     const isConfirmed = voucherDetails?.confirmationStatus === "Confirmed";
                                     
-                                    if (!isConfirmed) {
-                                      toast.error("Confirm the booking then only Confirmation or voucherDetails can be get");
+                                    if (selectedVoucherType !== "Request" && !isConfirmed) {
+                                      toast.error(`Confirm the booking then only ${selectedVoucherType} can be generated`);
                                       return;
                                     }
                                     
-                                    if (
-                                      selectedVoucherType === "Confirmation"
-                                    ) {
-                                      generateConfirmationPdf();
-                                    }
+                                    handleGeneratePdf(selectedVoucherType);
                                   }}
                                   disabled={generatingPdf}
                                 >

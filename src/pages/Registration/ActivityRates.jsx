@@ -40,6 +40,7 @@ const SearchableSelect = ({
   name,
   disabled = false,
   isLoading = false,
+  onInputChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -101,6 +102,7 @@ const SearchableSelect = ({
       });
       setIsOpen(false);
       setSearchTerm("");
+      if (onInputChange) onInputChange("");
     } catch (error) {
       console.error("Error in handleSelect:", error);
     }
@@ -123,12 +125,16 @@ const SearchableSelect = ({
         }
         onChange={(e) => {
           if (disabled) return;
+          const val = e.target.value;
           if (isOpen) {
-            setSearchTerm(e.target.value);
+            setSearchTerm(val);
           } else {
             // If not open, open dropdown and set search term
             setIsOpen(true);
-            setSearchTerm(e.target.value);
+            setSearchTerm(val);
+          }
+          if (onInputChange) {
+            onInputChange(val);
           }
         }}
         onFocus={() => !disabled && setIsOpen(true)}
@@ -271,6 +277,7 @@ const ActivityRates = () => {
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [isCountryLoading, setIsCountryLoading] = useState(false);
   const countryDebounceRef = useRef(null);
+  const placeDebounceRef = useRef(null);
 
   // Form state for modal
   const [formData, setFormData] = useState({
@@ -343,10 +350,10 @@ const ActivityRates = () => {
     }
   };
 
-  const cityList = async (countryId) => {
+  const cityList = async (countryId, searchTerm = "") => {
     try {
       setIsLoadingPlaces(true);
-      const response = await axiosInstance.post(`/api/destination/getCitiesByCountryId/${countryId}`);
+      const response = await axiosInstance.get(`/api/province?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(searchTerm)}`);
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.log("axios call error for city list : ", error);
@@ -1736,12 +1743,22 @@ styles={{
                       <Form.Label>
                         <span style={{ color: 'red' }}>*</span>Place
                       </Form.Label>
-                      <SearchableSelect
+                       <SearchableSelect
                         name="placeId"
                         value={formData.placeId}
                         onChange={handlePlaceChange}
+                        onInputChange={(inputValue) => {
+                          if (placeDebounceRef.current) {
+                            clearTimeout(placeDebounceRef.current);
+                          }
+                          placeDebounceRef.current = setTimeout(() => {
+                            if (formData.countryId) {
+                                cityList(formData.countryId, inputValue);
+                            }
+                          }, 400);
+                        }}
                         placeholder={isLoadingPlaces ? "Loading places..." : "Search and select place"}
-                        options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name })) : []}
+                        options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name || place.stateName })) : []}
                         isInvalid={!!validationErrors.placeId}
                         disabled={isViewMode || !formData.countryId || isLoadingPlaces}
                         isLoading={isLoadingPlaces}

@@ -27,6 +27,7 @@ import {
   FaMapMarkerAlt,
   FaTicketAlt,
   FaChild,
+  FaInfoCircle,
 } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 import { toast } from "react-hot-toast";
@@ -465,6 +466,13 @@ export default function TopBar() {
         return;
       }
 
+      // Check for hotel
+      const hotelExists = cartItems.some(item => !!item.hotel);
+      if (!hotelExists && cartItems.length > 0) {
+        toast.error("Please add a hotel to your package before proceeding.");
+        return;
+      }
+
       // Fetch latest cart data before navigating
       const response = await axiosInstance.post(
         `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
@@ -519,6 +527,13 @@ export default function TopBar() {
       const agentId = getCartAgentId();
       if (!agentId) {
         toast.error("Select an agent before proceeding to checkout.");
+        return;
+      }
+
+      // Check for hotel
+      const hotelExists = cartItems.some(item => !!item.hotel);
+      if (!hotelExists && cartItems.length > 0) {
+        toast.error("Please add a hotel to your package before proceeding.");
         return;
       }
 
@@ -680,6 +695,12 @@ export default function TopBar() {
             </div>
           ) : (
             <div className="d-flex flex-column gap-3">
+              {cartItems.length > 0 && !cartItems.some(item => !!item.hotel) && (
+                <div className="alert alert-warning py-2 mb-0 d-flex align-items-center gap-2" style={{ border: "none", borderRadius: "10px", fontSize: "13px" }}>
+                  <FaInfoCircle />
+                  <span>Please add a hotel to your package before proceeding to checkout.</span>
+                </div>
+              )}
               {cartItems.map((item, index) => renderCartItem(item, index))}
             </div>
           )}
@@ -710,6 +731,8 @@ export default function TopBar() {
                   variant="primary"
                   onClick={handleContinueBooking}
                   className="px-4 fw-bold rounded-pill"
+                  disabled={!cartItems.some(item => !!item.hotel)}
+                  title={!cartItems.some(item => !!item.hotel) ? "Please add a hotel first" : ""}
                 >
                   Checkout
                 </Button>
@@ -719,6 +742,8 @@ export default function TopBar() {
                   variant="outline-primary"
                   onClick={handleQuotationBooking}
                   className="px-4 fw-bold rounded-pill"
+                  disabled={!cartItems.some(item => !!item.hotel)}
+                  title={!cartItems.some(item => !!item.hotel) ? "Please add a hotel first" : ""}
                 >
                   Get Quote
                 </Button>

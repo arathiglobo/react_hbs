@@ -41,6 +41,7 @@ const SearchableSelect = ({
   name,
   disabled = false,
   isLoading = false,
+  onInputChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -77,6 +78,7 @@ const SearchableSelect = ({
       });
       setIsOpen(false);
       setSearchTerm("");
+      if (onInputChange) onInputChange("");
     } catch (error) {
       console.error("Error in handleSelect:", error);
     }
@@ -93,13 +95,15 @@ const SearchableSelect = ({
         value={isOpen ? searchTerm : selectedOption?.name || ""}
         onChange={(e) => {
           if (disabled) return;
+          const val = e.target.value;
           if (isOpen) {
-            setSearchTerm(e.target.value);
+            setSearchTerm(val);
           } else {
             // If not open, open dropdown and set search term
             setIsOpen(true);
-            setSearchTerm(e.target.value);
+            setSearchTerm(val);
           }
+          if (onInputChange) onInputChange(val);
         }}
         onFocus={() => !disabled && setIsOpen(true)}
         placeholder={placeholder}
@@ -238,6 +242,8 @@ const PackageReg = () => {
   const [isLoadingPackageTypes, setIsLoadingPackageTypes] = useState(false);
   const [isCountryLoading, setIsCountryLoading] = useState(false);
   const countryDebounceRef = useRef(null);
+  const placeDebounceRef = useRef(null);
+  const itineraryPlaceDebounceRef = useRef(null);
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -590,11 +596,11 @@ const PackageReg = () => {
     }
   };
 
-  const cityList = async (countryId) => {
+  const cityList = async (countryId, searchTerm = "") => {
     try {
       setIsLoadingPlaces(true);
-      const response = await axiosInstance.post(
-        `/api/destination/getCitiesByCountryId/${countryId}`
+      const response = await axiosInstance.get(
+        `/api/province?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(searchTerm)}`
       );
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
@@ -1736,6 +1742,16 @@ const PackageReg = () => {
                               name="placeId"
                               value={formData.placeId}
                               onChange={handlePlaceChange}
+                              onInputChange={(inputValue) => {
+                                if (placeDebounceRef.current) {
+                                  clearTimeout(placeDebounceRef.current);
+                                }
+                                placeDebounceRef.current = setTimeout(() => {
+                                  if (formData.countryId) {
+                                    cityList(formData.countryId, inputValue);
+                                  }
+                                }, 400);
+                              }}
                               placeholder={
                                 isLoadingPlaces
                                   ? "Loading places..."
@@ -1745,7 +1761,7 @@ const PackageReg = () => {
                                 Array.isArray(places)
                                   ? places.map((place) => ({
                                     id: place.id,
-                                    name: place.name,
+                                    name: place.name || place.stateName,
                                   }))
                                   : []
                               }
@@ -1866,21 +1882,31 @@ const PackageReg = () => {
                                     e.target.value
                                   )
                                 }
+                                onInputChange={(inputValue) => {
+                                  if (itineraryPlaceDebounceRef.current) {
+                                    clearTimeout(itineraryPlaceDebounceRef.current);
+                                  }
+                                  itineraryPlaceDebounceRef.current = setTimeout(() => {
+                                    if (formData.countryId) {
+                                      cityList(formData.countryId, inputValue);
+                                    }
+                                  }, 400);
+                                }}
                                 placeholder={
-                                  isLoadingDestinations
-                                    ? "Loading destinations..."
+                                  isLoadingPlaces
+                                    ? "Loading places..."
                                     : "Search and select destination"
                                 }
                                 options={
-                                  Array.isArray(allDestinations)
-                                    ? allDestinations.map((dest) => ({
-                                      id: dest.id,
-                                      name: dest.name,
+                                  Array.isArray(places)
+                                    ? places.map((place) => ({
+                                      id: place.id,
+                                      name: place.name || place.stateName,
                                     }))
                                     : []
                                 }
-                                disabled={isViewMode || isLoadingDestinations}
-                                isLoading={isLoadingDestinations}
+                                disabled={isViewMode || !formData.countryId || isLoadingPlaces}
+                                isLoading={isLoadingPlaces}
                               />
                             </Form.Group>
                           </Col>

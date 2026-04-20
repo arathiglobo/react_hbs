@@ -225,7 +225,7 @@ export default function Sidebar() {
           label: "Make Your Own Package",
           to: "/new-booking/make-your-own-package",
         },
-        { label: "Package Booking", to: "/new-booking/package" },
+        { label: "Package Booking", to: "/new-booking/package-search" },
         { label: "Cab Booking", to: "/new-booking/cab" },
         {
           label: "Tours and Activity",
@@ -245,10 +245,10 @@ export default function Sidebar() {
           label: "Custom Booking",
           to: "/booking-details/custom-booking-list",
         },
-        // {
-        //   label: "Package Booking",
-        //   to: "/booking-details/package-booking-list",
-        // },
+        {
+          label: "Package Booking",
+          to: "/booking-details/package-booking-list",
+        },
         {
           label: "Activity Booking",
           to: "/booking-details/activity-booking-list",

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import {
   Card,
   Row,
@@ -13,6 +13,8 @@ import {
   Modal,
   Accordion,
   Table,
+  OverlayTrigger,
+  Tooltip,
 } from "react-bootstrap";
 import Select from "react-select";
 import {
@@ -287,6 +289,46 @@ const [activeAccordion, setActiveAccordion] = useState({});
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [addingActivityId, setAddingActivityId] = useState(null);
   const [addingTransferId, setAddingTransferId] = useState(null);
+  const [hasHotelInCart, setHasHotelInCart] = useState(false);
+
+  const checkHotelInCart = useCallback(async () => {
+    const currentAgentId =
+      sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+      localStorage.getItem("makeYourOwnPackageAgentId") ||
+      agent ||
+      agentId ||
+      "";
+
+    if (!currentAgentId) {
+      setHasHotelInCart(false);
+      return;
+    }
+
+    try {
+      const response = await axiosInstance.post(
+        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
+          currentAgentId
+        )}`
+      );
+      if (Array.isArray(response.data)) {
+        const hotelExists = response.data.some((item) => !!item.hotel);
+        setHasHotelInCart(hotelExists);
+      } else {
+        setHasHotelInCart(false);
+      }
+    } catch (err) {
+      console.error("Error checking hotel in cart:", err);
+      setHasHotelInCart(false);
+    }
+  }, [agent, agentId]);
+
+  useEffect(() => {
+    checkHotelInCart();
+    window.addEventListener("cartUpdated", checkHotelInCart);
+    return () => {
+      window.removeEventListener("cartUpdated", checkHotelInCart);
+    };
+  }, [checkHotelInCart]);
 
   const formatDateToDDMMYYYY = (dateString) => {
     if (!dateString) return "";
@@ -2175,28 +2217,41 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                         textAlign: "center",
                                                       }}
                                                     >
-                                                      <Button
-                                                        variant="success"
-                                                        size="sm"
-                                                        className="add-transfer-to-cart"
-                                                        onClick={() =>
-                                                          handleAddTransferToCart(cab, detail)
+                                                      <OverlayTrigger
+                                                        placement="top"
+                                                        overlay={
+                                                          !hasHotelInCart ? (
+                                                            <Tooltip id={`tooltip-transfer-${idx}`}>
+                                                              Search and add hotels first, then only these will be enabled
+                                                            </Tooltip>
+                                                          ) : <></>
                                                         }
-                                                        disabled={isAdding}
-                                                        style={{ minWidth: "120px" }}
                                                       >
-                                                        {isAdding ? (
-                                                          <>
-                                                            <Spinner
-                                                              size="sm"
-                                                              className="me-2"
-                                                            />
-                                                            Adding...
-                                                          </>
-                                                        ) : (
-                                                          "Add to cart"
-                                                        )}
-                                                      </Button>
+                                                        <span className="d-inline-block">
+                                                          <Button
+                                                            variant="success"
+                                                            size="sm"
+                                                            className="add-transfer-to-cart"
+                                                            onClick={() =>
+                                                              handleAddTransferToCart(cab, detail)
+                                                            }
+                                                            disabled={isAdding || !hasHotelInCart}
+                                                            style={{ minWidth: "120px", pointerEvents: !hasHotelInCart ? 'none' : 'auto' }}
+                                                          >
+                                                            {isAdding ? (
+                                                              <>
+                                                                <Spinner
+                                                                  size="sm"
+                                                                  className="me-2"
+                                                                />
+                                                                Adding...
+                                                              </>
+                                                            ) : (
+                                                              "Add to cart"
+                                                            )}
+                                                          </Button>
+                                                        </span>
+                                                      </OverlayTrigger>
                                                     </td>
                                                   </tr>
                                                 );
@@ -2500,14 +2555,27 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                         >
                                           <FaEye size={13} />
                                         </Button>
-                                        <Button
+                                          <OverlayTrigger
+                                            placement="top"
+                                            overlay={
+                                              !hasHotelInCart ? (
+                                                <Tooltip id={`tooltip-activity-${activity.id}`}>
+                                                  Search and add hotels first, then only these will be enabled
+                                                </Tooltip>
+                                              ) : <></>
+                                            }
+                                          >
+                                            <span className="d-inline-block">
+                                              <Button
                                           variant="primary"
                                           size="sm"
                                           className="activity-add-to-cart"
                                           disabled={
                                             addingActivityId ===
-                                            (activity.id || activity.activityId)
+                                              (activity.id || activity.activityId) ||
+                                            !hasHotelInCart
                                           }
+                                          title={!hasHotelInCart ? "Search and add hotels first, then only these will be enabled" : ""}
                                           onClick={() => handleAddActivityToCart(activity)}
                                         >
                                           {addingActivityId ===
@@ -2523,7 +2591,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                           ) : (
                                             "Add to Cart"
                                           )}
-                                        </Button>
+                                            </Button>
+                                          </span>
+                                        </OverlayTrigger>
                                       </div>
                                     </div>
                                   </div>
