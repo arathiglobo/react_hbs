@@ -146,10 +146,10 @@ const HotelBookingPage = () => {
 
     // Real-time validation for phone length
     if (field === "phone" && value.trim() !== "") {
-      if (value.trim().length > 10) {
+      if (value.trim().length > 15) {
         setValidationErrors((prev) => ({
           ...prev,
-          phone: "Phone number cannot exceed 10 digits",
+          phone: "Phone number cannot exceed 15 digits",
         }));
         return;
       }
