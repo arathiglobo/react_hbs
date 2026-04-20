@@ -15,7 +15,7 @@ import PaxInformation from "./tabs/PaxInformation";
 
 import "../../../styles/PackageBooking_Stepper.css";
 
-const STEPS = ["Basic Details", "Hotels", "Pax Info"];
+const STEPS = ["Basic Details", "Hotels", "Cabs", "Activities", "Pax Info"];
 
 const PackageBooking = () => {
   const { id } = useParams();
@@ -43,7 +43,7 @@ const PackageBooking = () => {
       destinationCountryId: destinationCountryId || "",
     },
     selections: {
-      selectedHotels: [],
+      selectedHotel: null,
       selectedCab: null,
       selectedActivity: null,
       hotelPrice: 0,
@@ -102,17 +102,19 @@ const PackageBooking = () => {
     }
   };
 
-  const progressWidth = `${(currentStep - 1) * 50}%`;
+  const progressWidth = `${(currentStep - 1) * 25}%`;
 
   const renderStep = () => {
     switch (currentStep) {
       case 1: return <BasicDetails data={bookingData.searchParams} updateData={updateSearchParams} onNext={() => setCurrentStep(2)} />;
       case 2: return <HotelsTab searchParams={bookingData.searchParams} bookingData={bookingData.selections} updateData={updateSelections} onPrev={() => setCurrentStep(1)} onNext={() => setCurrentStep(3)} />;
-      case 3: return <PaxInformation 
+      case 3: return <CabsTab searchParams={{ ...bookingData.searchParams, ...packageData }} bookingData={bookingData.selections} updateData={updateSelections} onPrev={() => setCurrentStep(2)} onNext={() => setCurrentStep(4)} />;
+      case 4: return <ActivitiesTab searchParams={bookingData.searchParams} bookingData={bookingData.selections} updateData={updateSelections} onPrev={() => setCurrentStep(3)} onNext={() => setCurrentStep(5)} />;
+      case 5: return <PaxInformation 
                         searchParams={bookingData.searchParams} 
                         bookingData={bookingData} 
                         updateData={setBookingData} 
-                        onPrev={() => setCurrentStep(2)} 
+                        onPrev={() => setCurrentStep(4)} 
                         onFinish={handleFinish} 
                         packageData={packageData} 
                         totalPrice={totalPrice} 

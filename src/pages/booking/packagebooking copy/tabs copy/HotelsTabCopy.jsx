@@ -55,15 +55,13 @@ const HotelsTab = ({ searchParams, bookingData, updateData, onPrev, onNext }) =>
     }
   };
 
-  useEffect(() => {
-    if (hotels.length > 0) {
-      const totalPrice = hotels.reduce((sum, h) => sum + Number(h.adultRate || 0) + Number(h.childRate || 0), 0);
-      updateData({
-        selectedHotels: hotels,
-        hotelPrice: totalPrice,
-      });
-    }
-  }, [hotels]);
+  const handleSelectHotel = (hotel) => {
+    updateData({
+      selectedHotel: hotel,
+      hotelPrice: Number(hotel.adultRate || 0) + Number(hotel.childRate || 0),
+    });
+    toast.success(`${hotel.hotelName} selected!`);
+  };
 
   return (
     <div className="tab-pane-active">
@@ -75,9 +73,10 @@ const HotelsTab = ({ searchParams, bookingData, updateData, onPrev, onNext }) =>
       ) : hasSearched && hotels.length > 0 ? (
         <Row className="g-3">
           {hotels.map((hotel) => {
+            const isSelected = bookingData.selectedHotel?.hotelId === hotel.hotelId;
             return (
               <Col key={hotel.hotelId} md={6}>
-                <div className="hotel-selection-card selected">
+                <div className={`hotel-selection-card${isSelected ? " selected" : ""}`}>
                   <div className="d-flex gap-3">
                     <div className="hotel-thumb">
                       <img
@@ -87,10 +86,7 @@ const HotelsTab = ({ searchParams, bookingData, updateData, onPrev, onNext }) =>
                       />
                     </div>
                     <div className="flex-grow-1">
-                      <div className="d-flex justify-content-between align-items-start">
-                        <h5 className="hotel-name-title mb-1">{hotel.hotelName}</h5>
-                        <span className="badge bg-success" style={{ fontSize: '0.65rem' }}>Included</span>
-                      </div>
+                      <h5 className="hotel-name-title mb-1">{hotel.hotelName}</h5>
                       <p className="text-muted small mb-2">{hotel.stateName}</p>
                       <div className="d-flex justify-content-between align-items-end">
                         <div className="hotel-rates-brief">
@@ -106,6 +102,13 @@ const HotelsTab = ({ searchParams, bookingData, updateData, onPrev, onNext }) =>
                              {hotel.noOfnight} Night(s)
                           </div>
                         </div>
+                        <button
+                          className={`btn-nav-next${isSelected ? "" : " btn-nav-prev"}`}
+                          style={{ padding: "6px 20px", fontSize: "0.8rem" }}
+                          onClick={() => handleSelectHotel(hotel)}
+                        >
+                          {isSelected ? "✓ Selected" : "Select"}
+                        </button>
                       </div>
                     </div>
                   </div>

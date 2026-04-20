@@ -278,7 +278,7 @@ export default function MakeUrOwnPackage() {
                 </div>
                 <div>
                   <h2 className="fw-bold text-dark mb-1">
-                    Create My Trip
+                    Make My Trip
                   </h2>
                   <p className="text-muted mb-0">
                     Plan your perfect vacation package

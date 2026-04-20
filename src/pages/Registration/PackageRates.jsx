@@ -1797,11 +1797,11 @@ const PackageRates = () => {
                                 <Table bordered hover size="sm" className="mb-0">
                                   <thead>
                                     <tr className="bg-light">
-                                      <th style={{ minWidth: "100px" }}>Occupancy Type</th>
+                                      {/* <th style={{ minWidth: "100px" }}>Occupancy Type</th> */}
                                       <th style={{ minWidth: "250px" }}>Select Hotel or Similar</th>
-                                      <th>Adult Rate</th>
-                                      <th>Child With Bed</th>
-                                      <th>Child Without Bed</th>
+                                      <th>Per Adult Rate</th>
+                                      <th>Per Child With Bed</th>
+                                      <th>Per Child Without Bed</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -1809,9 +1809,9 @@ const PackageRates = () => {
                                       const occRate = formData.rates?.[categoryKey]?.occupancyRates?.[occ.id] || {};
                                       return (
                                         <tr key={occ.id}>
-                                          <td className="align-middle fw-semibold">
+                                          {/* <td className="align-middle fw-semibold">
                                             {occ.minimumPax} - {occ.maximumPax}
-                                          </td>
+                                          </td> */}
                                           <td className="align-middle">
                                             <Select
                                               isMulti

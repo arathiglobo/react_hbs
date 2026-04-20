@@ -65,29 +65,7 @@ const PaxInformation = ({
   }, [searchParams]);
 
   const handleContactChange = (field, value) => {
-    let updatedTravellers = [...localData.travellers];
-
-    // Automatically sync contact info to the first traveller
-    if (updatedTravellers.length > 0) {
-      if (field === "contactTitle") {
-        updatedTravellers[0] = { ...updatedTravellers[0], title: value };
-      } else if (field === "contactName") {
-        const nameParts = value.trim().split(/\s+/);
-        const firstName = nameParts[0] || "";
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
-        updatedTravellers[0] = {
-          ...updatedTravellers[0],
-          firstName: firstName,
-          lastName: lastName,
-        };
-      }
-    }
-
-    const updated = {
-      ...localData,
-      [field]: value,
-      travellers: updatedTravellers,
-    };
+    const updated = { ...localData, [field]: value };
     setLocalData(updated);
     updateData({ ...bookingData, paxInfo: updated });
   };
@@ -150,14 +128,35 @@ const PaxInformation = ({
         },
         travellers: localData.travellers,
         selections: {
-          hotels: (bookingData.selections.selectedHotels || []).map((h) => ({
-            hotelId: h.hotelId,
-            hotelName: h.hotelName,
-            selectedRate: h.adultRate,
-            currency: h.currencyCode || "AED",
-          })),
-          cab: null,
-          activity: null,
+          hotel: bookingData.selections.selectedHotel
+            ? {
+                hotelId: bookingData.selections.selectedHotel.hotelId,
+                hotelName: bookingData.selections.selectedHotel.hotelName,
+                selectedRate: bookingData.selections.selectedHotel.adultRate,
+                currency:
+                  bookingData.selections.selectedHotel.currencyCode || "AED",
+              }
+            : null,
+          cab: bookingData.selections.selectedCab
+            ? {
+                cabId: bookingData.selections.selectedCab.cabid,
+                cabName: bookingData.selections.selectedCab.cabname,
+                selectedRate:
+                  bookingData.selections.selectedCab.searchCabDetailsDTO?.[0]
+                    ?.price || 0,
+                currency: "AED",
+              }
+            : null,
+          activity: bookingData.selections.selectedActivity
+            ? {
+                activityId: bookingData.selections.selectedActivity.activityId,
+                activityName:
+                  bookingData.selections.selectedActivity.activityName,
+                selectedRate: bookingData.selections.selectedActivity.totalRate,
+                currency:
+                  bookingData.selections.selectedActivity.currencyCode || "AED",
+              }
+            : null,
         },
       };
 
@@ -394,15 +393,35 @@ const PaxInformation = ({
                   <td>Included Services</td>
                   <td className="text-end">AED {packageData?.rate || 0}</td>
                 </tr>
-                {bookingData.selections.selectedHotels && bookingData.selections.selectedHotels.map((hotel, idx) => (
-                  <tr key={hotel.hotelId || idx}>
-                    <td className="text-muted">Hotel {bookingData.selections.selectedHotels.length > 1 ? idx + 1 : ""}</td>
-                    <td>{hotel.hotelName}</td>
+                {bookingData.selections.selectedHotel && (
+                  <tr>
+                    <td className="text-muted">Hotel</td>
+                    <td>{bookingData.selections.selectedHotel.hotelName}</td>
                     <td className="text-end">
-                      + AED {Number(hotel.adultRate || 0) + Number(hotel.childRate || 0)}
+                      + AED {bookingData.selections.hotelPrice}
                     </td>
                   </tr>
-                ))}
+                )}
+                {bookingData.selections.selectedCab && (
+                  <tr>
+                    <td className="text-muted">Cab</td>
+                    <td>{bookingData.selections.selectedCab.cabname}</td>
+                    <td className="text-end">
+                      + AED {bookingData.selections.cabPrice}
+                    </td>
+                  </tr>
+                )}
+                {bookingData.selections.selectedActivity && (
+                  <tr>
+                    <td className="text-muted">Activity</td>
+                    <td>
+                      {bookingData.selections.selectedActivity.activityName}
+                    </td>
+                    <td className="text-end">
+                      + AED {bookingData.selections.activityPrice}
+                    </td>
+                  </tr>
+                )}
               </tbody>
               <tfoot className="table-light">
                 <tr className="fw-bold fw-large">

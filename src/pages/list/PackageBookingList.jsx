@@ -27,6 +27,8 @@ import {
   FaExclamationTriangle,
   FaCheckCircle,
   FaClipboardList,
+  FaTrash,
+  FaExclamationCircle,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -56,6 +58,11 @@ const PackageBookingList = () => {
   const [verificationDetails, setVerificationDetails] = useState(null);
   const [loadingVerification, setLoadingVerification] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  
+  // Cancellation state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Map status to type parameter
   const getTypeParam = (status) => {
@@ -87,8 +94,12 @@ const PackageBookingList = () => {
   const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
-      // Calling the new endpoint provided by the user
-      const response = await axiosInstance.get("/api/v1/package-booking/bookings");
+      // Switch endpoint based on status
+      const endpoint = status === "cancelled" 
+        ? "/api/v1/package-booking/cancelled" 
+        : "/api/v1/package-booking/bookings";
+        
+      const response = await axiosInstance.get(endpoint);
 
       if (Array.isArray(response.data)) {
         setAllBookings(response.data || []);
@@ -102,7 +113,7 @@ const PackageBookingList = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [status]);
 
   useEffect(() => {
     fetchBookings();
@@ -284,6 +295,37 @@ const PackageBookingList = () => {
     }
   };
 
+  // Handle Cancel Click
+  const handleCancelClick = (booking) => {
+    setBookingToCancel(booking);
+    setShowCancelModal(true);
+  };
+
+  // Confirm Cancellation
+  const confirmCancelBooking = async () => {
+    if (!bookingToCancel) return;
+
+    try {
+      setIsCancelling(true);
+      const bookingId = bookingToCancel.bookingId;
+      const response = await axiosInstance.put(`/api/v1/package-booking/cancel/${bookingId}`);
+
+      if (response.data && response.data.status === "success") {
+        toast.success(response.data.message || "Booking cancelled successfully");
+        setShowCancelModal(false);
+        setBookingToCancel(null);
+        fetchBookings();
+      } else {
+        toast.error(response.data?.message || "Failed to cancel booking");
+      }
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+      toast.error(error.response?.data?.message || "Error cancelling booking. Please try again.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const displayStart = paginatedBookings.length > 0 ? (page - 1) * perPage + 1 : 0;
   const displayEnd = Math.min(page * perPage, totalElements);
 
@@ -329,9 +371,51 @@ const PackageBookingList = () => {
                 </Button> */}
               </Card.Header>
               <Card.Body>
-                {/* Filters */}
+                {/* Booking Types Radio Section */}
+                <Row className="mb-4">
+                  <Col md={6}>
+                    <Card className="shadow-sm border-0" style={{ backgroundColor: "#f8f9fa", borderRadius: "8px" }}>
+                      <Card.Body className="p-3">
+                        <h6 className="mb-3 fw-bold text-dark" style={{ fontSize: "0.85rem" }}>Booking Types</h6>
+                        <div className="d-flex flex-wrap gap-4">
+                          <Form.Check
+                            type="radio"
+                            id="upcoming"
+                            name="bookingType"
+                            label="Upcoming"
+                            checked={status === "upcoming"}
+                            onChange={() => setStatus("upcoming")}
+                            className="fw-semibold"
+                            style={{ fontSize: "0.85rem", cursor: "pointer" }}
+                          />
+                          <Form.Check
+                            type="radio"
+                            id="completed"
+                            name="bookingType"
+                            label="Completed"
+                            checked={status === "completed"}
+                            onChange={() => setStatus("completed")}
+                            className="fw-semibold"
+                            style={{ fontSize: "0.85rem", cursor: "pointer" }}
+                          />
+                          <Form.Check
+                            type="radio"
+                            id="cancelled"
+                            name="bookingType"
+                            label="Cancelled"
+                            checked={status === "cancelled"}
+                            onChange={() => setStatus("cancelled")}
+                            className="fw-semibold"
+                            style={{ fontSize: "0.85rem", cursor: "pointer" }}
+                          />
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+
                 {/* Display and Search */}
-                <Row className="mb-3 align-items-center mt-3">
+                <Row className="mb-3 align-items-center">
                   <Col md={3}>
                     <div className="d-flex align-items-center gap-2">
                       <span className="small text-muted">Display</span>
@@ -400,21 +484,19 @@ const PackageBookingList = () => {
                                   AED {parseFloat(booking.totalPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </td>
                                 <td>
-                                  <div className="d-flex gap-2 align-items-center">
+                                  <div className="d-flex gap-3 align-items-center">
                                     <FaEye
-                                      className="text-primary"
-                                      style={{ cursor: "pointer" }}
+                                      style={{ cursor: "pointer", fontSize: "14px", color: "#007bff" }}
                                       onClick={() => handleViewDetails(booking)}
                                       title="View Details"
-                                      size={18}
                                     />
-                                    {/* <FaExclamationTriangle
-                                      className="text-warning"
-                                      style={{ cursor: "pointer" }}
-                                      onClick={() => handleVerificationClick(booking)}
-                                      title="Verify Booking"
-                                      size={18}
-                                    /> */}
+                                    {status !== "cancelled" && (
+                                      <FaTrash
+                                        style={{ cursor: "pointer", fontSize: "14px", color: "#dc3545" }}
+                                        onClick={() => handleCancelClick(booking)}
+                                        title="Cancel Booking"
+                                      />
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -580,35 +662,45 @@ const PackageBookingList = () => {
                 <Col lg={7}>
                   <div className="border p-3">
                     <h6 className="mb-3">Selected Services</h6>
-                    {/* Hotel Selection */}
-                    {bookingDetails.selections?.hotel && (
-                      <div className="p-2 border mb-2">
-                        <div className="small mb-1 text-muted">Hotel Selection</div>
-                        <div className="d-flex justify-content-between align-items-center">
-                          <div className="small">{bookingDetails.selections.hotel.hotelName}</div>
-                          <div className="small">{bookingDetails.selections.hotel.selectedRate} AED</div>
-                        </div>
+                    {/* Hotel Selection - Updated to handle multiple hotels */}
+                    {bookingDetails.selections?.hotels && bookingDetails.selections.hotels.length > 0 ? (
+                      <div className="mb-3">
+                        <div className="small mb-2 text-muted fw-bold">Hotel Selections</div>
+                        {bookingDetails.selections.hotels.map((hotel, hIdx) => (
+                          <div key={hotel.hotelId || hIdx} className="p-2 border mb-2 bg-white shadow-sm rounded">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <div>
+                                <div className="fw-bold small">{hotel.hotelName}</div>
+                                <div className="text-muted" style={{ fontSize: '0.7rem' }}>Hotel ID: {hotel.hotelId}</div>
+                              </div>
+                              <div className="text-end">
+                                <div className="fw-bold small text-primary">{hotel.selectedRate} {hotel.currency || 'AED'}</div>
+                                <div className="text-muted" style={{ fontSize: '0.7rem' }}>Per Pax Rate</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
-
+                    ) : null}
+ 
                     {/* Cab Selection */}
                     {bookingDetails.selections?.cab && (
-                      <div className="p-2 border mb-2">
-                        <div className="small mb-1 text-muted">Transfer Selection</div>
+                      <div className="p-2 border mb-2 bg-white shadow-sm rounded">
+                        <div className="small mb-1 text-muted fw-bold">Transfer Selection</div>
                         <div className="d-flex justify-content-between align-items-center">
                           <div className="small">{bookingDetails.selections.cab.cabName}</div>
-                          <div className="small">{bookingDetails.selections.cab.selectedRate} AED</div>
+                          <div className="small fw-bold text-primary">{bookingDetails.selections.cab.selectedRate} AED</div>
                         </div>
                       </div>
                     )}
-
+ 
                     {/* Activity Selection */}
                     {bookingDetails.selections?.activity && (
-                      <div className="p-2 border">
-                        <div className="small mb-1 text-muted">Activity Selection</div>
+                      <div className="p-2 border bg-white shadow-sm rounded">
+                        <div className="small mb-1 text-muted fw-bold">Activity Selection</div>
                         <div className="d-flex justify-content-between align-items-center">
                           <div className="small">{bookingDetails.selections.activity.activityName}</div>
-                          <div className="small">{bookingDetails.selections.activity.selectedRate} AED</div>
+                          <div className="small fw-bold text-primary">{bookingDetails.selections.activity.selectedRate} AED</div>
                         </div>
                       </div>
                     )}
@@ -874,6 +966,56 @@ const PackageBookingList = () => {
               <>
                 Set Verified <FaCheckCircle className="ms-2" />
               </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Cancellation Modal */}
+      <Modal
+        show={showCancelModal}
+        onHide={() => !isCancelling && setShowCancelModal(false)}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!isCancelling} className="border-0">
+          <Modal.Title className="fw-bold d-flex align-items-center">
+            <FaExclamationCircle className="me-2 text-danger" />
+            <span>Cancel Booking</span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="py-4 text-center">
+          <p className="fs-5 mb-0">Are you sure you want to cancel this booking?</p>
+          {bookingToCancel && (
+            <div className="mt-3 text-muted small">
+              <div className="fw-bold text-dark">{bookingToCancel.confirmationCode}</div>
+              <div>{bookingToCancel.packageName}</div>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="border-0 justify-content-center pb-4">
+          <Button
+            variant="secondary"
+            className="px-4 fw-bold"
+            onClick={() => setShowCancelModal(false)}
+            disabled={isCancelling}
+          >
+            No
+          </Button>
+          <Button
+            variant="danger"
+            className="px-4 fw-bold shadow-sm"
+            onClick={confirmCancelBooking}
+            disabled={isCancelling}
+          >
+            {isCancelling ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Cancelling...
+              </>
+            ) : (
+              "Yes, Cancel"
             )}
           </Button>
         </Modal.Footer>

@@ -21,6 +21,7 @@ import {
   FaEnvelope,
   FaPaperPlane,
   FaExclamationCircle,
+  FaDownload,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -328,6 +329,35 @@ const HotelBookingList = () => {
       );
     } finally {
       setGeneratingPdf(false);
+    }
+  };
+
+  // Download PDF directly
+  const handleDownloadPdf = async (bookingId, type) => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get(`/api/bookings/${bookingId}/pdf`, {
+        params: { type: type.toUpperCase() },
+      });
+
+      if (response.data && response.data.status === "SUCCESS" && response.data.pdfUrl) {
+        // Trigger browser download
+        const link = document.createElement("a");
+        link.href = response.data.pdfUrl;
+        link.download = `Booking_${bookingId}_${type}.pdf`;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`${type} PDF download started!`);
+      } else {
+        toast.error(response.data?.message || `Failed to generate ${type} PDF.`);
+      }
+    } catch (error) {
+      console.error(`Error downloading ${type} PDF:`, error);
+      toast.error(`Error downloading ${type} PDF.`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1157,87 +1187,69 @@ const HotelBookingList = () => {
                                     minWidth: COLUMN_WIDTHS.action,
                                   }}
                                 >
-                                  <div className="d-flex gap-2 justify-content-center align-items-center">
+                                  <div className="d-flex gap-3 justify-content-center align-items-center">
+                                    {/* View Icon - SHOWN FOR ALL */}
                                     {loadingBookingId === b.bookingId ? (
                                       <Spinner
                                         animation="border"
                                         size="sm"
-                                        style={{ color: "#2196f3" }}
+                                        style={{ color: "#007bff" }}
                                       />
                                     ) : (
                                       <FaEye
                                         style={{
-                                          fontSize: "16px",
-                                          color: "#2196f3",
+                                          fontSize: "14px",
+                                          color: "#007bff",
                                           cursor: "pointer",
-                                          transition: "all 0.2s ease",
                                         }}
                                         title="View"
                                         onClick={() =>
                                           fetchBookingDetails(b.bookingId)
                                         }
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.color =
-                                            "#1976d2";
-                                          e.currentTarget.style.transform =
-                                            "scale(1.15)";
+                                      />
+                                    )}
+
+                                    {/* Message Icon (Voucher Modal) - SHOWN FOR UPCOMING & COMPLETED */}
+                                    {(status === "upcoming" || status === "completed") && (
+                                      <FaEnvelope
+                                        style={{
+                                          fontSize: "14px",
+                                          color: "#28a745",
+                                          cursor: "pointer",
                                         }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.color =
-                                            "#2196f3";
-                                          e.currentTarget.style.transform =
-                                            "scale(1)";
+                                        title="Send request or confirmation"
+                                        onClick={async () => {
+                                          setSelectedBooking(b);
+                                          setShowVoucherModal(true);
+                                          setSelectedVoucherType("Request");
+                                          await fetchVoucherDetails(b.bookingId);
                                         }}
                                       />
                                     )}
-                                    <FaEnvelope
-                                      style={{
-                                        fontSize: "16px",
-                                        color: "#4caf50",
-                                        cursor: "pointer",
-                                        transition: "all 0.2s ease",
-                                      }}
-                                      title="Send request or confirmation"
-                                      onClick={async () => {
-                                        setSelectedBooking(b);
-                                        setShowVoucherModal(true);
-                                        setSelectedVoucherType("Request");
-                                        await fetchVoucherDetails(b.bookingId);
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.color = "#388e3c";
-                                        e.currentTarget.style.transform =
-                                          "scale(1.15)";
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.color = "#4caf50";
-                                        e.currentTarget.style.transform =
-                                          "scale(1)";
-                                      }}
-                                    />
-                                    {isCancellationAllowed(b) && (
+
+                                    {/* Download Icon - SHOWN FOR COMPLETED ONLY */}
+                                    {status === "completed" && (
+                                      <FaDownload
+                                        style={{
+                                          fontSize: "14px",
+                                          color: "#333",
+                                          cursor: "pointer",
+                                        }}
+                                        title="Download Completed PDF"
+                                        onClick={() => handleDownloadPdf(b.bookingId, "COMPLETED")}
+                                      />
+                                    )}
+
+                                    {/* Delete/Cancel Icon - SHOWN FOR UPCOMING ONLY */}
+                                    {status === "upcoming" && isCancellationAllowed(b) && (
                                       <FaTrash
                                         style={{
-                                          fontSize: "16px",
-                                          color: "#f44336",
+                                          fontSize: "14px",
+                                          color: "#dc3545",
                                           cursor: "pointer",
-                                          transition: "all 0.2s ease",
                                         }}
                                         title="Delete"
-                                        className="delete-booking"
                                         onClick={() => handleDeleteBooking(b)}
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.color =
-                                            "#d32f2f";
-                                          e.currentTarget.style.transform =
-                                            "scale(1.15)";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.color =
-                                            "#f44336";
-                                          e.currentTarget.style.transform =
-                                            "scale(1)";
-                                        }}
                                       />
                                     )}
                                   </div>

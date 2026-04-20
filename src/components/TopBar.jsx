@@ -107,7 +107,7 @@ export default function TopBar() {
             </Col>
             <Col md={4}>
               <div className="bg-light p-2 rounded-3 border">
-                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ENTER MARKUP %</Form.Label>
+                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ADDITIONAL MARKUP %</Form.Label>
                 <div className="input-group input-group-sm">
                   <Form.Control
                     type="number"
@@ -201,7 +201,7 @@ export default function TopBar() {
             </Col>
             <Col md={4}>
               <div className="bg-light p-2 rounded-3 border">
-                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ENTER MARKUP %</Form.Label>
+                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ADDITIONAL MARKUP %</Form.Label>
                 <div className="input-group input-group-sm">
                   <Form.Control
                     type="number"
@@ -277,7 +277,7 @@ export default function TopBar() {
             </Col>
             <Col md={4}>
               <div className="bg-light p-2 rounded-3 border">
-                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ENTER MARKUP %</Form.Label>
+                <Form.Label className="mb-1 x-small fw-bold text-muted" style={{ fontSize: "10px" }}>ADDITIONAL MARKUP %</Form.Label>
                 <div className="input-group input-group-sm">
                   <Form.Control
                     type="number"

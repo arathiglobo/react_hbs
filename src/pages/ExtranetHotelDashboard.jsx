@@ -51,7 +51,7 @@ const ExtranetHotelDashboard = () => {
       iconColor: "#16A34A",
     },
     {
-      to: "/hotelBookings",
+      to: "/calendar",
       icon: <FaClipboardList size={22} />,
       label: "My Bookings",
       description: "View all reservations",

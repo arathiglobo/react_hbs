@@ -70,7 +70,7 @@ const mailTypeDropdownStyles = `
 `;
 
 // Inject styles
-if (typeof document !== 'undefined') {
+if (typeof document !== "undefined") {
   const styleSheet = document.createElement("style");
   styleSheet.type = "text/css";
   styleSheet.innerText = mailTypeDropdownStyles;
@@ -124,7 +124,7 @@ const HotelRegistrationActions = () => {
   const [stateList, setStateList] = useState([]);
   const [placeList, setPlaceList] = useState([]);
 
-   console.log("hotel complete data::", hotelData);
+  console.log("hotel complete data::", hotelData);
 
   // Mail Center data - now fetched when modal opens
   // Removed the old useEffect as we now fetch data dynamically
@@ -143,7 +143,8 @@ const HotelRegistrationActions = () => {
 
   // Mail center save loading state
   const [isMailCenterSaving, setIsMailCenterSaving] = useState(false);
-  const [mailCenterValidationError, setMailCenterValidationError] = useState("");
+  const [mailCenterValidationError, setMailCenterValidationError] =
+    useState("");
   const [isMailCenterSaved, setIsMailCenterSaved] = useState(false);
   const [isLoadingMailCenterData, setIsLoadingMailCenterData] = useState(false);
 
@@ -153,10 +154,6 @@ const HotelRegistrationActions = () => {
   const [formTimestamp, setFormTimestamp] = useState(Date.now());
   const [showPassword, setShowPassword] = useState(false);
   const [showRePassword, setShowRePassword] = useState(false);
-
-
-
- 
 
   const navigationTabs = [
     { id: "basic-details", label: "Basic details", icon: FaUser },
@@ -177,20 +174,28 @@ const HotelRegistrationActions = () => {
     isMailCenterSaved,
     loginDetailsSaved,
     mailCenterStatus: isMailCenterSaved ? "success" : "pending",
-    loginDetailsStatus: isMailCenterSaved ? (loginDetailsSaved ? "success" : "pending") : "disabled"
+    loginDetailsStatus: isMailCenterSaved
+      ? loginDetailsSaved
+        ? "success"
+        : "pending"
+      : "disabled",
   });
 
   const actions = [
-    { 
-      label: "Mail center", 
-      icon: FaAt, 
-      status: isMailCenterSaved ? "success" : "pending", 
-      count: null 
+    {
+      label: "Mail center",
+      icon: FaAt,
+      status: isMailCenterSaved ? "success" : "pending",
+      count: null,
     },
     {
       label: "Login Details",
       icon: FaArrowRight,
-      status: isMailCenterSaved ? (loginDetailsSaved ? "success" : "pending") : "disabled",
+      status: isMailCenterSaved
+        ? loginDetailsSaved
+          ? "success"
+          : "pending"
+        : "disabled",
       count: null,
     },
     {
@@ -252,17 +257,17 @@ const HotelRegistrationActions = () => {
   useEffect(() => {
     // console.log("Hotel ID changed to:", id);
     // console.log("Resetting login state for new hotel");
-    
+
     // Reset all login-related state variables
     setLoginFormData({
       username: "",
       password: "",
       repassword: "",
-      userroles: []
+      userroles: [],
     });
     setLoginDetailsSaved(false);
     setSavedUsername("");
-    setLoginFormKey(prev => prev + 1);
+    setLoginFormKey((prev) => prev + 1);
     setFormTimestamp(Date.now()); // Update timestamp for unique keys
     setLoginErrors({
       username: "",
@@ -270,7 +275,7 @@ const HotelRegistrationActions = () => {
       repassword: "",
       userroles: "",
     });
-    
+
     // console.log("✅ Login state reset for hotel ID:", id);
   }, [id]);
 
@@ -325,22 +330,33 @@ const HotelRegistrationActions = () => {
     const checkMailCenterStatus = async () => {
       try {
         // Check if mail center has been saved for this hotel
-        const mailCenterResponse = await axiosInstance.get(`/api/hotels/getMailCentre/${id}`);
+        const mailCenterResponse = await axiosInstance.get(
+          `/api/hotels/getMailCentre/${id}`,
+        );
         console.log("Mail center check response:", mailCenterResponse.data);
-        
+
         // Handle both single object and array responses
         let hasData = false;
-        if (Array.isArray(mailCenterResponse.data) && mailCenterResponse.data.length > 0) {
+        if (
+          Array.isArray(mailCenterResponse.data) &&
+          mailCenterResponse.data.length > 0
+        ) {
           hasData = true;
-        } else if (mailCenterResponse.data && typeof mailCenterResponse.data === 'object' && mailCenterResponse.data.id) {
+        } else if (
+          mailCenterResponse.data &&
+          typeof mailCenterResponse.data === "object" &&
+          mailCenterResponse.data.id
+        ) {
           hasData = true;
         }
-        
+
         if (hasData) {
           console.log("✅ Mail center data found - enabling login details");
           setIsMailCenterSaved(true);
         } else {
-          console.log("❌ No mail center data found - login details will be disabled");
+          console.log(
+            "❌ No mail center data found - login details will be disabled",
+          );
           setIsMailCenterSaved(false);
         }
       } catch (error) {
@@ -355,8 +371,6 @@ const HotelRegistrationActions = () => {
       checkMailCenterStatus();
     }
   }, [id]);
-
- 
 
   const getAmenityIcon = (amenityId) => {
     const iconMap = {
@@ -374,13 +388,13 @@ const HotelRegistrationActions = () => {
 
   // Helper function to get state name from ID
   const getStateName = (stateId) => {
-    const state = stateList.find(s => s.value === stateId);
+    const state = stateList.find((s) => s.value === stateId);
     return state ? state.label : `State ID: ${stateId}`;
   };
 
   // Helper function to get place name from ID
   const getPlaceName = (placeId) => {
-    const place = placeList.find(p => p.value === placeId);
+    const place = placeList.find((p) => p.value === placeId);
     return place ? place.label : `Place ID: ${placeId}`;
   };
 
@@ -443,7 +457,8 @@ const HotelRegistrationActions = () => {
                         <div className="location-details">
                           <div>{hotelData.address}</div>
                           <div className="location-additional">
-                            {getStateName(hotelData.stateId)}, {getPlaceName(hotelData.placeId)}
+                            {getStateName(hotelData.stateId)},{" "}
+                            {getPlaceName(hotelData.placeId)}
                           </div>
                         </div>
                       </div>
@@ -464,7 +479,7 @@ const HotelRegistrationActions = () => {
                           {hotelData.amenities &&
                             hotelData.amenities.map((amenity) => {
                               const IconComponent = getAmenityIcon(
-                                amenity.amenityId
+                                amenity.amenityId,
                               );
                               return (
                                 <div
@@ -472,7 +487,10 @@ const HotelRegistrationActions = () => {
                                   className="amenity-item"
                                 >
                                   <IconComponent className="amenity-icon" />
-                                  <span className="amenitiesname"> {amenity.amenityName}</span>
+                                  <span className="amenitiesname">
+                                    {" "}
+                                    {amenity.amenityName}
+                                  </span>
                                 </div>
                               );
                             })}
@@ -575,34 +593,30 @@ const HotelRegistrationActions = () => {
           <div>
             <h4 className="mb-3">Room Details</h4>
             {hotelData.roomCategories && hotelData.roomCategories.length > 0 ? (
-              hotelData.roomCategories.map(
-                (room, index) => (
-                  // console.log("room::##", room),
-                  (
-                    <div key={index} className="room-item">
-                      <div className="content-item">
-                        <strong>Room Name:</strong> {room.name}
-                      </div>
-                      {/* <div className="content-item">
+              hotelData.roomCategories.map((room, index) => (
+                // console.log("room::##", room),
+                <div key={index} className="room-item">
+                  <div className="content-item">
+                    <strong>Room Name:</strong> {room.name}
+                  </div>
+                  {/* <div className="content-item">
                     <strong>Room Category ID:</strong> {room.roomCategoryId}
                   </div>
                   <div className="content-item">
                     <strong>Room Type ID:</strong> {room.roomTypeId}
                   </div> */}
-                      <div className="content-item">
-                        <strong>Status:</strong>
-                        <Badge
-                          bg={room.isDeleted ? "danger" : "success"}
-                          className="ms-2"
-                        >
-                          {room.isDeleted ? "Deleted" : "Active"}
-                        </Badge>
-                      </div>
-                      <hr />
-                    </div>
-                  )
-                )
-              )
+                  <div className="content-item">
+                    <strong>Status:</strong>
+                    <Badge
+                      bg={room.isDeleted ? "danger" : "success"}
+                      className="ms-2"
+                    >
+                      {room.isDeleted ? "Deleted" : "Active"}
+                    </Badge>
+                  </div>
+                  <hr />
+                </div>
+              ))
             ) : (
               <p className="text-muted">No room details available</p>
             )}
@@ -659,7 +673,9 @@ const HotelRegistrationActions = () => {
       // Check if mail center has been saved first
       if (!isMailCenterSaved) {
         console.log("❌ Login Details clicked but mail center not saved");
-        toast.error("Please add mail center first, then you can add login details");
+        toast.error(
+          "Please add mail center first, then you can add login details",
+        );
         return;
       }
       console.log("✅ Mail center saved - opening login details modal");
@@ -669,26 +685,26 @@ const HotelRegistrationActions = () => {
       // console.log("Current form data before clearing:", loginFormData);
       // console.log("Current saved username:", savedUsername);
       // console.log("Current loginDetailsSaved:", loginDetailsSaved);
-      
+
       // COMPLETELY reset all login-related state to ensure clean slate
       const emptyFormData = {
         username: "",
         password: "",
         repassword: "",
-        userroles: []
+        userroles: [],
       };
       // console.log("🔧 Resetting form data to:", emptyFormData);
       setLoginFormData(emptyFormData);
       setLoginDetailsSaved(false);
       setSavedUsername("");
-      setLoginFormKey(prev => prev + 1); // Force form re-render
+      setLoginFormKey((prev) => prev + 1); // Force form re-render
       setFormTimestamp(Date.now()); // Update timestamp for unique keys
       // console.log("✅ All login state reset - form should be completely empty");
       // console.log("About to call API: auth/checkRegisteredUserExist/" + id);
-      
+
       // Show modal first, then fetch data
       setShowLoginDetailsModal(true);
-      
+
       // Fetch existing login data after modal is shown with a longer delay
       setTimeout(() => {
         // console.log("🔄 About to fetch existing login data...");
@@ -858,49 +874,58 @@ const HotelRegistrationActions = () => {
   const fetchExistingMailCenterData = async () => {
     setIsLoadingMailCenterData(true);
     try {
-      const response = await axiosInstance.get(`/api/hotels/getMailCentre/${id}`);
+      const response = await axiosInstance.get(
+        `/api/hotels/getMailCentre/${id}`,
+      );
       console.log("📧 Mail center fetch response:", response.data);
-      
+
       // Handle both single object and array responses
       let dataArray = [];
       if (Array.isArray(response.data)) {
         dataArray = response.data;
-      } else if (response.data && typeof response.data === 'object') {
+      } else if (response.data && typeof response.data === "object") {
         dataArray = [response.data]; // Convert single object to array
       }
-      
+
       console.log("📊 Processed data array:", dataArray);
-      
+
       if (dataArray.length > 0) {
         // If we have existing mail center data, populate the form
-        const existingData = dataArray.map(item => {
+        const existingData = dataArray.map((item) => {
           console.log("🔍 Processing mail center item:", item);
           console.log("📋 mailTyIds from API:", item.mailTyIds);
-          
+
           const mappedItem = {
             id: item.id,
             userType: "Hotel Contact",
             username: item.contactPerson || "",
             contactNumber: item.mobileNumber || item.teleNumber || "",
             mailId: item.personalEmail || "",
-            mailType: item.mailTyIds ? item.mailTyIds.map(id => {
-              console.log("🔄 Converting mailTyId:", id, "to string:", id.toString());
-              return id.toString();
-            }) : []
+            mailType: item.mailTyIds
+              ? item.mailTyIds.map((id) => {
+                  console.log(
+                    "🔄 Converting mailTyId:",
+                    id,
+                    "to string:",
+                    id.toString(),
+                  );
+                  return id.toString();
+                })
+              : [],
           };
-          
+
           console.log("🔍 Final mapped item for dropdown:", {
             id: mappedItem.id,
             mailType: mappedItem.mailType,
             mailTypeLength: mappedItem.mailType?.length,
-            mailTypeIsArray: Array.isArray(mappedItem.mailType)
+            mailTypeIsArray: Array.isArray(mappedItem.mailType),
           });
-          
+
           console.log("✅ Mapped mail center item:", mappedItem);
           console.log("📧 Final mailType array:", mappedItem.mailType);
           return mappedItem;
         });
-        
+
         console.log("📊 All mapped existing data:", existingData);
         setMailCenterData(existingData);
         setIsMailCenterSaved(true);
@@ -913,7 +938,7 @@ const HotelRegistrationActions = () => {
             username: item.contactPerson || "",
             contactNumber: item.mobileNumber || item.teleNumber || "",
             mailId: item.personalEmail || "",
-            mailType: []
+            mailType: [],
           }));
           setMailCenterData(formattedData);
         }
@@ -929,7 +954,7 @@ const HotelRegistrationActions = () => {
           username: item.contactPerson || "",
           contactNumber: item.mobileNumber || item.teleNumber || "",
           mailId: item.personalEmail || "",
-          mailType: []
+          mailType: [],
         }));
         setMailCenterData(formattedData);
       }
@@ -944,30 +969,41 @@ const HotelRegistrationActions = () => {
     // console.log("Hotel ID:", id);
     // console.log("Form data at start of fetch:", loginFormData);
     setIsLoadingLoginData(true);
-    
+
     try {
-     
-      const response = await axiosInstance.post(`/auth/checkRegisteredUserExist/${id}`);
+      const response = await axiosInstance.post(
+        `/auth/checkRegisteredUserExist/${id}`,
+      );
       // console.log("Login check response for hotel ID", id, ":", response.data);
-      
+
       // Scenario 1: API returns successful response with userName (existing user)
       // Expected response: { "userId": 4, "userName": "kumar", "password": null, "userRoles": null }
       if (response.data && response.data.userName) {
         // console.log("✅ Existing user found for hotel ID", id, "- pre-filling username:", response.data.userName);
         // console.log("Full response data:", response.data);
-        
+
+        // Map role names from response to IDs from rolesList
+        const roleIds = (response.data.userRoles || [])
+          .map((roleName) => {
+            const role = rolesList.find(
+              (r) => r.roleName?.toUpperCase() === roleName.toUpperCase(),
+            );
+            return role ? role.id : null;
+          })
+          .filter((id) => id !== null);
+
         // Pre-fill username, keep password fields empty
         const newFormData = {
           username: response.data.userName,
           password: "",
           repassword: "",
-          userroles: response.data.userRoles || []
+          userroles: roleIds,
         };
         // console.log("🔧 Setting form data to:", newFormData);
         setLoginFormData(newFormData);
         setLoginDetailsSaved(true);
         setSavedUsername(response.data.userName);
-        setLoginFormKey(prev => prev + 1); // Force form re-render
+        setLoginFormKey((prev) => prev + 1); // Force form re-render
         setFormTimestamp(Date.now()); // Update timestamp for unique keys
         // console.log("✅ Form populated with existing user data for hotel ID", id, "- username:", response.data.userName);
       } else {
@@ -975,33 +1011,42 @@ const HotelRegistrationActions = () => {
         // console.log("⚠️ API success but no userName for hotel ID", id, "- keeping form empty");
         setLoginDetailsSaved(false);
         setSavedUsername("");
-        setLoginFormKey(prev => prev + 1); // Force form re-render
+        setLoginFormKey((prev) => prev + 1); // Force form re-render
         // console.log("Form remains empty - no userName in response for hotel ID", id);
       }
     } catch (error) {
-      console.error("❌ Error fetching login data for hotel ID", id, ":", error);
-      
+      console.error(
+        "❌ Error fetching login data for hotel ID",
+        id,
+        ":",
+        error,
+      );
+
       // Scenario 2: API returns 400 error (new user)
       // Expected error response: { "status": 400, "error": "Bad Request", "message": "User is not Registered for id : 8", "timestamp": "..." }
-      if (error.response && error.response.status === 400 && 
-          error.response.data && error.response.data.message && 
-          error.response.data.message.includes("User is not Registered")) {
+      if (
+        error.response &&
+        error.response.status === 400 &&
+        error.response.data &&
+        error.response.data.message &&
+        error.response.data.message.includes("User is not Registered")
+      ) {
         // console.log("✅ User is not registered (400 error) for hotel ID", id, "- this is a new user");
         // console.log("Error response:", error.response.data);
-        
+
         // Keep all fields empty for new user
         // console.log("🔧 Setting form data to empty for new user for hotel ID", id, "...");
         const emptyFormData = {
           username: "",
           password: "",
           repassword: "",
-          userroles: []
+          userroles: [],
         };
         // console.log("🔧 Setting form data to:", emptyFormData);
         setLoginFormData(emptyFormData);
         setLoginDetailsSaved(false);
         setSavedUsername("");
-        setLoginFormKey(prev => prev + 1); // Force form re-render
+        setLoginFormKey((prev) => prev + 1); // Force form re-render
         setFormTimestamp(Date.now()); // Update timestamp for unique keys
         // console.log("✅ Form data set to empty for hotel ID", id, "- username: '', password: '', repassword: ''");
         // console.log("✅ Form remains empty for new user registration for hotel ID", id);
@@ -1009,18 +1054,18 @@ const HotelRegistrationActions = () => {
         // Other errors - also keep form empty
         // console.log("⚠️ Other error occurred for hotel ID", id, "- keeping form empty");
         // console.log("Error details:", error.response?.data || error.message);
-        
+
         const errorFormData = {
           username: "",
           password: "",
           repassword: "",
-          userroles: []
+          userroles: [],
         };
         // console.log("🔧 Setting form data to:", errorFormData);
         setLoginFormData(errorFormData);
         setLoginDetailsSaved(false);
         setSavedUsername("");
-        setLoginFormKey(prev => prev + 1); // Force form re-render
+        setLoginFormKey((prev) => prev + 1); // Force form re-render
         setFormTimestamp(Date.now()); // Update timestamp for unique keys
         // console.log("Form remains empty due to other error for hotel ID", id);
       }
@@ -1031,15 +1076,17 @@ const HotelRegistrationActions = () => {
 
   const handleMailTypeChange = (id, selectedOptions) => {
     // Convert selected options to array of values
-    const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
-    
+    const selectedValues = selectedOptions
+      ? selectedOptions.map((option) => option.value)
+      : [];
+
     setMailCenterData((prevData) => {
       const updatedData = prevData.map((item) =>
-        item.id === id ? { ...item, mailType: selectedValues } : item
+        item.id === id ? { ...item, mailType: selectedValues } : item,
       );
       return updatedData;
     });
-    
+
     // Clear validation error when user selects mail types
     if (selectedValues.length > 0) {
       setMailCenterValidationError("");
@@ -1048,12 +1095,13 @@ const HotelRegistrationActions = () => {
 
   const handleMailCenterSave = async () => {
     // Validate that at least one mail type is selected
-    const selectedMailTypes = mailCenterData.filter(item => 
-      item.mailType && 
-      Array.isArray(item.mailType) && 
-      item.mailType.length > 0
+    const selectedMailTypes = mailCenterData.filter(
+      (item) =>
+        item.mailType &&
+        Array.isArray(item.mailType) &&
+        item.mailType.length > 0,
     );
-    
+
     if (selectedMailTypes.length === 0) {
       setMailCenterValidationError("Please select at least one mail type");
       return;
@@ -1066,9 +1114,9 @@ const HotelRegistrationActions = () => {
     try {
       // Prepare the payload according to HotelMailCentreDTO structure
       // Get all contact details that have mail types selected
-      const mailTypeData = selectedMailTypes.map(item => ({
+      const mailTypeData = selectedMailTypes.map((item) => ({
         hotelContactDetailsId: item.id,
-        mailCentreIds: item.mailType.map(type => parseInt(type))
+        mailCentreIds: item.mailType.map((type) => parseInt(type)),
       }));
 
       // If we have multiple contacts with mail types, we might need to send multiple requests
@@ -1079,7 +1127,7 @@ const HotelRegistrationActions = () => {
 
       const response = await axiosInstance.post(
         `/api/hotels/addMailCentre/${id}`,
-        mailCentrePayload
+        mailCentrePayload,
       );
 
       if (response.data) {
@@ -1095,7 +1143,7 @@ const HotelRegistrationActions = () => {
       toast.error(
         `Failed to save mail center data: ${
           error.response?.data?.message || error.message
-        }`
+        }`,
       );
     } finally {
       setIsMailCenterSaving(false);
@@ -1131,7 +1179,7 @@ const HotelRegistrationActions = () => {
   const handleLoginSave = async () => {
     // console.log("its handleLoginSave click");
     // console.log("loginFormData::" ,loginFormData);
-   
+
     let isValid = true;
     const errors = {
       username: "",
@@ -1182,7 +1230,6 @@ const HotelRegistrationActions = () => {
       isValid = false;
     }
 
-
     // User roles validation - set default if not provided
     // if (!loginFormData.userroles || loginFormData.userroles.length === 0) {
     //   // Set default user role for hotel extranet users
@@ -1196,19 +1243,18 @@ const HotelRegistrationActions = () => {
         // setIsLoading(true);
 
         let activeUserRole = localStorage.getItem("currentActiveRole");
-         console.log("currentActiveRole::", activeUserRole);
+        console.log("currentActiveRole::", activeUserRole);
         // console.log("roleslist::", rolesList);
 
         let activeRoleObj = rolesList.find(
-          (role) => role.roleName.toUpperCase() === "EXTRANET"
+          (role) => role.roleName.toUpperCase() === "EXTRANET",
         );
-
 
         let loginPayload = null;
 
         if (activeRoleObj) {
-           // console.log("Active role exists in rolesList:", activeUserRole);
-           // console.log("activeRoleObj:", activeRoleObj);
+          // console.log("Active role exists in rolesList:", activeUserRole);
+          // console.log("activeRoleObj:", activeRoleObj);
 
           loginPayload = {
             userId: id, // Hotel ID
@@ -1221,15 +1267,16 @@ const HotelRegistrationActions = () => {
             loginPayload.password = loginFormData.password;
           }
         } else {
-          toast.error("Required role 'EXTRANET' not found. Please contact administrator.");
+          toast.error(
+            "Required role 'EXTRANET' not found. Please contact administrator.",
+          );
           setIsLoading(false);
           return;
         }
 
-
         const response = await axiosInstance.post(
           "/auth/register",
-          loginPayload
+          loginPayload,
         );
         // // console.log("login register success::", response);
 
@@ -1243,7 +1290,7 @@ const HotelRegistrationActions = () => {
           // await fetchAgentList(page, search);
         } else {
           toast.error(
-            "Something went wrong!!Failed to save login credentials."
+            "Something went wrong!!Failed to save login credentials.",
           );
         }
       } catch (error) {
@@ -1251,7 +1298,7 @@ const HotelRegistrationActions = () => {
         toast.error(
           `Failed to save login credentials: ${
             error.response?.data?.message || error.message
-          }`
+          }`,
         );
       } finally {
         setIsLoading(false);
@@ -1267,12 +1314,21 @@ const HotelRegistrationActions = () => {
 
   const handleLoginCancel = () => {
     setShowLoginDetailsModal(false);
-    setLoginFormData({ username: "", password: "", repassword: "", userroles: [] });
-    setLoginErrors({ username: "", password: "", repassword: "", userroles: "" });
+    setLoginFormData({
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: [],
+    });
+    setLoginErrors({
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: "",
+    });
     setShowPassword(false);
     setShowRePassword(false);
   };
-
 
   // Image upload handlers
   const handleFileSelect = (event) => {
@@ -1513,10 +1569,12 @@ const HotelRegistrationActions = () => {
             <div className="main-content-area">
               <Card className="content-card">
                 <Card.Body className="p-0 bg-white">
-                  <Row className="h-100" style={{minHeight:"600px"}}>
+                  <Row className="h-100" style={{ minHeight: "600px" }}>
                     {/* Left Content Panel */}
                     <Col md={8} className="content-panel">
-                      <div className="content-wrapper-hotel">{renderContent()}</div>
+                      <div className="content-wrapper-hotel">
+                        {renderContent()}
+                      </div>
                     </Col>
 
                     {/* Right Actions Panel */}
@@ -1531,20 +1589,30 @@ const HotelRegistrationActions = () => {
                               key={index}
                               className="action-item"
                               onClick={() => handleActionClick(action.label)}
-                              title={action.label === "Login Details" && action.status === "disabled" 
-                                ? "Please add mail center first to enable login details" 
-                                : action.label}
+                              title={
+                                action.label === "Login Details" &&
+                                action.status === "disabled"
+                                  ? "Please add mail center first to enable login details"
+                                  : action.label
+                              }
                               style={{
                                 cursor:
                                   action.label === "Mail center" ||
-                                  (action.label === "Login Details" && action.status !== "disabled") ||
+                                  (action.label === "Login Details" &&
+                                    action.status !== "disabled") ||
                                   // action.label === "Image Upload" ||
                                   action.label === "Hotel Edit"
                                     ? "pointer"
                                     : "default",
                                 opacity: action.status === "disabled" ? 0.4 : 1,
-                                backgroundColor: action.status === "disabled" ? "#f8f9fa" : "transparent",
-                                border: action.status === "disabled" ? "1px dashed #dee2e6" : "1px solid transparent",
+                                backgroundColor:
+                                  action.status === "disabled"
+                                    ? "#f8f9fa"
+                                    : "transparent",
+                                border:
+                                  action.status === "disabled"
+                                    ? "1px dashed #dee2e6"
+                                    : "1px solid transparent",
                               }}
                             >
                               <div className="action-content">
@@ -1636,23 +1704,31 @@ const HotelRegistrationActions = () => {
                           readOnly
                           className="border-0 bg-transparent"
                         />
-                       
                       </td>
                       <td>
                         <Select
                           isMulti
                           options={[
                             { value: "1", label: "Login Credentials" },
-                            { value: "2", label: "Voucher" }
+                            { value: "2", label: "Voucher" },
                           ]}
-                          value={item.mailType ? item.mailType.map(type => ({
-                            value: String(type),
-                            label: type === "1" || type === 1 ? "Login Credentials" : 
-                                   type === "2" || type === 2 ? "Voucher" : 
-                                   `Unknown (${type})`
-                          })) : []}
+                          value={
+                            item.mailType
+                              ? item.mailType.map((type) => ({
+                                  value: String(type),
+                                  label:
+                                    type === "1" || type === 1
+                                      ? "Login Credentials"
+                                      : type === "2" || type === 2
+                                        ? "Voucher"
+                                        : `Unknown (${type})`,
+                                }))
+                              : []
+                          }
                           onChange={(selectedOptions) => {
-                            const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
+                            const selectedValues = selectedOptions
+                              ? selectedOptions.map((option) => option.value)
+                              : [];
                             handleMailTypeChange(item.id, selectedOptions);
                           }}
                           placeholder="Select mail types..."
@@ -1665,11 +1741,17 @@ const HotelRegistrationActions = () => {
                               ...base,
                               minHeight: "38px",
                               fontSize: "14px",
-                              border: state.isFocused ? "2px solid #007bff" : "1px solid #dee2e6",
+                              border: state.isFocused
+                                ? "2px solid #007bff"
+                                : "1px solid #dee2e6",
                               borderRadius: "6px",
-                              boxShadow: state.isFocused ? "0 0 0 0.2rem rgba(0, 123, 255, 0.25)" : "none",
-                              "&:hover": { 
-                                borderColor: state.isFocused ? "#007bff" : "#86b7fe" 
+                              boxShadow: state.isFocused
+                                ? "0 0 0 0.2rem rgba(0, 123, 255, 0.25)"
+                                : "none",
+                              "&:hover": {
+                                borderColor: state.isFocused
+                                  ? "#007bff"
+                                  : "#86b7fe",
                               },
                               backgroundColor: "#fff",
                             }),
@@ -1714,8 +1796,6 @@ const HotelRegistrationActions = () => {
                   <small className="fw-bold">{mailCenterValidationError}</small>
                 </div>
               )}
-              
-          
             </>
           )}
         </Modal.Body>
@@ -1736,11 +1816,7 @@ const HotelRegistrationActions = () => {
           >
             {isMailCenterSaving ? (
               <>
-                <Spinner
-                  animation="border"
-                  size="sm"
-                  className="me-2"
-                />
+                <Spinner animation="border" size="sm" className="me-2" />
                 Saving...
               </>
             ) : (
@@ -1766,139 +1842,184 @@ const HotelRegistrationActions = () => {
             </div>
           ) : (
             <Form key={`login-form-${loginFormKey}-${formTimestamp}`}>
-           
-            {loginDetailsSaved && (
-              <div className="alert alert-info mb-3" role="alert">
-                <small><strong>Existing User:</strong> </small>
-              </div>
-            )}
-            {!loginDetailsSaved && (
-              <div className="alert alert-warning mb-3" role="alert">
-                <small><strong>New User:</strong> Please fill in all fields to create new login credentials.</small>
-              </div>
-            )}
-            <Form.Group className="mb-3">
-              <Form.Label>Username</Form.Label>
-              <Form.Control
-                key={`username-${loginFormKey}-${id}-${formTimestamp}`}
-                name={`username-${id}-${formTimestamp}`}
-                type="text"
-                placeholder="Enter username"
-                value={loginFormData.username}
-                autoComplete="off"
-                isInvalid={!!loginErrors.username}
-                onChange={(e) => {
-                  // console.log("Username field onChange triggered with value:", e.target.value);
-                  handleLoginFormChange("username", e.target.value);
-                }}
-              />
-              {loginErrors.username && (
-                <Form.Control.Feedback type="invalid">
-                  {loginErrors.username}
-                </Form.Control.Feedback>
-              )}
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Password</Form.Label>
-              <div className="position-relative">
-                <Form.Control
-                  key={`password-${loginFormKey}-${id}-${formTimestamp}`}
-                  name={`password-${id}-${formTimestamp}`}
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter password"
-                  value={loginFormData.password}
-                  autoComplete="new-password"
-                  isInvalid={!!loginErrors.password}
-                  onChange={(e) =>
-                    handleLoginFormChange("password", e.target.value)
-                  }
-                />
-                <Button
-                  variant="link"
-                  className="position-absolute end-0 top-50 translate-middle-y text-muted text-decoration-none"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{ zIndex: 10 }}
-                >
-                  {showPassword ? <FaEyeSlash /> : <FaEye />}
-                </Button>
-                {loginErrors.password && (
-                  <Form.Control.Feedback type="invalid">
-                    {loginErrors.password}
-                  </Form.Control.Feedback>
-                )}
-              </div>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Re-enter Password</Form.Label>
-              <div className="position-relative">
-                <Form.Control
-                  key={`repassword-${loginFormKey}-${id}-${formTimestamp}`}
-                  name={`repassword-${id}-${formTimestamp}`}
-                  type={showRePassword ? "text" : "password"}
-                  placeholder="Re-enter password"
-                  value={loginFormData.repassword}
-                  autoComplete="new-password"
-                  isInvalid={!!loginErrors.repassword}
-                  onChange={(e) =>
-                    handleLoginFormChange("repassword", e.target.value)
-                  }
-                />
-                <Button
-                  variant="link"
-                  className="position-absolute end-0 top-50 translate-middle-y text-muted text-decoration-none"
-                  onClick={() => setShowRePassword(!showRePassword)}
-                  style={{ zIndex: 10 }}
-                >
-                  {showRePassword ? <FaEyeSlash /> : <FaEye />}
-                </Button>
-                {loginErrors.repassword && (
-                  <Form.Control.Feedback type="invalid">
-                    {loginErrors.repassword}
-                  </Form.Control.Feedback>
-                )}
-              </div>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>User Roles</Form.Label>
-              <Select
-                isMulti
-                options={rolesList.map(role => ({
-                  value: role.id,
-                  label: role.roleName
-                }))}
-                value={rolesList
-                  .filter(role => loginFormData.userroles.includes(role.id))
-                  .map(role => ({
-                    value: role.id,
-                    label: role.roleName
-                  }))
-                }
-                onChange={(selectedOptions) => {
-                  const values = selectedOptions ? selectedOptions.map(opt => opt.value) : [];
-                  handleLoginFormChange("userroles", values);
-                }}
-                placeholder="Select user roles..."
-                className={loginErrors.userroles ? "is-invalid" : ""}
-                menuPortalTarget={document.body}
-                styles={{
-                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                  control: (base) => ({
-                    ...base,
-                    borderColor: loginErrors.userroles ? "#dc3545" : base.borderColor,
-                    '&:hover': {
-                      borderColor: loginErrors.userroles ? "#dc3545" : base.borderColor,
-                    }
-                  })
-                }}
-              />
-              {loginErrors.userroles && (
-                <div className="text-danger small mt-1">
-                  {loginErrors.userroles}
+              {loginDetailsSaved && (
+                <div className="alert alert-info mb-3" role="alert">
+                  <div className="d-flex flex-column">
+                    <small>
+                      <strong>Existing User:</strong> {savedUsername}
+                    </small>
+                    <small>
+                      <strong>User Role:</strong>{" "}
+                      {loginFormData.userroles
+                        .map((id) => {
+                          const role = rolesList.find((r) => r.id === id);
+                          return role ? role.roleName : id;
+                        })
+                        .join(", ") || "None"}
+                    </small>
+                  </div>
                 </div>
               )}
-            </Form.Group>
-
-          </Form>
+              {!loginDetailsSaved && (
+                <div className="alert alert-warning mb-3" role="alert">
+                  <small>
+                    <strong>New User:</strong> Please fill in all fields to
+                    create new login credentials.
+                  </small>
+                </div>
+              )}
+              <Form.Group className="mb-3">
+                <Form.Label>Username</Form.Label>
+                <Form.Control
+                  key={`username-${loginFormKey}-${id}-${formTimestamp}`}
+                  name={`username-${id}-${formTimestamp}`}
+                  type="text"
+                  placeholder="Enter username"
+                  value={loginFormData.username}
+                  autoComplete="off"
+                  isInvalid={!!loginErrors.username}
+                  onChange={(e) => {
+                    // console.log("Username field onChange triggered with value:", e.target.value);
+                    handleLoginFormChange("username", e.target.value);
+                  }}
+                />
+                {loginErrors.username && (
+                  <Form.Control.Feedback type="invalid">
+                    {loginErrors.username}
+                  </Form.Control.Feedback>
+                )}
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Password</Form.Label>
+                <div className="position-relative">
+                  <Form.Control
+                    key={`password-${loginFormKey}-${id}-${formTimestamp}`}
+                    name={`password-${id}-${formTimestamp}`}
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter password"
+                    value={loginFormData.password}
+                    autoComplete="new-password"
+                    isInvalid={!!loginErrors.password}
+                    onChange={(e) =>
+                      handleLoginFormChange("password", e.target.value)
+                    }
+                  />
+                  <Button
+                    variant="link"
+                    className="position-absolute end-0 top-50 translate-middle-y text-muted text-decoration-none"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ zIndex: 10 }}
+                  >
+                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  </Button>
+                  {loginErrors.password && (
+                    <Form.Control.Feedback type="invalid">
+                      {loginErrors.password}
+                    </Form.Control.Feedback>
+                  )}
+                </div>
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Re-enter Password</Form.Label>
+                <div className="position-relative">
+                  <Form.Control
+                    key={`repassword-${loginFormKey}-${id}-${formTimestamp}`}
+                    name={`repassword-${id}-${formTimestamp}`}
+                    type={showRePassword ? "text" : "password"}
+                    placeholder="Re-enter password"
+                    value={loginFormData.repassword}
+                    autoComplete="new-password"
+                    isInvalid={!!loginErrors.repassword}
+                    onChange={(e) =>
+                      handleLoginFormChange("repassword", e.target.value)
+                    }
+                  />
+                  <Button
+                    variant="link"
+                    className="position-absolute end-0 top-50 translate-middle-y text-muted text-decoration-none"
+                    onClick={() => setShowRePassword(!showRePassword)}
+                    style={{ zIndex: 10 }}
+                  >
+                    {showRePassword ? <FaEyeSlash /> : <FaEye />}
+                  </Button>
+                  {loginErrors.repassword && (
+                    <Form.Control.Feedback type="invalid">
+                      {loginErrors.repassword}
+                    </Form.Control.Feedback>
+                  )}
+                </div>
+              </Form.Group>
+              {console.log("rolesList:", rolesList)}
+              <Form.Group className="mb-3">
+                <Form.Label>User Roles</Form.Label>
+                <Select
+                  isMulti
+                  // options={rolesList.map((role) => ({
+                  //   value: role.id,
+                  //   label: role.roleName,
+                  // }))}
+                  // // value={rolesList
+                  // //   .filter(role => loginFormData.userroles.includes(role.id))
+                  // //   .map(role => ({
+                  // //     value: role.id,
+                  // //     label: role.roleName
+                  // //   }))
+                  // // }
+                  // value={rolesList
+                  //   .filter((role) =>
+                  //     loginFormData.userroles.includes(role.roleName),
+                  //   )
+                  //   .map((role) => ({
+                  //     value: role.id,
+                  //     label: role.roleName,
+                  //   }))}
+                  value={rolesList
+                    .filter((role) =>
+                      loginFormData.userroles.includes(role.id),
+                    )
+                    .map((role) => ({
+                      value: role.id,
+                      label: role.roleName,
+                    }))}
+                  options={rolesList
+                    .filter(
+                      (role) => role.roleName?.toUpperCase() === "EXTRANET",
+                    )
+                    .map((role) => ({
+                      value: role.id,
+                      label: role.roleName,
+                    }))}
+                  onChange={(selectedOptions) => {
+                    const values = selectedOptions
+                      ? selectedOptions.map((opt) => opt.value)
+                      : [];
+                    handleLoginFormChange("userroles", values);
+                  }}
+                  placeholder="Select user roles..."
+                  className={loginErrors.userroles ? "is-invalid" : ""}
+                  menuPortalTarget={document.body}
+                  styles={{
+                    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                    control: (base) => ({
+                      ...base,
+                      borderColor: loginErrors.userroles
+                        ? "#dc3545"
+                        : base.borderColor,
+                      "&:hover": {
+                        borderColor: loginErrors.userroles
+                          ? "#dc3545"
+                          : base.borderColor,
+                      },
+                    }),
+                  }}
+                />
+                {loginErrors.userroles && (
+                  <div className="text-danger small mt-1">
+                    {loginErrors.userroles}
+                  </div>
+                )}
+              </Form.Group>
+            </Form>
           )}
         </Modal.Body>
         <Modal.Footer>
@@ -2006,7 +2127,7 @@ const HotelRegistrationActions = () => {
                           ) {
                             handleRoomSearchFormChange(
                               "checkOut",
-                              formatDate(getTomorrow(new Date(newCheckIn)))
+                              formatDate(getTomorrow(new Date(newCheckIn))),
                             );
                           }
                         }}
@@ -2028,7 +2149,7 @@ const HotelRegistrationActions = () => {
                         min={
                           roomSearchForm.checkIn
                             ? formatDate(
-                                getTomorrow(new Date(roomSearchForm.checkIn))
+                                getTomorrow(new Date(roomSearchForm.checkIn)),
                               )
                             : formatDate(getTomorrow())
                         }

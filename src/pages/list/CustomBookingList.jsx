@@ -26,6 +26,8 @@ import {
   FaMapMarkerAlt,
   FaExclamationTriangle,
   FaCheckCircle,
+  FaTrash,
+  FaExclamationCircle,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -55,6 +57,11 @@ const CustomBookingList = () => {
   const [verificationDetails, setVerificationDetails] = useState(null);
   const [loadingVerification, setLoadingVerification] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  
+  // Cancellation state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Map status to type parameter
   const getTypeParam = (status) => {
@@ -292,6 +299,38 @@ const CustomBookingList = () => {
     }
   };
 
+  // Handle Cancel Click
+  const handleCancelClick = (booking) => {
+    setBookingToCancel(booking);
+    setShowCancelModal(true);
+  };
+
+  // Confirm Cancellation
+  const confirmCancelBooking = async () => {
+    if (!bookingToCancel) return;
+
+    try {
+      setIsCancelling(true);
+      const bookingId = bookingToCancel.customBookingId || bookingToCancel.bookingId || bookingToCancel.id;
+      
+      const response = await axiosInstance.patch(`/api/makeYourOwnPackage/cancelCustomBooking/${bookingId}`);
+
+      if (response.data && response.data.status === "success") {
+        toast.success("cancelled successfully");
+        setShowCancelModal(false);
+        setBookingToCancel(null);
+        fetchBookings();
+      } else {
+        toast.error(response.data?.message || "Failed to cancel booking");
+      }
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+      toast.error(error.response?.data?.message || "Error cancelling booking. Please try again.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const displayStart = paginatedBookings.length > 0 ? (page - 1) * perPage + 1 : 0;
   const displayEnd = Math.min(page * perPage, totalElements);
 
@@ -466,21 +505,19 @@ const CustomBookingList = () => {
                                 <td>{formatDate(booking.bookDate)}</td>
                                 <td>{formatDate(booking.travelDate)}</td>
                                 <td>
-                                  <div className="d-flex gap-2 align-items-center">
+                                  <div className="d-flex gap-3 align-items-center">
                                     <FaEye
-                                      className="text-primary"
-                                      style={{ cursor: "pointer" }}
+                                      style={{ cursor: "pointer", fontSize: "14px", color: "#007bff" }}
                                       onClick={() => handleViewDetails(booking)}
                                       title="View Details"
-                                      size={18}
                                     />
-                                    {/* <FaExclamationTriangle
-                                      className="text-warning"
-                                      style={{ cursor: "pointer" }}
-                                      onClick={() => handleVerificationClick(booking)}
-                                      title="Verify Booking"
-                                      size={18}
-                                    /> */}
+                                    {status !== "cancelled" && (
+                                      <FaTrash
+                                        style={{ cursor: "pointer", fontSize: "14px", color: "#dc3545" }}
+                                        onClick={() => handleCancelClick(booking)}
+                                        title="Cancel Booking"
+                                      />
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -1109,6 +1146,56 @@ const CustomBookingList = () => {
               <>
                 Set Verified <FaCheckCircle className="ms-2" />
               </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Cancellation Modal */}
+      <Modal
+        show={showCancelModal}
+        onHide={() => !isCancelling && setShowCancelModal(false)}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!isCancelling} className="border-0">
+          <Modal.Title className="fw-bold d-flex align-items-center">
+            <FaExclamationCircle className="me-2 text-danger" />
+            <span>Cancel Booking</span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="py-4 text-center">
+          <p className="fs-5 mb-0">Are you sure you want to cancel this booking?</p>
+          {bookingToCancel && (
+            <div className="mt-3 text-muted small">
+              <div className="fw-bold text-dark">{bookingToCancel.packageCode}</div>
+              <div>{bookingToCancel.customerName}</div>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="border-0 justify-content-center pb-4">
+          <Button
+            variant="secondary"
+            className="px-4 fw-bold"
+            onClick={() => setShowCancelModal(false)}
+            disabled={isCancelling}
+          >
+            No
+          </Button>
+          <Button
+            variant="danger"
+            className="px-4 fw-bold shadow-sm"
+            onClick={confirmCancelBooking}
+            disabled={isCancelling}
+          >
+            {isCancelling ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Cancelling...
+              </>
+            ) : (
+              "Yes, Cancel"
             )}
           </Button>
         </Modal.Footer>
