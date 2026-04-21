@@ -230,3 +230,151 @@
         padding: 1.5rem;
     }
 }
+/* --- Detail Modal --- */
+.package-detail-modal .modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.detail-hero-image-container {
+    width: 100%;
+    height: 200px;
+    overflow: hidden;
+    background: #f1f5f9;
+}
+
+.detail-hero-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 1rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.details-grid-card {
+    background: #ffffff;
+    border: 1px solid #edf2f7;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.detail-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #718096;
+    margin-bottom: 2px;
+}
+
+.detail-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.detail-value-large {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #2d3748;
+}
+
+/* --- Itinerary Timeline --- */
+.itinerary-container {
+    padding: 0;
+}
+
+.timeline-item {
+    position: relative;
+    padding-left: 30px;
+    padding-bottom: 1rem;
+}
+
+.timeline-line {
+    position: absolute;
+    left: 10px;
+    top: 20px;
+    bottom: 0;
+    width: 1px;
+    background: #cbd5e0;
+}
+
+.timeline-dot {
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 20px;
+    height: 20px;
+    background: #667eea;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.dot-inner {
+    color: white;
+    font-weight: 700;
+    font-size: 0.7rem;
+}
+
+.timeline-card {
+    padding: 0.5rem 0.75rem;
+    background: #f8fafc;
+    border-radius: 6px;
+}
+
+.timeline-heading {
+    color: #2d3748;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+}
+
+.timeline-text {
+    color: #4a5568;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+/* --- Others Section --- */
+.others-section {
+    background: #ffffff;
+    border: 1px solid #edf2f7;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.other-group-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #718096;
+    margin-bottom: 0.5rem;
+}
+
+.other-badge {
+    background: #f1f5f9;
+    color: #2d3748;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+    margin-bottom: 4px;
+    margin-right: 4px;
+}
+
+@media (max-width: 768px) {
+    .detail-hero-image-container {
+        height: 150px;
+    }
+}
+

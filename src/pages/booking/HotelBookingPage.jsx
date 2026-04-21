@@ -203,8 +203,8 @@ const HotelBookingPage = () => {
     if (!primaryGuest.phone || primaryGuest.phone.trim() === "") {
       errors.phone = "Phone is required";
       hasErrors = true;
-    } else if (primaryGuest.phone.trim().length > 10) {
-      errors.phone = "Phone number cannot exceed 10 digits";
+    } else if (primaryGuest.phone.trim().length > 15) {
+      errors.phone = "Phone number cannot exceed 15 digits";
       hasErrors = true;
     }
     if (!primaryGuest.agentLpo || primaryGuest.agentLpo.trim() === "") {

@@ -1,17 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Card,
-  Button,
-  Row,
-  Col,
-  Form,
-  Spinner,
-} from "react-bootstrap";
+import { Card, Button, Row, Col, Form, Spinner, Modal, Badge } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
-import { FaClock, FaSearch } from "react-icons/fa";
+import {
+  FaSearch,
+  FaEye,
+  FaCalendarAlt,
+  FaInfoCircle,
+  FaCheckCircle,
+  FaLayerGroup,
+  FaClock,
+  FaClipboardList,
+} from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import "../../../styles/PackageSearch.css";
@@ -29,6 +31,9 @@ const PackageSearch = () => {
   const [progress, setProgress] = useState(0);
   const progressRef = useRef(null);
   const navigate = useNavigate();
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   // ─────────────────────────────────────────────
   // Helper: Debounce function
@@ -106,7 +111,7 @@ const PackageSearch = () => {
       setIsDestinationLoading(true);
       try {
         const response = await axiosInstance.get(
-          `/api/province?search=${searchText}`
+          `/api/province?search=${searchText}`,
         );
         const cityApiRes = Array.isArray(response.data) ? response.data : [];
         const options = cityApiRes.slice(0, 50).map((city) => ({
@@ -121,7 +126,7 @@ const PackageSearch = () => {
       } finally {
         setIsDestinationLoading(false);
       }
-    }, 300)
+    }, 300),
   ).current;
 
   useEffect(() => {
@@ -161,7 +166,10 @@ const PackageSearch = () => {
       };
 
       console.log("Package search payload:", payload);
-      const response = await axiosInstance.post("/api/v1/package-booking/search", payload);
+      const response = await axiosInstance.post(
+        "/api/v1/package-booking/search",
+        payload,
+      );
 
       console.log("Package search response:", response.data);
       setResults(Array.isArray(response.data) ? response.data : []);
@@ -190,6 +198,25 @@ const PackageSearch = () => {
     });
   };
 
+  const handleView = React.useCallback(async (packageId) => {
+    try {
+      console.log("handleView called with:", packageId);
+      setIsDetailLoading(true);
+      setSelectedPackage(null); // Clear previous detail
+      setShowDetailModal(true);
+      
+      const response = await axiosInstance.get(`/api/TravelPackage/${packageId}`);
+      console.log("Package details response:", response.data);
+      setSelectedPackage(response.data);
+    } catch (error) {
+      console.error("Error fetching package details:", error);
+      toast.error("Failed to fetch package details");
+      setShowDetailModal(false);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  }, []);
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -200,7 +227,9 @@ const PackageSearch = () => {
             <Card.Body>
               <div className="mb-4">
                 <h2 className="fw-bold text-primary mb-1">Package Search</h2>
-                <p className="text-muted">Find the best travel packages for your clients</p>
+                <p className="text-muted">
+                  Find the best travel packages for your clients
+                </p>
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
@@ -218,14 +247,20 @@ const PackageSearch = () => {
                         onInputChange={(val) => debouncedCitySearch(val)}
                         onChange={(option) => {
                           setSelectedDestination(option);
-                          if (option) setErrors(prev => ({ ...prev, destination: null }));
+                          if (option)
+                            setErrors((prev) => ({
+                              ...prev,
+                              destination: null,
+                            }));
                         }}
                         placeholder="Search for Country or City..."
                         isSearchable
                         isClearable
                       />
                       {errors.destination && (
-                        <div className="text-danger small mt-1">{errors.destination}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.destination}
+                        </div>
                       )}
                     </Form.Group>
                   </Col>
@@ -239,7 +274,8 @@ const PackageSearch = () => {
                         value={agentId}
                         onChange={(e) => {
                           setAgentId(e.target.value);
-                          if (e.target.value) setErrors(prev => ({ ...prev, agent: null }));
+                          if (e.target.value)
+                            setErrors((prev) => ({ ...prev, agent: null }));
                         }}
                       >
                         <option value="">Select Agent</option>
@@ -250,7 +286,9 @@ const PackageSearch = () => {
                         ))}
                       </Form.Select>
                       {errors.agent && (
-                        <div className="text-danger small mt-1">{errors.agent}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.agent}
+                        </div>
                       )}
                     </Form.Group>
                   </Col>
@@ -298,7 +336,8 @@ const PackageSearch = () => {
                 </div>
                 <h4 className="fw-bold text-dark mb-2">Ready to Search?</h4>
                 <p className="text-muted mx-auto" style={{ maxWidth: "500px" }}>
-                  Select a destination and an agent to discover available travel packages and special offers.
+                  Select a destination and an agent to discover available travel
+                  packages and special offers.
                 </p>
               </Card.Body>
             </Card>
@@ -307,7 +346,9 @@ const PackageSearch = () => {
               {/* Results Header */}
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h5 className="fw-bold mb-0 text-dark">Search Results</h5>
-                <span className="text-muted fw-medium">{results.length} Packages Found</span>
+                <span className="text-muted fw-medium">
+                  {results.length} Packages Found
+                </span>
               </div>
 
               {/* Card Grid */}
@@ -319,7 +360,10 @@ const PackageSearch = () => {
                         {/* Image */}
                         <div className="package-image-wrap">
                           <img
-                            src={pkg.packageImage || "https://via.placeholder.com/400x300?text=Package+Image"}
+                            src={
+                              pkg.packageImage ||
+                              "https://via.placeholder.com/400x300?text=Package+Image"
+                            }
                             alt={pkg.packageName}
                             className="package-image"
                           />
@@ -331,9 +375,14 @@ const PackageSearch = () => {
 
                         {/* Body */}
                         <Card.Body className="d-flex flex-column p-3">
-                          <span className="package-type-tag">{pkg.packageType}</span>
+                          <span className="package-type-tag">
+                            {pkg.packageType}
+                          </span>
                           <h6 className="package-name">{pkg.packageName}</h6>
-                          <p className="text-muted mb-3" style={{ fontSize: "0.78rem" }}>
+                          <p
+                            className="text-muted mb-3"
+                            style={{ fontSize: "0.78rem" }}
+                          >
                             {pkg.packageCategory}
                           </p>
 
@@ -342,8 +391,19 @@ const PackageSearch = () => {
                             <div>
                               <span className="price-currency">AED </span>
                               <span className="price-value">{pkg.rate}</span>
-                              <span className="price-unit">/{pkg.rateType}</span>
+                              <span className="price-unit">
+                                /{pkg.rateType}
+                              </span>
                             </div>
+                            <Button
+                              variant="success"
+                              size="sm"
+                              className="px-2 d-flex align-items-center justify-content-center"
+                              onClick={() => handleView(pkg.packageId)}
+                            >
+                             <FaEye size={15}/>
+                              
+                            </Button>
                             <Button
                               variant="primary"
                               size="sm"
@@ -369,7 +429,8 @@ const PackageSearch = () => {
                 </div>
                 <h4 className="fw-bold text-dark mb-2">No Packages Found</h4>
                 <p className="text-muted mx-auto" style={{ maxWidth: "500px" }}>
-                  We couldn't find any packages matching your selection. Try adjusting your destination or agent.
+                  We couldn't find any packages matching your selection. Try
+                  adjusting your destination or agent.
                 </p>
                 <Button
                   variant="outline-primary"
@@ -386,6 +447,136 @@ const PackageSearch = () => {
           )}
         </main>
       </div>
+      {/* Package Detail Modal */}
+      <Modal
+        show={showDetailModal}
+        onHide={() => setShowDetailModal(false)}
+        size="lg"
+        centered
+        className="package-detail-modal"
+      >
+        <Modal.Header closeButton className="py-2 px-3">
+          <Modal.Title className="fs-6 fw-bold text-dark">
+            {isDetailLoading ? "Loading..." : selectedPackage?.packageName}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-0">
+          {isDetailLoading ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" size="sm" variant="primary" />
+              <span className="ms-2 small text-muted">Loading...</span>
+            </div>
+          ) : selectedPackage ? (
+            <div className="modal-content-inner">
+              {/* Image Section */}
+              <div className="detail-hero-image-container">
+                <img
+                  src={selectedPackage.packageImagePath || "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1200&q=80"}
+                  alt={selectedPackage.packageName}
+                  className="detail-hero-image"
+                  onError={(e) => {
+                    e.target.src = "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1200&q=80";
+                  }}
+                />
+              </div>
+
+              <div className="p-3">
+                {/* Basic Details */}
+                <Row className="g-3 mb-3">
+                   <Col md={12}>
+                      <section>
+                        <h6 className="section-title">Basic Information</h6>
+                        <div className="details-grid-card">
+                          <Row className="g-2 text-center">
+                            <Col xs={3}>
+                              <div className="detail-label">Code</div>
+                              <div className="detail-value small">{selectedPackage.packageCode}</div>
+                            </Col>
+                            <Col xs={3}>
+                              <div className="detail-label">Nights</div>
+                              <div className="detail-value small">{selectedPackage.noOfNights}</div>
+                            </Col>
+                            <Col xs={3}>
+                              <div className="detail-label">Rate</div>
+                              <div className="detail-value-large text-primary small">
+                                {selectedPackage.packageBasicRate} {selectedPackage.currencyId === 1 ? "AED" : ""}
+                              </div>
+                            </Col>
+                            <Col xs={3}>
+                              <div className="detail-label">Category</div>
+                              <div className="detail-value small">Standard</div>
+                            </Col>
+                          </Row>
+                        </div>
+                      </section>
+                   </Col>
+                   <Col md={12}>
+                      <div className="mt-1 small text-muted">
+                         <strong>Overview:</strong> {selectedPackage.overview || "No overview provided."}
+                      </div>
+                   </Col>
+                </Row>
+
+                <Row className="g-3">
+                   {/* Itinerary */}
+                   <Col md={12}>
+                      <section>
+                        <h6 className="section-title">Itinerary</h6>
+                        <div className="itinerary-container">
+                          {selectedPackage.packageItinearyDTOList?.length > 0 ? (
+                            selectedPackage.packageItinearyDTOList
+                              .sort((a,b) => a.day - b.day)
+                              .map((item, idx) => (
+                                <div key={idx} className="timeline-item">
+                                  <div className="timeline-line"></div>
+                                  <div className="timeline-dot">
+                                     <div className="dot-inner">{item.day}</div>
+                                  </div>
+                                  <div className="timeline-card">
+                                    <div className="timeline-heading small">{item.heading}</div>
+                                    <div className="timeline-text x-small">{item.dayActivities}</div>
+                                  </div>
+                                </div>
+                              ))
+                          ) : (
+                            <div className="small text-muted italic">No itinerary available.</div>
+                          )}
+                        </div>
+                      </section>
+                   </Col>
+
+           
+                </Row>
+                <Row className="g-3">        {/* Others */}
+                   <Col md={12}>
+                      <section>
+                        <h6 className="section-title">Other Details</h6>
+                        <div className="others-section small">
+                           <div className="other-group-title">Inclusions / Exclusions / Terms</div>
+                           <div className="d-flex flex-wrap">
+                              {selectedPackage.packageOthersDTOList?.filter(o => !o.isDeleted).length > 0 ? (
+                                selectedPackage.packageOthersDTOList
+                                  .filter(o => !o.isDeleted)
+                                  .map((other, idx) => (
+                                    <span key={idx} className="other-badge">{other.type || "Detail"}</span>
+                                  ))
+                              ) : (
+                                <span className="text-muted italic">No extra details.</span>
+                              )}
+                           </div>
+                        </div>
+                      </section>
+                   </Col></Row>
+              </div>
+            </div>
+          ) : null}
+        </Modal.Body>
+        <Modal.Footer className="py-2 px-3 border-top-0">
+          <Button variant="secondary" size="sm" className="px-3" onClick={() => setShowDetailModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

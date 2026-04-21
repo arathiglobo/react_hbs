@@ -57,7 +57,8 @@ const HotelsTab = ({ searchParams, bookingData, updateData, onPrev, onNext }) =>
 
   useEffect(() => {
     if (hotels.length > 0) {
-      const totalPrice = hotels.reduce((sum, h) => sum + Number(h.adultRate || 0) + Number(h.childRate || 0), 0);
+      // Use the first hotel's rate as the common package rate for hotels
+      const totalPrice = Number(hotels[0]?.totalRateWithMarkup || 0);
       updateData({
         selectedHotels: hotels,
         hotelPrice: totalPrice,
@@ -92,19 +93,25 @@ const HotelsTab = ({ searchParams, bookingData, updateData, onPrev, onNext }) =>
                         <span className="badge bg-success" style={{ fontSize: '0.65rem' }}>Included</span>
                       </div>
                       <p className="text-muted small mb-2">{hotel.stateName}</p>
+                      <div className="nights-badge mt-1">
+                             {hotel.noOfnight} Night(s)
+                          </div>
                       <div className="d-flex justify-content-between align-items-end">
                         <div className="hotel-rates-brief">
-                          <div className="rate-item">
+                          {/* <div className="rate-item">
                             <span className="label">Adult Rate:</span>
                             <span className="value">AED {hotel.adultRate}</span>
                           </div>
                           <div className="rate-item">
                             <span className="label">Child Rate:</span>
                             <span className="value">AED {hotel.childRate}</span>
-                          </div>
-                          <div className="nights-badge mt-1">
-                             {hotel.noOfnight} Night(s)
-                          </div>
+                          </div> */}
+                          <div className="rate-item">
+  <span style={{ color: '#28a745', fontSize: '0.75rem', fontWeight: '600' }}>
+    Preferred
+  </span>
+</div> 
+                          
                         </div>
                       </div>
                     </div>

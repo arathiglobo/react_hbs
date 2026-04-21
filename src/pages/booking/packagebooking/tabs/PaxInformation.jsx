@@ -153,7 +153,7 @@ const PaxInformation = ({
           hotels: (bookingData.selections.selectedHotels || []).map((h) => ({
             hotelId: h.hotelId,
             hotelName: h.hotelName,
-            selectedRate: h.adultRate,
+            selectedRate: h.totalRateWithMarkup,
             currency: h.currencyCode || "AED",
           })),
           cab: null,
@@ -399,7 +399,7 @@ const PaxInformation = ({
                     <td className="text-muted">Hotel {bookingData.selections.selectedHotels.length > 1 ? idx + 1 : ""}</td>
                     <td>{hotel.hotelName}</td>
                     <td className="text-end">
-                      + AED {Number(hotel.adultRate || 0) + Number(hotel.childRate || 0)}
+                      + AED {hotel.totalRateWithMarkup || 0}
                     </td>
                   </tr>
                 ))}

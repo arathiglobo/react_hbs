@@ -80,7 +80,12 @@ const PackageBooking = () => {
   useEffect(() => {
     const baseRate = Number(packageData?.rate) || 0;
     const { hotelPrice, cabPrice, activityPrice } = bookingData.selections;
-    setTotalPrice(baseRate + hotelPrice + cabPrice + activityPrice);
+    
+    // If hotelPrice is present (meaning hotels were fetched and have a markup rate), 
+    // it should be the new base for the package total.
+    const effectiveBase = hotelPrice > 0 ? hotelPrice : baseRate;
+    
+    setTotalPrice(effectiveBase + cabPrice + activityPrice);
   }, [bookingData.selections, packageData]);
 
   const updateSearchParams = (params) =>
@@ -206,12 +211,12 @@ const PackageBooking = () => {
 
                 <hr className="price-divider" />
 
-                <div className="price-breakdown-row">
+                {/* <div className="price-breakdown-row">
                   <span className="price-breakdown-label">Base fare</span>
                   <span className="price-breakdown-value">
                     {Number(packageData?.rate || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </span>
-                </div>
+                </div> */}
 
                 {bookingData.selections.hotelPrice > 0 && (
                   <div className="price-breakdown-row">

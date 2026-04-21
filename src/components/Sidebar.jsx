@@ -326,10 +326,10 @@ export default function Sidebar() {
           label: "Cancellation",
           to: "/report/cancellation",
         },
-        {
-          label: "Inventory",
-          to: "/report/inventory",
-        },
+        // {
+        //   label: "Inventory",
+        //   to: "/report/inventory",
+        // },
         {
           label: "Hotel Wise",
           to: "/report/hotel-wise",

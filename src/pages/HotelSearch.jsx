@@ -1060,6 +1060,53 @@ export default function HotelSearch() {
                       )}
                     </Form.Group>
                   </Col>
+                     <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Agent
+                      </Form.Label>
+                      <Form.Select
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        value={agent}
+                        onChange={(e) => {
+                          setAgent(e.target.value);
+                          if (e.target.value) clearError("agent");
+                        }}
+                      >
+                        <option value="">Select Agent</option>
+                        {agents.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.companyName}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {errors.agent && (
+                        <div className="text-danger small mt-1">
+                          {errors.agent}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                
+
+                    <Col lg={2} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nights
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={nights}
+                        onChange={(e) => handleNightsChange(e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
 
                   <Col lg={4} md={6}>
                     <Form.Group>
@@ -1095,7 +1142,7 @@ export default function HotelSearch() {
                     </Form.Group>
                   </Col>
 
-                  <Col lg={3} md={6}>
+                    <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-out
@@ -1122,23 +1169,6 @@ export default function HotelSearch() {
                     </Form.Group>
                   </Col>
 
-                  <Col lg={2} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Nights
-                      </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="number"
-                        min={1}
-                        max={60}
-                        value={nights}
-                        onChange={(e) => handleNightsChange(e.target.value)}
-                      />
-                    </Form.Group>
-                  </Col>
-
                   <Col lg={4} md={6}>
                     <Form.Label className="fw-semibold text-dark">
                       Rooms & Guests
@@ -1158,34 +1188,7 @@ export default function HotelSearch() {
                     </Button>
                   </Col>
 
-                  <Col lg={3} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Agent
-                      </Form.Label>
-                      <Form.Select
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        value={agent}
-                        onChange={(e) => {
-                          setAgent(e.target.value);
-                          if (e.target.value) clearError("agent");
-                        }}
-                      >
-                        <option value="">Select Agent</option>
-                        {agents.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.companyName}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {errors.agent && (
-                        <div className="text-danger small mt-1">
-                          {errors.agent}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
+               
                 </Row>
 
                 {roomsOpen && (

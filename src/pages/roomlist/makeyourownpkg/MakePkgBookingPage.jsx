@@ -98,6 +98,8 @@ const MakePkgBookingPage = () => {
   // Initialize guest details for rooms
   const initializeRoomGuests = (cartItems) => {
     const guests = {};
+    const firstHotelIndex = cartItems.findIndex((i) => i.hotel);
+
     cartItems.forEach((item, hotelIndex) => {
       if (item.hotel) {
         const hotel = item.hotel || {};
@@ -108,20 +110,35 @@ const MakePkgBookingPage = () => {
           const totalGuests = adults + children;
 
           const key = `${hotelIndex}-${roomIndex}`;
-          guests[key] = Array.from(
-            { length: totalGuests },
-            (_, guestIndex) => ({
-              salutation: "",
-              firstName: "",
-              lastName: "",
-              gender: "",
-              isChild: guestIndex >= adults,
-              age:
-                guestIndex >= adults
-                  ? room.childAge?.[guestIndex - adults] || ""
-                  : "",
-            }),
-          );
+          guests[key] = Array.from({ length: totalGuests }, (_, guestIndex) => {
+            // Master Guest: First guest of the first room in the first hotel
+            const isMasterGuest =
+              hotelIndex === firstHotelIndex &&
+              roomIndex === 0 &&
+              guestIndex === 0;
+
+            if (isMasterGuest) {
+              return {
+                salutation: primaryGuest.salutation || "Mr",
+                firstName: primaryGuest.firstName || "",
+                lastName: primaryGuest.lastName || "",
+                gender: "Male", // Default for master guest
+                isChild: false,
+                age: "",
+              };
+            } else {
+              // Dummy data for all other guests (temporary/testing purposes)
+              const isChild = guestIndex >= adults;
+              return {
+                salutation: isChild ? "Master" : "Mr",
+                firstName: "",
+                lastName: "",
+                gender: "Male",
+                isChild: isChild,
+                age: isChild ? room.childAge?.[guestIndex - adults] || "5" : "",
+              };
+            }
+          });
         });
       }
     });
@@ -212,50 +229,113 @@ const MakePkgBookingPage = () => {
     field,
     value,
   ) => {
-    const key = `${hotelIndex}-${roomIndex}`;
+    const firstHotelIndex = cartData.findIndex((item) => item.hotel);
+    const isFirstHotel = hotelIndex === firstHotelIndex;
+    const isMasterGuest =
+      isFirstHotel && roomIndex === 0 && guestIndex === 0;
+
+    // 1. Sync to primaryGuest state if Master Guest is edited (First Hotel, Room 1, Adult 1)
+    if (isMasterGuest) {
+      if (field === "firstName" || field === "lastName") {
+        setPrimaryGuest((prev) => ({ ...prev, [field]: value }));
+      } else if (field === "gender" || field === "salutation") {
+        // Sync salutation directly, or map gender to title (salutation)
+        let mappedSalutation = value;
+        if (field === "gender") {
+          if (value === "Male") mappedSalutation = "Mr";
+          else if (value === "Female") mappedSalutation = "Mrs";
+        }
+        setPrimaryGuest((prev) => ({
+          ...prev,
+          salutation: mappedSalutation || prev.salutation,
+        }));
+      }
+    }
+
     setRoomGuests((prev) => {
       const updated = { ...prev };
-      if (!updated[key]) {
-        updated[key] = [];
-      }
-      const guests = [...updated[key]];
 
-      // Ensure guest object exists, create if it doesn't
-      if (!guests[guestIndex]) {
+      // 2. Identify all keys to update. If editing the first hotel, sync across ALL hotels.
+      const targetHotelIndices = isFirstHotel
+        ? cartData
+            .map((item, idx) => (item.hotel ? idx : -1))
+            .filter((idx) => idx !== -1)
+        : [hotelIndex];
+
+      targetHotelIndices.forEach((idx) => {
+        const key = `${idx}-${roomIndex}`;
+        if (!updated[key]) {
+          updated[key] = [];
+        }
+        const guests = [...updated[key]];
+
+        // Ensure guest object exists, create if it doesn't
+        if (!guests[guestIndex]) {
+          guests[guestIndex] = {
+            salutation: "",
+            firstName: "",
+            lastName: "",
+            gender: "",
+            isChild: false,
+            age: "",
+          };
+        }
+
+        // Update the guest field
         guests[guestIndex] = {
-          salutation: "",
-          firstName: "",
-          lastName: "",
-          gender: "",
-          isChild: false,
-          age: "",
+          ...guests[guestIndex],
+          [field]: value,
         };
-      }
 
-      // Update the guest field
-      guests[guestIndex] = {
-        ...guests[guestIndex],
-        [field]: value,
-      };
+        updated[key] = guests;
+      });
 
-      updated[key] = guests;
       return updated;
     });
 
-    // Clear validation error when user starts typing
-    const errorKey = `hotel_${hotelIndex}_room_${roomIndex}_guest_${guestIndex}_${field}`;
-    if (validationErrors[errorKey]) {
-      setValidationErrors((prev) => {
-        const updated = { ...prev };
+    // Clear validation errors for all affected fields
+    const targetHotelIndices = isFirstHotel
+      ? cartData
+          .map((item, idx) => (item.hotel ? idx : -1))
+          .filter((idx) => idx !== -1)
+      : [hotelIndex];
+
+    setValidationErrors((prev) => {
+      const updated = { ...prev };
+      targetHotelIndices.forEach((idx) => {
+        const errorKey = `hotel_${idx}_room_${roomIndex}_guest_${guestIndex}_${field}`;
         delete updated[errorKey];
-        return updated;
       });
-    }
+      if (isMasterGuest) {
+        const primaryPrefix = `primaryGuest_${field === 'gender' ? 'salutation' : field}`;
+        delete updated[primaryPrefix];
+      }
+      return updated;
+    });
   };
 
   // Handle primary guest change
-  const handlePrimaryGuestChange = (field, value) => {
+   const handlePrimaryGuestChange = (field, value) => {
     setPrimaryGuest((prev) => ({ ...prev, [field]: value }));
+
+    // Sync Master Guest automatically if primary fields are edited
+    const syncFields = ["salutation", "firstName", "lastName"];
+    if (syncFields.includes(field)) {
+      const firstHotelIndex = cartData.findIndex((item) => item.hotel);
+      if (firstHotelIndex !== -1) {
+        const guestKey = `${firstHotelIndex}-0`; // Master Guest Key
+        setRoomGuests((prevGuests) => {
+          if (!prevGuests[guestKey] || prevGuests[guestKey].length === 0)
+            return prevGuests;
+
+          const updatedGuests = { ...prevGuests };
+          const roomGuestsArray = [...updatedGuests[guestKey]];
+          roomGuestsArray[0] = { ...roomGuestsArray[0], [field]: value };
+          updatedGuests[guestKey] = roomGuestsArray;
+          return updatedGuests;
+        });
+      }
+    }
 
     // Real-time validation for email format
     if (field === "emailId" && value.trim() !== "") {
@@ -562,7 +642,7 @@ const MakePkgBookingPage = () => {
     }
 
     // Validate hotel room guest details
-    const hotels = getHotels();
+   const hotels = getHotels();
     if (hotels.length > 0) {
       hotels.forEach((item, hotelIndex) => {
         const hotel = item.hotel || {};
@@ -625,7 +705,7 @@ const MakePkgBookingPage = () => {
           });
         }
       });
-    }
+    } 
 
     return { errors, hasErrors };
   };
@@ -1443,7 +1523,6 @@ const MakePkgBookingPage = () => {
                                         )}
                                       </tbody>
                                     </Table>
-
                                     {/* Guest Details for each room */}
                                     {searchRoomDTOs.map((room, roomIndex) => {
                                       const adults = parseInt(
@@ -1950,77 +2029,39 @@ const MakePkgBookingPage = () => {
                                   {formatDate(activityDate)}
                                 </div>
 
-                                <Row className="g-3 mb-3">
-                                  <Col md={6}>
-                                    <div>
-                                      <strong>Adult Count</strong>
-                                      <div className="mt-1">
-                                        <Form.Control
-                                          type="text"
-                                          value={adult}
-                                          readOnly
-                                          className="bg-light"
-                                        />
-                                      </div>
-                                    </div>
-                                  </Col>
-                                  <Col md={6}>
-                                    <div>
-                                      <strong>Child Count</strong>
-                                      <div className="mt-1">
-                                        <Form.Control
-                                          type="text"
-                                          value={child}
-                                          readOnly
-                                          className="bg-light"
-                                        />
-                                      </div>
-                                      {childAges.length > 0 &&
-                                        childAges.length === 1 && (
-                                          <small className="text-muted d-block mt-1">
-                                            {child} Child : {childAges[0]} Age
-                                          </small>
+                                <div className="activity-info-summary mt-2 pt-2 border-top">
+                                  <Row className="g-3 align-items-end">
+                                    <Col xs={6} sm={3} md={2}>
+                                      <label className="text-muted small d-block mb-1">Adult Count</label>
+                                      <div className="fw-bold fs-6">{adult}</div>
+                                    </Col>
+                                    <Col xs={6} sm={3} md={2}>
+                                      <label className="text-muted small d-block mb-1">Child Count</label>
+                                      <div className="fw-bold fs-6">
+                                        {child}
+                                        {childAges.length > 0 && (
+                                          <span className="text-muted ms-1 small" style={{ fontSize: '0.75rem' }}>
+                                            ({childAges.join(', ')})
+                                          </span>
                                         )}
-                                      {childAges.length > 1 && (
-                                        <small className="text-muted d-block mt-1">
-                                          {childAges.map((age, idx) => (
-                                            <span key={idx}>
-                                              {idx + 1} Child : {age} Age
-                                              {idx < childAges.length - 1
-                                                ? ", "
-                                                : ""}
-                                            </span>
-                                          ))}
-                                        </small>
-                                      )}
-                                    </div>
-                                  </Col>
-                                </Row>
-
-                                <Row className="g-3 mb-3">
-                                  <Col md={6}>
-                                    <div className="d-flex align-items-center justify-content-between">
-                                      <strong>Selling Price</strong>
-                                      <div className="d-flex align-items-center gap-2">
-                                        <span className="text-success fw-bold">
-                                          {sellingPrice.toFixed(2)}
-                                        </span>
-                                        {/* <FaEdit className="text-success" style={{ cursor: "pointer" }} /> */}
                                       </div>
-                                    </div>
-                                  </Col>
-                                  <Col md={6}>
-                                    <div className="d-flex align-items-center justify-content-between">
-                                      <strong>Total Price</strong>
-                                      <div className="d-flex align-items-center gap-2">
-                                        <span className="text-primary fw-bold">
-                                          {totalPrice.toFixed(2)}
-                                        </span>
-                                        {/* <FaEdit className="text-success" style={{ cursor: "pointer" }} /> */}
+                                    </Col>
+                                    <Col xs={6} sm={3} md={4} className="text-sm-end">
+                                      <label className="text-muted small d-block mb-1">Selling Price</label>
+                                      <div className="text-success fw-bold fs-5">
+                                        <small className="me-1">AED</small>
+                                        {sellingPrice.toFixed(2)}
                                       </div>
-                                    </div>
-                                  </Col>
-                                </Row>
+                                    </Col>
+                                    <Col xs={6} sm={3} md={4} className="text-sm-end">
+                                      <label className="text-muted small d-block mb-1">Total Price</label>
+                                      <div className="text-primary fw-bold fs-5">
+                                        <small className="me-1">AED</small>
+                                        {totalPrice.toFixed(2)}
+                                      </div>
+                                    </Col>
+                                  </Row>
+                                </div>
                               </Card.Body>
                             </Card>
                           );
@@ -2216,7 +2257,7 @@ const MakePkgBookingPage = () => {
                                         placeholder="Enter contact number"
                                       />
                                     </Col>
-                                    <Col md={6}>
+                                    {/* <Col md={6}>
                                       <Form.Label>Driver Name</Form.Label>
                                       <Form.Control
                                         type="text"
@@ -2232,8 +2273,8 @@ const MakePkgBookingPage = () => {
                                         }
                                         placeholder="Enter driver name"
                                       />
-                                    </Col>
-                                    <Col md={6}>
+                                    </Col> */}
+                                    {/* <Col md={6}>
                                       <Form.Label>Driver Contact</Form.Label>
                                       <Form.Control
                                         type="text"
@@ -2251,7 +2292,7 @@ const MakePkgBookingPage = () => {
                                         }
                                         placeholder="Enter driver contact"
                                       />
-                                    </Col>
+                                    </Col> */}
                                   </Row>
                                 </div>
 
