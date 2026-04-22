@@ -150,6 +150,39 @@ const FetchNewHotels = () => {
     }
   };
 
+    const handleFetchFromApis = async () => {
+    if (
+      !formData.apiProvider ||
+      !formData.apiCountryId ||
+      !formData.apiCityName
+    ) {
+      toast.error("Please fill all fields before fetching");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await axiosInstance.get(
+        "api/hotelMapping/fetchFromApi",
+        {
+          params: {
+            countryId: formData.apiCountryId,
+            city: formData.apiCityName,
+            platform: formData.apiProvider.toLowerCase(),
+          },
+        },
+      );
+      setHotelList(Array.isArray(response.data) ? response.data : []);
+      toast.success("Hotels fetched from DB successfully");
+    } catch (error) {
+      console.error("Error fetching hotels from DB:", error);
+      toast.error("Failed to fetch hotels from DB");
+      setHotelList([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
@@ -234,9 +267,7 @@ const FetchNewHotels = () => {
                     </Button>
                     <Button
                       variant="success"
-                      onClick={() =>
-                        toast.info("Fetch from API logic coming later")
-                      }
+                      onClick={handleFetchFromApis}
                       disabled={isLoading}
                       className="w-100"
                     >
