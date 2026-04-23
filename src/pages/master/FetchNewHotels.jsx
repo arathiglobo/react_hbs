@@ -24,7 +24,7 @@ const FetchNewHotels = () => {
   const [formData, setFormData] = useState({
     apiProvider: "",
     apiCountryId: "",
-    apiCityName: "",
+    apiCityId: "",
   });
 
   const platformCountryApis = {
@@ -50,7 +50,7 @@ const FetchNewHotels = () => {
     setFormData({
       apiProvider: value,
       apiCountryId: "",
-      apiCityName: "",
+      apiCityId: "",
     });
     setSelectedCountryOption(null);
     setSelectedCityOption(null);
@@ -90,7 +90,7 @@ const FetchNewHotels = () => {
       });
 
       return response.data.map((c) => ({
-        value: c.cityName || c.name, // We use cityName as value since DB fetch needs city name
+        value: c.id || c.cityId, // We use cityID  as value 
         label: c.cityName || c.name,
       }));
     } catch (error) {
@@ -167,7 +167,7 @@ const FetchNewHotels = () => {
         {
           params: {
             countryId: formData.apiCountryId,
-            city: formData.apiCityName,
+            cityId: formData.apiCityName,
             platform: formData.apiProvider.toLowerCase(),
           },
         },

@@ -147,6 +147,7 @@ import PackageSearch from "./pages/search/package/PackageSearch";
 import PackageBooking from "./pages/booking/packagebooking/PackageBooking";
 import FetchNewHotels from "./pages/master/FetchNewHotels";
 import PackageBookingList from "./pages/list/PackageBookingList";
+import OfflineSearch from "./pages/search/offline/OfflineSearch";
 
 
 export default function App() {
@@ -284,6 +285,8 @@ export default function App() {
 
         <Route path="/new-booking/package-search" element={<PrivateRoute><PackageSearch /> </PrivateRoute>}/>
         <Route path="/new-booking/package-booking/:id" element={<PrivateRoute><PackageBooking /> </PrivateRoute>}/>
+        
+        <Route path="/new-booking/offline-search" element={<PrivateRoute><OfflineSearch /> </PrivateRoute>}/>
         
 
         {/* Booking List/Details */}

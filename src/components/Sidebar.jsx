@@ -231,6 +231,10 @@ export default function Sidebar() {
           label: "Tours and Activity",
           to: "/new-booking/tours-and-activities",
         },
+        {
+          label: "Offline Booking",
+          to: "/new-booking/offline-search",
+        },
       ],
     },
     {
