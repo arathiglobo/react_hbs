@@ -31,7 +31,8 @@ import {
   FaUtensils,
   FaInfoCircle,
   FaShieldAlt,
-  FaChevronDown
+  FaChevronDown,
+  FaMapMarkerAlt
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -215,6 +216,7 @@ export default function MakePkgCombineSearch() {
     agent,
     nationality,
     destination,
+    itinerary,
     adults,
     children,
     childAges: initialChildAges = [],
@@ -226,7 +228,12 @@ const [activeAccordion, setActiveAccordion] = useState({});
   const [nightsCount, setNightsCount] = useState(nights || 1);
   const [adultCount, setAdultCount] = useState(adults || 1);
   const [childCount, setChildCount] = useState(children || 0);
-  const [destinationLabel] = useState(destination?.label || "");
+  const [itineraryData] = useState(itinerary || []);
+  const [destinationLabel] = useState(
+    itinerary && itinerary.length > 0
+      ? itinerary.map(item => item.selectedDestination?.label).filter(Boolean).join(" , ")
+      : destination?.label || ""
+  );
   const [agentId, setAgentId] = useState(agent || "");
   const [activeTab, setActiveTab] = useState("accommodation");
   const [roomsOpen, setRoomsOpen] = useState(false);
@@ -1237,10 +1244,37 @@ const [activeAccordion, setActiveAccordion] = useState({});
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl mb-4">
             <Card.Body>
-              <h4 className="fw-bold mb-4">
-                Create My Trip{" "}
-                <span className="text-muted">- {destinationLabel}</span>
-              </h4>
+              <div className="mb-4">
+                <h4 className="fw-bold mb-3 d-flex align-items-center">
+                  <i className="bi bi-folder2-open me-2 text-primary"></i> Make your own package
+                </h4>
+                <div 
+                  className="d-flex flex-wrap align-items-center bg-light rounded-3 p-1 border shadow-sm"
+                  style={{ gap: "2px" }}
+                >
+                  {itineraryData.length > 0 ? (
+                    itineraryData.map((item, idx) => (
+                      <React.Fragment key={idx}>
+                        <div 
+                          className="px-3 py-2 text-dark bg-white rounded-2 d-flex align-items-center border-end"
+                          style={{ fontSize: "0.8rem", fontWeight: "500", minWidth: "fit-content" }}
+                        >
+                          <FaMapMarkerAlt className="text-primary me-2" style={{ fontSize: "0.75rem" }} />
+                          {item.selectedDestination?.label?.split(",")[0] || "Destination"}
+                          <span className="ms-2 text-muted small">({item.nights}N)</span>
+                        </div>
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    <div 
+                      className="px-3 py-2 text-dark bg-white rounded-2 border"
+                      style={{ fontSize: "0.85rem", fontWeight: "500" }}
+                    >
+                      {destinationLabel}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               <Tabs
                 activeKey={activeTab}

@@ -30,17 +30,19 @@ export default function MakeUrOwnPackage() {
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
   const [destinationOptions, setDestinationOptions] = useState([]);
-  const [selectedDestination, setSelectedDestination] = useState(null);
+  const [isDestinationLoading, setIsDestinationLoading] = useState(false);
+
+  const [itinerary, setItinerary] = useState([
+    { id: Date.now(), selectedDestination: null, nights: 1 }
+  ]);
   const [travelDate, setTravelDate] = useState("");
   const [agent, setAgent] = useState("");
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [childAges, setChildAges] = useState([]);
-  const [nights, setNights] = useState(1);
   const [agents, setAgents] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [isDestinationLoading, setIsDestinationLoading] = useState(false);
 
   // Debounce utility function
   function debounce(func, wait) {
@@ -140,6 +142,30 @@ export default function MakeUrOwnPackage() {
     agentList();
   }, []);
 
+  const addDestination = () => {
+    setItinerary([...itinerary, { id: Date.now(), selectedDestination: null, nights: 1 }]);
+  };
+
+  const removeDestination = (id) => {
+    if (itinerary.length > 1) {
+      setItinerary(itinerary.filter(item => item.id !== id));
+    }
+  };
+
+  const updateDestination = (id, destination) => {
+    setItinerary(itinerary.map(item => 
+      item.id === id ? { ...item, selectedDestination: destination } : item
+    ));
+    if (destination) clearError(`destination_${id}`);
+  };
+
+  const updateNights = (id, nights) => {
+    setItinerary(itinerary.map(item => 
+      item.id === id ? { ...item, nights: parseInt(nights) || 1 } : item
+    ));
+    if (nights) clearError(`nights_${id}`);
+  };
+
   const formatDate = (date) => date.toISOString().split("T")[0];
   const today = formatDate(new Date());
 
@@ -158,29 +184,18 @@ export default function MakeUrOwnPackage() {
       newErrors.nationality = "Native Country of Guest is required";
     }
 
-    if (!selectedDestination) {
-      newErrors.destination = "Search Destination is required";
-    }
-
-    if (!adults || adults < 1) {
-      newErrors.adults = "Number of adults must be at least 1";
-    }
-
-    if (children < 0) {
-      newErrors.children = "Number of children cannot be negative";
-    }
-
-    if (children > 0 && childAges.length !== children) {
-      newErrors.childAges = "Please enter age for all children";
-    }
-
     if (children > 0 && childAges.some(age => !age || age < 0 || age > 17)) {
       newErrors.childAges = "Child age must be between 0 and 17";
     }
 
-    if (!nights || nights < 1) {
-      newErrors.nights = "Number of nights must be at least 1";
-    }
+    itinerary.forEach((item, index) => {
+      if (!item.selectedDestination) {
+        newErrors[`destination_${item.id}`] = "Destination is required";
+      }
+      if (!item.nights || item.nights < 1) {
+        newErrors[`nights_${item.id}`] = "Nights must be at least 1";
+      }
+    });
 
     return newErrors;
   };
@@ -217,11 +232,13 @@ export default function MakeUrOwnPackage() {
         travelDate,
         agent,
         nationality: selectedNationality,
-        destination: selectedDestination,
+        itinerary, // Pass the entire itinerary array
         adults,
         children,
         childAges: childAges.map(age => parseInt(age) || 0),
-        nights,
+        // Pass the first destination and total nights for backward compatibility if needed
+        destination: itinerary[0].selectedDestination,
+        nights: itinerary.reduce((acc, curr) => acc + curr.nights, 0),
       },
     });
 
@@ -484,92 +501,106 @@ export default function MakeUrOwnPackage() {
                     </>
                   )}
 
-                  <Col lg={6} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaMapMarkerAlt className="me-2" />
-                        Search Destination <span className="text-danger">*</span>
-                      </Form.Label>
-                      <Select
-                        options={destinationOptions}
-                        value={selectedDestination}
-                        onChange={(option) => {
-                          setSelectedDestination(option);
-                          if (option) clearError("destination");
-                        }}
-                        placeholder="Search destinations..."
-                        isSearchable
-                        isClearable
-                        className="modern-select"
-                        isLoading={isDestinationLoading}
-                        noOptionsMessage={() =>
-                          isDestinationLoading
-                            ? "Searching destinations..."
-                            : "Type to search destinations..."
-                        }
-                        onMenuOpen={() => {
-                          if (destinationOptions.length === 0) {
-                            loadPopularDestinations();
-                          }
-                        }}
-                        onInputChange={(inputValue, { action }) => {
-                          if (action === "input-change") {
-                            cityList(inputValue);
-                          }
-                        }}
-                        menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: base => ({ ...base, zIndex: 9999 }),
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "42px",
-                            border: "1px solid #dee2e6",
-                            "&:hover": { borderColor: "#86b7fe" },
-                          }),
-                        }}
-                      />
-                      {errors.destination && (
-                        <div className="text-danger small mt-1">
-                          {errors.destination}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
+                  {itinerary.map((item, index) => (
+                    <React.Fragment key={item.id}>
+                      <Col lg={6} md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold text-dark">
+                            <FaMapMarkerAlt className="me-2" />
+                            Search Destination {itinerary.length > 1 ? `#${index + 1}` : ""} <span className="text-danger">*</span>
+                          </Form.Label>
+                          <div className="d-flex align-items-center gap-2">
+                            <div className="flex-grow-1">
+                              <Select
+                                options={destinationOptions}
+                                value={item.selectedDestination}
+                                onChange={(option) => updateDestination(item.id, option)}
+                                placeholder="Search destinations..."
+                                isSearchable
+                                isClearable
+                                className="modern-select"
+                                isLoading={isDestinationLoading}
+                                noOptionsMessage={() =>
+                                  isDestinationLoading
+                                    ? "Searching destinations..."
+                                    : "Type to search destinations..."
+                                }
+                                onMenuOpen={() => {
+                                  if (destinationOptions.length === 0) {
+                                    loadPopularDestinations();
+                                  }
+                                }}
+                                onInputChange={(inputValue, { action }) => {
+                                  if (action === "input-change") {
+                                    cityList(inputValue);
+                                  }
+                                }}
+                                menuPortalTarget={document.body}
+                                styles={{
+                                  menuPortal: base => ({ ...base, zIndex: 9999 }),
+                                  control: (base) => ({
+                                    ...base,
+                                    minHeight: "42px",
+                                    border: "1px solid #dee2e6",
+                                    "&:hover": { borderColor: "#86b7fe" },
+                                  }),
+                                }}
+                              />
+                            </div>
+                            <Button 
+                              variant="primary" 
+                              className="rounded-circle d-flex align-items-center justify-content-center"
+                              style={{ width: "42px", height: "42px", minWidth: "42px" }}
+                              onClick={addDestination}
+                              title="Add another destination"
+                            >
+                              <FaPlus />
+                            </Button>
+                            {itinerary.length > 1 && (
+                              <Button 
+                                variant="outline-danger" 
+                                className="rounded-circle d-flex align-items-center justify-content-center"
+                                style={{ width: "42px", height: "42px", minWidth: "42px" }}
+                                onClick={() => removeDestination(item.id)}
+                                title="Remove destination"
+                              >
+                                <span className="fw-bold">×</span>
+                              </Button>
+                            )}
+                          </div>
+                          {errors[`destination_${item.id}`] && (
+                            <div className="text-danger small mt-1">
+                              {errors[`destination_${item.id}`]}
+                            </div>
+                          )}
+                        </Form.Group>
+                      </Col>
 
-                  <Col lg={3} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaCalendarAlt className="me-2" />
-                        Number of nights <span className="text-danger">*</span>
-                      </Form.Label>
-                      <div className="d-flex">
-                        <Form.Control
-                          type="number"
-                          min="1"
-                          max="30"
-                          value={nights}
-                          onChange={(e) => {
-                            setNights(parseInt(e.target.value) || 1);
-                            if (e.target.value) clearError("nights");
-                          }}
-                          className="form-control-modern"
-                          isInvalid={!!errors.nights}
-                        />
-                        <Button
-                          variant="primary"
-                          className="ms-2"
-                          onClick={() => setNights(prev => prev + 1)}
-                        >
-                          <FaPlus />
-                        </Button>
-                      </div>
-                      {errors.nights && (
-                        <div className="text-danger small mt-1">
-                          {errors.nights}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold text-dark">
+                            <FaCalendarAlt className="me-2" />
+                            Number of nights <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            min="1"
+                            max="30"
+                            value={item.nights}
+                            onChange={(e) => updateNights(item.id, e.target.value)}
+                            className="form-control-modern"
+                            isInvalid={!!errors[`nights_${item.id}`]}
+                          />
+                          {errors[`nights_${item.id}`] && (
+                            <div className="text-danger small mt-1">
+                              {errors[`nights_${item.id}`]}
+                            </div>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col lg={3} className="d-none d-lg-block"></Col> {/* Spacer for alignment */}
+                    </React.Fragment>
+                  ))}
                 </Row>
 
                 <Row className="mt-4">
