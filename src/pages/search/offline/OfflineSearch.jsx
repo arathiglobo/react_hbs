@@ -401,15 +401,15 @@ const OfflineSearch = () => {
         <Sidebar />
         <main className="flex-grow-1 offline-search-container">
           <Card className="search-card-premium animate-fade-in-up">
-            <Card.Body className="p-3">
-              <div className="mb-4">
-                <h2 className="card-title-modern">Offline Booking</h2>
+            <Card.Body className="p-2">
+              <div className="mb-3">
+                <h3 className="card-title-modern">Offline Booking</h3>
                 <p className="text-muted small">Search and add criteria for offline bookings</p>
               </div>
 
               <Form onSubmit={handleSubmit}>
-                <div className="mb-4">
-                  <h6 className="fw-bold text-primary mb-3">Search Criteria</h6>
+                <div className="mb-2">
+                  {/* <h6 className="fw-bold text-primary mb-3">Search Criteria</h6> */}
                   <Row className="g-4">
                     {/* Search Agent */}
                     <Col lg={3}>
@@ -610,7 +610,7 @@ const OfflineSearch = () => {
                   </Col>
                 </Row>
 
-                <div className="d-flex justify-content-center pt-3">
+                <div className="d-flex justify-content-center pt-0">
                   <Button
                     type="submit"
                     className="btn-add-premium d-flex align-items-center gap-2"

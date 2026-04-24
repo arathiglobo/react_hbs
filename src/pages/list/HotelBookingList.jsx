@@ -469,14 +469,39 @@ const HotelBookingList = () => {
   );
 
   // Filter bookings based on search term
-  const filteredBookings = useMemo(() => {
-    if (!search.trim()) {
-      return bookings;
-    }
-    return bookings.filter((booking) =>
-      String(booking.bookingId).toLowerCase().includes(search.toLowerCase())
-    );
-  }, [bookings, search]);
+ const filteredBookings = useMemo(() => {
+  if (!search.trim()) return bookings;
+  const query = search.trim().toLowerCase();
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const formatDeadlineDate = (dateString) => {
+    if (!dateString) return "";
+    return dateString.split("T")[0];
+  };
+
+  return bookings.filter((booking) =>
+    [
+      booking.bookingCode,                          // GLBIN11
+      booking.agentName,                            // Agent Name
+      booking.primaryGuestName,                     // Customer Name
+      booking.referenceNumber,                      // Reference Code
+      booking.hotelName,                            // Hotel Name
+      formatDate(booking.bookingDate),              // 24/04/2025
+      formatDeadlineDate(booking.deadlineDate),     // 2025-11-04
+      booking.confirmationStatus,                   // Confirmed / Not Confirmed
+    ]
+      .map((val) => String(val ?? "").toLowerCase())
+      .some((val) => val.includes(query))
+  );
+}, [bookings, search]);
 
   const currentPaginationState = pagination[status] || { page: 1, perPage: 10 };
   const currentPage = currentPaginationState.page;

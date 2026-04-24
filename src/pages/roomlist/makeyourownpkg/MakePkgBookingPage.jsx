@@ -2222,21 +2222,23 @@ const MakePkgBookingPage = () => {
                                     <Col md={6}>
                                       <Form.Label>Transporter Name</Form.Label>
                                       <Form.Control
-                                        type="text"
-                                        value={
-                                          transferDetail.transporterName || ""
-                                        }
-                                        onChange={(e) =>
-                                          setTransferDetails({
-                                            ...transferDetails,
-                                            [transferIndex]: {
-                                              ...transferDetail,
-                                              transporterName: e.target.value,
-                                            },
-                                          })
-                                        }
-                                        placeholder="Enter transporter name"
-                                      />
+  type="text"
+  value={
+    transferDetails[transferIndex]?.transporterName !== undefined
+      ? transferDetails[transferIndex].transporterName
+      : primaryGuest.firstName || ""
+  }
+  onChange={(e) =>
+    setTransferDetails({
+      ...transferDetails,
+      [transferIndex]: {
+        ...transferDetail,
+        transporterName: e.target.value,
+      },
+    })
+  }
+  placeholder="Enter transporter name"
+/>
                                     </Col>
                                     <Col md={6}>
                                       <Form.Label>Contact Number</Form.Label>
