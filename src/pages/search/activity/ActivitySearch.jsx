@@ -104,6 +104,7 @@ const ActivitySearch = () => {
   const [nationalityList, setNationalityList] = useState([]);
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [isDestinationLoading, setIsDestinationLoading] = useState(false);
+  const [isNationalityLoading, setIsNationalityLoading] = useState(false);
 
   // Debounce utility function
   function debounce(func, wait) {
@@ -148,20 +149,56 @@ const ActivitySearch = () => {
     }, 300)
   ).current;
 
-  const countryList = async () => {
-    try {
-      const response = await axiosInstance.get("/api/country");
-      const options = Array.isArray(response.data)
-        ? response.data.map((country) => ({
-          value: country.id,
-          label: country.name,
-          code: country.countryCode,
-        }))
-        : [];
-      setNationalityList(options);
-    } catch (error) {
-      console.log("error for country list:", error);
-      setNationalityList([]);
+  // Debounced country search function
+  const debouncedCountrySearch = useRef(
+    debounce(async (search) => {
+      try {
+        setIsNationalityLoading(true);
+        const response = await axiosInstance.get(`/api/country?search=${search}`);
+        const options = Array.isArray(response.data)
+          ? response.data.map((country) => ({
+            value: country.id,
+            label: country.name,
+            code: country.countryCode,
+          }))
+          : [];
+        setNationalityList(options);
+      } catch (error) {
+        console.log("axios call error for country list:", error);
+        setNationalityList([]);
+      } finally {
+        setIsNationalityLoading(false);
+      }
+    }, 300)
+  ).current;
+
+  const countryList = async (search = "") => {
+    if (search) {
+      debouncedCountrySearch(search);
+    } else {
+      try {
+        setIsNationalityLoading(true);
+        const response = await axiosInstance.get("/api/country?limit=50");
+        const options = Array.isArray(response.data)
+          ? response.data.map((country) => ({
+            value: country.id,
+            label: country.name,
+            code: country.countryCode,
+          }))
+          : [];
+        setNationalityList(options);
+      } catch (error) {
+        console.log("error for country list:", error);
+        setNationalityList([]);
+      } finally {
+        setIsNationalityLoading(false);
+      }
+    }
+  };
+
+  const handleCountryInputChange = (inputValue) => {
+    if (inputValue.length >= 2) {
+      debouncedCountrySearch(inputValue);
     }
   };
 
@@ -376,6 +413,8 @@ const ActivitySearch = () => {
           options={nationalityList}
           value={nationality}
           onChange={setNationality}
+          onInputChange={handleCountryInputChange}
+          isLoading={isNationalityLoading}
           placeholder="Search Nationality"
           isSearchable
           isClearable

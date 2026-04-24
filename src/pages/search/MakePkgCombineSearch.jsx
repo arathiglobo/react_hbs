@@ -615,6 +615,11 @@ const [activeAccordion, setActiveAccordion] = useState({});
       const nationalityCode = nationality?.code || "";
       const destinationCityId = destination?.value || "";
       const destinationCountryId = destination?.countryId || "";
+      
+      const destinationCityIds = itinerary && itinerary.length > 0
+        ? itinerary.map(item => String(item.selectedDestination?.value)).filter(id => id && id !== "undefined")
+        : [String(destination?.value)].filter(id => id && id !== "undefined");
+
       const noOfRooms = String(rooms.length);
 
       const roomConfigurations = rooms.map((room, index) => ({
@@ -636,6 +641,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
         nationalityId,
         nationalityCode,
         destinationCityId,
+        destinationCityIds,
         destinationCountryId,
         checkIn,
         checkOut,
@@ -743,6 +749,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
         nativeCountryId: nationality?.value ? String(nationality.value) : "",
         destinationCountryId: destination?.countryId || "",
         destinationCityId: destination?.value || "",
+        destinationCityIds: itinerary && itinerary.length > 0
+          ? itinerary.map(item => String(item.selectedDestination?.value)).filter(id => id && id !== "undefined")
+          : [String(destination?.value)].filter(id => id && id !== "undefined"),
         searchCorCtype: destination?.type || "State",
         agentId: String(agentId || agent || 1),
         childAge:
@@ -1084,6 +1093,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
         nativeCountryId: nationality?.value ? Number(nationality.value) : null,
         destinationCountryId: destination?.countryId || "",
         destinationCityId: destination?.value || "",
+        destinationCityIds: itinerary && itinerary.length > 0
+          ? itinerary.map(item => String(item.selectedDestination?.value)).filter(id => id && id !== "undefined")
+          : [String(destination?.value)].filter(id => id && id !== "undefined"),
         searchCorCtype: "city",
         agentid: String(agentId || agent || 1),
         childAge:

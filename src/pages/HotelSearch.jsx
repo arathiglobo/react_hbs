@@ -357,6 +357,7 @@ export default function HotelSearch() {
   const [isDestinationLoading, setIsDestinationLoading] = useState(false);
   const resultsRef = useRef(null);
   const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
+  const [isNationalityLoading, setIsNationalityLoading] = useState(false);
 
   const starOptions = [
     { value: 5, label: "5 Stars" },
@@ -534,19 +535,55 @@ export default function HotelSearch() {
     }, 0);
   };
 
-  const countryList = async () => {
-    try {
-      const response = await axiosInstance.get("/api/country");
-      const options = Array.isArray(response.data)
-        ? response.data.map((country) => ({
-            value: country.id,
-            label: country.name,
-            code: country.countryCode,
-          }))
-        : [];
-      setNationalityList(options);
-    } catch {
-      setNationalityList([]);
+  const debouncedCountrySearch = useRef(
+    debounce(async (search) => {
+      try {
+        setIsNationalityLoading(true);
+        const response = await axiosInstance.get(`/api/country?search=${search}`);
+        const options = Array.isArray(response.data)
+          ? response.data.map((country) => ({
+              value: country.id,
+              label: country.name,
+              code: country.countryCode,
+            }))
+          : [];
+        setNationalityList(options);
+      } catch (error) {
+        console.error("error for country search:", error);
+        setNationalityList([]);
+      } finally {
+        setIsNationalityLoading(false);
+      }
+    }, 300)
+  ).current;
+
+  const countryList = async (search = "") => {
+    if (search) {
+      debouncedCountrySearch(search);
+    } else {
+      try {
+        setIsNationalityLoading(true);
+        const response = await axiosInstance.get("/api/country?limit=50");
+        const options = Array.isArray(response.data)
+          ? response.data.map((country) => ({
+              value: country.id,
+              label: country.name,
+              code: country.countryCode,
+            }))
+          : [];
+        setNationalityList(options);
+      } catch (error) {
+        console.error("error for country list:", error);
+        setNationalityList([]);
+      } finally {
+        setIsNationalityLoading(false);
+      }
+    }
+  };
+
+  const handleCountryInputChange = (inputValue) => {
+    if (inputValue.length >= 2) {
+      debouncedCountrySearch(inputValue);
     }
   };
 
@@ -1031,13 +1068,15 @@ export default function HotelSearch() {
                       <Form.Label className="fw-semibold text-dark">
                         Nationality
                       </Form.Label>
-                      <Select
+                       <Select
                         options={nationalityList}
                         value={selectedNationality}
                         onChange={(option) => {
                           setSelectedNationality(option);
                           if (option) clearError("nationality");
                         }}
+                        onInputChange={handleCountryInputChange}
+                        isLoading={isNationalityLoading}
                         placeholder="Select nationality"
                         isSearchable
                         isClearable
