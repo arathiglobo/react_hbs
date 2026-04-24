@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, Form, Row, Col, Button, Spinner } from "react-bootstrap";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -93,15 +94,6 @@ function RoomGuestSelector({ value, onChange }) {
 
 
 const OfflineSearch = () => {
-  const [invoiceCounter, setInvoiceCounter] = useState(() => {
-    const saved = localStorage.getItem("offline_invoice_counter");
-    return saved ? parseInt(saved, 10) : 1;
-  });
-
-  const generateInvoiceNumber = (counter) => {
-    return `INV-GLB-${String(counter).padStart(4, "0")}`;
-  };
-
   const [formData, setFormData] = useState({
     agentId: null,
     refNo: "",
@@ -109,7 +101,7 @@ const OfflineSearch = () => {
     checkOut: "",
     searchGuest: "",
     customerName: "",
-    invoiceNo: generateInvoiceNumber(invoiceCounter),
+    invoiceNo: "",
     contactNo: "",
     bookingDoneBy: null,
     currency: null,
@@ -122,6 +114,8 @@ const OfflineSearch = () => {
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [isLoadingCurrencies, setIsLoadingCurrencies] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [commonOrderNote, setCommonOrderNote] = useState("");
+  const navigate = useNavigate();
 
   // Guest state
   const [rooms, setRooms] = useState([{ adults: 1, children: 0, childAges: [] }]);
@@ -130,14 +124,22 @@ const OfflineSearch = () => {
 
   // Supplier Section State
   const [mainBasicId, setMainBasicId] = useState(null);
+  const [savedInvoiceNo, setSavedInvoiceNo] = useState("");
   const [activeSupplier, setActiveSupplier] = useState("Hotel");
   const [supplierEntries, setSupplierEntries] = useState([]);
-  useEffect(() => {
-    setFormData((prev) => ({
-      ...prev,
-      invoiceNo: generateInvoiceNumber(invoiceCounter),
-    }));
-  }, [invoiceCounter]);
+  const fetchNextInvoiceNumber = async () => {
+    try {
+      const response = await axiosInstance.get("/api/v1/offline-booking/next-invoice-number");
+      if (response.data) {
+        setFormData((prev) => ({
+          ...prev,
+          invoiceNo: response.data,
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching next invoice number:", error);
+    }
+  };
 
   // ─────────────────────────────────────────────
   // API: Fetch Agents (Searchable)
@@ -201,6 +203,7 @@ const OfflineSearch = () => {
     fetchAgents();
     fetchEmployees();
     fetchCurrencies();
+    fetchNextInvoiceNumber();
   }, []);
 
   // ─────────────────────────────────────────────
@@ -284,11 +287,8 @@ const OfflineSearch = () => {
       if (response.data && response.data !== 0) {
         toast.success("basic supplier details added successfully");
         setMainBasicId(response.data); // Store the returned ID
-        
-        const nextCounter = invoiceCounter + 1;
-        setInvoiceCounter(nextCounter);
-        localStorage.setItem("offline_invoice_counter", nextCounter.toString());
-
+        setSavedInvoiceNo(formData.invoiceNo); // Keep the invoice number used for this booking
+        fetchNextInvoiceNumber(); // Get the next one for the next possible booking
         setErrors({});
       } else {
         toast.error("Failed to add supplier details");
@@ -302,9 +302,9 @@ const OfflineSearch = () => {
   };
 
   const fetchSupplierEntries = async () => {
-    if (!mainBasicId || !formData.invoiceNo) return;
+    if (!mainBasicId || !savedInvoiceNo) return;
     try {
-      const res = await axiosInstance.get(`/api/v1/offline-booking/list/${formData.invoiceNo}/${mainBasicId}`);
+      const res = await axiosInstance.get(`/api/v1/offline-booking/list/${savedInvoiceNo}/${mainBasicId}`);
       setSupplierEntries(res.data || []);
     } catch (err) {
       console.error("Error fetching supplier entries:", err);
@@ -312,19 +312,56 @@ const OfflineSearch = () => {
   };
 
   useEffect(() => {
-    if (mainBasicId) {
+    if (mainBasicId && savedInvoiceNo) {
       fetchSupplierEntries();
     }
-  }, [mainBasicId]);
+  }, [mainBasicId, savedInvoiceNo]);
 
   const handleAddEntry = () => {
     fetchSupplierEntries();
   };
 
+  const handleFinalSubmit = async () => {
+    if (!mainBasicId) {
+      toast.error("Please add basic details first");
+      return;
+    }
+    if (supplierEntries.length === 0) {
+      toast.error("Please add at least one supplier entry");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      
+      const totalQty = supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.quantity) || 0), 0);
+      const subTot = supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.subTotal) || 0), 0);
+
+      const payload = {
+        totalQuantity: String(totalQty),
+        subTotal: String(subTot),
+        grandTotal: String(subTot), // Assuming grandTotal is same as subTotal for now
+        commonOrderNote: commonOrderNote,
+        invoiceNumber: savedInvoiceNo
+      };
+
+      const response = await axiosInstance.post(`/api/v1/offline-booking/final-submit`, payload);
+      if (response.status === 200) {
+        toast.success("Booking submitted successfully");
+        navigate("/booking-details/offline-booking-list");
+      }
+    } catch (error) {
+      console.error("Error final submitting:", error);
+      toast.error("Failed to submit booking");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const renderSupplierForm = () => {
     const commonProps = { 
       mainBasicId, 
-      invoiceNo: formData.invoiceNo, 
+      invoiceNo: savedInvoiceNo, 
       onAdd: handleAddEntry 
     };
     switch (activeSupplier) {
@@ -364,7 +401,7 @@ const OfflineSearch = () => {
         <Sidebar />
         <main className="flex-grow-1 offline-search-container">
           <Card className="search-card-premium animate-fade-in-up">
-            <Card.Body className="p-4 p-lg-5">
+            <Card.Body className="p-3">
               <div className="mb-4">
                 <h2 className="card-title-modern">Offline Booking</h2>
                 <p className="text-muted small">Search and add criteria for offline bookings</p>
@@ -593,7 +630,7 @@ const OfflineSearch = () => {
 
               {/* Dynamic Supplier Section */}
               {mainBasicId && (
-                <div className="mt-5 pt-4 border-top animate-fade-in">
+                <div className="mt-3 pt-2 border-top animate-fade-in">
                   <div className="supplier-tabs-container">
                     <Row>
                       <Col lg={2} md={3} className="border-end">
@@ -625,7 +662,7 @@ const OfflineSearch = () => {
                   </div>
 
                   {/* Summary Table */}
-                  <div className="mt-5">
+                  <div className="mt-3">
                     <div className="table-responsive summary-table-container">
                       <table className="table table-hover align-middle summary-table-modern">
                         <thead>
@@ -672,6 +709,85 @@ const OfflineSearch = () => {
                         </tbody>
                       </table>
                     </div>
+                  </div>
+
+                  {/* Summary Totals and Notes */}
+                  <div className="mt-3 p-3 border rounded-3 bg-white shadow-sm">
+                    <Row className="g-4">
+                      <Col md={8}>
+                        <Form.Group>
+                          <Form.Label className="fw-bold text-secondary">Order Notes</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={4}
+                            placeholder="Order Notes If Any..."
+                            value={commonOrderNote}
+                            onChange={(e) => setCommonOrderNote(e.target.value)}
+                            style={{ borderRadius: "8px", border: "1px solid #ced4da" }}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={4}>
+                        <div className="d-flex flex-column gap-3">
+                          <div>
+                            <Form.Label className="small fw-semibold text-muted mb-1">Total Quantity</Form.Label>
+                            <Form.Control
+                              type="text"
+                              readOnly
+                              value={supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.quantity) || 0), 0)}
+                              className="bg-light text-center fw-bold"
+                              style={{ height: "45px", borderRadius: "8px" }}
+                            />
+                          </div>
+                          <div>
+                            <Form.Label className="small fw-semibold text-muted mb-1">Sub Total</Form.Label>
+                            <Form.Control
+                              type="text"
+                              readOnly
+                              value={supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.subTotal) || 0), 0).toFixed(2)}
+                              className="bg-light text-center fw-bold"
+                              style={{ height: "45px", borderRadius: "8px" }}
+                            />
+                          </div>
+                          <div>
+                            <Form.Label className="small fw-semibold text-muted mb-1">Grand Total</Form.Label>
+                            <Form.Control
+                              type="text"
+                              readOnly
+                              value={supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.subTotal) || 0), 0).toFixed(2)}
+                              className="bg-light text-center fw-bold"
+                              style={{ height: "45px", borderRadius: "8px", border: "1px solid #dee2e6" }}
+                            />
+                          </div>
+                        </div>
+                      </Col>
+                    </Row>
+                  </div>
+
+                  <div className="d-flex justify-content-end mt-3 pt-3">
+                    <Button
+                      variant="success"
+                      className="btn-final-submit-premium d-flex align-items-center gap-2"
+                      onClick={handleFinalSubmit}
+                      disabled={isSubmitting || supplierEntries.length === 0}
+                      style={{
+                        padding: "12px 40px",
+                        fontSize: "1.1rem",
+                        fontWeight: "600",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+                        transition: "all 0.3s ease"
+                      }}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Spinner animation="border" size="sm" />
+                          Submitting...
+                        </>
+                      ) : (
+                        <>Submit</>
+                      )}
+                    </Button>
                   </div>
                 </div>
               )}

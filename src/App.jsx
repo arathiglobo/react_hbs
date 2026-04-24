@@ -148,6 +148,7 @@ import PackageBooking from "./pages/booking/packagebooking/PackageBooking";
 import FetchNewHotels from "./pages/master/FetchNewHotels";
 import PackageBookingList from "./pages/list/PackageBookingList";
 import OfflineSearch from "./pages/search/offline/OfflineSearch";
+import OfflineBookingList from "./pages/list/OfflineBookingList";
 
 
 export default function App() {
@@ -293,6 +294,7 @@ export default function App() {
         <Route path="/booking-details/cab-booking-list" element={<PrivateRoute><CabBookingList /></PrivateRoute>} />
         <Route path="/booking-details/activity-booking-list" element={<PrivateRoute><ActivityBookingList /></PrivateRoute>} />
         <Route path="/booking-details/package-booking-list" element={<PrivateRoute><PackageBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/offline-booking-list" element={<PrivateRoute><OfflineBookingList /></PrivateRoute>} />
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
 

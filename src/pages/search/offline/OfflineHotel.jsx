@@ -459,7 +459,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd }) => {
               {isSubmitting ? (
                 <><Spinner animation="border" size="sm" className="me-2" />Saving...</>
               ) : (
-                <>Submit &rarr;</>
+                <>Add &rarr;</>
               )}
             </Button>
           </Col>

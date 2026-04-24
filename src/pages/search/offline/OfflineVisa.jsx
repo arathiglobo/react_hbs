@@ -1,24 +1,51 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Row, Col, Form, Button, Spinner } from "react-bootstrap";
+import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
 const initialForm = {
-  supplier: "",
-  visaType: "",
-  country: "",
-  qty: "",
-  unitPrice: "",
-  tax: "",
+  supplier: null,
+  visa: "",
+  price: "",
+  tax: "0",
+  quantity: "1",
   sellingPrice: "",
-  travelDate: "",
-  summary: "",
 };
 
-const OfflineVisa = ({ mainBasicId, onAdd }) => {
+const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd }) => {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [supplierOptions, setSupplierOptions] = useState([]);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+
+  const fetchSuppliers = async (search = "") => {
+    setIsLoadingSuppliers(true);
+    try {
+      const res = await axiosInstance.get(`/api/supplier?page=0&limit=10&search=${search}`);
+      const options = (res.data || []).map(s => ({ value: s.supplierId, label: s.name }));
+      setSupplierOptions(options);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingSuppliers(false);
+    }
+  };
+
+  const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  };
+
+  const debouncedFetchSuppliers = useCallback(debounce(fetchSuppliers, 500), []);
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -26,29 +53,33 @@ const OfflineVisa = ({ mainBasicId, onAdd }) => {
     if (errors[name]) setErrors((prev) => { const { [name]: _, ...rest } = prev; return rest; });
   };
 
-  const handleUnitPriceChange = (e) => {
-    const unitPrice = e.target.value;
+  const handleSelectChange = (name, val) => {
+    setForm(prev => ({ ...prev, [name]: val }));
+    if (errors[name]) setErrors(prev => { const { [name]: _, ...rest } = prev; return rest; });
+  };
+
+  const handlePriceChange = (e) => {
+    const price = e.target.value;
     const tax = parseFloat(form.tax) || 0;
-    const taxAmt = (parseFloat(unitPrice) || 0) * (tax / 100);
-    const selling = ((parseFloat(unitPrice) || 0) + taxAmt).toFixed(2);
-    setForm((prev) => ({ ...prev, unitPrice, sellingPrice: unitPrice ? selling : "" }));
-    if (errors.unitPrice) setErrors((prev) => { const { unitPrice: _, ...rest } = prev; return rest; });
+    const taxAmt = (parseFloat(price) || 0) * (tax / 100);
+    const selling = ((parseFloat(price) || 0) + taxAmt).toFixed(2);
+    setForm((prev) => ({ ...prev, price, sellingPrice: price ? selling : "" }));
+    if (errors.price) setErrors((prev) => { const { price: _, ...rest } = prev; return rest; });
   };
 
   const handleTaxChange = (e) => {
     const tax = e.target.value;
-    const unit = parseFloat(form.unitPrice) || 0;
-    const taxAmt = unit * ((parseFloat(tax) || 0) / 100);
-    setForm((prev) => ({ ...prev, tax, sellingPrice: form.unitPrice ? (unit + taxAmt).toFixed(2) : "" }));
+    const p = parseFloat(form.price) || 0;
+    const taxAmt = p * ((parseFloat(tax) || 0) / 100);
+    setForm((prev) => ({ ...prev, tax, sellingPrice: form.price ? (p + taxAmt).toFixed(2) : "" }));
   };
 
   const validate = () => {
     const e = {};
-    if (!form.supplier.trim()) e.supplier = "Supplier is required";
-    if (!form.visaType.trim()) e.visaType = "Visa Type is required";
-    if (!form.qty.trim()) e.qty = "Qty is required";
-    if (!form.unitPrice.trim()) e.unitPrice = "Unit Price is required";
-    if (!form.travelDate) e.travelDate = "Travel Date is required";
+    if (!form.supplier) e.supplier = "Supplier is required";
+    if (!form.visa.trim()) e.visa = "Visa Description is required";
+    if (!form.price.trim()) e.price = "Price is required";
+    if (!form.quantity.trim()) e.quantity = "Quantity is required";
     return e;
   };
 
@@ -59,39 +90,26 @@ const OfflineVisa = ({ mainBasicId, onAdd }) => {
 
     setIsSubmitting(true);
     const payload = {
-      supplierMainBasicId: mainBasicId,
-      supplier: form.supplier,
-      visaType: form.visaType,
-      country: form.country,
-      qty: form.qty,
-      unitPrice: form.unitPrice,
-      tax: form.tax,
-      sellingPrice: form.sellingPrice,
-      travelDate: form.travelDate,
-      summary: form.summary,
+      visaId: "0",
+      supplierMainBasicId: String(mainBasicId),
+      supplierId: String(form.supplier?.value),
+      visa: form.visa,
+      price: String(form.price),
+      tax: String(form.tax),
+      quantity: String(form.quantity),
+      sellingPrice: String(form.sellingPrice),
+      isDeleted: false,
+      invoiceNumber: invoiceNo,
     };
 
     try {
       const response = await axiosInstance.post(
-        "/api/v1/offline-booking/supplier-visa/save",
+        "/api/v1/offline-booking/visa/save",
         payload
       );
       if (response.data && response.data !== 0) {
         toast.success("Visa details added successfully");
-        if (onAdd) {
-          onAdd({
-            type: "Visa",
-            description: `${form.visaType}${form.country ? ` - ${form.country}` : ""}`,
-            qty: form.qty,
-            unitPrice: form.unitPrice,
-            sellingPrice: form.sellingPrice,
-            tax: form.tax,
-            taxAmount: (
-              ((parseFloat(form.unitPrice) || 0) * (parseFloat(form.tax) || 0)) / 100
-            ).toFixed(2),
-            subTotal: form.sellingPrice,
-          });
-        }
+        if (onAdd) onAdd();
         setForm(initialForm);
         setErrors({});
       } else {
@@ -113,89 +131,72 @@ const OfflineVisa = ({ mainBasicId, onAdd }) => {
       <h5 className="supplier-form-title">Visa</h5>
       <Form onSubmit={handleSubmit}>
         <Row className="g-3">
-          {/* Supplier */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Supplier</Form.Label>
-              <Form.Control
-                type="text"
-                className={inputCls("supplier")}
-                name="supplier"
+              <Select
+                className={`react-select-premium ${errors.supplier ? "is-invalid-select" : ""}`}
+                classNamePrefix="react-select"
+                options={supplierOptions}
                 value={form.supplier}
-                onChange={handleChange}
-                placeholder="Supplier Name"
+                onChange={(opt) => handleSelectChange("supplier", opt)}
+                onInputChange={(val) => debouncedFetchSuppliers(val)}
+                isLoading={isLoadingSuppliers}
+                placeholder="SELECT"
+                isSearchable
               />
               {errors.supplier && <div className="text-danger small mt-1">{errors.supplier}</div>}
             </Form.Group>
           </Col>
 
-          {/* Visa Type */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Visa Type</Form.Label>
+              <Form.Label className="form-label-modern">Visa</Form.Label>
               <Form.Control
                 type="text"
-                className={inputCls("visaType")}
-                name="visaType"
-                value={form.visaType}
+                className={inputCls("visa")}
+                name="visa"
+                value={form.visa}
                 onChange={handleChange}
-                placeholder="Visa Type"
+                placeholder="Visa Description"
               />
-              {errors.visaType && <div className="text-danger small mt-1">{errors.visaType}</div>}
+              {errors.visa && <div className="text-danger small mt-1">{errors.visa}</div>}
             </Form.Group>
           </Col>
 
-          {/* Country */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Country</Form.Label>
-              <Form.Control
-                type="text"
-                className="form-control-premium"
-                name="country"
-                value={form.country}
-                onChange={handleChange}
-                placeholder="Country"
-              />
-            </Form.Group>
-          </Col>
-
-          {/* Qty */}
-          <Col lg={4} md={6}>
-            <Form.Group>
-              <Form.Label className="form-label-modern">Qty</Form.Label>
+              <Form.Label className="form-label-modern">Quantity</Form.Label>
               <Form.Control
                 type="number"
                 min="1"
-                className={inputCls("qty")}
-                name="qty"
-                value={form.qty}
+                className={inputCls("quantity")}
+                name="quantity"
+                value={form.quantity}
                 onChange={handleChange}
                 placeholder="Quantity"
               />
-              {errors.qty && <div className="text-danger small mt-1">{errors.qty}</div>}
+              {errors.quantity && <div className="text-danger small mt-1">{errors.quantity}</div>}
             </Form.Group>
           </Col>
 
-          {/* Unit Price */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Unit Price (in AED)</Form.Label>
+              <Form.Label className="form-label-modern">Price (in AED)</Form.Label>
               <Form.Control
                 type="number"
                 min="0"
                 step="0.01"
-                className={inputCls("unitPrice")}
-                name="unitPrice"
-                value={form.unitPrice}
-                onChange={handleUnitPriceChange}
-                placeholder="Unit Price"
+                className={inputCls("price")}
+                name="price"
+                value={form.price}
+                onChange={handlePriceChange}
+                placeholder="Price"
               />
-              {errors.unitPrice && <div className="text-danger small mt-1">{errors.unitPrice}</div>}
+              {errors.price && <div className="text-danger small mt-1">{errors.price}</div>}
             </Form.Group>
           </Col>
 
-          {/* Tax */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Tax (%)</Form.Label>
@@ -212,14 +213,11 @@ const OfflineVisa = ({ mainBasicId, onAdd }) => {
             </Form.Group>
           </Col>
 
-          {/* Selling Price */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Selling Price (in AED)</Form.Label>
               <Form.Control
                 type="number"
-                min="0"
-                step="0.01"
                 className="form-control-premium"
                 name="sellingPrice"
                 value={form.sellingPrice}
@@ -229,38 +227,6 @@ const OfflineVisa = ({ mainBasicId, onAdd }) => {
             </Form.Group>
           </Col>
 
-          {/* Travel Date */}
-          <Col lg={4} md={6}>
-            <Form.Group>
-              <Form.Label className="form-label-modern">Travel Date</Form.Label>
-              <Form.Control
-                type="date"
-                className={inputCls("travelDate")}
-                name="travelDate"
-                value={form.travelDate}
-                onChange={handleChange}
-              />
-              {errors.travelDate && <div className="text-danger small mt-1">{errors.travelDate}</div>}
-            </Form.Group>
-          </Col>
-
-          {/* Summary */}
-          <Col lg={8} md={12}>
-            <Form.Group>
-              <Form.Label className="form-label-modern">Summary</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                className="form-control-premium"
-                name="summary"
-                value={form.summary}
-                onChange={handleChange}
-                placeholder="Enter summary here..."
-              />
-            </Form.Group>
-          </Col>
-
-          {/* Submit */}
           <Col lg={4} md={12} className="d-flex align-items-end">
             <Button
               type="submit"
@@ -270,7 +236,7 @@ const OfflineVisa = ({ mainBasicId, onAdd }) => {
               {isSubmitting ? (
                 <><Spinner animation="border" size="sm" className="me-2" />Saving...</>
               ) : (
-                <>Submit &rarr;</>
+                <>Add &rarr;</>
               )}
             </Button>
           </Col>

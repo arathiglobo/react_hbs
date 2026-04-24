@@ -1,30 +1,70 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Row, Col, Form, Button, Spinner } from "react-bootstrap";
+import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
 const initialForm = {
-  timeType: "arrival",
-  supplier: "",
-  transfer: "",
-  qty: "",
-  driver: "",
-  vehicle: "",
-  vehicleNo: "",
+  timeType: "arrival", // arrival or departure
+  supplier: null,
+  arrivalTransfer: "",
+  quantity: "1",
+  driverName: "",
+  vehicleName: "",
+  vechicleNumber: "",
   rate: "",
-  tax: "",
+  tax: "0",
   sellingPrice: "",
+  date: "",
+  pickupPoint: "",
+  dropOffPoint: "",
+  flightNumber: "",
+  time: "",
 };
 
-const OfflineCab = ({ mainBasicId, onAdd }) => {
+const OfflineCab = ({ mainBasicId, invoiceNo, onAdd }) => {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [supplierOptions, setSupplierOptions] = useState([]);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+
+  const fetchSuppliers = async (search = "") => {
+    setIsLoadingSuppliers(true);
+    try {
+      const res = await axiosInstance.get(`/api/supplier?page=0&limit=10&search=${search}`);
+      const options = (res.data || []).map(s => ({ value: s.supplierId, label: s.name }));
+      setSupplierOptions(options);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingSuppliers(false);
+    }
+  };
+
+  const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  };
+
+  const debouncedFetchSuppliers = useCallback(debounce(fetchSuppliers, 500), []);
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
 
   const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    setForm((prev) => ({ ...prev, [name]: type === "radio" ? value : value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors((prev) => { const { [name]: _, ...rest } = prev; return rest; });
+  };
+
+  const handleSelectChange = (name, val) => {
+    setForm(prev => ({ ...prev, [name]: val }));
+    if (errors[name]) setErrors(prev => { const { [name]: _, ...rest } = prev; return rest; });
   };
 
   const handleRateChange = (e) => {
@@ -38,22 +78,25 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
 
   const handleTaxChange = (e) => {
     const tax = e.target.value;
-    const rate = parseFloat(form.rate) || 0;
-    const taxAmt = rate * ((parseFloat(tax) || 0) / 100);
-    setForm((prev) => ({
-      ...prev,
-      tax,
-      sellingPrice: form.rate ? (rate + taxAmt).toFixed(2) : "",
-    }));
+    const r = parseFloat(form.rate) || 0;
+    const taxAmt = r * ((parseFloat(tax) || 0) / 100);
+    setForm((prev) => ({ ...prev, tax, sellingPrice: form.rate ? (r + taxAmt).toFixed(2) : "" }));
   };
 
   const validate = () => {
     const e = {};
-    if (!form.supplier.trim()) e.supplier = "Supplier is required";
-    if (!form.transfer.trim()) e.transfer = "Transfer is required";
-    if (!form.qty.trim()) e.qty = "Qty is required";
+    if (!form.supplier) e.supplier = "Supplier is required";
+    if (!form.arrivalTransfer.trim()) e.arrivalTransfer = "Transfer is required";
+    if (!form.quantity.trim()) e.quantity = "Quantity is required";
     if (!form.rate.trim()) e.rate = "Rate is required";
+    if (!form.date) e.date = "Date is required";
     return e;
+  };
+
+  const formatDatePayload = (dateStr) => {
+    if (!dateStr) return "";
+    const [y, m, d] = dateStr.split("-");
+    return `${d}/${m}/${y}`;
   };
 
   const handleSubmit = async (ev) => {
@@ -62,41 +105,42 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
     if (Object.keys(formErrors).length > 0) { setErrors(formErrors); return; }
 
     setIsSubmitting(true);
+    const isArrival = form.timeType === "arrival";
+    
     const payload = {
-      supplierMainBasicId: mainBasicId,
-      timeType: form.timeType,
-      supplier: form.supplier,
-      transfer: form.transfer,
-      qty: form.qty,
-      driver: form.driver,
-      vehicle: form.vehicle,
-      vehicleNo: form.vehicleNo,
-      rate: form.rate,
-      tax: form.tax,
-      sellingPrice: form.sellingPrice,
+      id: "0",
+      supplierMainBasicId: String(mainBasicId),
+      supplierId: String(form.supplier?.value),
+      arrivalTime: isArrival,
+      departureTime: !isArrival,
+      arrivalTransfer: form.arrivalTransfer,
+      quantity: String(form.quantity),
+      driverName: form.driverName,
+      vehicleName: form.vehicleName,
+      vechicleNumber: form.vechicleNumber,
+      flightNumber: form.flightNumber,
+      tax: String(form.tax),
+      sellingPrice: String(form.sellingPrice),
+      rate: String(form.rate),
+      checkinDate: isArrival ? formatDatePayload(form.date) : "",
+      checkOutDate: !isArrival ? formatDatePayload(form.date) : "",
+      pickupPoint: isArrival ? form.pickupPoint : "",
+      cabdepPickPoint: !isArrival ? form.pickupPoint : "",
+      cabArrivalDropOffpoint: isArrival ? form.dropOffPoint : "",
+      dropOffPoint: !isArrival ? form.dropOffPoint : "",
+      ETA: isArrival ? form.time : "",
+      ETD: !isArrival ? form.time : "",
+      invoiceNumber: invoiceNo,
     };
 
     try {
       const response = await axiosInstance.post(
-        "/api/v1/offline-booking/supplier-cab/save",
+        "/api/v1/offline-booking/cab/save",
         payload
       );
       if (response.data && response.data !== 0) {
         toast.success("Cab details added successfully");
-        if (onAdd) {
-          onAdd({
-            type: "Cab",
-            description: form.transfer,
-            qty: form.qty,
-            unitPrice: form.rate,
-            sellingPrice: form.sellingPrice,
-            tax: form.tax,
-            taxAmount: (
-              ((parseFloat(form.rate) || 0) * (parseFloat(form.tax) || 0)) / 100
-            ).toFixed(2),
-            subTotal: form.sellingPrice,
-          });
-        }
+        if (onAdd) onAdd();
         setForm(initialForm);
         setErrors({});
       } else {
@@ -117,7 +161,6 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
     <div className="supplier-form-panel">
       <h5 className="supplier-form-title">Cab</h5>
       <Form onSubmit={handleSubmit}>
-        {/* Radio: Arrival / Departure */}
         <div className="d-flex gap-4 mb-3">
           <Form.Check
             type="radio"
@@ -125,8 +168,9 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
             name="timeType"
             value="arrival"
             checked={form.timeType === "arrival"}
-            onChange={handleChange}
+            onChange={(e) => setForm(prev => ({ ...prev, timeType: e.target.value }))}
             id="cab-arrival"
+            className="modern-radio"
           />
           <Form.Check
             type="radio"
@@ -134,107 +178,104 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
             name="timeType"
             value="departure"
             checked={form.timeType === "departure"}
-            onChange={handleChange}
+            onChange={(e) => setForm(prev => ({ ...prev, timeType: e.target.value }))}
             id="cab-departure"
+            className="modern-radio"
           />
         </div>
 
         <Row className="g-3">
-          {/* Supplier */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Supplier</Form.Label>
-              <Form.Control
-                type="text"
-                className={inputCls("supplier")}
-                name="supplier"
+              <Select
+                className={`react-select-premium ${errors.supplier ? "is-invalid-select" : ""}`}
+                classNamePrefix="react-select"
+                options={supplierOptions}
                 value={form.supplier}
-                onChange={handleChange}
-                placeholder="Supplier Name"
+                onChange={(opt) => handleSelectChange("supplier", opt)}
+                onInputChange={(val) => debouncedFetchSuppliers(val)}
+                isLoading={isLoadingSuppliers}
+                placeholder="SELECT"
+                isSearchable
               />
               {errors.supplier && <div className="text-danger small mt-1">{errors.supplier}</div>}
             </Form.Group>
           </Col>
 
-          {/* Transfer */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Transfer</Form.Label>
               <Form.Control
                 type="text"
-                className={inputCls("transfer")}
-                name="transfer"
-                value={form.transfer}
+                className={inputCls("arrivalTransfer")}
+                name="arrivalTransfer"
+                value={form.arrivalTransfer}
                 onChange={handleChange}
                 placeholder="Transfer"
               />
-              {errors.transfer && <div className="text-danger small mt-1">{errors.transfer}</div>}
+              {errors.arrivalTransfer && <div className="text-danger small mt-1">{errors.arrivalTransfer}</div>}
             </Form.Group>
           </Col>
 
-          {/* Qty */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Qty</Form.Label>
               <Form.Control
                 type="number"
                 min="1"
-                className={inputCls("qty")}
-                name="qty"
-                value={form.qty}
+                className={inputCls("quantity")}
+                name="quantity"
+                value={form.quantity}
                 onChange={handleChange}
                 placeholder="Cab Qty"
               />
-              {errors.qty && <div className="text-danger small mt-1">{errors.qty}</div>}
+              {errors.quantity && <div className="text-danger small mt-1">{errors.quantity}</div>}
             </Form.Group>
           </Col>
 
-          {/* Driver */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Driver</Form.Label>
               <Form.Control
                 type="text"
                 className="form-control-premium"
-                name="driver"
-                value={form.driver}
+                name="driverName"
+                value={form.driverName}
                 onChange={handleChange}
                 placeholder="Driver Name"
               />
             </Form.Group>
           </Col>
 
-          {/* Vehicle */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Vehicle</Form.Label>
               <Form.Control
                 type="text"
                 className="form-control-premium"
-                name="vehicle"
-                value={form.vehicle}
+                name="vehicleName"
+                value={form.vehicleName}
                 onChange={handleChange}
                 placeholder="Vehicle Name"
               />
             </Form.Group>
           </Col>
 
-          {/* Vehicle No */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Vehicle No</Form.Label>
               <Form.Control
                 type="text"
                 className="form-control-premium"
-                name="vehicleNo"
-                value={form.vehicleNo}
+                name="vechicleNumber"
+                value={form.vechicleNumber}
                 onChange={handleChange}
                 placeholder="Vehicle Number"
               />
             </Form.Group>
           </Col>
 
-          {/* Rate */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Rate (in AED)</Form.Label>
@@ -252,7 +293,6 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
             </Form.Group>
           </Col>
 
-          {/* Tax */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Tax (%)</Form.Label>
@@ -269,14 +309,11 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
             </Form.Group>
           </Col>
 
-          {/* Selling Price */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Selling Price (in AED)</Form.Label>
               <Form.Control
                 type="number"
-                min="0"
-                step="0.01"
                 className="form-control-premium"
                 name="sellingPrice"
                 value={form.sellingPrice}
@@ -286,7 +323,79 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
             </Form.Group>
           </Col>
 
-          {/* Submit */}
+          <Col lg={4} md={6}>
+            <Form.Group>
+              <Form.Label className="form-label-modern">Date</Form.Label>
+              <Form.Control
+                type="date"
+                className={inputCls("date")}
+                name="date"
+                value={form.date}
+                onChange={handleChange}
+              />
+              {errors.date && <div className="text-danger small mt-1">{errors.date}</div>}
+            </Form.Group>
+          </Col>
+
+          <Col lg={4} md={6}>
+            <Form.Group>
+              <Form.Label className="form-label-modern">
+                {form.timeType === "arrival" ? "Pickup Point" : "Pick Up Point"}
+              </Form.Label>
+              <Form.Control
+                type="text"
+                className="form-control-premium"
+                name="pickupPoint"
+                value={form.pickupPoint}
+                onChange={handleChange}
+                placeholder="Pickup Point"
+              />
+            </Form.Group>
+          </Col>
+
+          <Col lg={4} md={6}>
+            <Form.Group>
+              <Form.Label className="form-label-modern">DropOff Point</Form.Label>
+              <Form.Control
+                type="text"
+                className="form-control-premium"
+                name="dropOffPoint"
+                value={form.dropOffPoint}
+                onChange={handleChange}
+                placeholder="DropOff Point"
+              />
+            </Form.Group>
+          </Col>
+
+          <Col lg={4} md={6}>
+            <Form.Group>
+              <Form.Label className="form-label-modern">Flight No</Form.Label>
+              <Form.Control
+                type="text"
+                className="form-control-premium"
+                name="flightNumber"
+                value={form.flightNumber}
+                onChange={handleChange}
+                placeholder="Flight Number"
+              />
+            </Form.Group>
+          </Col>
+
+          <Col lg={4} md={6}>
+            <Form.Group>
+              <Form.Label className="form-label-modern">
+                {form.timeType === "arrival" ? "ETA" : "ETD"}
+              </Form.Label>
+              <Form.Control
+                type="time"
+                className="form-control-premium"
+                name="time"
+                value={form.time}
+                onChange={handleChange}
+              />
+            </Form.Group>
+          </Col>
+
           <Col md={12}>
             <Button
               type="submit"
@@ -296,7 +405,7 @@ const OfflineCab = ({ mainBasicId, onAdd }) => {
               {isSubmitting ? (
                 <><Spinner animation="border" size="sm" className="me-2" />Saving...</>
               ) : (
-                <>Submit &rarr;</>
+                <>Add &rarr;</>
               )}
             </Button>
           </Col>

@@ -1,29 +1,65 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Row, Col, Form, Button, Spinner } from "react-bootstrap";
+import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
 const initialForm = {
-  supplier: "",
-  activityName: "",
-  description: "",
-  qty: "",
+  supplier: null,
+  activity: "",
+  date: "",
+  pickupPoint: "",
+  activityType: "",
+  activityTraveller: "adult",
+  activityTravellerCount: "1",
   unitPrice: "",
-  tax: "",
+  tax: "0",
   sellingPrice: "",
-  activityDate: "",
-  summary: "",
 };
 
-const OfflineActivity = ({ mainBasicId, onAdd }) => {
+const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd }) => {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [supplierOptions, setSupplierOptions] = useState([]);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+
+  const fetchSuppliers = async (search = "") => {
+    setIsLoadingSuppliers(true);
+    try {
+      const res = await axiosInstance.get(`/api/supplier?page=0&limit=10&search=${search}`);
+      const options = (res.data || []).map(s => ({ value: s.supplierId, label: s.name }));
+      setSupplierOptions(options);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingSuppliers(false);
+    }
+  };
+
+  const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  };
+
+  const debouncedFetchSuppliers = useCallback(debounce(fetchSuppliers, 500), []);
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors((prev) => { const { [name]: _, ...rest } = prev; return rest; });
+  };
+
+  const handleSelectChange = (name, val) => {
+    setForm(prev => ({ ...prev, [name]: val }));
+    if (errors[name]) setErrors(prev => { const { [name]: _, ...rest } = prev; return rest; });
   };
 
   const handleUnitPriceChange = (e) => {
@@ -44,12 +80,17 @@ const OfflineActivity = ({ mainBasicId, onAdd }) => {
 
   const validate = () => {
     const e = {};
-    if (!form.supplier.trim()) e.supplier = "Supplier is required";
-    if (!form.activityName.trim()) e.activityName = "Activity Name is required";
-    if (!form.qty.trim()) e.qty = "Qty is required";
+    if (!form.supplier) e.supplier = "Supplier is required";
+    if (!form.activity.trim()) e.activity = "Activity is required";
+    if (!form.date) e.date = "Date is required";
     if (!form.unitPrice.trim()) e.unitPrice = "Unit Price is required";
-    if (!form.activityDate) e.activityDate = "Activity Date is required";
     return e;
+  };
+
+  const formatDatePayload = (dateStr) => {
+    if (!dateStr) return "";
+    const [y, m, d] = dateStr.split("-");
+    return `${d}/${m}/${y}`;
   };
 
   const handleSubmit = async (ev) => {
@@ -59,39 +100,29 @@ const OfflineActivity = ({ mainBasicId, onAdd }) => {
 
     setIsSubmitting(true);
     const payload = {
-      supplierMainBasicId: mainBasicId,
-      supplier: form.supplier,
-      activityName: form.activityName,
-      description: form.description,
-      qty: form.qty,
-      unitPrice: form.unitPrice,
-      tax: form.tax,
-      sellingPrice: form.sellingPrice,
-      activityDate: form.activityDate,
-      summary: form.summary,
+      supplierActivityId: "0",
+      supplierMainBasicId: String(mainBasicId),
+      supplierId: String(form.supplier?.value),
+      activity: form.activity,
+      date: formatDatePayload(form.date),
+      pickupPoint: form.pickupPoint,
+      unitPrice: String(form.unitPrice),
+      tax: String(form.tax),
+      sellingPrice: String(form.sellingPrice),
+      invoiceNumber: invoiceNo,
+      activityType: form.activityType,
+      activityTraveller: form.activityTraveller,
+      activityTravellerCount: String(form.activityTravellerCount),
     };
 
     try {
       const response = await axiosInstance.post(
-        "/api/v1/offline-booking/supplier-activity/save",
+        "/api/v1/offline-booking/activity/save",
         payload
       );
       if (response.data && response.data !== 0) {
         toast.success("Activity details added successfully");
-        if (onAdd) {
-          onAdd({
-            type: "Activity",
-            description: form.activityName,
-            qty: form.qty,
-            unitPrice: form.unitPrice,
-            sellingPrice: form.sellingPrice,
-            tax: form.tax,
-            taxAmount: (
-              ((parseFloat(form.unitPrice) || 0) * (parseFloat(form.tax) || 0)) / 100
-            ).toFixed(2),
-            subTotal: form.sellingPrice,
-          });
-        }
+        if (onAdd) onAdd();
         setForm(initialForm);
         setErrors({});
       } else {
@@ -113,71 +144,112 @@ const OfflineActivity = ({ mainBasicId, onAdd }) => {
       <h5 className="supplier-form-title">Activity</h5>
       <Form onSubmit={handleSubmit}>
         <Row className="g-3">
-          {/* Supplier */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Supplier</Form.Label>
-              <Form.Control
-                type="text"
-                className={inputCls("supplier")}
-                name="supplier"
+              <Select
+                className={`react-select-premium ${errors.supplier ? "is-invalid-select" : ""}`}
+                classNamePrefix="react-select"
+                options={supplierOptions}
                 value={form.supplier}
-                onChange={handleChange}
-                placeholder="Supplier Name"
+                onChange={(opt) => handleSelectChange("supplier", opt)}
+                onInputChange={(val) => debouncedFetchSuppliers(val)}
+                isLoading={isLoadingSuppliers}
+                placeholder="SELECT"
+                isSearchable
               />
               {errors.supplier && <div className="text-danger small mt-1">{errors.supplier}</div>}
             </Form.Group>
           </Col>
 
-          {/* Activity Name */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Activity Name</Form.Label>
+              <Form.Label className="form-label-modern">Activity</Form.Label>
               <Form.Control
                 type="text"
-                className={inputCls("activityName")}
-                name="activityName"
-                value={form.activityName}
+                className={inputCls("activity")}
+                name="activity"
+                value={form.activity}
                 onChange={handleChange}
                 placeholder="Activity Name"
               />
-              {errors.activityName && <div className="text-danger small mt-1">{errors.activityName}</div>}
+              {errors.activity && <div className="text-danger small mt-1">{errors.activity}</div>}
             </Form.Group>
           </Col>
 
-          {/* Description */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Description</Form.Label>
+              <Form.Label className="form-label-modern">Date</Form.Label>
+              <Form.Control
+                type="date"
+                className={inputCls("date")}
+                name="date"
+                value={form.date}
+                onChange={handleChange}
+              />
+              {errors.date && <div className="text-danger small mt-1">{errors.date}</div>}
+            </Form.Group>
+          </Col>
+
+          <Col lg={4} md={6}>
+            <Form.Group>
+              <Form.Label className="form-label-modern">Pickup Point</Form.Label>
               <Form.Control
                 type="text"
                 className="form-control-premium"
-                name="description"
-                value={form.description}
+                name="pickupPoint"
+                value={form.pickupPoint}
                 onChange={handleChange}
-                placeholder="Description"
+                placeholder="Pickup Point"
               />
             </Form.Group>
           </Col>
 
-          {/* Qty */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Qty</Form.Label>
+              <Form.Label className="form-label-modern">Activity Type</Form.Label>
+              <Form.Select
+                className="form-control-premium"
+                name="activityType"
+                value={form.activityType}
+                onChange={handleChange}
+              >
+                <option value="">SELECT</option>
+                <option value="Private">Private</option>
+                <option value="SIC">SIC</option>
+              </Form.Select>
+            </Form.Group>
+          </Col>
+
+          <Col lg={2} md={3}>
+            <Form.Group>
+              <Form.Label className="form-label-modern">Traveller</Form.Label>
+              <Form.Select
+                className="form-control-premium"
+                name="activityTraveller"
+                value={form.activityTraveller}
+                onChange={handleChange}
+              >
+                <option value="adult">Adult</option>
+                <option value="child">Child</option>
+              </Form.Select>
+            </Form.Group>
+          </Col>
+
+          <Col lg={2} md={3}>
+            <Form.Group>
+              <Form.Label className="form-label-modern">Count</Form.Label>
               <Form.Control
                 type="number"
                 min="1"
-                className={inputCls("qty")}
-                name="qty"
-                value={form.qty}
+                className="form-control-premium"
+                name="activityTravellerCount"
+                value={form.activityTravellerCount}
                 onChange={handleChange}
-                placeholder="Quantity"
               />
-              {errors.qty && <div className="text-danger small mt-1">{errors.qty}</div>}
             </Form.Group>
           </Col>
 
-          {/* Unit Price */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Unit Price (in AED)</Form.Label>
@@ -195,7 +267,6 @@ const OfflineActivity = ({ mainBasicId, onAdd }) => {
             </Form.Group>
           </Col>
 
-          {/* Tax */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Tax (%)</Form.Label>
@@ -212,14 +283,11 @@ const OfflineActivity = ({ mainBasicId, onAdd }) => {
             </Form.Group>
           </Col>
 
-          {/* Selling Price */}
           <Col lg={4} md={6}>
             <Form.Group>
               <Form.Label className="form-label-modern">Selling Price (in AED)</Form.Label>
               <Form.Control
                 type="number"
-                min="0"
-                step="0.01"
                 className="form-control-premium"
                 name="sellingPrice"
                 value={form.sellingPrice}
@@ -229,38 +297,6 @@ const OfflineActivity = ({ mainBasicId, onAdd }) => {
             </Form.Group>
           </Col>
 
-          {/* Activity Date */}
-          <Col lg={4} md={6}>
-            <Form.Group>
-              <Form.Label className="form-label-modern">Activity Date</Form.Label>
-              <Form.Control
-                type="date"
-                className={inputCls("activityDate")}
-                name="activityDate"
-                value={form.activityDate}
-                onChange={handleChange}
-              />
-              {errors.activityDate && <div className="text-danger small mt-1">{errors.activityDate}</div>}
-            </Form.Group>
-          </Col>
-
-          {/* Summary */}
-          <Col lg={8} md={12}>
-            <Form.Group>
-              <Form.Label className="form-label-modern">Summary</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                className="form-control-premium"
-                name="summary"
-                value={form.summary}
-                onChange={handleChange}
-                placeholder="Enter summary here..."
-              />
-            </Form.Group>
-          </Col>
-
-          {/* Submit */}
           <Col lg={4} md={12} className="d-flex align-items-end">
             <Button
               type="submit"
@@ -270,7 +306,7 @@ const OfflineActivity = ({ mainBasicId, onAdd }) => {
               {isSubmitting ? (
                 <><Spinner animation="border" size="sm" className="me-2" />Saving...</>
               ) : (
-                <>Submit &rarr;</>
+                <>Add &rarr;</>
               )}
             </Button>
           </Col>

@@ -269,10 +269,10 @@ export default function Sidebar() {
         //   label: "Quotation List",
         //   to: "/booking-details/quotation-list-list",
         // },
-        // {
-        //   label: "Offline Booking List",
-        //   to: "/booking-details/offline-booking-list",
-        // },
+        {
+          label: "Offline Booking List",
+          to: "/booking-details/offline-booking-list",
+        },
       ],
     },
     {
