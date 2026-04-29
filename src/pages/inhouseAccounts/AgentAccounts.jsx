@@ -21,18 +21,13 @@ import {
 
 export default function AgentAccounts() {
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [search, setSearch] = useState("");
-  const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Form fields for Amount Receive modal
   const [dateOfReceive, setDateOfReceive] = useState("");
   const [amount, setAmount] = useState("");
   const [paymentType, setPaymentType] = useState("");
@@ -40,17 +35,42 @@ export default function AgentAccounts() {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [allAgents, setAllAgents] = useState([]);
 
+  const totalPages = Math.ceil(allAgents.length / 10);
+  
+  const paginatedAgents = useMemo(() => {
+    return allAgents.slice(page * 10, (page + 1) * 10);
+  }, [allAgents, page]);
 
-  const nextId = useMemo(
-    () => Math.max(0, ...items.map((i) => i.id)) + 1,
-    [items]
-  );
+  const fetchAgentSummaries = async (searchVal = searchTerm) => {
+    setIsLoading(true);
+    try {
+      const res = await axiosInstance.get("/api/agent-credit-limit/agents");
+      if (res.data && Array.isArray(res.data)) {
+        let data = res.data;
+        if (searchVal && searchVal.trim()) {
+          const lowerSearch = searchVal.toLowerCase().trim();
+          data = data.filter(agent => 
+            agent.agentName?.toLowerCase().includes(lowerSearch)
+          );
+        }
+        setAllAgents(data);
+        setPage(0); // Reset to first page on new data/search
+      } else {
+        setAllAgents([]);
+      }
+    } catch (err) {
+      toast.error("Failed to load agent summaries");
+      setAllAgents([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const openCreate = (agent) => {
     setEditing(null);
     setSelectedAgent(agent);
     setDateOfReceive(new Date().toISOString().split('T')[0]);
-    setAmount(agent?.used || "");
+    setAmount(agent?.usedCreditLimit || "");
     setPaymentType("");
     setRemarks("");
     setError("");
@@ -71,7 +91,6 @@ export default function AgentAccounts() {
   const handleEdit = async () => {
     if (!editing) return;
 
-    // Validation
     if (!dateOfReceive) {
       setError("Date of receive is required");
       return;
@@ -93,7 +112,7 @@ export default function AgentAccounts() {
         amount: parseFloat(amount),
         paymentType: paymentType,
         remarks: remarks,
-        agentId: selectedAgent.id,
+        agentId: selectedAgent.agentId || selectedAgent.id,
       };
 
       const editRes = await axiosInstance.put(
@@ -103,7 +122,7 @@ export default function AgentAccounts() {
 
       if (editRes.data) {
         toast.success("Amount Receive Updated Successfully!");
-        await fetchAgentAccountsList(page, search);
+        await fetchAgentSummaries();
         closeModal();
       }
     } catch (error) {
@@ -125,50 +144,7 @@ export default function AgentAccounts() {
     setError("");
   };
 
-  const fetchAgentAccountsList = async (pageNum = 0, searchTerm = search) => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: pageNum.toString(),
-        limit: "10",
-      });
-
-      if (searchTerm && searchTerm.trim()) {
-        params.append("search", searchTerm.trim());
-      }
-
-      const res = await axiosInstance.get(
-        `/api/inhouseAgentAccounts?${params.toString()}`
-      );
-
-      if (res.data && Array.isArray(res.data)) {
-        setAllAgents(res.data);
-        setItems(res.data); // Keep this for compatibility
-        if (res.data.length < 10) {
-          setTotalPages(pageNum + 1);
-        } else {
-          setTotalPages(Math.max(totalPages, pageNum + 2));
-        }
-        setPage(pageNum);
-      } else {
-        setAllAgents([]);
-        setItems([]);
-        setTotalPages(0);
-        setPage(0);
-      }
-    } catch (err) {
-      toast.error("Failed to load agent accounts");
-      setAllAgents([]);
-      setItems([]);
-      setTotalPages(0);
-      setPage(0);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const saveAmountReceive = async () => {
-    // Validation
     if (!dateOfReceive) {
       setError("Date of receive is required");
       return;
@@ -190,10 +166,9 @@ export default function AgentAccounts() {
         amount: parseFloat(amount),
         paymentType: paymentType,
         remarks: remarks,
-        // agentId: selectedAgent.id,
+        agentId: selectedAgent.agentId || selectedAgent.id,
       };
 
-      console.log(" Payload to save:", payload);
       const saveRes = await axiosInstance.post(
         "/api/inhouseAgentAccounts/save",
         payload
@@ -201,6 +176,7 @@ export default function AgentAccounts() {
 
       if (saveRes.data !== 0) {
         toast.success("Amount Receive added Successfully!");
+        await fetchAgentSummaries();
         closeModal();
       }
     } catch (error) {
@@ -213,33 +189,15 @@ export default function AgentAccounts() {
 
   const resetForm = () => {
     setDateOfReceive(new Date().toISOString().split('T')[0]);
-    setAmount(selectedAgent?.used || "");
+    setAmount(selectedAgent?.usedCreditLimit || "");
     setPaymentType("");
     setRemarks("");
     setError("");
   };
 
-  // Debounced search effect
   useEffect(() => {
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
-
-    if (search !== "") {
-      const timeout = setTimeout(() => {
-        fetchAgentAccountsList(0, search);
-      }, 500);
-      setSearchTimeout(timeout);
-    } else if (search === "") {
-      fetchAgentAccountsList(0, "");
-    }
-
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-    };
-  }, [search]);
+    fetchAgentSummaries();
+  }, []);
 
   const handleDelete = (item) => {
     Swal.fire({
@@ -260,7 +218,7 @@ export default function AgentAccounts() {
           .delete(`/api/inhouseAgentAccounts/${item.id}`)
           .then(() => {
             toast.success("Amount receive record deleted successfully");
-            fetchAgentAccountsList(page, search);
+            fetchAgentSummaries();
           })
           .catch(() => {
             toast.error("Sorry!! Amount receive record not deleted");
@@ -269,16 +227,13 @@ export default function AgentAccounts() {
     });
   };
 
-
   const handlePaymentHistory = (item) => {
-
-    console.log("agent item::: ", item);
-    const agentId = item.agentId;
+    const agentId = item.agentId || item.id;
     navigate(`/inhouse-accounts/agent-payment-history/${agentId}`);
   };
 
   const handleCurrency = (item) => {
-      const agentId = item.agentId;
+    const agentId = item.agentId || item.id;
     navigate(`/inhouse-accounts/agent-payment-history/${agentId}`);
   };
 
@@ -286,27 +241,6 @@ export default function AgentAccounts() {
     return (parseFloat(creditLimit) - parseFloat(used)).toFixed(2);
   };
 
-   const getAgentCreditLimitData = async () => {
-    // Validate form before submitting
-    
-    try {
-       
-      const packageCategorySaveRes = await axiosInstance.get("/api/agent-credit-limit/agents");
-      if (packageCategorySaveRes.data !== null) {
-        setAllAgents(packageCategorySaveRes.data);
-      }
-    } catch (error) {
-      setError("Sorry! Data not saved to db..");
-    //   toast.error("Failed to save package category data");
-    } finally {
-    //   setIsLoading(false);
-    }
-  };
-
- useEffect(() => {
-    fetchAgentAccountsList();
-    getAgentCreditLimitData();
-  }, []);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -327,7 +261,7 @@ export default function AgentAccounts() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setSearchTerm(value);
-                    fetchAgentAccountsList(0, value);
+                    fetchAgentSummaries(value);
                   }}
                 />
               </Form.Group>
@@ -346,7 +280,7 @@ export default function AgentAccounts() {
                   </tr>
                 </thead>
                 <tbody>
-                  {allAgents && Array.isArray(allAgents) && allAgents.map((item, index) => (
+                  {paginatedAgents.map((item, index) => (
                     <tr key={item.id}>
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.agentName}</td>
@@ -412,20 +346,20 @@ export default function AgentAccounts() {
                     <Pagination className="mb-0">
                       <Pagination.Prev
                         disabled={page === 0}
-                        onClick={() => fetchAgentAccountsList(page - 1, search)}
+                        onClick={() => setPage(page - 1)}
                       />
                       {Array.from({ length: totalPages }, (_, i) => (
                         <Pagination.Item
                           key={i}
                           active={i === page}
-                          onClick={() => fetchAgentAccountsList(i, search)}
+                          onClick={() => setPage(i)}
                         >
                           {i + 1}
                         </Pagination.Item>
                       ))}
                       <Pagination.Next
                         disabled={page === totalPages - 1}
-                        onClick={() => fetchAgentAccountsList(page + 1, search)}
+                        onClick={() => setPage(page + 1)}
                       />
                     </Pagination>
                   </div>

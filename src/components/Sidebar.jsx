@@ -288,18 +288,18 @@ export default function Sidebar() {
           label: "Agent Accounts",
           to: "/inhouse-accounts/agent",
         },
-        {
-          label: "Payment Gateway Transactions",
-          to: "/inhouse-accounts/payment-gateway-transactions",
-        },
-        {
-          label: "Statement of Accounts Online",
-          to: "/inhouse-accounts/statement-of-accounts-online",
-        },
-        {
-          label: "Statement of Accounts offline",
-          to: "/inhouse-accounts/statement-of-accounts-offline",
-        },
+        // {
+        //   label: "Payment Gateway Transactions",
+        //   to: "/inhouse-accounts/payment-gateway-transactions",
+        // },
+        // {
+        //   label: "Statement of Accounts Online",
+        //   to: "/inhouse-accounts/statement-of-accounts-online",
+        // },
+        // {
+        //   label: "Statement of Accounts offline",
+        //   to: "/inhouse-accounts/statement-of-accounts-offline",
+        // },
       ],
     },
     // {
@@ -312,11 +312,11 @@ export default function Sidebar() {
       to: "/calendar",
       roles: ["admin", "agent", "staff", "extranet"],
     },
-    {
-      label: "Extranet Contract",
-      to: "/extranet-contract",
-      roles: ["admin"],
-    },
+    // {
+    //   label: "Extranet Contract",
+    //   to: "/extranet-contract",
+    //   roles: ["admin"],
+    // },
     {
       label: "Report",
       to: "/report",

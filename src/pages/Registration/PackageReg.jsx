@@ -28,6 +28,7 @@ import {
   FaBackward,
   FaDollarSign,
   FaCopy,
+  FaChevronDown,
 } from "react-icons/fa";
 
 // Enhanced SearchableSelect Component with loading support
@@ -107,11 +108,17 @@ const SearchableSelect = ({
         }}
         onFocus={() => !disabled && setIsOpen(true)}
         placeholder={placeholder}
-        className={`form-input ${isInvalid ? "is-invalid" : ""}`}
+        className={`form-input pe-5 ${isInvalid ? "is-invalid" : ""}`}
         disabled={disabled}
         readOnly={disabled}
         autoComplete="off"
       />
+      <div
+        className="position-absolute end-0 top-50 translate-middle-y pe-3"
+        style={{ pointerEvents: "none" }}
+      >
+        <FaChevronDown className="text-muted small" />
+      </div>
 
       {isOpen && !disabled && (
         <div
@@ -455,7 +462,7 @@ const PackageReg = () => {
 
   useEffect(() => {
     fetchPackageList();
-    fetchCountries("");
+    fetchCountries("", 250);
     loadCurrencies();
     loadAllDestinations();
     loadTermsAndConditions();
@@ -505,7 +512,7 @@ const PackageReg = () => {
     formDataPayload.append("liveStatus", formData.status === "true" ? 1 : 0);
 
     if (formData.packageImage) {
-      formDataPayload.append("packageImage", formData.packageImage);
+      formDataPayload.append("packageImageFile", formData.packageImage);
     }
 
     return formDataPayload;
@@ -574,11 +581,11 @@ const PackageReg = () => {
     }
   };
 
-  const fetchCountries = async (searchTerm = "") => {
+  const fetchCountries = async (searchTerm = "", limit = 20) => {
     setIsCountryLoading(true);
     try {
       const res = await axiosInstance.get(
-        `/api/country?page=0&limit=20&search=${encodeURIComponent(searchTerm)}`
+        `/api/country?page=0&limit=${limit}&search=${encodeURIComponent(searchTerm)}`
       );
       if (Array.isArray(res.data)) {
         setCountries(res.data);
@@ -823,7 +830,7 @@ const PackageReg = () => {
       const countryId = data.arriveCountry || data.countryId;
       if (countryId) {
         cityList(countryId);
-        fetchCountries("").then((options) => {
+        fetchCountries("", 250).then((options) => {
           const matched = (options || []).find(c => String(c.id) === String(countryId));
           if (matched) {
             setSelectedCountryOption({ value: matched.id, label: matched.name });
@@ -1477,10 +1484,16 @@ const PackageReg = () => {
                                 }
                               }}
                               readOnly
-                              className={`form-input ${validationErrors.packageCategory ? "is-invalid" : ""} ${isViewMode ? "bg-light" : ""}`}
+                              className={`form-input pe-5 ${validationErrors.packageCategory ? "is-invalid" : ""} ${isViewMode ? "bg-light" : ""}`}
                               style={{ cursor: isViewMode ? "default" : "pointer" }}
                               placeholder="Select Package Categories"
                             />
+                            <div
+                              className="position-absolute end-0 top-50 translate-middle-y pe-3"
+                              style={{ pointerEvents: "none" }}
+                            >
+                              <FaChevronDown className="text-muted small" />
+                            </div>
 
                             {packageCategoryDropdownOpen && !isViewMode && (
                               <div

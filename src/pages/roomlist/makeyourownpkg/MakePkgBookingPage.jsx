@@ -88,6 +88,9 @@ const MakePkgBookingPage = () => {
   // Transfer/Cab details state
   const [transferDetails, setTransferDetails] = useState({});
 
+  // Activity/Tour details state
+  const [activityDetails, setActivityDetails] = useState({});
+
   // Validation errors state
   const [validationErrors, setValidationErrors] = useState({});
 
@@ -168,6 +171,22 @@ const MakePkgBookingPage = () => {
     setTransferDetails(details);
   };
 
+  // Initialize activity details
+  const initializeActivityDetails = (cartItems) => {
+    const details = {};
+    cartItems.forEach((item, index) => {
+      if (item.activity) {
+        const activity = item.activity || {};
+        const activityData = activity.details || {};
+        details[index] = {
+          driverName: activity.driverName || activityData.driverName || "",
+          driverContact: activity.driverContact || activityData.driverContact || "",
+        };
+      }
+    });
+    setActivityDetails(details);
+  };
+
   // Initialize hotel-specific fields (Tourism Dirhams, Remarks, Special Request, Booking Confirmation)
   const initializeHotelFields = (cartItems) => {
     const tourismDirhams = {};
@@ -204,6 +223,7 @@ const MakePkgBookingPage = () => {
           calculatePrices(parsed);
           initializeRoomGuests(parsed);
           initializeTransferDetails(parsed);
+          initializeActivityDetails(parsed);
           initializeHotelFields(parsed);
         } else {
           toast.error("No cart data found. Please add items to cart first.");
@@ -357,7 +377,75 @@ const MakePkgBookingPage = () => {
         return updated;
       });
     }
+
+    // NEW: Sync primary guest name to the first transfer's driver name
+    if (field === "firstName" || field === "lastName") {
+      syncGuestToDriver();
+    }
   };
+
+  // Helper to sync guest names to driver names
+  const syncGuestToDriver = (updatedRoomGuests = null) => {
+    const guestsToUse = updatedRoomGuests || roomGuests;
+    const hotelIndices = cartData
+      .map((item, idx) => (item.hotel ? idx : -1))
+      .filter((idx) => idx !== -1);
+    const transferIndices = cartData
+      .map((item, idx) => (item.cab ? idx : -1))
+      .filter((idx) => idx !== -1);
+
+    setTransferDetails((prev) => {
+      const updated = { ...prev };
+      transferIndices.forEach((tIdx, i) => {
+        const hIdx = hotelIndices[i];
+        if (hIdx !== undefined) {
+          const guestKey = `${hIdx}-0`;
+          const firstGuest = guestsToUse[guestKey]?.[0];
+          if (firstGuest && (firstGuest.firstName || firstGuest.lastName)) {
+            const fullName = `${firstGuest.firstName || ""} ${firstGuest.lastName || ""}`.trim();
+            if (!updated[tIdx]) updated[tIdx] = {};
+            updated[tIdx] = {
+              ...updated[tIdx],
+              driverName: fullName,
+            };
+          }
+        }
+      });
+      return updated;
+    });
+
+    // NEW: Sync guest name to activity's driver name
+    const activityIndices = cartData
+      .map((item, idx) => (item.activity ? idx : -1))
+      .filter((idx) => idx !== -1);
+
+    setActivityDetails((prev) => {
+      const updated = { ...prev };
+      activityIndices.forEach((aIdx, i) => {
+        const hIdx = hotelIndices[i];
+        if (hIdx !== undefined) {
+          const guestKey = `${hIdx}-0`;
+          const firstGuest = guestsToUse[guestKey]?.[0];
+          if (firstGuest && (firstGuest.firstName || firstGuest.lastName)) {
+            const fullName = `${firstGuest.firstName || ""} ${firstGuest.lastName || ""}`.trim();
+            if (!updated[aIdx]) updated[aIdx] = {};
+            updated[aIdx] = {
+              ...updated[aIdx],
+              driverName: fullName,
+            };
+          }
+        }
+      });
+      return updated;
+    });
+  };
+
+  // UseEffect to sync when cartData or roomGuests changes initially
+  useEffect(() => {
+    if (cartData.length > 0 && Object.keys(roomGuests).length > 0) {
+      syncGuestToDriver();
+    }
+  }, [cartData, roomGuests]);
 
   // Fetch itinerary details
   const fetchItineraryDetails = async () => {
@@ -972,7 +1060,7 @@ const MakePkgBookingPage = () => {
         visaInfantRate: parseFloat(visaDetails.visaInfantRate || "0") || 0,
         hotelBookingRequest:
           hotelBookingRequests.length > 0 ? hotelBookingRequests : [],
-        customBookingActivityDTO: activities.map((item) => {
+        customBookingActivityDTO: activities.map((item, activityArrayIndex) => {
           const activity = item.activity || {};
           const details = activity.details || {};
           // Selling Price = totalRate (with markup)
@@ -981,6 +1069,21 @@ const MakePkgBookingPage = () => {
           const activityTotalPrice = parseFloat(
             activity.totalRateWithoutmrk || activity.totalRate || 0,
           );
+
+          // Find actual index in cartData
+          let activityIndexInCart = -1;
+          let activityCount = 0;
+          for (let i = 0; i < cartData.length; i++) {
+            if (cartData[i].activity) {
+              if (activityCount === activityArrayIndex) {
+                activityIndexInCart = i;
+                break;
+              }
+              activityCount++;
+            }
+          }
+          const actualIndex = activityIndexInCart >= 0 ? activityIndexInCart : 0;
+          const activityDetail = activityDetails[actualIndex] || {};
 
           return {
             activityId: parseInt(activity.activityId || "0") || 0,
@@ -996,6 +1099,8 @@ const MakePkgBookingPage = () => {
                 : [],
             sellingPrice: String(activitySellingPrice.toFixed(2)),
             totalPrice: String(activityTotalPrice.toFixed(2)),
+            driverName: activityDetail.driverName || "",
+            driverContact: activityDetail.driverContact || "",
           };
         }),
         customBookingCabDTO: transfers.map((item, transferArrayIndex) => {
@@ -2003,6 +2108,21 @@ const MakePkgBookingPage = () => {
                               0,
                           );
 
+                          // Find actual index in cartData for activityDetails
+                          let activityIndexInCart = -1;
+                          let activityCount = 0;
+                          for (let i = 0; i < cartData.length; i++) {
+                            if (cartData[i].activity) {
+                              if (activityCount === activityIndex) {
+                                activityIndexInCart = i;
+                                break;
+                              }
+                              activityCount++;
+                            }
+                          }
+                          const actualIndex = activityIndexInCart >= 0 ? activityIndexInCart : 0;
+                          const activityDetail = activityDetails[actualIndex] || {};
+
                           return (
                             <Card
                               key={activityIndex}
@@ -2062,6 +2182,48 @@ const MakePkgBookingPage = () => {
                                     </Col>
                                   </Row>
                                 </div>
+
+                                {/* <div className="mb-3 p-3 bg-light rounded mt-3">
+                                  <h6 className="mb-3 fw-bold text-primary">
+                                    Driver Details
+                                  </h6>
+                                  <Row className="g-3">
+                                    <Col md={6}>
+                                      <Form.Label>Driver Name</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={activityDetail.driverName || ""}
+                                        onChange={(e) =>
+                                          setActivityDetails({
+                                            ...activityDetails,
+                                            [actualIndex]: {
+                                              ...activityDetail,
+                                              driverName: e.target.value,
+                                            },
+                                          })
+                                        }
+                                        placeholder="Enter driver name"
+                                      />
+                                    </Col>
+                                    <Col md={6}>
+                                      <Form.Label>Driver Contact</Form.Label>
+                                      <Form.Control
+                                        type="text"
+                                        value={activityDetail.driverContact || ""}
+                                        onChange={(e) =>
+                                          setActivityDetails({
+                                            ...activityDetails,
+                                            [actualIndex]: {
+                                              ...activityDetail,
+                                              driverContact: e.target.value,
+                                            },
+                                          })
+                                        }
+                                        placeholder="Enter driver contact"
+                                      />
+                                    </Col>
+                                  </Row>
+                                </div> */}
                               </Card.Body>
                             </Card>
                           );
@@ -2275,8 +2437,8 @@ const MakePkgBookingPage = () => {
                                         }
                                         placeholder="Enter driver name"
                                       />
-                                    </Col> */}
-                                    {/* <Col md={6}>
+                                    </Col>
+                                    <Col md={6}>
                                       <Form.Label>Driver Contact</Form.Label>
                                       <Form.Control
                                         type="text"
