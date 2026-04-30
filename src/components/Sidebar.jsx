@@ -212,8 +212,8 @@ export default function Sidebar() {
       label: "Registration",
       roles: ["agent"],
       children: [
-        { label: "Sub User", to: "/agentregistration/sub-user" },
-        { label: "Sub Agent", to: "/agentregistration/sub-agent" },
+        { label: "Sub User", to: "/agent-registration/sub-user" },
+        { label: "Sub Agent", to: "/agent-registration/sub-agent" },
       ],
     },
     {

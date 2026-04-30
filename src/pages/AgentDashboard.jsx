@@ -8,15 +8,6 @@ import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
 import axiosInstance from '../components/AxiosInstance';
 
-const kpiData = {
-  totalBookings: 1245,
-  todaysBookings: 85,
-  totalRevenue: 58300,
-  activeAgents: 112,
-  hotelsListed: 342,
-  apiBookings: 413
-};
-
 const bookingsLabels = ['Aug 1','Aug 2','Aug 3','Aug 4','Aug 5'];
 const bookingsData = [20,35,50,40,65];
 const revenueData = [3000,4800,5500,4000,6800];
@@ -26,12 +17,44 @@ export default function AgentDashboard(){
   const navigate = useNavigate();
   const [creditSummary, setCreditSummary] = useState(null);
   const [loadingCredit, setLoadingCredit] = useState(true);
+  const defaultDashboardStatus = {
+    totalBookings: 0,
+    todayBookings: 0,
+    totalRevenue: 0,
+    totalActiveAgents: 0,
+    totalHotels: 0,
+    totalApiBookings: 0,
+  };
+const [dashboardStatus, setDashboardStatus] = useState(defaultDashboardStatus);
+  // ✅ Fetch dashboard data
+  const fetchAgentDashboardStatus = async () => {
+    try {
+      const response = await axiosInstance.get(`/api/dashboard/agent/stats`);
+
+      if (response.data && typeof response.data === "object") {
+        setDashboardStatus((prev) => ({
+          ...prev,
+          ...response.data,
+        }));
+      } else {
+        setDashboardStatus(defaultDashboardStatus);
+      }
+    } catch (error) {
+      console.error("Error fetching dashboard status:", error);
+      setDashboardStatus(defaultDashboardStatus);
+    }
+  };
+
+  // ✅ CALL IT HERE
+  useEffect(() => {
+    fetchAgentDashboardStatus();
+  }, []);
 
   useEffect(() => {
     const fetchCreditLimit = async () => {
       try {
         setLoadingCredit(true);
-        const response = await axiosInstance.get('/api/agent-credit-limit/agent/6');
+        const response = await axiosInstance.get('/api/agent-credit-limit/single-agent');
         const data = response.data;
         
         const creditData = {
@@ -148,12 +171,12 @@ export default function AgentDashboard(){
           </Row>
 
           <Row xs={1} sm={2} lg={3} className="g-4 mb-3">
-            <Col><KpiCard title="Total Bookings" value={kpiData.totalBookings} /></Col>
-            <Col><KpiCard title="Today's Bookings" value={kpiData.todaysBookings} /></Col>
-            <Col><KpiCard title="Total Revenue" value={`$${kpiData.totalRevenue.toLocaleString()}`} /></Col>
-            <Col><KpiCard title="Active Agents" value={kpiData.activeAgents} /></Col>
-            <Col><KpiCard title="Hotels Listed" value={kpiData.hotelsListed} /></Col>
-            <Col><KpiCard title="API Bookings" value={kpiData.apiBookings} /></Col>
+            <Col><KpiCard title="Total Bookings" value={dashboardStatus.totalBookings} /></Col>
+            <Col><KpiCard title="Today's Bookings" value={dashboardStatus.todaysBookings} /></Col>
+            <Col><KpiCard title="Total Revenue" value={`AED ${dashboardStatus.totalRevenue.toLocaleString()}`} /></Col>
+            <Col><KpiCard title="Active Agents" value={dashboardStatus.activeAgents} /></Col>
+            <Col><KpiCard title="Hotels Listed" value={dashboardStatus.hotelsListed} /></Col>
+            <Col><KpiCard title="API Bookings" value={dashboardStatus.totalApiBookings} /></Col>
           </Row>
 
           <Row className="g-4">

@@ -149,6 +149,8 @@ import FetchNewHotels from "./pages/master/FetchNewHotels";
 import PackageBookingList from "./pages/list/PackageBookingList";
 import OfflineSearch from "./pages/search/offline/OfflineSearch";
 import OfflineBookingList from "./pages/list/OfflineBookingList";
+import SubUser from "./pages/Registration/agent/SubUser";
+import SubAgent from "./pages/Registration/agent/SubAgent";
 
 
 export default function App() {
@@ -300,6 +302,8 @@ export default function App() {
 
         {/* Registration */}
         <Route path="/registration/agent" element={<PrivateRoute><AgentReg /></PrivateRoute>} />
+        <Route path="/agent-registration/sub-user" element={<PrivateRoute><SubUser /></PrivateRoute>} />
+        <Route path="/agent-registration/sub-agent" element={<PrivateRoute><SubAgent /></PrivateRoute>} />
         <Route path="/registration/employee" element={<PrivateRoute><EmployeeReg /></PrivateRoute>} />
         <Route path="/registration/cabProvider" element={<PrivateRoute><CabProviderReg /></PrivateRoute>} />
         <Route path="/cab-rates" element={<PrivateRoute><CabRates /></PrivateRoute>} />

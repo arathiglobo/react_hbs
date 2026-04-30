@@ -8,9 +8,13 @@ import AsyncSelect from "react-select/async";
 
 const FetchNewHotels = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [hotelList, setHotelList] = useState([]);
+  const [isFetchedFromApi, setIsFetchedFromApi] = useState(false);
+  const [apiMeta, setApiMeta] = useState({ pageNumber: 1, pageSize: 500 });
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [selectedCityOption, setSelectedCityOption] = useState(null);
+  const [errors, setErrors] = useState({});
 
   const [platforms] = useState([
     "Iwtx",
@@ -52,8 +56,31 @@ const FetchNewHotels = () => {
       apiCountryId: "",
       apiCityId: "",
     });
+    setErrors({});                  // ✅ clear all errors
     setSelectedCountryOption(null);
     setSelectedCityOption(null);
+    setHotelList([]);
+    setIsFetchedFromApi(false);
+  };
+
+  const validateForm = () => {
+    let newErrors = {};
+
+    if (!formData.apiProvider) {
+      newErrors.apiProvider = "Platform is required";
+    }
+
+    if (!formData.apiCountryId) {
+      newErrors.apiCountryId = "Country is required";
+    }
+
+    // Optional: if city is required, uncomment
+    // if (!formData.apiCityName) {
+    //   newErrors.apiCityName = "City is required";
+    // }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const loadPlatformCountry = async (inputValue) => {
@@ -90,7 +117,7 @@ const FetchNewHotels = () => {
       });
 
       return response.data.map((c) => ({
-        value: c.id || c.cityId, // We use cityID  as value 
+        value: c.id || c.cityId, // We use cityID  as value
         label: c.cityName || c.name,
       }));
     } catch (error) {
@@ -106,6 +133,7 @@ const FetchNewHotels = () => {
       apiCountryId: option ? option.value : "",
       apiCityName: "",
     }));
+    setErrors((prev) => ({ ...prev, apiCountryId: "" })); // ✅ clear country error
     setSelectedCityOption(null);
   };
 
@@ -118,14 +146,7 @@ const FetchNewHotels = () => {
   };
 
   const handleFetchFromDB = async () => {
-    if (
-      !formData.apiProvider ||
-      !formData.apiCountryId ||
-      !formData.apiCityName
-    ) {
-      toast.error("Please fill all fields before fetching");
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsLoading(true);
     try {
@@ -139,7 +160,9 @@ const FetchNewHotels = () => {
           },
         },
       );
+
       setHotelList(Array.isArray(response.data) ? response.data : []);
+      setIsFetchedFromApi(false);
       toast.success("Hotels fetched from DB successfully");
     } catch (error) {
       console.error("Error fetching hotels from DB:", error);
@@ -150,15 +173,8 @@ const FetchNewHotels = () => {
     }
   };
 
-    const handleFetchFromApis = async () => {
-    if (
-      !formData.apiProvider ||
-      !formData.apiCountryId ||
-      !formData.apiCityName
-    ) {
-      toast.error("Please fill all fields before fetching");
-      return;
-    }
+  const handleFetchFromApis = async () => {
+    if (!validateForm()) return;
 
     setIsLoading(true);
     try {
@@ -172,14 +188,47 @@ const FetchNewHotels = () => {
           },
         },
       );
-      setHotelList(Array.isArray(response.data) ? response.data : []);
-      toast.success("Hotels fetched from DB successfully");
+
+      const hotels = response.data?.hotels;
+      setHotelList(Array.isArray(hotels) ? hotels : []);
+      setIsFetchedFromApi(true);
+
+      setApiMeta({
+        pageNumber: response.data?.pageNumber ?? 1,
+        pageSize: response.data?.pageSize ?? 500,
+      });
+
+      toast.success(
+        `Hotels fetched from API successfully (${response.data?.count ?? 0} results)`,
+      );
     } catch (error) {
-      console.error("Error fetching hotels from DB:", error);
-      toast.error("Failed to fetch hotels from DB");
+      console.error("Error fetching hotels from API:", error);
+      toast.error("Failed to fetch hotels from API");
       setHotelList([]);
+      setIsFetchedFromApi(false);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveToDB = async () => {
+    setIsSaving(true);
+    try {
+      await axiosInstance.post("/api/hotelMapping/saveFromApi", null, {
+        params: {
+          platform: formData.apiProvider.toLowerCase(),
+          countryId: formData.apiCountryId,
+          pageNumber: apiMeta.pageNumber,
+          pageSize: apiMeta.pageSize,
+        },
+      });
+      toast.success(`${hotelList.length} hotels saved to DB successfully!`);
+      setIsFetchedFromApi(false);
+    } catch (error) {
+      console.error("Error saving hotels to DB:", error);
+      toast.error("Failed to save hotels to DB");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -203,6 +252,7 @@ const FetchNewHotels = () => {
                     <Form.Select
                       value={formData.apiProvider}
                       onChange={handlePlatformChange}
+                      isInvalid={!!errors.apiProvider}
                     >
                       <option value="">Select Platform</option>
                       {platforms.map((p) => (
@@ -211,6 +261,9 @@ const FetchNewHotels = () => {
                         </option>
                       ))}
                     </Form.Select>
+                    <Form.Control.Feedback type="invalid">
+                      {errors.apiProvider}
+                    </Form.Control.Feedback>
                   </Form.Group>
                 </Col>
                 <Col md={3}>
@@ -225,13 +278,25 @@ const FetchNewHotels = () => {
                       loadOptions={loadPlatformCountry}
                       onChange={handleCountrySelect}
                       isDisabled={!formData.apiProvider}
-                      menuPortalTarget={document.body} // ✅ IMPORTANT
-                      menuPosition="fixed" // ✅ prevents clipping
+                      menuPortalTarget={document.body}
+                      menuPosition="fixed"
                       styles={{
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
                         menu: (base) => ({ ...base, zIndex: 9999 }),
+                        control: (base) => ({
+                          ...base,
+                          borderColor: errors.apiCountryId ? "#dc3545" : base.borderColor,
+                          "&:hover": {
+                            borderColor: errors.apiCountryId ? "#dc3545" : base["&:hover"]?.borderColor,
+                          },
+                        }),
                       }}
                     />
+                    {errors.apiCountryId && (
+                      <div className="text-danger small mt-1">
+                        {errors.apiCountryId}
+                      </div>
+                    )}
                   </Form.Group>
                 </Col>
                 <Col md={3}>
@@ -246,13 +311,25 @@ const FetchNewHotels = () => {
                       loadOptions={loadPlatformCity}
                       onChange={handleCitySelect}
                       isDisabled={!formData.apiCountryId}
-                      menuPortalTarget={document.body} // ✅ IMPORTANT
-                      menuPosition="fixed" // ✅ prevents clipping
+                      menuPortalTarget={document.body}
+                      menuPosition="fixed"
                       styles={{
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
                         menu: (base) => ({ ...base, zIndex: 9999 }),
+                        control: (base) => ({
+                          ...base,
+                          borderColor: errors.apiCityName ? "#dc3545" : base.borderColor,
+                          "&:hover": {
+                            borderColor: errors.apiCityName ? "#dc3545" : base["&:hover"]?.borderColor,
+                          },
+                        }),
                       }}
                     />
+                    {errors.apiCityName && (
+                      <div className="text-danger small mt-1">
+                        {errors.apiCityName}
+                      </div>
+                    )}
                   </Form.Group>
                 </Col>
                 <Col md={3}>
@@ -280,6 +357,28 @@ const FetchNewHotels = () => {
           </Card>
 
           <Card className="shadow-sm">
+            {isFetchedFromApi && hotelList.length > 0 && (
+              <Card.Header className="bg-white py-3 d-flex justify-content-between align-items-center">
+                <span className="fw-semibold text-muted">
+                  {hotelList.length} hotels fetched from API
+                </span>
+                <Button
+                  variant="warning"
+                  onClick={handleSaveToDB}
+                  disabled={isSaving}
+                  className="fw-bold px-4"
+                >
+                  {isSaving ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    "💾 Save to DB"
+                  )}
+                </Button>
+              </Card.Header>
+            )}
             <Card.Body className="p-0">
               <Table responsive hover striped className="mb-0 align-middle">
                 <thead className="bg-light">
