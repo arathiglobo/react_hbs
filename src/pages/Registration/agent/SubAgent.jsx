@@ -5,7 +5,7 @@ import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash, FaPlus, FaSearch, FaChevronDown, FaUndo, FaTimes, FaCheck } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaSearch, FaChevronDown, FaUndo, FaTimes, FaCheck, FaSignInAlt, FaCreditCard } from "react-icons/fa";
 
 // Searchable Select Component for large lists
 const SearchableSelect = ({ label, name, value, options, onChange, placeholder, onSearch, isLoading, error, required }) => {
@@ -113,11 +113,46 @@ export default function SubAgent() {
   const [provinces, setProvinces] = useState([]);
   const [places, setPlaces] = useState([]);
   const [currencies, setCurrencies] = useState([]);
+  const [markupTypes, setMarkupTypes] = useState([]);
   
   const [isDataLoading, setIsDataLoading] = useState({
     countries: false,
     provinces: false,
     places: false
+  });
+
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showRolesDropdown, setShowRolesDropdown] = useState(false);
+  const [rolesList, setRolesList] = useState([]);
+  const [loginModalKey, setLoginModalKey] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRePassword, setShowRePassword] = useState(false);
+  const [loginFormData, setLoginFormData] = useState({
+    username: "",
+    password: "",
+    repassword: "",
+    userroles: [],
+  });
+  const [loginErrors, setLoginErrors] = useState({
+    username: "",
+    password: "",
+    repassword: "",
+    userroles: "",
+  });
+
+  const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
+  const [creditLimitType, setCreditLimitType] = useState("initial");
+  const [hasInitialCredit, setHasInitialCredit] = useState(false);
+  const [creditLimitFormData, setCreditLimitFormData] = useState({
+    addCreditLimit: "",
+    remarks: "",
+    totalCreditLimit: "",
+    availableCreditLimit: "",
+    usedCreditLimit: "",
+  });
+  const [creditLimitErrors, setCreditLimitErrors] = useState({
+    addCreditLimit: "",
+    remarks: "",
   });
 
   const initialFormState = {
@@ -141,6 +176,8 @@ export default function SubAgent() {
     faxNumber: "",
     telephoneNumber: ""
   };
+
+  const mainAgentName = localStorage.getItem("UserName") || "";
 
   const [formData, setFormData] = useState(initialFormState);
   const [validationErrors, setValidationErrors] = useState({});
@@ -207,12 +244,16 @@ export default function SubAgent() {
 
   const fetchInitialMasterData = async () => {
     try {
-      const [catRes, currRes] = await Promise.all([
+      const [catRes, currRes, markupRes, rolesRes] = await Promise.all([
         axiosInstance.get("/api/agentCategory"),
-        axiosInstance.get("/api/currency")
+        axiosInstance.get("/api/currency"),
+        axiosInstance.get("/api/markupType"),
+        axiosInstance.get("/api/userRoles")
       ]);
       setCategories(catRes.data || []);
       setCurrencies(currRes.data || []);
+      setMarkupTypes(Array.isArray(markupRes.data) ? markupRes.data : []);
+      setRolesList(rolesRes.data || []);
       fetchCountries(""); 
     } catch (err) {
       console.error("Error fetching initial master data", err);
@@ -283,19 +324,41 @@ export default function SubAgent() {
         provinceId: parseInt(formData.provinceId),
         placeId: parseInt(formData.placeId),
         currency: formData.currency ? parseInt(formData.currency) : null,
+        markup: formData.markup ? parseInt(formData.markup) : null,
       };
 
-      if (editing) {
-        await axiosInstance.put(`/api/sub-agent/${editing.id}`, payload);
-        toast.success("Sub Agent updated successfully");
-      } else {
-        await axiosInstance.post("/api/sub-agent/register", payload);
-        toast.success("Sub Agent registered successfully");
-      }
+      await axiosInstance.post("/api/sub-agent/register", payload);
+      toast.success("Sub Agent registered successfully");
       fetchSubAgents();
       handleClose();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Operation failed");
+      toast.error(err.response?.data?.message || "Registration failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdate = async (e) => {
+    if (e) e.preventDefault();
+    if (!validate()) return;
+
+    setIsLoading(true);
+    try {
+      const payload = {
+        ...formData,
+        agentCategoryId: parseInt(formData.agentCategoryId),
+        countryId: parseInt(formData.countryId),
+        provinceId: parseInt(formData.provinceId),
+        placeId: parseInt(formData.placeId),
+        currency: formData.currency ? parseInt(formData.currency) : null,
+      };
+
+      await axiosInstance.put(`/api/sub-agent/${editing.id}`, payload);
+      toast.success("Sub Agent updated successfully");
+      fetchSubAgents();
+      handleClose();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Update failed");
     } finally {
       setIsLoading(false);
     }
@@ -322,20 +385,26 @@ export default function SubAgent() {
     });
   };
 
-  const handleOpen = (item = null) => {
+  const handleOpen = async (item = null) => {
     if (item) {
-      setEditing(item);
-      setFormData({
-        ...initialFormState,
-        ...item,
-        agentCategoryId: String(item.agentCategoryId || ""),
-        countryId: String(item.countryId || ""),
-        provinceId: String(item.provinceId || ""),
-        placeId: String(item.placeId || ""),
-        currency: item.currency ? String(item.currency) : "",
-      });
-      if (item.countryId) fetchProvinces(item.countryId);
-      if (item.provinceId) fetchPlaces(item.provinceId);
+      try {
+        const res = await axiosInstance.get(`/api/sub-agent/${item.id}`);
+        const data = res.data;
+        setEditing(data);
+        setFormData({
+          ...initialFormState,
+          ...data,
+          agentCategoryId: String(data.agentCategoryId || ""),
+          countryId: String(data.countryId || ""),
+          provinceId: String(data.provinceId || ""),
+          placeId: String(data.placeId || ""),
+          currency: data.currency ? String(data.currency) : "",
+          markup: data.markup ? String(data.markup) : "",
+        });
+      } catch (err) {
+        toast.error("Failed to fetch sub-agent details");
+        return;
+      }
     } else {
       setEditing(null);
       setFormData(initialFormState);
@@ -349,9 +418,197 @@ export default function SubAgent() {
     setEditing(null);
   };
 
+  const handleLogin = async (item) => {
+    setEditing(item);
+    setLoginFormData({
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: [],
+    });
+    setLoginErrors({
+      username: "",
+      password: "",
+      repassword: "",
+      userroles: "",
+    });
+    setShowRolesDropdown(false);
+    setShowPassword(false);
+    setShowRePassword(false);
+
+    try {
+      const response = await axiosInstance.post(`/auth/checkRegisteredUserExist/${item.id}`);
+      if (response.data) {
+        let userNameValue = response.data.userName || response.data.username || "";
+        // Strip the suffix if it exists to only show the prefix in the input
+        if (mainAgentName && userNameValue.endsWith(`.${mainAgentName}`)) {
+          userNameValue = userNameValue.substring(0, userNameValue.length - mainAgentName.length - 1);
+        }
+        setLoginFormData(prev => ({
+          ...prev,
+          username: userNameValue,
+        }));
+      }
+    } catch (error) {
+      console.error("No existing login data found", error);
+    }
+    setLoginModalKey(prev => prev + 1);
+    setShowLoginModal(true);
+  };
+
+  const handleLoginSubmit = async () => {
+    let isValid = true;
+    const errors = { username: "", password: "", repassword: "", userroles: "" };
+
+    if (!loginFormData.username.trim()) { errors.username = "Username is required"; isValid = false; }
+    if (!loginFormData.password) { errors.password = "Password is required"; isValid = false; }
+    if (loginFormData.password !== loginFormData.repassword) { errors.repassword = "Passwords do not match"; isValid = false; }
+    if (loginFormData.userroles.length === 0) { errors.userroles = "At least one user role is required"; isValid = false; }
+
+    setLoginErrors(errors);
+
+    if (isValid) {
+      try {
+        setIsLoading(true);
+        let activeRoleObj = rolesList.find((role) => role.roleName === "AGENT");
+        const loginPayload = {
+          userId: editing?.id,
+          userTypeId: activeRoleObj?.id,
+          userName: `${loginFormData.username}.${mainAgentName}`,
+          password: loginFormData.password,
+          userRoleIds: loginFormData.userroles,
+        };
+
+        const response = await axiosInstance.post("/auth/register", loginPayload);
+        if (response.data) {
+          toast.success("Login credentials saved successfully!");
+          setShowLoginModal(false);
+        }
+      } catch (error) {
+        toast.error("Failed to save login credentials");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const handleCreditLimit = async (item) => {
+    setEditing(item);
+    setCreditLimitFormData({
+      addCreditLimit: "",
+      remarks: "",
+      totalCreditLimit: "0",
+      availableCreditLimit: "0",
+      usedCreditLimit: "0",
+    });
+    setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+
+    try {
+      const response = await axiosInstance.get(`/api/agent-credit-limit/agent/${item.id}`);
+      const creditData = response.data;
+      if (creditData && Number(creditData.totalCreditLimit) > 0) {
+        setHasInitialCredit(true);
+        setCreditLimitType("update");
+        setCreditLimitFormData(prev => ({
+          ...prev,
+          totalCreditLimit: creditData.totalCreditLimit || "0",
+          availableCreditLimit: creditData.availableCreditLimit || "0",
+          usedCreditLimit: creditData.usedCreditLimit || "0",
+        }));
+      } else {
+        setHasInitialCredit(false);
+        setCreditLimitType("initial");
+      }
+    } catch (error) {
+      setHasInitialCredit(false);
+      setCreditLimitType("initial");
+    }
+    setShowCreditLimitModal(true);
+  };
+
+  const handleCreditLimitSubmit = async () => {
+    if (!creditLimitFormData.addCreditLimit) {
+      setCreditLimitErrors({ addCreditLimit: "Amount is required" });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const addAmount = parseFloat(creditLimitFormData.addCreditLimit);
+      let response;
+      if (creditLimitType === "initial") {
+        response = await axiosInstance.post("/api/agent-credit-limit/create", null, {
+          params: { agentId: editing?.id, totalCreditLimit: addAmount }
+        });
+      } else {
+        response = await axiosInstance.put("/api/agent-credit-limit/update", {
+          agentId: editing?.id,
+          additionalCredit: addAmount,
+          remarks: creditLimitFormData.remarks,
+          totalCreditLimit: creditLimitFormData.totalCreditLimit,
+          availableCreditLimit: creditLimitFormData.availableCreditLimit
+        });
+      }
+
+      if (response.data) {
+        toast.success("Credit limit updated successfully!");
+        setShowCreditLimitModal(false);
+        fetchSubAgents();
+      }
+    } catch (error) {
+      toast.error("Failed to update credit limit");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleReset = () => {
     setFormData(initialFormState);
     setValidationErrors({});
+  };
+
+  const handleLoginChange = (e) => {
+    const { name, value } = e.target;
+    let fieldName = name;
+    if (name === "login-username") fieldName = "username";
+    else if (name === "login-password") fieldName = "password";
+    else if (name === "login-repassword") fieldName = "repassword";
+    setLoginFormData(prev => ({ ...prev, [fieldName]: value }));
+  };
+
+  const toggleRole = (roleId) => {
+    setLoginFormData(prev => ({
+      ...prev,
+      userroles: prev.userroles.includes(roleId)
+        ? prev.userroles.filter(id => id !== roleId)
+        : [...prev.userroles, roleId]
+    }));
+    setShowRolesDropdown(false);
+  };
+
+  const removeRole = (roleId) => {
+    setLoginFormData(prev => ({
+      ...prev,
+      userroles: prev.userroles.filter(id => id !== roleId)
+    }));
+  };
+
+  const closeLoginModal = () => {
+    setShowLoginModal(false);
+    setShowRolesDropdown(false);
+  };
+
+  const closeCreditLimitModal = () => {
+    setShowCreditLimitModal(false);
+  };
+
+  const handleCreditLimitChange = (e) => {
+    const { name, value } = e.target;
+    setCreditLimitFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreditLimitTypeChange = (e) => {
+    setCreditLimitType(e.target.value);
   };
 
   const filteredItems = items.filter(item => 
@@ -433,6 +690,18 @@ export default function SubAgent() {
                         <td>{item.personalEmail}</td>
                         <td className="text-center">
                           <div className="d-flex justify-content-center gap-2">
+                            <FaSignInAlt 
+                               className="text-primary cursor-pointer" 
+                               style={{ cursor: 'pointer' }} 
+                               onClick={() => handleLogin(item)} 
+                               title="Login Details"
+                            />
+                            <FaCreditCard 
+                               className="text-warning cursor-pointer" 
+                               style={{ cursor: 'pointer' }} 
+                               onClick={() => handleCreditLimit(item)} 
+                               title="Credit Details"
+                            />
                             <FaEdit 
                               className="text-success cursor-pointer" 
                               style={{ cursor: 'pointer' }} 
@@ -508,7 +777,7 @@ export default function SubAgent() {
               `}</style>
               
               <div className="p-4 bg-white">
-                <Form onSubmit={handleSubmit}>
+                <Form onSubmit={editing ? handleUpdate : handleSubmit}>
                   {/* Agent Details Section */}
                   <div className="custom-fieldset">
                     <div className="custom-legend">Agent Details</div>
@@ -735,16 +1004,41 @@ export default function SubAgent() {
                         <div className="custom-legend">Settings</div>
                         <Form.Group className="mb-3">
                           <Form.Label className="form-label-custom"><span className="text-danger">* </span>Markup Type</Form.Label>
-                          <div className="input-group input-group-sm">
-                            <Form.Control 
-                              name="markup" 
-                              value={formData.markup} 
-                              onChange={handleChange} 
-                              isInvalid={!!validationErrors.markup}
-                              className="form-control-custom"
-                            />
-                            <span className="input-group-text bg-light">%</span>
-                          </div>
+                          <Form.Select 
+                            name="markup" 
+                            value={formData.markup} 
+                            onChange={handleChange} 
+                            isInvalid={!!validationErrors.markup}
+                            style={selectStyle}
+                          >
+                            <option value="">SELECT</option>
+                            {markupTypes.map(m => (
+                              <option key={m.id} value={m.id}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </Form.Select>
+                          {validationErrors.markup && (
+                            <Form.Control.Feedback type="invalid" style={{ fontSize: '0.7rem' }}>
+                              {validationErrors.markup}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                        <Form.Group className="mb-3">
+                          <Form.Label className="form-label-custom">Currency</Form.Label>
+                          <Form.Select 
+                            name="currency" 
+                            value={formData.currency} 
+                            onChange={handleChange}
+                            style={selectStyle}
+                          >
+                            <option value="">SELECT</option>
+                            {currencies.map(curr => (
+                              <option key={curr.currencyId || curr.id} value={curr.currencyId || curr.id}>
+                                {curr.code || curr.currencyCode} - {curr.name || curr.currencyName}
+                              </option>
+                            ))}
+                          </Form.Select>
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label className="form-label-custom"><span className="text-danger">* </span>Status</Form.Label>
@@ -778,6 +1072,112 @@ export default function SubAgent() {
                 </Form>
               </div>
             </Modal.Body>
+          </Modal>
+
+          {/* Login Modal */}
+          <Modal show={showLoginModal} onHide={closeLoginModal} centered key={loginModalKey} backdrop="static">
+            <Modal.Header closeButton>
+              <Modal.Title>Login Details for: {editing?.companyName}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form>
+                <Form.Group className="mb-3">
+                  <Form.Label>Username</Form.Label>
+                  <div className="input-group">
+                    <Form.Control 
+                      name="login-username" 
+                      value={loginFormData.username} 
+                      onChange={handleLoginChange} 
+                      isInvalid={!!loginErrors.username} 
+                      placeholder="Enter username"
+                    />
+                    <span className="input-group-text">.</span>
+                    <Form.Control 
+                      value={mainAgentName} 
+                      readOnly 
+                      disabled 
+                      className="bg-light text-muted"
+                      style={{ maxWidth: '150px' }}
+                    />
+                  </div>
+                  <div className="mt-2" style={{ fontSize: '0.85rem' }}>
+                    Your username is: <span className="text-danger fw-bold">{loginFormData.username ? `${loginFormData.username}.${mainAgentName}` : `prefix.${mainAgentName}`}</span>
+                  </div>
+                  {loginErrors.username && <div className="text-danger small mt-1">{loginErrors.username}</div>}
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Password</Form.Label>
+                  <Form.Control type="password" name="login-password" value={loginFormData.password} onChange={handleLoginChange} isInvalid={!!loginErrors.password} />
+                  <Form.Control.Feedback type="invalid">{loginErrors.password}</Form.Control.Feedback>
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Confirm Password</Form.Label>
+                  <Form.Control type="password" name="login-repassword" value={loginFormData.repassword} onChange={handleLoginChange} isInvalid={!!loginErrors.repassword} />
+                  <Form.Control.Feedback type="invalid">{loginErrors.repassword}</Form.Control.Feedback>
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>User Roles</Form.Label>
+                  <div className="form-control d-flex flex-wrap align-items-center" style={{ cursor: 'pointer' }} onClick={() => setShowRolesDropdown(!showRolesDropdown)}>
+                    {loginFormData.userroles.length > 0 ? loginFormData.userroles.map(roleId => {
+                      const role = rolesList.find(r => r.id === roleId);
+                      return role ? <span key={roleId} className="badge bg-primary me-1 mb-1">{role.roleName}</span> : null;
+                    }) : <span className="text-muted">Select roles...</span>}
+                  </div>
+                  {showRolesDropdown && (
+                    <div className="border rounded mt-1 bg-white shadow-sm" style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                      {rolesList.map(role => (
+                        <div key={role.id} className="p-2 cursor-pointer hover-bg-light" onClick={() => toggleRole(role.id)} onMouseEnter={e => e.target.style.backgroundColor='#f8f9fa'} onMouseLeave={e => e.target.style.backgroundColor=''}>
+                          {role.roleName}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {loginErrors.userroles && <div className="text-danger small">{loginErrors.userroles}</div>}
+                </Form.Group>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={closeLoginModal}>Cancel</Button>
+              <Button variant="primary" onClick={handleLoginSubmit} disabled={isLoading}>Save</Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Credit Limit Modal */}
+          <Modal show={showCreditLimitModal} onHide={closeCreditLimitModal} centered backdrop="static">
+            <Modal.Header closeButton>
+              <Modal.Title>Manage Credit Limit - {editing?.companyName}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form>
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-bold">Action:</Form.Label>
+                  <div className="d-flex gap-3">
+                    <Form.Check type="radio" id="initial" name="type" value="initial" label="Initial" checked={creditLimitType === "initial"} onChange={handleCreditLimitTypeChange} disabled={hasInitialCredit} />
+                    <Form.Check type="radio" id="update" name="type" value="update" label="Update" checked={creditLimitType === "update"} onChange={handleCreditLimitTypeChange} disabled={!hasInitialCredit} />
+                  </div>
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>{creditLimitType === "initial" ? "Initial Credit Limit" : "Add-on Credit Limit"}</Form.Label>
+                  <Form.Control type="number" name="addCreditLimit" value={creditLimitFormData.addCreditLimit} onChange={handleCreditLimitChange} isInvalid={!!creditLimitErrors.addCreditLimit} />
+                </Form.Group>
+                {creditLimitType === "update" && (
+                  <>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Remarks</Form.Label>
+                      <Form.Control as="textarea" name="remarks" value={creditLimitFormData.remarks} onChange={handleCreditLimitChange} />
+                    </Form.Group>
+                    <Row>
+                       <Col><Form.Label className="small">Total: {creditLimitFormData.totalCreditLimit}</Form.Label></Col>
+                       <Col><Form.Label className="small">Available: {creditLimitFormData.availableCreditLimit}</Form.Label></Col>
+                    </Row>
+                  </>
+                )}
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={closeCreditLimitModal}>Cancel</Button>
+              <Button variant="primary" onClick={handleCreditLimitSubmit} disabled={isLoading}>Save</Button>
+            </Modal.Footer>
           </Modal>
         </main>
       </div>
