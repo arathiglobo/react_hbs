@@ -64,12 +64,19 @@ const isCancellationAllowed = (booking) => {
 };
 
 const HotelBookingList = () => {
+  const [role, setRole] = useState(() => {
+    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+  });
+  const [userId, setUserId] = useState(() => {
+    const stored = localStorage.getItem("userId");
+    return (stored && stored !== "null") ? stored : null;
+  });
+
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("upcoming");
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
-  const [perPage, setPerPage] = useState(10);
-  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState("upcoming");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [pagination, setPagination] = useState({
@@ -134,43 +141,108 @@ const HotelBookingList = () => {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 2014 }, (_, i) => 2020 + i);
 
+  // Handle role sync if it's missing from localStorage initially
+  useEffect(() => {
+    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    if (storedRole && storedRole !== role) {
+      setRole(storedRole);
+    } else if (!storedRole) {
+      // Fallback to userRole if currentActiveRole is missing
+      const userRoles = (localStorage.getItem("userRole") || "").toLowerCase().split(",");
+      if (userRoles.includes("agent")) setRole("agent");
+      else if (userRoles.includes("staff")) setRole("staff");
+      else if (userRoles.includes("admin")) setRole("admin");
+    }
+  }, [role]);
+
+  // Fetch userId if missing
+  useEffect(() => {
+    const fetchUserId = async () => {
+      // Don't fetch if we already have a valid userId
+      if (userId && userId !== "null") return;
+      
+      const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      if (!userName) {
+        console.warn("No UserName found in storage, cannot fetch profile ID");
+        return;
+      }
+
+      try {
+        console.log(`Fetching profile for user: ${userName} to get ID`);
+        const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+        if (response.data && response.data.id) {
+          const id = String(response.data.id);
+          console.log(`Successfully retrieved ID: ${id} for user: ${userName}`);
+          setUserId(id);
+          localStorage.setItem("userId", id);
+        } else {
+          console.warn("Profile fetch successful but no ID found in response", response.data);
+        }
+      } catch (error) {
+        console.error("Error fetching user profile for ID:", error);
+      }
+    };
+
+    if (role === "agent" || role === "staff") {
+      fetchUserId();
+    }
+  }, [role, userId]);
+
   // Fetch data from API
   const fetchBookings = useCallback(async () => {
+    // SECURITY BLOCK:
+    // 1. If role is missing, we don't know what to fetch.
+    if (!role) {
+      console.log("Blocking fetchBookings: role is missing.");
+      return;
+    }
+
+    // 2. If we are an agent or staff but don't have the ID yet, do NOT call.
+    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) {
+      console.log("Blocking fetchBookings: role is " + role + " but userId is missing.");
+      return;
+    }
+
     try {
       setLoading(true);
-
+      
       const params = {
-        upcomingPage: Math.max(pagination.upcoming.page - 1, 0),
+        upcomingPage: pagination.upcoming.page - 1,
         upcomingSize: pagination.upcoming.perPage,
-        completedPage: Math.max(pagination.completed.page - 1, 0),
+        completedPage: pagination.completed.page - 1,
         completedSize: pagination.completed.perPage,
-        cancelledPage: Math.max(pagination.cancelled.page - 1, 0),
+        cancelledPage: pagination.cancelled.page - 1,
         cancelledSize: pagination.cancelled.perPage,
       };
 
-      if (selectedMonth && selectedYear) {
-        params.month = Number(selectedMonth);
-        params.year = Number(selectedYear);
-      }
+      if (search) params.search = search;
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
 
-      const response = await axiosInstance.get("/api/bookings/list", {
-        params,
+      // Role-based filtering
+      if (role === "agent" && userId) {
+        params.agentId = userId;
+      } else if (role === "staff" && userId) {
+        params.staffId = userId;
+      }
+      
+      console.log("API Request -> /api/bookings/list with params:", params);
+
+      const response = await axiosInstance.get("/api/bookings/list", { params });
+      
+      setApiData({
+        upcomingBookings: response.data?.upcomingBookings || { content: [], totalElements: 0, totalPages: 0 },
+        completedBookings: response.data?.completedBookings || { content: [], totalElements: 0, totalPages: 0 },
+        cancelledBookings: response.data?.cancelledBookings || { content: [], totalElements: 0, totalPages: 0 },
       });
-      console.log("API Response:", response.data);
 
-      if (response.data && response.data.success) {
-        setApiData({
-          upcomingBookings: response.data.upcomingBookings || { content: [] },
-          completedBookings: response.data.completedBookings || { content: [] },
-          cancelledBookings: response.data.cancelledBookings || { content: [] },
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching bookings:", error);
+    } catch (err) {
+      console.error("Error fetching bookings:", err);
+      toast.error("Failed to load bookings");
     } finally {
       setLoading(false);
     }
-  }, [pagination, selectedMonth, selectedYear]);
+  }, [pagination, search, selectedMonth, selectedYear, role, userId]);
 
   // Fetch booking details
   const fetchBookingDetails = async (bookingId) => {
@@ -785,20 +857,22 @@ const HotelBookingList = () => {
                           >
                             S.N
                           </th>
-                          <th
-                            style={{
-                              padding: "0.45rem 0.6rem",
-                              fontWeight: "600",
-                              textTransform: "uppercase",
-                              color: "#495057",
-                              border: "1px solid #dee2e6",
-                              whiteSpace: "normal",
-                              lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.agentName,
-                            }}
-                          >
-                            Agent Name
-                          </th>
+                          {role === "admin" && (
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minWidth: COLUMN_WIDTHS.agentName,
+                              }}
+                            >
+                              Agent Name
+                            </th>
+                          )}
                           <th
                             style={{
                               padding: "0.45rem 0.6rem",
@@ -1003,16 +1077,18 @@ const HotelBookingList = () => {
                                 >
                                   {serialNumberBase + i + 1}
                                 </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    minWidth: COLUMN_WIDTHS.agentName,
-                                  }}
-                                >
-                                  <span className="fw-medium text-dark">
-                                    {b.agentName || "-"}
-                                  </span>
-                                </td>
+                                {role === "admin" && (
+                                  <td
+                                    style={{
+                                      ...baseCellStyle,
+                                      minWidth: COLUMN_WIDTHS.agentName,
+                                    }}
+                                  >
+                                    <span className="fw-medium text-dark">
+                                      {b.agentName || "-"}
+                                    </span>
+                                  </td>
+                                )}
                                 <td
                                   style={{
                                     ...baseCellStyle,

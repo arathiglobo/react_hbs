@@ -40,6 +40,13 @@ const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 const PackageBookingList = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
+  const [role, setRole] = useState(() => {
+    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+  });
+  const [userId, setUserId] = useState(() => {
+    const stored = localStorage.getItem("userId");
+    return (stored && stored !== "null") ? stored : null;
+  });
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("upcoming");
   const [search, setSearch] = useState("");
@@ -92,17 +99,45 @@ const PackageBookingList = () => {
 
   // Fetch bookings from API
   const fetchBookings = useCallback(async () => {
+    // SECURITY BLOCK:
+    // 1. If role is missing, we don't know what to fetch.
+    if (!role) {
+      console.log("Blocking fetchBookings: role is missing.");
+      return;
+    }
+
+    // 2. If we are an agent or staff but don't have the ID yet, do NOT call.
+    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) {
+      console.log("Blocking fetchBookings: role is " + role + " but userId is missing.");
+      return;
+    }
+
     try {
       setLoading(true);
+      
+      const params = {
+        page: page - 1,
+        limit: perPage
+      };
+
+      // Role-based filtering
+      if (role === "agent" && userId) {
+        params.agentId = userId;
+      } else if (role === "staff" && userId) {
+        params.staffId = userId;
+      }
+
       // Switch endpoint based on status
       const endpoint = status === "cancelled" 
         ? "/api/v1/package-booking/cancelled" 
         : "/api/v1/package-booking/bookings";
         
-      const response = await axiosInstance.get(endpoint);
+      console.log(`Package Booking API Request -> ${endpoint} with params:`, params);
+      const response = await axiosInstance.get(endpoint, { params });
 
-      if (Array.isArray(response.data)) {
-        setAllBookings(response.data || []);
+      const bookingData = response.data?.content || response.data;
+      if (Array.isArray(bookingData)) {
+        setAllBookings(bookingData);
       } else {
         setAllBookings([]);
       }
@@ -113,7 +148,47 @@ const PackageBookingList = () => {
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, page, perPage, role, userId]);
+
+  // Handle role sync if it's missing from localStorage initially
+  useEffect(() => {
+    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    if (storedRole && storedRole !== role) {
+      setRole(storedRole);
+    } else if (!storedRole) {
+      // Fallback to userRole if currentActiveRole is missing
+      const userRoles = (localStorage.getItem("userRole") || "").toLowerCase().split(",");
+      if (userRoles.includes("agent")) setRole("agent");
+      else if (userRoles.includes("staff")) setRole("staff");
+      else if (userRoles.includes("admin")) setRole("admin");
+    }
+  }, [role]);
+
+  // Fetch userId if missing
+  useEffect(() => {
+    const fetchUserId = async () => {
+      // Don't fetch if we already have a valid userId
+      if (userId && userId !== "null") return;
+      
+      const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      if (!userName) return;
+
+      try {
+        const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+        if (response.data && response.data.id) {
+          const id = String(response.data.id);
+          setUserId(id);
+          localStorage.setItem("userId", id);
+        }
+      } catch (error) {
+        console.error("Error fetching user profile for ID:", error);
+      }
+    };
+
+    if (role === "agent" || role === "staff") {
+      fetchUserId();
+    }
+  }, [role, userId]);
 
   useEffect(() => {
     fetchBookings();
@@ -135,7 +210,7 @@ const PackageBookingList = () => {
         String(booking.confirmationCode || "").toLowerCase().includes(searchLower) ||
         String(booking.packageName || "").toLowerCase().includes(searchLower) ||
         String(booking.contactName || "").toLowerCase().includes(searchLower) ||
-        String(booking.agentName || "").toLowerCase().includes(searchLower)
+        (role === "admin" && String(booking.agentName || "").toLowerCase().includes(searchLower))
       );
     }
 
@@ -463,7 +538,7 @@ const PackageBookingList = () => {
                             <th style={{ width: "60px" }}>S.N</th>
                             <th>Conf Code</th>
                             <th>Package Name</th>
-                            <th>Agent Name</th>
+                            {role === "admin" && <th>Agent Name</th>}
                             <th>Contact Name</th>
                             <th>Travel Date</th>
                             <th className="text-end">Total Price</th>
@@ -477,7 +552,7 @@ const PackageBookingList = () => {
                                 <td>{(page - 1) * perPage + index + 1}</td>
                                 <td className="fw-bold text-primary">{booking.confirmationCode || "-"}</td>
                                 <td>{booking.packageName || "-"}</td>
-                                <td>{booking.agentName || "-"}</td>
+                                {role === "admin" && <td>{booking.agentName || "-"}</td>}
                                 <td>{booking.contactName || "-"}</td>
                                 <td>{formatDate(booking.travelDate)}</td>
                                 <td className="text-end fw-bold text-success">
