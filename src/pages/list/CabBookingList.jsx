@@ -27,6 +27,13 @@ import toast from "react-hot-toast";
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 const CabBookingList = () => {
+  const [role, setRole] = useState(() => {
+    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+  });
+  const [userId, setUserId] = useState(() => {
+    const stored = localStorage.getItem("userId");
+    return (stored && stored !== "null") ? stored : null;
+  });
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("upcoming");
@@ -54,7 +61,60 @@ const CabBookingList = () => {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 2014 }, (_, i) => 2020 + i);
 
+  // Handle role sync if it's missing from localStorage initially
+  useEffect(() => {
+    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    if (storedRole && storedRole !== role) {
+      setRole(storedRole);
+    } else if (!storedRole) {
+      // Fallback to userRole if currentActiveRole is missing
+      const userRoles = (localStorage.getItem("userRole") || "").toLowerCase().split(",");
+      if (userRoles.includes("agent")) setRole("agent");
+      else if (userRoles.includes("staff")) setRole("staff");
+      else if (userRoles.includes("admin")) setRole("admin");
+    }
+  }, [role]);
+
+  // Fetch userId if missing
+  useEffect(() => {
+    const fetchUserId = async () => {
+      // Don't fetch if we already have a valid userId
+      if (userId && userId !== "null") return;
+      
+      const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      if (!userName) return;
+
+      try {
+        const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+        if (response.data && response.data.id) {
+          const id = String(response.data.id);
+          setUserId(id);
+          localStorage.setItem("userId", id);
+        }
+      } catch (error) {
+        console.error("Error fetching user profile for ID:", error);
+      }
+    };
+
+    if (role === "agent" || role === "staff") {
+      fetchUserId();
+    }
+  }, [role, userId]);
+
   const fetchBookings = useCallback(async () => {
+    // SECURITY BLOCK:
+    // 1. If role is missing, we don't know what to fetch.
+    if (!role) {
+      console.log("Blocking fetchBookings: role is missing.");
+      return;
+    }
+
+    // 2. If we are an agent or staff but don't have the ID yet, do NOT call.
+    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) {
+      console.log("Blocking fetchBookings: role is " + role + " but userId is missing.");
+      return;
+    }
+
     try {
       setLoading(true);
       const params = {
@@ -71,6 +131,13 @@ const CabBookingList = () => {
         params.year = Number(selectedYear);
       }
 
+      // Role-based filtering
+      if (role === "agent" && userId) {
+        params.agentId = userId;
+      } else if (role === "staff" && userId) {
+        params.staffId = userId;
+      }
+
       const response = await axiosInstance.get("/api/cab/grouped-list", { params });
       if (response.data && response.data.success) {
         setApiData({
@@ -84,7 +151,7 @@ const CabBookingList = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination, selectedMonth, selectedYear]);
+  }, [pagination, selectedMonth, selectedYear, role, userId]);
 
   useEffect(() => {
     fetchBookings();
@@ -299,6 +366,7 @@ const CabBookingList = () => {
                   <Table bordered hover className="mb-0 align-middle small">
                     <thead className="bg-light text-muted uppercase small font-weight-bold">
                       <tr>
+                        {role === "admin" && <th>Agent Name</th>}
                         <th className="ps-4 py-3">Booking</th>
                         <th>Customer Name</th>
                         <th>Cab Details</th>
@@ -323,6 +391,11 @@ const CabBookingList = () => {
                       ) : (
                         filteredBookings.map((b) => (
                           <tr key={b.custombookingId}>
+                            {role === "admin" && (
+                              <td className="ps-4">
+                                <div className="fw-bold text-dark">{b.agentName || "-"}</div>
+                              </td>
+                            )}
                             <td className="ps-4">
                               <div className="fw-bold text-dark">{b.packageBookCode}</div>
                               <small className="text-muted">{formatDate(b.bookingDate)}</small>

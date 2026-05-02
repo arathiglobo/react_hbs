@@ -31,6 +31,13 @@ const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 const OfflineBookingList = () => {
   const [bookings, setBookings] = useState([]);
+  const [role, setRole] = useState(() => {
+    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+  });
+  const [userId, setUserId] = useState(() => {
+    const stored = localStorage.getItem("userId");
+    return (stored && stored !== "null") ? stored : null;
+  });
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [perPage, setPerPage] = useState(10);
@@ -53,23 +60,86 @@ const OfflineBookingList = () => {
   const [emailError, setEmailError] = useState("");
   const [sendingMail, setSendingMail] = useState(false);
 
+  // Handle role sync if it's missing from localStorage initially
+  useEffect(() => {
+    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    if (storedRole && storedRole !== role) {
+      setRole(storedRole);
+    } else if (!storedRole) {
+      // Fallback to userRole if currentActiveRole is missing
+      const userRoles = (localStorage.getItem("userRole") || "").toLowerCase().split(",");
+      if (userRoles.includes("agent")) setRole("agent");
+      else if (userRoles.includes("staff")) setRole("staff");
+      else if (userRoles.includes("admin")) setRole("admin");
+    }
+  }, [role]);
+
+  // Fetch userId if missing
+  useEffect(() => {
+    const fetchUserId = async () => {
+      // Don't fetch if we already have a valid userId
+      if (userId && userId !== "null") return;
+      
+      const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      if (!userName) return;
+
+      try {
+        const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+        if (response.data && response.data.id) {
+          const id = String(response.data.id);
+          setUserId(id);
+          localStorage.setItem("userId", id);
+        }
+      } catch (error) {
+        console.error("Error fetching user profile for ID:", error);
+      }
+    };
+
+    if (role === "agent" || role === "staff") {
+      fetchUserId();
+    }
+  }, [role, userId]);
+
   const fetchBookings = useCallback(async () => {
+    // SECURITY BLOCK:
+    // 1. If role is missing, we don't know what to fetch.
+    if (!role) {
+      console.log("Blocking fetchBookings: role is missing.");
+      return;
+    }
+
+    // 2. If we are an agent or staff but don't have the ID yet, do NOT call.
+    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) {
+      console.log("Blocking fetchBookings: role is " + role + " but userId is missing.");
+      return;
+    }
+
     try {
       setLoading(true);
-    //   const response = await axiosInstance.get("api/v1/offline-booking/all-list", {
-    //     params: {
-    //       page: page - 1,
-    //       size: perPage,
-    //       search: search,
-    //     },
-    //   });
+      
+      const params = {
+        page: page - 1,
+        limit: perPage,
+        search: search.trim() || undefined
+      };
 
-    const response = await axiosInstance.get("api/v1/offline-booking/all-list");
+      // Role-based filtering
+      if (role === "agent" && userId) {
+        params.agentId = userId;
+      } else if (role === "staff" && userId) {
+        // Based on backend snippet, only agentId is supported. 
+        // We pass userId as agentId if staff represents the same filtering logic.
+        params.agentId = userId;
+      }
+
+      console.log("Offline Booking API Request -> api/v1/offline-booking/all-list with params:", params);
+      const response = await axiosInstance.get("api/v1/offline-booking/all-list", { params });
 
       if (response.data) {
-        setBookings(response.data);
-        setTotalElements(response.data.length);
-        setTotalPages(Math.ceil(response.data.length / perPage));
+        const data = response.data.content || response.data;
+        setBookings(Array.isArray(data) ? data : []);
+        setTotalElements(response.data.totalElements || data.length || 0);
+        setTotalPages(response.data.totalPages || Math.ceil((data.length || 0) / perPage));
       }
     } catch (error) {
       console.error("Error fetching offline bookings:", error);
@@ -77,7 +147,7 @@ const OfflineBookingList = () => {
     } finally {
       setLoading(false);
     }
-  }, [perPage]);
+  }, [page, perPage, search, role, userId]);
 
   useEffect(() => {
     fetchBookings();
@@ -226,7 +296,7 @@ const OfflineBookingList = () => {
                       <th className="py-3 px-4 text-center" style={{ width: "60px" }}>S.N</th>
                       <th className="py-3 px-4">Date</th>
                       <th className="py-3 px-4">Invoice Number</th>
-                      <th className="py-3 px-4">Agent Name</th>
+                      {role === "admin" && <th className="py-3 px-4">Agent Name</th>}
                       <th className="py-3 px-4">Booking Details</th>
                       <th className="py-3 px-4">Total Amount</th>
                       <th className="py-3 px-4 text-center">Action</th>
@@ -246,7 +316,7 @@ const OfflineBookingList = () => {
                           <td className="px-4 text-center">{(page - 1) * perPage + idx + 1}</td>
                           <td className="px-4">{booking.bookingDate || booking.createdAt || "N/A"}</td>
                           <td className="px-4 font-monospace fw-bold text-primary">{booking.invoiceNumber}</td>
-                          <td className="px-4">{booking.agentName || "Direct Client"}</td>
+                          {role === "admin" && <td className="px-4">{booking.agentName || "Direct Client"}</td>}
                           <td className="px-4">
                             <div className="small">
                               <div className="fw-bold text-dark">{booking.customerName}</div>
