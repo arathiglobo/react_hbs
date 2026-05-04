@@ -132,6 +132,39 @@ const Login = () => {
 
   return (
     <div className="login-container">
+      {/* Travel-themed floating decorations */}
+      <svg className="travel-decor travel-decor-cloud travel-decor-cloud-1" viewBox="0 0 64 32" fill="currentColor" aria-hidden="true">
+        <path d="M51.2 22.4c4.4 0 8-3.6 8-8s-3.6-8-8-8c-1.1 0-2.2.2-3.1.7C46.4 3.5 42 .8 37 .8c-6.6 0-12.1 4.7-13.4 10.8-1.1-.6-2.4-1-3.8-1C15.5 10.6 12 14.1 12 18.4c0 1.5.4 2.9 1.2 4.1-.4-.1-.8-.1-1.2-.1-4.4 0-8 3.6-8 8 0 .5 0 1 .1 1.5h47C51.1 31.6 51.2 31.5 51.2 31.5c2.2-.5 4-2.5 4-4.9 0-2.3-1.6-4.2-3.7-4.6 0 0-.1.4-.3.4z"/>
+      </svg>
+      <svg className="travel-decor travel-decor-cloud travel-decor-cloud-2" viewBox="0 0 64 32" fill="currentColor" aria-hidden="true">
+        <path d="M51.2 22.4c4.4 0 8-3.6 8-8s-3.6-8-8-8c-1.1 0-2.2.2-3.1.7C46.4 3.5 42 .8 37 .8c-6.6 0-12.1 4.7-13.4 10.8-1.1-.6-2.4-1-3.8-1C15.5 10.6 12 14.1 12 18.4c0 1.5.4 2.9 1.2 4.1-.4-.1-.8-.1-1.2-.1-4.4 0-8 3.6-8 8 0 .5 0 1 .1 1.5h47C51.1 31.6 51.2 31.5 51.2 31.5c2.2-.5 4-2.5 4-4.9 0-2.3-1.6-4.2-3.7-4.6 0 0-.1.4-.3.4z"/>
+      </svg>
+      <svg className="travel-decor travel-decor-cloud travel-decor-cloud-3" viewBox="0 0 64 32" fill="currentColor" aria-hidden="true">
+        <path d="M51.2 22.4c4.4 0 8-3.6 8-8s-3.6-8-8-8c-1.1 0-2.2.2-3.1.7C46.4 3.5 42 .8 37 .8c-6.6 0-12.1 4.7-13.4 10.8-1.1-.6-2.4-1-3.8-1C15.5 10.6 12 14.1 12 18.4c0 1.5.4 2.9 1.2 4.1-.4-.1-.8-.1-1.2-.1-4.4 0-8 3.6-8 8 0 .5 0 1 .1 1.5h47C51.1 31.6 51.2 31.5 51.2 31.5c2.2-.5 4-2.5 4-4.9 0-2.3-1.6-4.2-3.7-4.6 0 0-.1.4-.3.4z"/>
+      </svg>
+      <svg className="travel-decor travel-decor-plane" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+      </svg>
+      <svg className="travel-decor travel-decor-balloon" viewBox="0 0 64 80" aria-hidden="true">
+        <defs>
+          <linearGradient id="balloonGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#ff7a45"/>
+            <stop offset="50%" stopColor="#fbbf24"/>
+            <stop offset="100%" stopColor="#0ea5b7"/>
+          </linearGradient>
+        </defs>
+        <ellipse cx="32" cy="28" rx="24" ry="26" fill="url(#balloonGrad)"/>
+        <path d="M14 38 Q32 60 50 38" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="1"/>
+        <path d="M22 52 L26 64 M42 52 L38 64 M32 54 L32 64" stroke="#64748b" strokeWidth="1" fill="none"/>
+        <rect x="26" y="64" width="12" height="8" rx="2" fill="#8b5e3c"/>
+      </svg>
+      <svg className="travel-decor travel-decor-compass" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <circle cx="32" cy="32" r="28"/>
+        <circle cx="32" cy="32" r="3" fill="currentColor"/>
+        <path d="M32 8 L36 32 L32 56 L28 32 Z" fill="currentColor" opacity="0.6"/>
+        <path d="M8 32 L32 28 L56 32 L32 36 Z" opacity="0.4"/>
+      </svg>
+
       {/* Header Section */}
       <div className="login-header">
         <div className="header-content" style={{ margin: "-13px auto" }}>
