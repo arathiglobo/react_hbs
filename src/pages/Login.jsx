@@ -34,8 +34,6 @@ const Login = () => {
         withCredentials: true,
       });
 
-      console.log("api login response :", response);
-
       const token = response.data.token;
       const roles = response.data.roles;
       const loginedUserName = response.data.username;
@@ -51,7 +49,6 @@ const Login = () => {
       localStorage.setItem("UserName", loginedUserName);
 
       if (roles.length > 1) {
-        console.log("navigate to select roles");
         navigate("/select-userRole", { state: { roles } });
 
         //   navigate("/select-userRole", {

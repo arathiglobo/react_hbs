@@ -1,10 +1,9 @@
 import axios from "axios";
-import { showSessionExpiredAlert } from "./SessionExpired";
-
+import { showSessionExpiredAlert, clearAuthStorage } from "./SessionExpired";
 
 const axiosInstance = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000,
 });
 
 let isRefreshing = false;
@@ -25,18 +24,9 @@ axiosInstance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("authToken");
     if (token) {
-
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.warn("No token found in localStorage");
     }
-
-    // if (!token) {
-    //   showSessionExpiredAlert();
-    //   return Promise.reject(new Error("No token found. Redirecting to login..."));
-    // }
-
     return config;
   },
   (error) => Promise.reject(error)
@@ -45,11 +35,13 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
-
-    console.log("error in axiosInstance::", error)
     const originalRequest = error.config;
 
-    if (error.response && (error.response.status === 401 || error.response.status === 403) && !originalRequest._retry) {
+    if (
+      error.response &&
+      (error.response.status === 401 || error.response.status === 403) &&
+      !originalRequest._retry
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -65,17 +57,11 @@ axiosInstance.interceptors.response.use(
       isRefreshing = true;
 
       try {
-
-
         const response = await axios.post(
           `${process.env.REACT_APP_API_BASE_URL}/auth/refresh-token`,
           {},
-          {
-            withCredentials: true, // Send HTTP-only refresh token cookie
-          }
+          { withCredentials: true }
         );
-
-
 
         const newAccessToken = response.data.accessToken;
         localStorage.setItem("authToken", newAccessToken);
@@ -84,13 +70,9 @@ axiosInstance.interceptors.response.use(
         processQueue(null, newAccessToken);
         return axiosInstance(originalRequest);
       } catch (refreshError) {
-
-        console.log("catch  refresh token end point");
         processQueue(refreshError, null);
+        clearAuthStorage();
         showSessionExpiredAlert();
-        localStorage.removeItem("authToken");
-        localStorage.removeItem("userRole");
-        window.location.href = "/login";
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

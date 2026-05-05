@@ -206,6 +206,12 @@ const AgentReg = () => {
       agentHsncode: "",
       agentStatus: "",
     },
+    financeManagerName: "",
+    financeManagerContactNo: "",
+    financeManagerEmail: "",
+    gmName: "",
+    gmContactNo: "",
+    gmEmail: "",
   });
 
   const mapAgentToForm = (data) => ({
@@ -230,6 +236,12 @@ const AgentReg = () => {
     currency: String(data?.currency || ""),
     status: data?.status || "",
     agentLogo: null,
+    financeManagerName: data?.financeManagerName || "",
+    financeManagerContactNo: data?.financeManagerContactNo || "",
+    financeManagerEmail: data?.financeManagerEmail || "",
+    gmName: data?.gmName || "",
+    gmContactNo: data?.gmContactNo || "",
+    gmEmail: data?.gmEmail || "",
     agentGSTDetailsDTO: {
       agentClassification:
         data?.agentClassification ||
@@ -372,6 +384,12 @@ const AgentReg = () => {
         agentHsncode: "",
         agentStatus: "",
       },
+      financeManagerName: "",
+      financeManagerContactNo: "",
+      financeManagerEmail: "",
+      gmName: "",
+      gmContactNo: "",
+      gmEmail: "",
     });
     setProvinces([]);
     setPlaces([]);
@@ -631,6 +649,12 @@ const AgentReg = () => {
       agentRegisterstatus: "",
       agentHsncode: "",
       agentLogo: null,
+      financeManagerName: "",
+      financeManagerContactNo: "",
+      financeManagerEmail: "",
+      gmName: "",
+      gmContactNo: "",
+      gmEmail: "",
     });
     setProvinces([]);
     setPlaces([]);
@@ -747,10 +771,34 @@ const AgentReg = () => {
     if (!data.currency) newErrors.currency = "Currency is required";
     if (!getStringValue(data.status)) newErrors.status = "Status is required";
 
+    // Finance Manager validations
+    if (!getStringValue(data.financeManagerName))
+      newErrors.financeManagerName = "Finance Manager Name is required";
+    if (!getStringValue(data.financeManagerContactNo))
+      newErrors.financeManagerContactNo = "Finance Manager Contact No is required";
+    if (!getStringValue(data.financeManagerEmail))
+      newErrors.financeManagerEmail = "Finance Manager Email is required";
+
+    // GM validations
+    if (!getStringValue(data.gmName))
+      newErrors.gmName = "GM Name is required";
+    if (!getStringValue(data.gmContactNo))
+      newErrors.gmContactNo = "GM Contact No is required";
+    if (!getStringValue(data.gmEmail))
+      newErrors.gmEmail = "GM Email is required";
+
     // Additional format validations
     const emailValue = getStringValue(data.personalEmail);
     if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue))
       newErrors.personalEmail = "Invalid email format";
+
+    const fmEmail = getStringValue(data.financeManagerEmail);
+    if (fmEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fmEmail))
+      newErrors.financeManagerEmail = "Invalid Finance Manager email format";
+
+    const gmEmailVal = getStringValue(data.gmEmail);
+    if (gmEmailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gmEmailVal))
+      newErrors.gmEmail = "Invalid GM email format";
 
     const mobileValue = getStringValue(data.mobileNumber);
     if (mobileValue && !/^\+?\d{10,15}$/.test(mobileValue.replace(/\s/g, "")))
@@ -2649,6 +2697,175 @@ const AgentReg = () => {
                             </Row>
                           </div>
                         )}
+                      </Card.Body>
+                    </Card>
+
+                    {/* Finance Manager & GM Section */}
+                    <Card className="mb-3">
+                      <Card.Header>Finance Manager &amp; GM Details</Card.Header>
+                      <Card.Body>
+                        <h6 className="mb-3 text-primary">Finance Manager</h6>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Name <span className="text-danger">*</span></Form.Label>
+                              <Form.Control
+                                value={formData.financeManagerName}
+                                placeholder="Enter finance manager name"
+                                isInvalid={!!validationErrors.financeManagerName}
+                                {...getFormControlProps(
+                                  "financeManagerName",
+                                  (e) => {
+                                    setFormData({ ...formData, financeManagerName: e.target.value });
+                                    if (validationErrors.financeManagerName) {
+                                      setValidationErrors(prev => ({ ...prev, financeManagerName: "" }));
+                                    }
+                                  },
+                                  { className: `form-input ${validationErrors.financeManagerName ? "is-invalid" : ""}` }
+                                )}
+                              />
+                              {validationErrors.financeManagerName && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.financeManagerName}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Contact No <span className="text-danger">*</span></Form.Label>
+                              <Form.Control
+                                value={formData.financeManagerContactNo}
+                                placeholder="Enter contact number"
+                                isInvalid={!!validationErrors.financeManagerContactNo}
+                                {...getFormControlProps(
+                                  "financeManagerContactNo",
+                                  (e) => {
+                                    setFormData({ ...formData, financeManagerContactNo: e.target.value });
+                                    if (validationErrors.financeManagerContactNo) {
+                                      setValidationErrors(prev => ({ ...prev, financeManagerContactNo: "" }));
+                                    }
+                                  },
+                                  { className: `form-input ${validationErrors.financeManagerContactNo ? "is-invalid" : ""}` }
+                                )}
+                              />
+                              {validationErrors.financeManagerContactNo && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.financeManagerContactNo}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <Row>
+                          <Col md={12}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Email <span className="text-danger">*</span></Form.Label>
+                              <Form.Control
+                                value={formData.financeManagerEmail}
+                                placeholder="Enter finance manager email"
+                                isInvalid={!!validationErrors.financeManagerEmail}
+                                {...getFormControlProps(
+                                  "financeManagerEmail",
+                                  (e) => {
+                                    setFormData({ ...formData, financeManagerEmail: e.target.value });
+                                    if (validationErrors.financeManagerEmail) {
+                                      setValidationErrors(prev => ({ ...prev, financeManagerEmail: "" }));
+                                    }
+                                  },
+                                  { className: `form-input ${validationErrors.financeManagerEmail ? "is-invalid" : ""}` }
+                                )}
+                              />
+                              {validationErrors.financeManagerEmail && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.financeManagerEmail}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+
+                        <hr />
+                        <h6 className="mb-3 text-primary">GM (General Manager)</h6>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Name <span className="text-danger">*</span></Form.Label>
+                              <Form.Control
+                                value={formData.gmName}
+                                placeholder="Enter GM name"
+                                isInvalid={!!validationErrors.gmName}
+                                {...getFormControlProps(
+                                  "gmName",
+                                  (e) => {
+                                    setFormData({ ...formData, gmName: e.target.value });
+                                    if (validationErrors.gmName) {
+                                      setValidationErrors(prev => ({ ...prev, gmName: "" }));
+                                    }
+                                  },
+                                  { className: `form-input ${validationErrors.gmName ? "is-invalid" : ""}` }
+                                )}
+                              />
+                              {validationErrors.gmName && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.gmName}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Contact No <span className="text-danger">*</span></Form.Label>
+                              <Form.Control
+                                value={formData.gmContactNo}
+                                placeholder="Enter GM contact number"
+                                isInvalid={!!validationErrors.gmContactNo}
+                                {...getFormControlProps(
+                                  "gmContactNo",
+                                  (e) => {
+                                    setFormData({ ...formData, gmContactNo: e.target.value });
+                                    if (validationErrors.gmContactNo) {
+                                      setValidationErrors(prev => ({ ...prev, gmContactNo: "" }));
+                                    }
+                                  },
+                                  { className: `form-input ${validationErrors.gmContactNo ? "is-invalid" : ""}` }
+                                )}
+                              />
+                              {validationErrors.gmContactNo && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.gmContactNo}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <Row>
+                          <Col md={12}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Email <span className="text-danger">*</span></Form.Label>
+                              <Form.Control
+                                value={formData.gmEmail}
+                                placeholder="Enter GM email"
+                                isInvalid={!!validationErrors.gmEmail}
+                                {...getFormControlProps(
+                                  "gmEmail",
+                                  (e) => {
+                                    setFormData({ ...formData, gmEmail: e.target.value });
+                                    if (validationErrors.gmEmail) {
+                                      setValidationErrors(prev => ({ ...prev, gmEmail: "" }));
+                                    }
+                                  },
+                                  { className: `form-input ${validationErrors.gmEmail ? "is-invalid" : ""}` }
+                                )}
+                              />
+                              {validationErrors.gmEmail && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.gmEmail}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
                       </Card.Body>
                     </Card>
                   </Col>

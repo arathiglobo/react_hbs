@@ -67,6 +67,7 @@ const ExternalApiRoomList = () => {
   const [loadingRate, setLoadingRate] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
   const [policyList, setPolicyList] = useState(null);
+  const [viewMode, setViewMode] = useState("grid");
   const [selectedRate, setSelectedRate] = useState([]);
   const [lowestRate, setLowestRate] = useState(Infinity);
   const [selectedProvider, setSelectedProvider] = useState("");
@@ -189,9 +190,17 @@ const ExternalApiRoomList = () => {
 
   const handleRateSelect = (roomIndex, rate, hotelId, hotelName) => {
     setSelectedRooms((prev) =>
-      prev.map((r, i) =>
-        i === roomIndex ? { ...r, selectedRate: rate, hotelId, hotelName } : r
-      )
+      prev.map((r, i) => {
+        if (i === roomIndex) {
+          // If the clicked rate is already selected, unselect it
+          if (r.selectedRate === rate) {
+            return { ...r, selectedRate: null, hotelId: null, hotelName: null };
+          }
+          // Otherwise, select the new rate
+          return { ...r, selectedRate: rate, hotelId, hotelName };
+        }
+        return r;
+      })
     );
   };
 
@@ -590,7 +599,27 @@ const ExternalApiRoomList = () => {
 
             {/* ===== Per-Room Accordion Section ===== */}
             <div className="room-categories-section">
-              <h4 className="mb-3">Select Rooms</h4>
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h4 className="mb-0">Select Rooms</h4>
+                <div className="btn-group shadow-sm gap-1" role="group">
+                  <Button
+                    variant={viewMode === "grid" ? "primary" : "outline-primary"}
+                    onClick={() => setViewMode("grid")}
+                    className="d-flex align-items-center gap-2"
+                    size="sm"
+                  >
+                    <span className="fs-5" style={{ lineHeight: 1 }}>⊞</span> 
+                  </Button>
+                  <Button
+                    variant={viewMode === "list" ? "primary" : "outline-primary"}
+                    onClick={() => setViewMode("list")}
+                    className="d-flex align-items-center gap-2"
+                    size="sm"
+                  >
+                    <span className="fs-5" style={{ lineHeight: 1 }}>☰</span> 
+                  </Button>
+                </div>
+              </div>
               <p className="text-muted small mb-4">
                 Please select one rate for each room. You can choose different meal plans per room.
               </p>
@@ -616,7 +645,7 @@ const ExternalApiRoomList = () => {
                           <div className="d-flex align-items-center gap-3">
                             <FaBed className="text-primary" />
                             <span className="fw-bold">{roomLabel}</span>
-                            {roomSelection ? (
+                            {/* {roomSelection ? (
                               <Badge bg="success" className="ms-2">
                                 Selected: {roomSelection.mealPlan} —{" "}
                                 {formatPrice(
@@ -629,7 +658,7 @@ const ExternalApiRoomList = () => {
                               <Badge bg="warning" text="dark" className="ms-2">
                                 No selection yet
                               </Badge>
-                            )}
+                            )} */}
                           </div>
                           <Button
                             variant="outline-primary"
@@ -722,24 +751,21 @@ const ExternalApiRoomList = () => {
                                               const isBestDeal = rate.totalRate === lowestRate;
 
                                               return (
-                                                <Col xs={12} sm={5} md={4} key={rateIndex}>
+                                                <Col xs={12} sm={viewMode === "grid" ? 5 : 12} md={viewMode === "grid" ? 4 : 12} key={rateIndex} className={viewMode === "list" ? "mb-2" : ""}>
                                                   <Card
-                                                    className={`rate-selection-card ${isChecked ? "selected-rate-card" : ""}`}
+                                                    className={`rate-selection-card ${isChecked ? "selected-rate-card" : ""} shadow-sm`}
                                                     onClick={() => handleRateSelect(roomIndex, rate, providerHotel.hotelId, providerHotel.hotelName)}
                                                     style={{
                                                       cursor: "pointer",
                                                       border: isChecked ? "2px solid #0d6efd" : "1px solid #e0e0e0",
                                                       borderRadius: "12px",
                                                       backgroundColor: isChecked ? "#f0f5ff" : "#fff",
-                                                      boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
                                                       transition: "border-color 0.15s, background-color 0.15s",
-                                                      minHeight: "380px",
-                                                      display: "flex",
-                                                      flexDirection: "column",
                                                       position: "relative",
+                                                      ...(viewMode === "grid" ? { minHeight: "380px", display: "flex", flexDirection: "column" } : {})
                                                     }}
                                                   >
-                                                    {isBestDeal && (
+                                                    {isBestDeal && viewMode === "grid" && (
                                                       <Badge
                                                         bg="warning"
                                                         text="dark"
@@ -749,14 +775,18 @@ const ExternalApiRoomList = () => {
                                                           right: "10px",
                                                           zIndex: 1,
                                                           fontSize: "0.8rem",
-                                                          padding: "5px 10px",
+                                                          padding: "5px 12px",
                                                           boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                                                          borderRadius: "10px",
+                                                          fontWeight: "bold",
+                                                          border: "1px solid #ffc107"
                                                         }}
                                                       >
-                                                        Best Deal
+                                                        ✨ Best Deal
                                                       </Badge>
                                                     )}
-                                                    <Card.Body className="p-4 d-flex flex-column">
+                                                    {viewMode === "grid" ? (
+                                                      <Card.Body className="p-4 d-flex flex-column">
                                                       <div className="d-flex justify-content-between align-items-start mb-2">
                                                         <div className="d-flex align-items-center gap-1 flex-wrap">
                                                           {getMealPlanIcon(rate.mealPlan || "")}
@@ -770,10 +800,13 @@ const ExternalApiRoomList = () => {
                                                           name={`roomSelection_${roomIndex}`}
                                                           id={radioId}
                                                           checked={isChecked}
-                                                          onChange={() => handleRateSelect(roomIndex, rate, providerHotel.hotelId, providerHotel.hotelName)}
-                                                          onClick={(e) => e.stopPropagation()}
-                                                          className="rate-radio-input"
-                                                          style={{ transform: "scale(1.2)", cursor: "pointer", flexShrink: 0 }}
+                                                          onChange={() => {}}
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRateSelect(roomIndex, rate, providerHotel.hotelId, providerHotel.hotelName);
+                                                          }}
+                                                          className="form-check-input rate-radio-input m-0 border-primary"
+                                                          style={{ cursor: "pointer", width: "1.25em", height: "1.25em", flexShrink: 0, opacity: 1 }}
                                                         />
                                                       </div>
 
@@ -810,20 +843,95 @@ const ExternalApiRoomList = () => {
                                                         )}
                                                       </div>
 
-                                                      <Button
-                                                        variant="primary"
-                                                        className="w-100 mt-auto"
-                                                        style={{
-                                                          borderRadius: "8px",
-                                                          fontWeight: 600,
-                                                          fontSize: "0.88rem",
-                                                          padding: "9px 0",
-                                                          opacity: isChecked ? 1 : 0.88,
-                                                        }}
-                                                      >
-                                                        {isChecked ? "✓ Selected" : "View Details / Select"}
-                                                      </Button>
-                                                    </Card.Body>
+                                                        <Button
+                                                          variant="primary"
+                                                          className="w-100 mt-auto"
+                                                          style={{
+                                                            borderRadius: "8px",
+                                                            fontWeight: 600,
+                                                            fontSize: "0.88rem",
+                                                            padding: "9px 0",
+                                                            opacity: isChecked ? 1 : 0.88,
+                                                          }}
+                                                        >
+                                                          {isChecked ? "✓ Selected" : "View Details / Select"}
+                                                        </Button>
+                                                      </Card.Body>
+                                                    ) : (
+                                                      <Card.Body className="p-3 py-2 d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+                                                        <div className="d-flex flex-column flex-grow-1 w-100">
+                                                          <div className="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                                                            <div className="d-flex align-items-center gap-2">
+                                                              {getMealPlanIcon(rate.mealPlan || "")}
+                                                              <span className="fw-bold" style={{ fontSize: "0.9rem" }}>
+                                                                {rate.mealPlan}
+                                                              </span>
+                                                            </div>
+                                                            {isBestDeal && (
+                                                              <Badge 
+                                                                bg="warning" 
+                                                                text="dark" 
+                                                                style={{ 
+                                                                  borderRadius: "8px", 
+                                                                  border: "1px solid #ffc107",
+                                                                  padding: "5px 10px",
+                                                                  fontSize: "0.75rem",
+                                                                  fontWeight: "bold"
+                                                                }}
+                                                              >
+                                                                ✨ Best Deal
+                                                              </Badge>
+                                                            )}
+                                                            {getRefundStatusBadgeInRoomList(rate.nonRefundable)}
+                                                            <div className="d-flex align-items-center mb-0 text-muted" style={{ fontSize: "0.82rem" }}>
+                                                              {getRoomStatusBadge(rate.roomStatus)}
+                                                            </div>
+                                                          </div>
+                                                          <div className="rate-features small text-muted d-flex flex-wrap gap-3">
+                                                            <div className="d-flex align-items-center gap-1 text-muted">
+                                                              <FaInfoCircle size={11} />
+                                                              <span>contract: {rate.contractLabel || apiType}</span>
+                                                            </div>
+                                                            {rate.cancellationPolicies?.length > 0 && (
+                                                              <div className="d-flex align-items-center gap-1 text-muted text-truncate" style={{ maxWidth: '350px' }}>
+                                                                <FaShieldAlt size={11} style={{ flexShrink: 0 }} />
+                                                                <span>{rate.cancellationPolicies[0].policyText}</span>
+                                                              </div>
+                                                            )}
+                                                          </div>
+                                                        </div>
+                                                        
+                                                        <div className="d-flex w-100 w-lg-auto justify-content-between justify-content-lg-end align-items-center mt-2 mt-lg-0">
+                                                          <div className="text-start text-lg-end px-0 px-lg-4" style={{ minWidth: '200px' }}>
+                                                            <div className="fw-bold text-success" style={{ fontSize: "1.4rem" }}>
+                                                              {formatPrice(rate.totalRate)}
+                                                            </div>
+                                                            <div className="text-muted" style={{ fontSize: "0.78rem" }}>
+                                                              {formatPrice(rate.totalRate || 0)} × 1 rooms
+                                                            </div>
+                                                            <div className="text-muted" style={{ fontSize: "0.78rem" }}>
+                                                              per night
+                                                            </div>
+                                                          </div>
+
+                                                          <div className="ps-0 ps-lg-3 pe-2 border-start-0 border-lg-start ms-auto ms-lg-0 d-flex align-items-center justify-content-center" style={{ minWidth: "60px" }}>
+                                                            <input
+                                                              type="radio"
+                                                              name={`roomSelection_${roomIndex}_list`}
+                                                              id={`${radioId}_list`}
+                                                              checked={isChecked}
+                                                              onChange={() => {}}
+                                                              onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleRateSelect(roomIndex, rate, providerHotel.hotelId, providerHotel.hotelName);
+                                                              }}
+                                                              className="form-check-input rate-radio-input m-0 border-primary"
+                                                              style={{ cursor: "pointer", width: "1.35em", height: "1.35em", flexShrink: 0, opacity: isChecked ? 1 : 0.6 }}
+                                                            />
+                                                          </div>
+                                                        </div>
+                                                      </Card.Body>
+                                                    )}
                                                   </Card>
                                                 </Col>
                                               );

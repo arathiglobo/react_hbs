@@ -1,5 +1,17 @@
 import Swal from "sweetalert2";
 
+const AUTH_KEYS = [
+  "authToken",
+  "userRole",
+  "UserName",
+  "currentActiveRole",
+  "makeYourOwnPackageAgentId",
+];
+
+export const clearAuthStorage = () => {
+  AUTH_KEYS.forEach((key) => localStorage.removeItem(key));
+};
+
 export const showSessionExpiredAlert = () => {
   Swal.fire({
     title: "Session Expired",
@@ -7,7 +19,7 @@ export const showSessionExpiredAlert = () => {
     icon: "warning",
     confirmButtonText: "OK",
   }).then(() => {
-    localStorage.removeItem("authToken");
+    clearAuthStorage();
     window.location.href = "/login";
   });
 };

@@ -37,7 +37,7 @@ const COLUMN_WIDTHS = {
   referenceCode: "clamp(18ch, 20ch + 1vw, 30ch)",
   bookDate: "clamp(11ch, 12ch + 0.5vw, 16ch)",
   bookingDetails: "clamp(20ch, 24ch + 1vw, 36ch)",
-  deadlineDate: "clamp(12ch, 13ch + 0.5vw, 18ch)",
+  deadlineDate: "clamp(11ch, 12ch + 0.5vw, 16ch)",
   notification: "clamp(11ch, 12ch + 0.5vw, 16ch)",
   action: "clamp(10ch, 11ch + 0.5vw, 15ch)",
 };
@@ -69,7 +69,7 @@ const HotelBookingList = () => {
   });
   const [userId, setUserId] = useState(() => {
     const stored = localStorage.getItem("userId");
-    return (stored && stored !== "null") ? stored : null;
+    return stored && stored !== "null" ? stored : null;
   });
 
   const [bookings, setBookings] = useState([]);
@@ -83,6 +83,9 @@ const HotelBookingList = () => {
     upcoming: { page: 1, perPage: 10 },
     completed: { page: 1, perPage: 10 },
     cancelled: { page: 1, perPage: 10 },
+    onrequest: { page: 1, perPage: 10 },
+    reconfirmed: { page: 1, perPage: 10 },
+    invoiced: { page: 1, perPage: 10 },
   });
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
@@ -91,6 +94,9 @@ const HotelBookingList = () => {
     completedBookings: { content: [] },
     cancelledBookings: { content: [] },
   });
+  const [onRequestData, setOnRequestData] = useState({ content: [], totalElements: 0, totalPages: 0 });
+  const [reconfirmedData, setReconfirmedData] = useState({ content: [], totalElements: 0, totalPages: 0 });
+  const [invoicedData, setInvoicedData] = useState({ content: [], totalElements: 0, totalPages: 0 });
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [bookingDetails, setBookingDetails] = useState(null);
   const [loadingBookingId, setLoadingBookingId] = useState(null);
@@ -108,7 +114,8 @@ const HotelBookingList = () => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [voucherDetails, setVoucherDetails] = useState(null);
   const [loadingVoucherDetails, setLoadingVoucherDetails] = useState(false);
-  const [updatingConfirmationStatus, setUpdatingConfirmationStatus] = useState(null);
+  const [updatingConfirmationStatus, setUpdatingConfirmationStatus] =
+    useState(null);
   const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
   const [bookingToUpdateStatus, setBookingToUpdateStatus] = useState(null);
   const hasTimeFilter = Boolean(selectedMonth) && Boolean(selectedYear);
@@ -118,7 +125,7 @@ const HotelBookingList = () => {
       { value: "completed", label: "Completed" },
       { value: "cancelled", label: "Cancelled" },
     ],
-    []
+    [],
   );
 
   // Generate months
@@ -148,7 +155,9 @@ const HotelBookingList = () => {
       setRole(storedRole);
     } else if (!storedRole) {
       // Fallback to userRole if currentActiveRole is missing
-      const userRoles = (localStorage.getItem("userRole") || "").toLowerCase().split(",");
+      const userRoles = (localStorage.getItem("userRole") || "")
+        .toLowerCase()
+        .split(",");
       if (userRoles.includes("agent")) setRole("agent");
       else if (userRoles.includes("staff")) setRole("staff");
       else if (userRoles.includes("admin")) setRole("admin");
@@ -160,8 +169,9 @@ const HotelBookingList = () => {
     const fetchUserId = async () => {
       // Don't fetch if we already have a valid userId
       if (userId && userId !== "null") return;
-      
-      const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+
+      const userName =
+        localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
       if (!userName) {
         console.warn("No UserName found in storage, cannot fetch profile ID");
         return;
@@ -169,14 +179,19 @@ const HotelBookingList = () => {
 
       try {
         console.log(`Fetching profile for user: ${userName} to get ID`);
-        const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+        const response = await axiosInstance.get(
+          `/api/personalProfile/${userName}`,
+        );
         if (response.data && response.data.id) {
           const id = String(response.data.id);
           console.log(`Successfully retrieved ID: ${id} for user: ${userName}`);
           setUserId(id);
           localStorage.setItem("userId", id);
         } else {
-          console.warn("Profile fetch successful but no ID found in response", response.data);
+          console.warn(
+            "Profile fetch successful but no ID found in response",
+            response.data,
+          );
         }
       } catch (error) {
         console.error("Error fetching user profile for ID:", error);
@@ -198,14 +213,19 @@ const HotelBookingList = () => {
     }
 
     // 2. If we are an agent or staff but don't have the ID yet, do NOT call.
-    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) {
-      console.log("Blocking fetchBookings: role is " + role + " but userId is missing.");
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    ) {
+      console.log(
+        "Blocking fetchBookings: role is " + role + " but userId is missing.",
+      );
       return;
     }
 
     try {
       setLoading(true);
-      
+
       const params = {
         upcomingPage: pagination.upcoming.page - 1,
         upcomingSize: pagination.upcoming.perPage,
@@ -225,17 +245,30 @@ const HotelBookingList = () => {
       } else if (role === "staff" && userId) {
         params.staffId = userId;
       }
-      
+
       console.log("API Request -> /api/bookings/list with params:", params);
 
-      const response = await axiosInstance.get("/api/bookings/list", { params });
-      
-      setApiData({
-        upcomingBookings: response.data?.upcomingBookings || { content: [], totalElements: 0, totalPages: 0 },
-        completedBookings: response.data?.completedBookings || { content: [], totalElements: 0, totalPages: 0 },
-        cancelledBookings: response.data?.cancelledBookings || { content: [], totalElements: 0, totalPages: 0 },
+      const response = await axiosInstance.get("/api/bookings/list", {
+        params,
       });
 
+      setApiData({
+        upcomingBookings: response.data?.upcomingBookings || {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+        },
+        completedBookings: response.data?.completedBookings || {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+        },
+        cancelledBookings: response.data?.cancelledBookings || {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+        },
+      });
     } catch (err) {
       console.error("Error fetching bookings:", err);
       toast.error("Failed to load bookings");
@@ -244,12 +277,90 @@ const HotelBookingList = () => {
     }
   }, [pagination, search, selectedMonth, selectedYear, role, userId]);
 
+  // Fetch On Request bookings from dedicated endpoint
+  const fetchOnRequestBookings = useCallback(async () => {
+    if (!role) return;
+    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) return;
+    try {
+      setLoading(true);
+      const params = {
+        page: pagination.onrequest.page - 1,
+        size: pagination.onrequest.perPage,
+      };
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+      if (role === "agent" && userId) params.agentId = userId;
+      else if (role === "staff" && userId) params.staffId = userId;
+      const response = await axiosInstance.get("/api/bookings/list/on-request", { params });
+      if (response.data?.success) {
+        setOnRequestData(response.data.bookings || { content: [], totalElements: 0, totalPages: 0 });
+      }
+    } catch (err) {
+      console.error("Error fetching on-request bookings:", err);
+      toast.error("Failed to load on-request bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.onrequest, selectedMonth, selectedYear, role, userId]);
+
+  // Fetch Reconfirmed bookings from dedicated endpoint
+  const fetchReconfirmedBookings = useCallback(async () => {
+    if (!role) return;
+    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) return;
+    try {
+      setLoading(true);
+      const params = {
+        page: pagination.reconfirmed.page - 1,
+        size: pagination.reconfirmed.perPage,
+      };
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+      if (role === "agent" && userId) params.agentId = userId;
+      else if (role === "staff" && userId) params.staffId = userId;
+      const response = await axiosInstance.get("/api/bookings/list/reconfirmed", { params });
+      if (response.data?.success) {
+        setReconfirmedData(response.data.bookings || { content: [], totalElements: 0, totalPages: 0 });
+      }
+    } catch (err) {
+      console.error("Error fetching reconfirmed bookings:", err);
+      toast.error("Failed to load reconfirmed bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.reconfirmed, selectedMonth, selectedYear, role, userId]);
+
+  // Fetch Invoiced bookings from dedicated endpoint
+  const fetchInvoicedBookings = useCallback(async () => {
+    if (!role) return;
+    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) return;
+    try {
+      setLoading(true);
+      const params = {
+        page: pagination.invoiced.page - 1,
+        size: pagination.invoiced.perPage,
+      };
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+      if (role === "agent" && userId) params.agentId = userId;
+      else if (role === "staff" && userId) params.staffId = userId;
+      const response = await axiosInstance.get("/api/bookings/list/invoiced", { params });
+      if (response.data?.success) {
+        setInvoicedData(response.data.bookings || { content: [], totalElements: 0, totalPages: 0 });
+      }
+    } catch (err) {
+      console.error("Error fetching invoiced bookings:", err);
+      toast.error("Failed to load invoiced bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.invoiced, selectedMonth, selectedYear, role, userId]);
+
   // Fetch booking details
   const fetchBookingDetails = async (bookingId) => {
     try {
       setLoadingBookingId(bookingId);
       const response = await axiosInstance.get(
-        `/api/hotel-booking/details/${bookingId}`
+        `/api/hotel-booking/details/${bookingId}`,
       );
       console.log("Booking Details Response:", response.data);
 
@@ -286,8 +397,8 @@ const HotelBookingList = () => {
       const response = await axiosInstance.patch(
         `/api/booking-confirmation/${bookingToUpdateStatus.bookingId}/confirmation-status`,
         {
-          confirmStatus: true
-        }
+          confirmStatus: true,
+        },
       );
 
       console.log("Confirmation Status Response:", response.data);
@@ -297,18 +408,18 @@ const HotelBookingList = () => {
         setShowConfirmStatusModal(false);
         setBookingToUpdateStatus(null);
         toast.success(
-          response.data.message || "Confirmation status updated successfully!"
+          response.data.message || "Confirmation status updated successfully!",
         );
       } else {
         toast.error(
-          response.data?.message || "Failed to update confirmation status."
+          response.data?.message || "Failed to update confirmation status.",
         );
       }
     } catch (error) {
       console.error("Error updating confirmation status:", error);
       toast.error(
         error.response?.data?.message ||
-          "Failed to update confirmation status. Please try again."
+          "Failed to update confirmation status. Please try again.",
       );
     } finally {
       setUpdatingConfirmationStatus(null);
@@ -322,7 +433,7 @@ const HotelBookingList = () => {
     try {
       setConfirmingBooking(true);
       const response = await axiosInstance.put(
-        `/api/hotel-booking/confirm/${bookingToConfirm.bookingId}`
+        `/api/hotel-booking/confirm/${bookingToConfirm.bookingId}`,
       );
 
       if (response.data && response.data.success) {
@@ -338,7 +449,7 @@ const HotelBookingList = () => {
       console.error("Error confirming booking:", error);
       alert(
         error.response?.data?.message ||
-          "Failed to confirm booking. Please try again."
+          "Failed to confirm booking. Please try again.",
       );
     } finally {
       setConfirmingBooking(false);
@@ -351,22 +462,21 @@ const HotelBookingList = () => {
       setLoadingVoucherDetails(true);
       setVoucherDetails(null);
       const response = await axiosInstance.get(
-        `/api/hotel-booking/confirmation-voucher/${bookingId}`
+        `/api/hotel-booking/confirmation-voucher/${bookingId}`,
       );
 
       if (response.data && response.data.success) {
         setVoucherDetails(response.data.voucherDetails);
-      
       } else {
         toast.error(
-          response.data?.message || "Failed to load voucher details."
+          response.data?.message || "Failed to load voucher details.",
         );
       }
     } catch (error) {
       console.error("Error fetching voucher details:", error);
       toast.error(
         error.response?.data?.message ||
-          "Failed to load voucher details. Please try again."
+          "Failed to load voucher details. Please try again.",
       );
     } finally {
       setLoadingVoucherDetails(false);
@@ -384,12 +494,14 @@ const HotelBookingList = () => {
         `/api/bookings/${selectedBooking.bookingId}/pdf`,
         {
           params: { type: type.toUpperCase() },
-        }
+        },
       );
 
       if (response.data && response.data.status === "SUCCESS") {
         setPdfUrl(response.data.pdfUrl);
-        toast.success(response.data.message || `${type} Generated successfully!`);
+        toast.success(
+          response.data.message || `${type} Generated successfully!`,
+        );
       } else {
         toast.error(response.data?.message || `Failed to generate ${type}.`);
       }
@@ -397,7 +509,7 @@ const HotelBookingList = () => {
       console.error(`Error generating ${type}:`, error);
       toast.error(
         error.response?.data?.message ||
-          `Failed to generate ${type}. Please try again.`
+          `Failed to generate ${type}. Please try again.`,
       );
     } finally {
       setGeneratingPdf(false);
@@ -408,11 +520,18 @@ const HotelBookingList = () => {
   const handleDownloadPdf = async (bookingId, type) => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get(`/api/bookings/${bookingId}/pdf`, {
-        params: { type: type.toUpperCase() },
-      });
+      const response = await axiosInstance.get(
+        `/api/bookings/${bookingId}/pdf`,
+        {
+          params: { type: type.toUpperCase() },
+        },
+      );
 
-      if (response.data && response.data.status === "SUCCESS" && response.data.pdfUrl) {
+      if (
+        response.data &&
+        response.data.status === "SUCCESS" &&
+        response.data.pdfUrl
+      ) {
         // Trigger browser download
         const link = document.createElement("a");
         link.href = response.data.pdfUrl;
@@ -423,7 +542,9 @@ const HotelBookingList = () => {
         document.body.removeChild(link);
         toast.success(`${type} PDF download started!`);
       } else {
-        toast.error(response.data?.message || `Failed to generate ${type} PDF.`);
+        toast.error(
+          response.data?.message || `Failed to generate ${type} PDF.`,
+        );
       }
     } catch (error) {
       console.error(`Error downloading ${type} PDF:`, error);
@@ -436,6 +557,18 @@ const HotelBookingList = () => {
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
+
+  useEffect(() => {
+    if (status === "onrequest") fetchOnRequestBookings();
+  }, [status, fetchOnRequestBookings]);
+
+  useEffect(() => {
+    if (status === "reconfirmed") fetchReconfirmedBookings();
+  }, [status, fetchReconfirmedBookings]);
+
+  useEffect(() => {
+    if (status === "invoiced") fetchInvoicedBookings();
+  }, [status, fetchInvoicedBookings]);
 
   // Get bookings based on selected status
   useEffect(() => {
@@ -461,6 +594,21 @@ const HotelBookingList = () => {
         paginationMeta.totalElements =
           apiData.cancelledBookings.totalElements || 0;
         break;
+      case "onrequest":
+        currentBookings = onRequestData.content || [];
+        paginationMeta.totalPages = onRequestData.totalPages || 0;
+        paginationMeta.totalElements = onRequestData.totalElements || 0;
+        break;
+      case "reconfirmed":
+        currentBookings = reconfirmedData.content || [];
+        paginationMeta.totalPages = reconfirmedData.totalPages || 0;
+        paginationMeta.totalElements = reconfirmedData.totalElements || 0;
+        break;
+      case "invoiced":
+        currentBookings = invoicedData.content || [];
+        paginationMeta.totalPages = invoicedData.totalPages || 0;
+        paginationMeta.totalElements = invoicedData.totalElements || 0;
+        break;
       default:
         currentBookings = [];
     }
@@ -474,7 +622,7 @@ const HotelBookingList = () => {
       const effectiveTotalPages = paginationMeta.totalPages || 1;
       const clampedPage = Math.min(
         currentState.page,
-        Math.max(effectiveTotalPages, 1)
+        Math.max(effectiveTotalPages, 1),
       );
       if (clampedPage === currentState.page) {
         return prev;
@@ -484,13 +632,16 @@ const HotelBookingList = () => {
         [status]: { ...currentState, page: clampedPage },
       };
     });
-  }, [status, apiData]);
+  }, [status, apiData, onRequestData, reconfirmedData, invoicedData]);
 
   const resetAllPages = useCallback(() => {
     setPagination((prev) => ({
       upcoming: { ...prev.upcoming, page: 1 },
       completed: { ...prev.completed, page: 1 },
       cancelled: { ...prev.cancelled, page: 1 },
+      onrequest: { ...prev.onrequest, page: 1 },
+      reconfirmed: { ...prev.reconfirmed, page: 1 },
+      invoiced: { ...prev.invoiced, page: 1 },
     }));
   }, []);
 
@@ -506,7 +657,7 @@ const HotelBookingList = () => {
         };
       });
     },
-    [status]
+    [status],
   );
 
   const handlePageSizeChange = useCallback(
@@ -521,7 +672,7 @@ const HotelBookingList = () => {
         };
       });
     },
-    [status]
+    [status],
   );
 
   const handleMonthChange = useCallback(
@@ -529,7 +680,7 @@ const HotelBookingList = () => {
       setSelectedMonth(value);
       resetAllPages();
     },
-    [resetAllPages]
+    [resetAllPages],
   );
 
   const handleYearChange = useCallback(
@@ -537,43 +688,43 @@ const HotelBookingList = () => {
       setSelectedYear(value);
       resetAllPages();
     },
-    [resetAllPages]
+    [resetAllPages],
   );
 
   // Filter bookings based on search term
- const filteredBookings = useMemo(() => {
-  if (!search.trim()) return bookings;
-  const query = search.trim().toLowerCase();
+  const filteredBookings = useMemo(() => {
+    if (!search.trim()) return bookings;
+    const query = search.trim().toLowerCase();
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
-  };
+    const formatDate = (dateString) => {
+      if (!dateString) return "";
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
 
-  const formatDeadlineDate = (dateString) => {
-    if (!dateString) return "";
-    return dateString.split("T")[0];
-  };
+    const formatDeadlineDate = (dateString) => {
+      if (!dateString) return "";
+      return dateString.split("T")[0];
+    };
 
-  return bookings.filter((booking) =>
-    [
-      booking.bookingCode,                          // GLBIN11
-      booking.agentName,                            // Agent Name
-      booking.primaryGuestName,                     // Customer Name
-      booking.referenceNumber,                      // Reference Code
-      booking.hotelName,                            // Hotel Name
-      formatDate(booking.bookingDate),              // 24/04/2025
-      formatDeadlineDate(booking.deadlineDate),     // 2025-11-04
-      booking.confirmationStatus,                   // Confirmed / Not Confirmed
-    ]
-      .map((val) => String(val ?? "").toLowerCase())
-      .some((val) => val.includes(query))
-  );
-}, [bookings, search]);
+    return bookings.filter((booking) =>
+      [
+        booking.bookingCode, // GLBIN11
+        booking.agentName, // Agent Name
+        booking.primaryGuestName, // Customer Name
+        booking.referenceNumber, // Reference Code
+        booking.hotelName, // Hotel Name
+        formatDate(booking.bookingDate), // 24/04/2025
+        formatDeadlineDate(booking.deadlineDate), // 2025-11-04
+        booking.confirmationStatus, // Confirmed / Not Confirmed
+      ]
+        .map((val) => String(val ?? "").toLowerCase())
+        .some((val) => val.includes(query)),
+    );
+  }, [bookings, search]);
 
   const currentPaginationState = pagination[status] || { page: 1, perPage: 10 };
   const currentPage = currentPaginationState.page;
@@ -604,6 +755,12 @@ const HotelBookingList = () => {
       case "pending":
       case "upcoming":
         return "warning";
+      case "reconfirmed":
+        return "success";
+      case "invoiced":
+        return "primary";
+      case "onrequest":
+        return "secondary";
       default:
         return "secondary";
     }
@@ -626,7 +783,7 @@ const HotelBookingList = () => {
 
       const response = await axiosInstance.delete(
         `/api/hotel-booking/${bookingToCancel.bookingId}/cancel`,
-        { params }
+        { params },
       );
 
       if (
@@ -669,13 +826,25 @@ const HotelBookingList = () => {
             }}
           >
             <div className="d-flex justify-content-between align-items-center mb-2">
-              <h3 className="fw-bold text-dark">Hotel Bookings</h3>
+              <h3
+                className="fw-bold text-dark"
+                style={{ position: "relative", top: "26px" }}
+              >
+                Hotel Bookings
+              </h3>
             </div>
 
             {/* Search Section */}
-            <Row className="mb-3">
-              <Col md={4} sm={6} xs={12}>
-                <InputGroup style={{ height: "40px" }}>
+            <Row className="mb-3 align-items-end">
+              <Col
+                md={4}
+                sm={6}
+                xs={12}
+                style={{ position: "relative", top: "-46px" }}
+              >
+                <InputGroup style={{ height: "46px" }}>
+                  {" "}
+                  {/* ✅ FIXED */}
                   <InputGroup.Text
                     style={{
                       backgroundColor: "#f8f9fa",
@@ -694,62 +863,13 @@ const HotelBookingList = () => {
                       borderLeft: "none",
                       fontSize: "0.85rem",
                       borderColor: "#dee2e6",
+                      height: "46px",
                     }}
                   />
                 </InputGroup>
               </Col>
-            </Row>
 
-            {/* Filters Section */}
-            <Row className="mb-3 g-3 align-items-stretch flex-column flex-lg-row">
-              <Col md={5} sm={12} className="order-1 order-lg-0">
-                <Card
-                  className="shadow-sm border-0 h-60 mt-1"
-                  style={{ borderRadius: "8px" }}
-                >
-                  <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Types
-                    </h6>
-                    <div className="d-flex flex-wrap gap-3">
-                      <Form.Check
-                        type="radio"
-                        id="upcoming"
-                        name="bookingType"
-                        label="Upcoming"
-                        checked={status === "upcoming"}
-                        onChange={() => setStatus("upcoming")}
-                        className="fw-semibold"
-                        style={{ fontSize: "0.82rem" }}
-                      />
-                      <Form.Check
-                        type="radio"
-                        id="completed"
-                        name="bookingType"
-                        label="Completed"
-                        checked={status === "completed"}
-                        onChange={() => setStatus("completed")}
-                        className="fw-semibold"
-                        style={{ fontSize: "0.82rem" }}
-                      />
-                      <Form.Check
-                        type="radio"
-                        id="cancelled"
-                        name="bookingType"
-                        label="Cancelled"
-                        checked={status === "cancelled"}
-                        onChange={() => setStatus("cancelled")}
-                        className="fw-semibold"
-                        style={{ fontSize: "0.82rem" }}
-                      />
-                    </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-              <Col md={4} sm={12} className="ms-lg-auto order-0 order-lg-1">
+              <Col md={4} sm={12} className="ms-lg-auto">
                 <Card
                   className="shadow-sm border-0 h-60"
                   style={{ borderRadius: "8px" }}
@@ -761,15 +881,15 @@ const HotelBookingList = () => {
                     >
                       Time Period
                     </h6>
+
                     <Row className="g-2">
                       <Col xs={6}>
                         <Form.Select
-                        
                           value={selectedMonth}
                           onChange={(e) => handleMonthChange(e.target.value)}
                           className="form-control"
                           size="sm"
-                          style={{ fontSize: "0.82rem" ,height:"46px"}}
+                          style={{ fontSize: "0.82rem", height: "46px" }}
                         >
                           <option value="">Month</option>
                           {months.map((month, index) => (
@@ -779,13 +899,14 @@ const HotelBookingList = () => {
                           ))}
                         </Form.Select>
                       </Col>
+
                       <Col xs={6}>
                         <Form.Select
                           value={selectedYear}
                           onChange={(e) => handleYearChange(e.target.value)}
                           className="form-control"
                           size="sm"
-                          style={{ fontSize: "0.82rem" ,height:"46px"}}
+                          style={{ fontSize: "0.82rem", height: "46px" }}
                         >
                           <option value="">Year</option>
                           {years.map((year) => (
@@ -796,6 +917,90 @@ const HotelBookingList = () => {
                         </Form.Select>
                       </Col>
                     </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+
+            {/* Filters Section */}
+            <Row
+              className="mb-2 g-1"
+              style={{ position: "relative", top: "-6px" }}
+            >
+              <Col xs={12}>
+                <Card
+                  className="shadow-sm border-0 w-100"
+                  style={{ borderRadius: "8px" }}
+                >
+                  <Card.Body className="p-3">
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                    >
+                      Booking Types
+                    </h6>
+
+                    <div className="row g-2">
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="Upcoming"
+                          name="bookingType"
+                          checked={status === "upcoming"}
+                          onChange={() => setStatus("upcoming")}
+                        />
+                      </div>
+
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="Completed"
+                          name="bookingType"
+                          checked={status === "completed"}
+                          onChange={() => setStatus("completed")}
+                        />
+                      </div>
+
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="Cancelled"
+                          name="bookingType"
+                          checked={status === "cancelled"}
+                          onChange={() => setStatus("cancelled")}
+                        />
+                      </div>
+
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="On Request"
+                          name="bookingType"
+                          checked={status === "onrequest"}
+                          onChange={() => setStatus("onrequest")}
+                        />
+                      </div>
+
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="Reconfirmed"
+                          name="bookingType"
+                          checked={status === "reconfirmed"}
+                          onChange={() => setStatus("reconfirmed")}
+                        />
+                      </div>
+
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="Invoiced"
+                          name="bookingType"
+                          checked={status === "invoiced"}
+                          onChange={() => setStatus("invoiced")}
+                        />
+                      </div>
+                    </div>
                   </Card.Body>
                 </Card>
               </Col>
@@ -1022,10 +1227,10 @@ const HotelBookingList = () => {
                               const date = new Date(dateString);
                               const day = String(date.getDate()).padStart(
                                 2,
-                                "0"
+                                "0",
                               );
                               const month = String(
-                                date.getMonth() + 1
+                                date.getMonth() + 1,
                               ).padStart(2, "0");
                               const year = date.getFullYear();
                               return `${day}/${month}/${year}`;
@@ -1180,12 +1385,14 @@ const HotelBookingList = () => {
                                 >
                                   {(() => {
                                     const normalizedStatus = String(
-                                      b.confirmationStatus || ""
+                                      b.confirmationStatus || "",
                                     )
                                       .replace(/\s+/g, "")
                                       .toLowerCase();
                                     const isConfirmed =
                                       normalizedStatus === "confirmed";
+                                    const isReconfirmed =
+                                      normalizedStatus === "reconfirmed";
                                     const isNotConfirmed =
                                       normalizedStatus === "notconfirmed";
                                     const showConfirmIcon = isNotConfirmed;
@@ -1209,10 +1416,31 @@ const HotelBookingList = () => {
                                       );
                                     }
 
+                                    if (isReconfirmed) {
+                                      return (
+                                        <span
+                                          style={{
+                                            color: "#06a301",
+                                            padding: "0.32rem 0.6rem",
+                                            fontSize: "0.82rem",
+                                            fontWeight: "600",
+                                            borderRadius: "0.375rem",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "0.35rem",
+                                          }}
+                                        >
+                                          ReConfirmed
+                                        </span>
+                                      );
+                                    }
+
                                     const label = isNotConfirmed
                                       ? "Not Confirmed"
                                       : b.confirmationStatus || "-";
-                                    const isUpdating = updatingConfirmationStatus === b.bookingId;
+                                    const isUpdating =
+                                      updatingConfirmationStatus ===
+                                      b.bookingId;
 
                                     return (
                                       <div
@@ -1227,7 +1455,9 @@ const HotelBookingList = () => {
                                             : "#6c757d",
                                           fontSize: "0.72rem",
                                           fontWeight: "600",
-                                          cursor: isUpdating ? "not-allowed" : "pointer",
+                                          cursor: isUpdating
+                                            ? "not-allowed"
+                                            : "pointer",
                                           transition: "all 0.2s ease",
                                           opacity: isUpdating ? 0.6 : 1,
                                         }}
@@ -1311,7 +1541,8 @@ const HotelBookingList = () => {
                                     )}
 
                                     {/* Message Icon (Voucher Modal) - SHOWN FOR UPCOMING & COMPLETED */}
-                                    {(status === "upcoming" || status === "completed") && (
+                                    {(status === "upcoming" ||
+                                      status === "completed") && (
                                       <FaEnvelope
                                         style={{
                                           fontSize: "14px",
@@ -1323,7 +1554,9 @@ const HotelBookingList = () => {
                                           setSelectedBooking(b);
                                           setShowVoucherModal(true);
                                           setSelectedVoucherType("Request");
-                                          await fetchVoucherDetails(b.bookingId);
+                                          await fetchVoucherDetails(
+                                            b.bookingId,
+                                          );
                                         }}
                                       />
                                     )}
@@ -1337,22 +1570,28 @@ const HotelBookingList = () => {
                                           cursor: "pointer",
                                         }}
                                         title="Download Completed PDF"
-                                        onClick={() => handleDownloadPdf(b.bookingId, "COMPLETED")}
+                                        onClick={() =>
+                                          handleDownloadPdf(
+                                            b.bookingId,
+                                            "COMPLETED",
+                                          )
+                                        }
                                       />
                                     )}
 
                                     {/* Delete/Cancel Icon - SHOWN FOR UPCOMING ONLY */}
-                                    {status === "upcoming" && isCancellationAllowed(b) && (
-                                      <FaTrash
-                                        style={{
-                                          fontSize: "14px",
-                                          color: "#dc3545",
-                                          cursor: "pointer",
-                                        }}
-                                        title="Delete"
-                                        onClick={() => handleDeleteBooking(b)}
-                                      />
-                                    )}
+                                    {status === "upcoming" &&
+                                      isCancellationAllowed(b) && (
+                                        <FaTrash
+                                          style={{
+                                            fontSize: "14px",
+                                            color: "#dc3545",
+                                            cursor: "pointer",
+                                          }}
+                                          title="Delete"
+                                          onClick={() => handleDeleteBooking(b)}
+                                        />
+                                      )}
                                   </div>
                                 </td>
                               </tr>
@@ -1427,7 +1666,7 @@ const HotelBookingList = () => {
                       />
                       {Array.from(
                         { length: safeTotalPages },
-                        (_, i) => i + 1
+                        (_, i) => i + 1,
                       ).map((pageNumber) => (
                         <Pagination.Item
                           key={pageNumber}
@@ -1514,7 +1753,9 @@ const HotelBookingList = () => {
                               // }
                               bg={
                                 bookingDetails.bookingHeader
-                                  ?.confirmationStatus === "Confirmed"
+                                  ?.confirmationStatus === "Confirmed" ||
+                                bookingDetails.bookingHeader
+                                  ?.confirmationStatus === "ReConfirmed"
                                   ? "success"
                                   : "danger"
                               }
@@ -1548,7 +1789,7 @@ const HotelBookingList = () => {
                             <div>
                               {bookingDetails.bookingHeader?.bookingDate
                                 ? new Date(
-                                    bookingDetails.bookingHeader.bookingDate
+                                    bookingDetails.bookingHeader.bookingDate,
                                   ).toLocaleDateString("en-US", {
                                     year: "numeric",
                                     month: "short",
@@ -1563,7 +1804,7 @@ const HotelBookingList = () => {
                                 </div>
                                 <div>
                                   {new Date(
-                                    bookingDetails.bookingHeader.deadlineDate
+                                    bookingDetails.bookingHeader.deadlineDate,
                                   ).toLocaleDateString("en-US", {
                                     year: "numeric",
                                     month: "short",
@@ -1660,13 +1901,13 @@ const HotelBookingList = () => {
                                 <span className="fw-semibold">
                                   {console.log(
                                     "bookingDetails:::###::",
-                                    bookingDetails
+                                    bookingDetails,
                                   )}
                                   {bookingDetails?.bookingDetails?.currency ||
                                     ""}{" "}
                                   {bookingDetails?.bookingDetails?.total
                                     ? bookingDetails.bookingDetails.total.toFixed(
-                                        2
+                                        2,
                                       )
                                     : "0.00"}
                                 </span>
@@ -1709,7 +1950,7 @@ const HotelBookingList = () => {
                                 {bookingDetails.bookingDetails?.currency ||
                                   "AED"}{" "}
                                 {bookingDetails.bookingDetails?.total?.toFixed(
-                                  2
+                                  2,
                                 ) || "0.00"}
                               </span>
                             </div>
@@ -1932,7 +2173,7 @@ const HotelBookingList = () => {
                                         {room.rate?.toFixed(2) || "0.00"}
                                       </td>
                                     </tr>
-                                  )
+                                  ),
                                 )}
                               </tbody>
                             </Table>
@@ -2237,8 +2478,8 @@ const HotelBookingList = () => {
                                   selectedVoucherType === "Request"
                                     ? 8
                                     : selectedVoucherType === "Confirmation"
-                                    ? 7
-                                    : 7
+                                      ? 7
+                                      : 7
                                 }
                                 style={{
                                   padding: "2rem",
@@ -2377,21 +2618,21 @@ const HotelBookingList = () => {
                               >
                                 {voucherDetails?.checkIn
                                   ? new Date(
-                                      voucherDetails.checkIn
+                                      voucherDetails.checkIn,
                                     ).toLocaleDateString("en-GB", {
                                       day: "2-digit",
                                       month: "short",
                                       year: "numeric",
                                     })
                                   : selectedBooking?.checkInDate
-                                  ? new Date(
-                                      selectedBooking.checkInDate
-                                    ).toLocaleDateString("en-GB", {
-                                      day: "2-digit",
-                                      month: "short",
-                                      year: "numeric",
-                                    })
-                                  : "-"}
+                                    ? new Date(
+                                        selectedBooking.checkInDate,
+                                      ).toLocaleDateString("en-GB", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      })
+                                    : "-"}
                               </td>
                               <td
                                 style={{
@@ -2401,21 +2642,21 @@ const HotelBookingList = () => {
                               >
                                 {voucherDetails?.checkout
                                   ? new Date(
-                                      voucherDetails.checkout
+                                      voucherDetails.checkout,
                                     ).toLocaleDateString("en-GB", {
                                       day: "2-digit",
                                       month: "short",
                                       year: "numeric",
                                     })
                                   : selectedBooking?.checkOutDate
-                                  ? new Date(
-                                      selectedBooking.checkOutDate
-                                    ).toLocaleDateString("en-GB", {
-                                      day: "2-digit",
-                                      month: "short",
-                                      year: "numeric",
-                                    })
-                                  : "-"}
+                                    ? new Date(
+                                        selectedBooking.checkOutDate,
+                                      ).toLocaleDateString("en-GB", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      })
+                                    : "-"}
                               </td>
                               <td
                                 style={{
@@ -2438,13 +2679,20 @@ const HotelBookingList = () => {
                                   title="Send"
                                   onClick={() => {
                                     // Check if booking is confirmed for Confirmation and Voucher
-                                    const isConfirmed = voucherDetails?.confirmationStatus === "Confirmed";
-                                    
-                                    if (selectedVoucherType !== "Request" && !isConfirmed) {
-                                      toast.error(`Confirm the booking then only ${selectedVoucherType} can be generated`);
+                                    const isConfirmed =
+                                      voucherDetails?.confirmationStatus ===
+                                      "Confirmed";
+
+                                    if (
+                                      selectedVoucherType !== "Request" &&
+                                      !isConfirmed
+                                    ) {
+                                      toast.error(
+                                        `Confirm the booking then only ${selectedVoucherType} can be generated`,
+                                      );
                                       return;
                                     }
-                                    
+
                                     handleGeneratePdf(selectedVoucherType);
                                   }}
                                   disabled={generatingPdf}
@@ -2616,7 +2864,8 @@ const HotelBookingList = () => {
                       </div>
                       {bookingToUpdateStatus.hotelName && (
                         <div>
-                          <strong>Hotel:</strong> {bookingToUpdateStatus.hotelName}
+                          <strong>Hotel:</strong>{" "}
+                          {bookingToUpdateStatus.hotelName}
                         </div>
                       )}
                     </div>

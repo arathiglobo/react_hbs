@@ -66,6 +66,7 @@ const RoomList = () => {
   const [loadingRate, setLoadingRate] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
   const [policyList, setPolicyList] = useState(null);
+  const [viewMode, setViewMode] = useState("grid");
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
   // console.log("currentActiveRole::", activeUserRole);
@@ -317,9 +318,10 @@ const RoomList = () => {
       case "On Request":
         return (
           <small>
-            {" "}
             This room can be booked{" "}
-            <span className="text-dark px-2 py-0 rounded">On Request </span>
+            <Badge bg="warning" text="dark" className="px-2 py-1 ms-1 fw-bold border border-warning shadow-sm">
+              On Request
+            </Badge>
           </small>
         );
       case "Available":
@@ -661,7 +663,27 @@ const RoomList = () => {
 
             {/* Room Categories Accordion */}
             <div className="room-categories-section">
-              <h4 className="mb-4">Available Room Categories</h4>
+              <div className="d-flex justify-content-between align-items-center mb-4">
+                <h4 className="mb-0">Available Room Categories</h4>
+                <div className="btn-group shadow-sm gap-1" role="group">
+                  <Button
+                    variant={viewMode === "grid" ? "primary" : "outline-primary"}
+                    onClick={() => setViewMode("grid")}
+                    className="d-flex align-items-center gap-2"
+                    size="sm"
+                  >
+                    <span className="fs-5" style={{ lineHeight: 1 }}>⊞</span> 
+                  </Button>
+                  <Button
+                    variant={viewMode === "list" ? "primary" : "outline-primary"}
+                    onClick={() => setViewMode("list")}
+                    className="d-flex align-items-center gap-2"
+                    size="sm"
+                  >
+                    <span className="fs-5" style={{ lineHeight: 1 }}>☰</span> 
+                  </Button>
+                </div>
+              </div>
 
               <Accordion
                 activeKey={activeAccordion}
@@ -723,83 +745,136 @@ const RoomList = () => {
                       <Accordion.Body className="room-rates-section">
                         <Row>
                           {category.availableRates.map((rate, rateIndex) => (
-                            <Col key={rateIndex} lg={6} xl={4} className="mb-3">
-                              <Card className="rate-card h-100">
-                                <Card.Body className="p-3 d-flex flex-column gap-2">
-                                  {/* Header */}
-                                  <div className="rate-header d-flex justify-content-between align-items-start">
-                                    <div>
-                                      <div className="d-flex align-items-center gap-2">
-                                        {getMealPlanIcon(rate.mealPlan)}
-                                        <span className="fw-semibold small">
-                                          {rate.mealPlan}
-                                        </span>
+                            <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-2">
+                              <Card className="rate-card h-100 shadow-sm">
+                                {viewMode === "grid" ? (
+                                  <Card.Body className="p-3 pb-2 d-flex flex-column gap-2">
+                                    {/* Header */}
+                                    <div className="rate-header d-flex justify-content-between align-items-start">
+                                      <div>
+                                        <div className="d-flex align-items-center gap-2">
+                                          {getMealPlanIcon(rate.mealPlan)}
+                                          <span className="fw-semibold small">
+                                            {rate.mealPlan}
+                                          </span>
+                                        </div>
+
+                                        <div className="mt-1">
+                                          {getRoomStatusBadge(rate.roomStatus)}
+                                        </div>
                                       </div>
 
-                                      <div className="mt-1">
-                                        {getRoomStatusBadge(rate.roomStatus)}
+                                      {getRefundStatusBadgeInRoomList(
+                                        rate.nonRefundable,
+                                      )}
+                                    </div>
+
+                                    {/* Pricing */}
+                                    <div className="rate-pricing text-center py-2">
+                                      <div className="current-price">
+                                        {formatPrice(rate.roomRateBasedOnRoomCount)}
+                                      </div>
+
+                                      {/* {rate.recommendedRetailPrice >
+                                        rate.totalRate && (
+                                        <div className="original-price text-decoration-line-through">
+                                          {formatPrice(
+                                            rate.recommendedRetailPrice,
+                                          )}
+                                        </div>
+                                      )} */}
+
+                                      <div className="indivial-price-per-room-noofroom">
+                                        <div className="text-muted small">
+                                          {formatPrice(rate.totalRate || 0)} ×{" "}
+                                          {rate.numberOfRooms || 1} rooms
+                                        </div>
+                                      </div>
+                                      <div className="price-per-night small text-muted">
+                                        per night
                                       </div>
                                     </div>
 
-                                    {getRefundStatusBadgeInRoomList(
-                                      rate.nonRefundable,
-                                    )}
-                                  </div>
+                                    {/* Features */}
+                                    <div className="rate-features small">
+                                      <div className="feature-item">
+                                        <FaInfoCircle className="me-2 text-muted" />
+                                        {rate.contractLabel}
+                                      </div>
 
-                                  {/* Pricing */}
-                                  <div className="rate-pricing text-center py-2">
-                                    <div className="current-price">
-                                      {formatPrice(rate.roomRateBasedOnRoomCount)}
+                                      {rate.cancellationPolicies?.length > 0 && (
+                                        <div className="feature-item">
+                                          <FaShieldAlt className="me-2 text-muted" />
+                                          {
+                                            rate.cancellationPolicies[0]
+                                              .policyText
+                                          }
+                                        </div>
+                                      )}
                                     </div>
 
-                                    {/* {rate.recommendedRetailPrice >
-                                      rate.totalRate && (
-                                      <div className="original-price text-decoration-line-through">
-                                        {formatPrice(
-                                          rate.recommendedRetailPrice,
+                                    {/* Button */}
+                                    <Button
+                                      variant="primary"
+                                      className="w-100 book-now-btn mt-1 mb-1"
+                                      onClick={() => handleBooking(rate)}
+                                    >
+                                      <FaMoneyBillWave className="me-2" />
+                                      View Details / Select
+                                    </Button>
+                                  </Card.Body>
+                                ) : (
+                                  <Card.Body className="p-3 py-2 d-flex flex-row justify-content-between align-items-center gap-3">
+                                    <div className="d-flex flex-column flex-grow-1">
+                                      <div className="d-flex align-items-center gap-3 mb-2">
+                                        <div className="d-flex align-items-center gap-2">
+                                          {getMealPlanIcon(rate.mealPlan)}
+                                          <span className="fw-semibold">{rate.mealPlan}</span>
+                                        </div>
+                                        {getRefundStatusBadgeInRoomList(rate.nonRefundable)}
+                                        <div className="d-flex align-items-center mb-0">
+                                          {getRoomStatusBadge(rate.roomStatus)}
+                                        </div>
+                                      </div>
+                                      <div className="rate-features small text-muted d-flex gap-4">
+                                        <div className="feature-item d-flex align-items-center">
+                                          <FaInfoCircle className="me-2" />
+                                          {rate.contractLabel}
+                                        </div>
+                                        {rate.cancellationPolicies?.length > 0 && (
+                                          <div className="feature-item d-flex align-items-center text-truncate" style={{ maxWidth: '350px' }}>
+                                            <FaShieldAlt className="me-2" />
+                                            {rate.cancellationPolicies[0].policyText}
+                                          </div>
                                         )}
                                       </div>
-                                    )} */}
-
-                                    <div className="indivial-price-per-room-noofroom">
+                                    </div>
+                                    
+                                    <div className="text-end px-4 border-start border-end" style={{ minWidth: '220px' }}>
+                                      <div className="fs-5 fw-bold text-primary">
+                                        {formatPrice(rate.roomRateBasedOnRoomCount)}
+                                      </div>
                                       <div className="text-muted small">
-                                        {formatPrice(rate.totalRate || 0)} ×{" "}
-                                        {rate.numberOfRooms || 1} rooms
+                                        {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
+                                      </div>
+                                      <div className="small text-muted">
+                                        per night
                                       </div>
                                     </div>
-                                    <div className="price-per-night small text-muted">
-                                      per night
+
+                                    <div className="ps-2">
+                                      <Button
+                                        variant="primary"
+                                        className="book-now-btn px-4 py-2"
+                                        onClick={() => handleBooking(rate)}
+                                        style={{ whiteSpace: 'nowrap' }}
+                                      >
+                                        <FaMoneyBillWave className="me-2" />
+                                        View Details
+                                      </Button>
                                     </div>
-                                  </div>
-
-                                  {/* Features */}
-                                  <div className="rate-features small">
-                                    <div className="feature-item">
-                                      <FaInfoCircle className="me-2 text-muted" />
-                                      {rate.contractLabel}
-                                    </div>
-
-                                    {rate.cancellationPolicies?.length > 0 && (
-                                      <div className="feature-item">
-                                        <FaShieldAlt className="me-2 text-muted" />
-                                        {
-                                          rate.cancellationPolicies[0]
-                                            .policyText
-                                        }
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Button */}
-                                  <Button
-                                    variant="primary"
-                                    className="w-100 book-now-btn mt-2"
-                                    onClick={() => handleBooking(rate)}
-                                  >
-                                    <FaMoneyBillWave className="me-2" />
-                                    View Details / Select
-                                  </Button>
-                                </Card.Body>
+                                  </Card.Body>
+                                )}
                               </Card>
                             </Col>
                           ))}
