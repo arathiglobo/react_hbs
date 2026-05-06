@@ -193,6 +193,12 @@ export default function EditLongStayContract() {
             ? null
             : Number(formData.maxBookingDays),
         rooms: formData.rooms.map((r) => ({
+          // Preserve longStayRoomId for existing rows so the backend updates them
+          // in place instead of treating them as removed-and-recreated. Omitted for
+          // brand-new rows that don't have a server-assigned id yet.
+          ...(r.longStayRoomId != null
+            ? { longStayRoomId: Number(r.longStayRoomId) }
+            : {}),
           hotelRoomCategoryId: Number(r.hotelRoomCategoryId),
           hotelRoomTypeId: Number(r.hotelRoomTypeId),
           occupancyTypeId: Number(r.occupancyTypeId),

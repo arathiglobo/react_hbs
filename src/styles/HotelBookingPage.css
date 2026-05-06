@@ -282,4 +282,26 @@
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
 }
 
+.special-request-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem 1.5rem;
+}
+
+.special-request-check .form-check-label {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 991px) {
+  .special-request-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575px) {
+  .special-request-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 

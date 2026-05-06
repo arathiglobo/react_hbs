@@ -9,7 +9,9 @@ import {
   Spinner,
   Badge,
   Table,
+  Modal,
 } from "react-bootstrap";
+import { FaHotel } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
@@ -30,6 +32,8 @@ export default function LongStayBookingPage() {
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("longStayBookingDraft");
@@ -66,11 +70,42 @@ export default function LongStayBookingPage() {
     fetchQuote();
   }, [draft]);
 
-  const handleBook = async () => {
-    if (!guest.name.trim()) return toast.error("Guest name is required");
-    if (!guest.email.trim()) return toast.error("Guest email is required");
-    if (!guest.phone.trim()) return toast.error("Guest phone is required");
+  const validateGuest = () => {
+    const e = {};
+    if (!guest.name.trim()) e.name = "Guest name is required";
+    if (!guest.email.trim()) {
+      e.email = "Guest email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email.trim())) {
+      e.email = "Enter a valid email address";
+    }
+    if (!guest.phone.trim()) {
+      e.phone = "Guest phone is required";
+    } else if (!/^[+0-9\s\-()]{7,}$/.test(guest.phone.trim())) {
+      e.phone = "Enter a valid phone number";
+    }
+    if (guest.nationality && guest.nationality.length !== 2) {
+      e.nationality = "Use 2-letter ISO code (e.g. IN, AE)";
+    }
+    return e;
+  };
 
+  // Step 1: validate, then open the order-summary modal
+  const handleBook = () => {
+    const e = validateGuest();
+    setErrors(e);
+    if (Object.keys(e).length > 0) {
+      toast.error("Please fix the highlighted fields");
+      return;
+    }
+    if (!quote || quoteError) {
+      toast.error("Price quote not ready — please wait or retry");
+      return;
+    }
+    setShowConfirmModal(true);
+  };
+
+  // Step 2: actually create the booking after the user confirms in the modal
+  const confirmBooking = async () => {
     try {
       setSubmitting(true);
       const payload = {
@@ -89,6 +124,7 @@ export default function LongStayBookingPage() {
       const res = await axiosInstance.post("/api/longStayBooking/create", payload);
       toast.success(`Booking confirmed: ${res.data.bookingCode}`);
       sessionStorage.removeItem("longStayBookingDraft");
+      setShowConfirmModal(false);
       navigate("/booking-details/long-stay-booking-list");
     } catch (err) {
       toast.error(`Booking failed: ${err.response?.data?.message || err.message}`);
@@ -102,10 +138,10 @@ export default function LongStayBookingPage() {
   const fmt = (n) => (n == null ? "-" : Number(n).toFixed(2));
 
   return (
-    <div className="d-flex">
-      <Sidebar />
-      <div className="flex-grow-1">
-        <Topbar />
+    <div className="min-vh-100 bg-light d-flex flex-column">
+      <Topbar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
         <div className="p-4">
           <h4 className="mb-3">Long Stay Booking — Confirmation</h4>
 
@@ -124,13 +160,46 @@ export default function LongStayBookingPage() {
                   </Badge>
                 </p>
                 <p className="mb-1">
-                  <strong>Room ID:</strong> #{draft.room.longStayRoomId} (Occ {draft.room.occupancyTypeId})
+                  <strong>Room Category:</strong>{" "}
+                  {draft.room.roomCategoryName ||
+                    `Category #${draft.room.hotelRoomCategoryId}`}
+                </p>
+                <p className="mb-1">
+                  <strong>Meal Plan:</strong>{" "}
+                  {draft.room.roomTypeName ||
+                    (draft.room.meal ? "Meal included" : "Room only")}
+                  {draft.room.meal && (
+                    <Badge bg="success" className="ms-2">
+                      Meal included
+                    </Badge>
+                  )}
+                </p>
+                <p className="mb-1">
+                  <strong>Occupancy:</strong>{" "}
+                  {draft.room.occupancyTypeName ||
+                    `Occ-${draft.room.occupancyTypeId}`}
+                  {draft.room.extraBed && (
+                    <Badge bg="info" className="ms-2">
+                      Extra bed
+                    </Badge>
+                  )}
+                </p>
+                <p className="mb-1">
+                  <strong>Refund:</strong>{" "}
+                  {draft.room.refundable ? (
+                    <Badge bg="success">Flexible</Badge>
+                  ) : (
+                    <Badge bg="danger">Non-Refundable</Badge>
+                  )}
                 </p>
                 <p className="mb-1">
                   <strong>Check-in:</strong> {draft.checkIn}
                 </p>
                 <p className="mb-1">
                   <strong>Check-out:</strong> {draft.checkOut}
+                </p>
+                <p className="mb-0 text-muted small">
+                  Room ID #{draft.room.longStayRoomId}
                 </p>
               </Card>
 
@@ -142,8 +211,15 @@ export default function LongStayBookingPage() {
                       <Form.Label>Name *</Form.Label>
                       <Form.Control
                         value={guest.name}
-                        onChange={(e) => setGuest({ ...guest, name: e.target.value })}
+                        isInvalid={!!errors.name}
+                        onChange={(e) => {
+                          setGuest({ ...guest, name: e.target.value });
+                          if (errors.name) setErrors({ ...errors, name: undefined });
+                        }}
                       />
+                      <Form.Control.Feedback type="invalid">
+                        {errors.name}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={6}>
@@ -152,8 +228,15 @@ export default function LongStayBookingPage() {
                       <Form.Control
                         type="email"
                         value={guest.email}
-                        onChange={(e) => setGuest({ ...guest, email: e.target.value })}
+                        isInvalid={!!errors.email}
+                        onChange={(e) => {
+                          setGuest({ ...guest, email: e.target.value });
+                          if (errors.email) setErrors({ ...errors, email: undefined });
+                        }}
                       />
+                      <Form.Control.Feedback type="invalid">
+                        {errors.email}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={6}>
@@ -161,8 +244,15 @@ export default function LongStayBookingPage() {
                       <Form.Label>Phone *</Form.Label>
                       <Form.Control
                         value={guest.phone}
-                        onChange={(e) => setGuest({ ...guest, phone: e.target.value })}
+                        isInvalid={!!errors.phone}
+                        onChange={(e) => {
+                          setGuest({ ...guest, phone: e.target.value });
+                          if (errors.phone) setErrors({ ...errors, phone: undefined });
+                        }}
                       />
+                      <Form.Control.Feedback type="invalid">
+                        {errors.phone}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={6}>
@@ -171,13 +261,19 @@ export default function LongStayBookingPage() {
                       <Form.Control
                         maxLength={2}
                         value={guest.nationality}
-                        onChange={(e) =>
+                        isInvalid={!!errors.nationality}
+                        onChange={(e) => {
                           setGuest({
                             ...guest,
                             nationality: e.target.value.toUpperCase(),
-                          })
-                        }
+                          });
+                          if (errors.nationality)
+                            setErrors({ ...errors, nationality: undefined });
+                        }}
                       />
+                      <Form.Control.Feedback type="invalid">
+                        {errors.nationality}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
                   <Col md={12}>
@@ -349,13 +445,159 @@ export default function LongStayBookingPage() {
                   onClick={handleBook}
                   disabled={!quote || !!quoteError || submitting}
                 >
-                  {submitting ? <Spinner size="sm" animation="border" /> : "Confirm Booking"}
+                  Confirm Booking
                 </Button>
               </div>
             </Col>
           </Row>
         </div>
       </div>
+
+      {/* Order Summary / Confirmation Modal */}
+      <Modal
+        show={showConfirmModal}
+        onHide={() => !submitting && setShowConfirmModal(false)}
+        centered
+        backdrop="static"
+        size="md"
+      >
+        <Modal.Header
+          closeButton={!submitting}
+          className="bg-primary text-white py-2"
+          style={{ borderBottom: "none" }}
+        >
+          <Modal.Title className="fw-semibold d-flex align-items-center">
+            <FaHotel className="me-2" /> Confirm Your Long Stay Booking
+          </Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body className="px-4 py-3 bg-light">
+          {draft && (
+            <div className="border rounded-3 bg-white shadow-sm p-3">
+              <div className="mb-3">
+                <h5 className="fw-bold text-primary mb-1">{draft.hotelName}</h5>
+                <p className="text-muted mb-0 small">
+                  Contract <strong>{draft.contract.rateCode}</strong>
+                  {" · "}
+                  {draft.contract.additionalCostType === "WEEKLY"
+                    ? "Weekly billing"
+                    : "Day-wise billing"}
+                </p>
+              </div>
+
+              <hr />
+
+              <Row className="gy-2">
+                <Col xs={6}>
+                  <p className="mb-1">
+                    <strong>Check-In:</strong>
+                    <br />
+                    <span className="text-dark">{draft.checkIn}</span>
+                  </p>
+                </Col>
+                <Col xs={6}>
+                  <p className="mb-1">
+                    <strong>Check-Out:</strong>
+                    <br />
+                    <span className="text-dark">{draft.checkOut}</span>
+                  </p>
+                </Col>
+                <Col xs={6}>
+                  <p className="mb-1">
+                    <strong>Nights:</strong>{" "}
+                    {quote?.totalNights ?? "—"}
+                  </p>
+                </Col>
+                <Col xs={6}>
+                  <p className="mb-1">
+                    <strong>Occupancy:</strong>{" "}
+                    {draft.room.occupancyTypeName ||
+                      `Occ-${draft.room.occupancyTypeId}`}
+                  </p>
+                </Col>
+                <Col xs={12}>
+                  <p className="mb-1">
+                    <strong>Room:</strong>{" "}
+                    {draft.room.roomCategoryName ||
+                      `Category #${draft.room.hotelRoomCategoryId}`}
+                    {" — "}
+                    {draft.room.roomTypeName ||
+                      (draft.room.meal ? "Meal included" : "Room only")}
+                  </p>
+                </Col>
+                <Col xs={12}>
+                  <p className="mb-1">
+                    <strong>Primary Guest:</strong> {guest.name}
+                  </p>
+                  <p className="mb-1 small text-muted">
+                    {guest.email} · {guest.phone}
+                    {guest.nationality ? ` · ${guest.nationality}` : ""}
+                  </p>
+                </Col>
+                <Col xs={12}>
+                  <p className="mb-1">
+                    <strong>Refund:</strong>{" "}
+                    {draft.room.refundable ? (
+                      <Badge bg="success">Flexible</Badge>
+                    ) : (
+                      <Badge bg="danger">Non-Refundable</Badge>
+                    )}
+                  </p>
+                </Col>
+
+                <Col xs={12}>
+                  <div className="p-3 rounded text-white text-center mt-2"
+                    style={{ background: "linear-gradient(135deg,#198754,#157347)" }}
+                  >
+                    <h6 className="mb-0 fw-bold">Total Price</h6>
+                    <h4 className="mb-0">
+                      {quote?.totalAmount != null
+                        ? Number(quote.totalAmount).toFixed(2)
+                        : "—"}
+                    </h4>
+                    <small>Final amount as quoted</small>
+                  </div>
+                </Col>
+              </Row>
+
+              <div className="mt-3 text-center">
+                <p className="text-muted small mb-0">
+                  Please review the booking details carefully before confirming.
+                </p>
+              </div>
+            </div>
+          )}
+        </Modal.Body>
+
+        <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowConfirmModal(false)}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={confirmBooking}
+            disabled={submitting}
+            className="px-4 fw-semibold"
+          >
+            {submitting ? (
+              <>
+                <Spinner
+                  size="sm"
+                  animation="border"
+                  className="me-2"
+                />
+                Processing…
+              </>
+            ) : (
+              "Confirm"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

@@ -25,6 +25,20 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 
+const SPECIAL_REQUEST_OPTIONS = [
+  "Early Check-In",
+  "Non-Smoking Rooms",
+  "High Floor",
+  "VIP Client",
+  "Late Check-In",
+  "Inter-connecting rooms",
+  "Low Floor",
+  "Room with Bathtub",
+  "Late check-Out",
+  "Honeymooners / Anniversary",
+  "Smoking Room",
+];
+
 const HotelBookingPage = () => {
   const navigate = useNavigate();
 
@@ -51,7 +65,7 @@ const HotelBookingPage = () => {
   const [employees, setEmployees] = useState([]);
   const [tourismDirhams, setTourismDirhams] = useState("0");
   const [remarks, setRemarks] = useState("");
-  const [specialRequests, setSpecialRequests] = useState("");
+  const [specialRequests, setSpecialRequests] = useState([]);
   const [bookingConfirmation, setBookingConfirmation] =
     useState("Book & Voucher");
 
@@ -390,7 +404,7 @@ const HotelBookingPage = () => {
 
         // ✅ Additional remarks
         remarks: remarks || "",
-        specialRequests: specialRequests || "",
+        specialRequests: specialRequests,
         tourismDirhams: parseFloat(tourismDirhams) || 0,
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
 
@@ -490,9 +504,23 @@ const HotelBookingPage = () => {
       currency: "AED",
     }).format(price);
 
+  const handleSpecialRequestToggle = (request) => {
+    setSpecialRequests((prevRequests) =>
+      prevRequests.includes(request)
+        ? prevRequests.filter((item) => item !== request)
+        : [...prevRequests, request],
+    );
+  };
+
   if (!bookingData) return <div>Loading booking data...</div>;
 
   const { hotelStaticData, payload, selectedRate } = bookingData;
+  const tourismDirhamsAmount = parseFloat(tourismDirhams) || 0;
+  const sellingPriceWithTd =
+    (selectedRate?.roomRateBasedOnRoomCount || 0) + tourismDirhamsAmount;
+  const totalPriceWithTd =
+    (selectedRate?.roomRateBasedOnRoomCount_WithoutMarkup || 0) +
+    tourismDirhamsAmount;
   console.log("bookingData:::", bookingData);
 
   return (
@@ -596,7 +624,7 @@ const HotelBookingPage = () => {
                         <div className="d-flex justify-content-between align-items-center">
                           <h5 className="mb-0 text-muted">Selling Price</h5>
                           <h4 className="mb-0 text-success fw-bold">
-                            {formatPrice(selectedRate.roomRateBasedOnRoomCount)}
+                            {formatPrice(sellingPriceWithTd)}
                           </h4>
                         </div>
                       </div>
@@ -605,11 +633,7 @@ const HotelBookingPage = () => {
                     <div className="pricing-section p-3 bg-gradient-success text-white rounded shadow-sm">
                       <div className="d-flex justify-content-between align-items-center">
                         <h5 className="mb-0">Total Price</h5>
-                        <h4 className="mb-0 fw-bold">
-                          {formatPrice(
-                            selectedRate.roomRateBasedOnRoomCount_WithoutMarkup,
-                          )}
-                        </h4>
+                        <h4 className="mb-0 fw-bold">{formatPrice(totalPriceWithTd)}</h4>
                       </div>
                     </div>
                   </Card.Body>
@@ -978,7 +1002,7 @@ const HotelBookingPage = () => {
               <Card className="p-4 mb-2 shadow-sm border-0">
                 <h5 className="mb-3 fw-bold">Remarks & Special Requests</h5>
                 <Row className="g-3">
-                  <Col md={12}>
+                  <Col md={6}>
                     <Form.Group className="mb-3">
                       <Form.Label>Tourism Dirhams (AED)</Form.Label>
                       <Form.Control
@@ -1003,16 +1027,22 @@ const HotelBookingPage = () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={6}>
+                  <Col md={12}>
                     <Form.Group className="mb-3">
                       <Form.Label>Special Request</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={3}
-                        placeholder="Any special requests..."
-                        value={specialRequests}
-                        onChange={(e) => setSpecialRequests(e.target.value)}
-                      />
+                      <div className="special-request-grid">
+                        {SPECIAL_REQUEST_OPTIONS.map((request) => (
+                          <Form.Check
+                            key={request}
+                            type="checkbox"
+                            id={`special-request-${request.replace(/[^a-zA-Z0-9]/g, "-")}`}
+                            label={request}
+                            checked={specialRequests.includes(request)}
+                            onChange={() => handleSpecialRequestToggle(request)}
+                            className="mb-2 special-request-check"
+                          />
+                        ))}
+                      </div>
                     </Form.Group>
                   </Col>
                   {selectedRate?.roomStatus !== "On Request" && (
@@ -1086,6 +1116,9 @@ const HotelBookingPage = () => {
               </Card>
 
               <div className="d-flex justify-content-end gap-2 mt-4">
+                <div className="d-flex align-items-center me-2 fw-bold text-danger">
+                  New Total: {formatPrice(sellingPriceWithTd)}
+                </div>
                 <Button variant="secondary" onClick={() => navigate(-1)}>
                   Back
                 </Button>
@@ -1191,9 +1224,7 @@ const HotelBookingPage = () => {
                                   Selling Price
                                 </h6>
                                 <h5 className="mb-0 text-success fw-bold">
-                                  {formatPrice(
-                                    selectedRate.roomRateBasedOnRoomCount,
-                                  )}
+                                  {formatPrice(sellingPriceWithTd)}
                                 </h5>
                               </div>
                             </div>
@@ -1202,9 +1233,7 @@ const HotelBookingPage = () => {
                           <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
                             <h6 className="mb-0 fw-bold">Total Price</h6>
                             <h4 className="mb-0">
-                              {formatPrice(
-                                selectedRate.roomRateBasedOnRoomCount,
-                              )}{" "}
+                              {formatPrice(totalPriceWithTd)}{" "}
                               for {pendingPayload.rooms.length}{" "}
                               {pendingPayload.rooms.length > 1
                                 ? "rooms"
@@ -1213,6 +1242,23 @@ const HotelBookingPage = () => {
                           </div>
                         </Col>
                       </Row>
+
+                      <div className="mt-3 p-3 bg-white border rounded">
+                        <h6 className="fw-bold mb-2">Rate Split</h6>
+                        <div className="d-flex justify-content-between">
+                          <span>Selling Price</span>
+                          <span>{formatPrice(selectedRate.roomRateBasedOnRoomCount || 0)}</span>
+                        </div>
+                        <div className="d-flex justify-content-between">
+                          <span>Tourism Dirhams</span>
+                          <span>{formatPrice(tourismDirhamsAmount)}</span>
+                        </div>
+                        <hr className="my-2" />
+                        <div className="d-flex justify-content-between fw-bold text-danger">
+                          <span>Total (Selling + TD)</span>
+                          <span>{formatPrice(sellingPriceWithTd)}</span>
+                        </div>
+                      </div>
 
                       <div className="mt-4 text-center">
                         <p className="text-muted small mb-0">

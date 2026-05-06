@@ -59,10 +59,10 @@ export default function LongStayBookingList() {
   };
 
   return (
-    <div className="d-flex">
-      <Sidebar />
-      <div className="flex-grow-1">
-        <Topbar />
+     <div className="min-vh-100 bg-light d-flex flex-column">
+          <Topbar />
+          <div className="d-flex flex-grow-1">
+            <Sidebar />
         <div className="p-4">
           <h4 className="mb-3">Long Stay Bookings</h4>
           <Card>

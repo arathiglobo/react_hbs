@@ -94,9 +94,21 @@ const HotelBookingList = () => {
     completedBookings: { content: [] },
     cancelledBookings: { content: [] },
   });
-  const [onRequestData, setOnRequestData] = useState({ content: [], totalElements: 0, totalPages: 0 });
-  const [reconfirmedData, setReconfirmedData] = useState({ content: [], totalElements: 0, totalPages: 0 });
-  const [invoicedData, setInvoicedData] = useState({ content: [], totalElements: 0, totalPages: 0 });
+  const [onRequestData, setOnRequestData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 0,
+  });
+  const [reconfirmedData, setReconfirmedData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 0,
+  });
+  const [invoicedData, setInvoicedData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 0,
+  });
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [bookingDetails, setBookingDetails] = useState(null);
   const [loadingBookingId, setLoadingBookingId] = useState(null);
@@ -280,7 +292,11 @@ const HotelBookingList = () => {
   // Fetch On Request bookings from dedicated endpoint
   const fetchOnRequestBookings = useCallback(async () => {
     if (!role) return;
-    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) return;
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    )
+      return;
     try {
       setLoading(true);
       const params = {
@@ -291,9 +307,18 @@ const HotelBookingList = () => {
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
       else if (role === "staff" && userId) params.staffId = userId;
-      const response = await axiosInstance.get("/api/bookings/list/on-request", { params });
+      const response = await axiosInstance.get(
+        "/api/bookings/list/on-request",
+        { params },
+      );
       if (response.data?.success) {
-        setOnRequestData(response.data.bookings || { content: [], totalElements: 0, totalPages: 0 });
+        setOnRequestData(
+          response.data.bookings || {
+            content: [],
+            totalElements: 0,
+            totalPages: 0,
+          },
+        );
       }
     } catch (err) {
       console.error("Error fetching on-request bookings:", err);
@@ -306,7 +331,11 @@ const HotelBookingList = () => {
   // Fetch Reconfirmed bookings from dedicated endpoint
   const fetchReconfirmedBookings = useCallback(async () => {
     if (!role) return;
-    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) return;
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    )
+      return;
     try {
       setLoading(true);
       const params = {
@@ -317,9 +346,18 @@ const HotelBookingList = () => {
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
       else if (role === "staff" && userId) params.staffId = userId;
-      const response = await axiosInstance.get("/api/bookings/list/reconfirmed", { params });
+      const response = await axiosInstance.get(
+        "/api/bookings/list/reconfirmed",
+        { params },
+      );
       if (response.data?.success) {
-        setReconfirmedData(response.data.bookings || { content: [], totalElements: 0, totalPages: 0 });
+        setReconfirmedData(
+          response.data.bookings || {
+            content: [],
+            totalElements: 0,
+            totalPages: 0,
+          },
+        );
       }
     } catch (err) {
       console.error("Error fetching reconfirmed bookings:", err);
@@ -332,7 +370,11 @@ const HotelBookingList = () => {
   // Fetch Invoiced bookings from dedicated endpoint
   const fetchInvoicedBookings = useCallback(async () => {
     if (!role) return;
-    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) return;
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    )
+      return;
     try {
       setLoading(true);
       const params = {
@@ -343,9 +385,17 @@ const HotelBookingList = () => {
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
       else if (role === "staff" && userId) params.staffId = userId;
-      const response = await axiosInstance.get("/api/bookings/list/invoiced", { params });
+      const response = await axiosInstance.get("/api/bookings/list/invoiced", {
+        params,
+      });
       if (response.data?.success) {
-        setInvoicedData(response.data.bookings || { content: [], totalElements: 0, totalPages: 0 });
+        setInvoicedData(
+          response.data.bookings || {
+            content: [],
+            totalElements: 0,
+            totalPages: 0,
+          },
+        );
       }
     } catch (err) {
       console.error("Error fetching invoiced bookings:", err);
@@ -2513,16 +2563,22 @@ const HotelBookingList = () => {
                                     fontSize: "0.75rem",
                                     padding: "0.4rem 0.6rem",
                                     fontWeight: "500",
-                                    color:
-                                      voucherDetails?.confirmationStatus ===
-                                      "Confirmed"
-                                        ? "#28a745" // success green
-                                        : "#dc3545", // danger red
-                                    backgroundColor:
-                                      voucherDetails?.confirmationStatus ===
-                                      "Confirmed"
-                                        ? "#d4edda" // Light green
-                                        : "#f8d7da", // Light red
+                                    color: [
+                                      "Confirmed",
+                                      "ReConfirmed",
+                                    ].includes(
+                                      voucherDetails?.confirmationStatus,
+                                    )
+                                      ? "#28a745" // success green
+                                      : "#dc3545", // danger red
+                                    backgroundColor: [
+                                      "Confirmed",
+                                      "ReConfirmed",
+                                    ].includes(
+                                      voucherDetails?.confirmationStatus,
+                                    )
+                                      ? "#d4edda" // Light green
+                                      : "#f8d7da", // Light red
                                     borderRadius: "0.375rem",
                                     display: "inline-block",
                                   }}
@@ -2530,7 +2586,10 @@ const HotelBookingList = () => {
                                   {voucherDetails?.confirmationStatus ===
                                   "Confirmed"
                                     ? "CONFIRMED"
-                                    : "NOT CONFIRMED"}
+                                    : voucherDetails?.confirmationStatus ===
+                                        "ReConfirmed"
+                                      ? "ReConfirmed"
+                                      : "NOT CONFIRMED"}
                                 </span>
                               </td>
 
