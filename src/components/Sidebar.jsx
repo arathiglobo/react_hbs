@@ -19,7 +19,7 @@ import {
   ImagePlus,
   Dot,
 } from "lucide-react";
-import { FaFileAlt, FaImages, FaTags, FaUser } from "react-icons/fa";
+import { FaBrain, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 
 
@@ -221,6 +221,7 @@ export default function Sidebar() {
       roles: ["admin", "agent"],
       children: [
         { label: "Hotel Booking", to: "/new-booking/hotel" },
+        { label: "Long Stay Booking", to: "/new-booking/long-stay" },
         {
           label: "Make Your Own Package",
           to: "/new-booking/make-your-own-package",
@@ -238,12 +239,26 @@ export default function Sidebar() {
       ],
     },
     {
+      label: "AI Insights",
+      roles: ["admin"],
+      children: [
+        { label: "Overview", to: "/ai" },
+        { label: "Demand & ADR Forecast", to: "/ai/demand-forecast" },
+        { label: "Agent Behavior", to: "/ai/agent-behavior" },
+        { label: "No-show / Overbooking Risk", to: "/ai/no-show-risk" },
+      ],
+    },
+    {
       label: "Booking List",
       roles: ["admin", "agent", "staff"],
       children: [
         {
           label: "Hotel Booking",
           to: "/booking-details/hotel-booking-list",
+        },
+        {
+          label: "Long Stay Booking",
+          to: "/booking-details/long-stay-booking-list",
         },
         {
           label: "Custom Booking",
@@ -818,6 +833,9 @@ function getIcon(label) {
 
     case "New Booking":
       return <PlusCircle {...iconProps} />;
+
+    case "AI Insights":
+      return <FaRobot {...iconProps} />;
 
     case "Booking List":
       return <BookOpen {...iconProps} />;

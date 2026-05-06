@@ -25,6 +25,7 @@ import {
   FaUsers,
   FaBullhorn,
   FaMoneyBill,
+  FaCalendarAlt,
   FaGift,
   FaFileAlt,
   FaCheckSquare,
@@ -211,6 +212,7 @@ const HotelRegistrationActions = () => {
       count: 0,
     },
     { label: "Contract Rate", icon: FaMoneyBill, status: "count", count: 0 },
+    { label: "Long Stay Contract", icon: FaCalendarAlt, status: "count", count: 0 },
     { label: "Promotion", icon: FaGift, status: "count", count: 0 },
     { label: "Policy", icon: FaFileAlt, status: "count", count: 0 },
     {
@@ -725,6 +727,8 @@ const HotelRegistrationActions = () => {
       navigate(`/hotel-actions/${id}/hotel-availability`);
     } else if (actionLabel === "Contract Rate") {
       navigate(`/hotel-actions/${id}/contract-rate`);
+    } else if (actionLabel === "Long Stay Contract") {
+      navigate(`/hotel-actions/${id}/long-stay-contract`);
     } else if (actionLabel === "Promotion") {
       navigate(`/hotel-actions/${id}/promotions`);
     } else if (actionLabel === "Policy") {

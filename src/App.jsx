@@ -69,6 +69,9 @@ import Policy from "./pages/HotelActions/Policy/Policy";
 import CreateContractRate from "./pages/HotelActions/ContractRate/CreateContractRate";
 import EditContractRate from "./pages/HotelActions/ContractRate/EditContractRate";
 import CopyContractRate from "./pages/HotelActions/ContractRate/CopyContractRate";
+import LongStayContract from "./pages/HotelActions/LongStayContract/LongStayContract";
+import CreateLongStayContract from "./pages/HotelActions/LongStayContract/CreateLongStayContract";
+import EditLongStayContract from "./pages/HotelActions/LongStayContract/EditLongStayContract";
 import OfferZone from "./pages/OfferZone";
 import OfferImageUpload from "./pages/OfferImageUpload";
 import AgentAccounts from "./pages/inhouseAccounts/AgentAccounts";
@@ -116,6 +119,15 @@ import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDaily
 import ExternalApiRoomList from "./pages/ExternalApiRoomList";
 import HotelBookingPage from "./pages/booking/HotelBookingPage";
 import ApiBookingPageForHotels from "./pages/booking/ApiBookingPageForHotels";
+import LongStaySearch from "./pages/search/LongStaySearch";
+import LongStayBookingPage from "./pages/booking/LongStayBookingPage";
+import LongStayBookingList from "./pages/list/LongStayBookingList";
+import LongStayRoomList from "./pages/LongStayRoomList";
+import CopilotWidget from "./components/CopilotWidget";
+import AiDashboard from "./pages/ai/AiDashboard";
+import DemandForecast from "./pages/ai/DemandForecast";
+import AgentBehavior from "./pages/ai/AgentBehavior";
+import NoShowRisk from "./pages/ai/NoShowRisk";
 import { CabSearch } from "./pages/search/cab/CabSearch";
 import CabBookingPage from "./pages/booking/CabBookingPage";
 import ActivitySearch from "./pages/search/activity/ActivitySearch";
@@ -269,6 +281,14 @@ export default function App() {
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
         <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
+        <Route path="/new-booking/long-stay" element={<PrivateRoute><LongStaySearch /></PrivateRoute>} />
+        <Route path="/long-stay-booking-page" element={<PrivateRoute><LongStayBookingPage /></PrivateRoute>} />
+        <Route path="/booking-details/long-stay-booking-list" element={<PrivateRoute><LongStayBookingList /></PrivateRoute>} />
+        <Route path="/long-stay-room-list" element={<PrivateRoute><LongStayRoomList /></PrivateRoute>} />
+        <Route path="/ai" element={<PrivateRoute><AiDashboard /></PrivateRoute>} />
+        <Route path="/ai/demand-forecast" element={<PrivateRoute><DemandForecast /></PrivateRoute>} />
+        <Route path="/ai/agent-behavior" element={<PrivateRoute><AgentBehavior /></PrivateRoute>} />
+        <Route path="/ai/no-show-risk" element={<PrivateRoute><NoShowRisk /></PrivateRoute>} />
         <Route path="/api-booking-page-hotels" element={<PrivateRoute><ApiBookingPageForHotels /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/booking-page" element={<PrivateRoute><MakePkgBookingPage /></PrivateRoute>} />
@@ -332,6 +352,9 @@ export default function App() {
         <Route path="/hotel-actions/hotel/:id/contract-rate/create" element={<PrivateRoute><CreateContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/contract-rate/:contractRateId/edit" element={<PrivateRoute><EditContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/copy" element={<PrivateRoute><CopyContractRate /></PrivateRoute>} />
+        <Route path="/hotel-actions/:id/long-stay-contract" element={<PrivateRoute><LongStayContract /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/long-stay-contract/create" element={<PrivateRoute><CreateLongStayContract /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/long-stay-contract/:contractId/edit" element={<PrivateRoute><EditLongStayContract /></PrivateRoute>} />
         {/* promotion */}
         <Route path="/hotel-actions/:id/promotions" element={<PrivateRoute><Promotion /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/promotion/special-rate/save" element={<PrivateRoute><SpecialRates /></PrivateRoute>} />
@@ -382,6 +405,9 @@ export default function App() {
        
 
       </Routes>
+
+      {/* AI booking copilot — self-hides outside booking-related routes */}
+      <CopilotWidget />
 
       {/* Toast container */}
       <Toaster
