@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Container,
   Row,
@@ -64,6 +65,7 @@ const isCancellationAllowed = (booking) => {
 };
 
 const HotelBookingList = () => {
+  const navigate = useNavigate();
   const [role, setRole] = useState(() => {
     return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
   });
@@ -1568,7 +1570,7 @@ const HotelBookingList = () => {
                                     minWidth: COLUMN_WIDTHS.action,
                                   }}
                                 >
-                                  <div className="d-flex gap-3 justify-content-center align-items-center">
+                                  <div className="d-flex gap-3 justify-content-center align-items-center flex-wrap">
                                     {/* View Icon - SHOWN FOR ALL */}
                                     {loadingBookingId === b.bookingId ? (
                                       <Spinner
@@ -1589,6 +1591,24 @@ const HotelBookingList = () => {
                                         }
                                       />
                                     )}
+
+                                    {/* View More link */}
+                                    <span
+                                      style={{
+                                        fontSize: "0.75rem",
+                                        color: "#c0392b",
+                                        cursor: "pointer",
+                                        fontWeight: "600",
+                                        textDecoration: "underline",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                      title="View full booking details"
+                                      onClick={() =>
+                                        navigate(`/booking-details/hotel-booking/${b.bookingId}`)
+                                      }
+                                    >
+                                      View More
+                                    </span>
 
                                     {/* Message Icon (Voucher Modal) - SHOWN FOR UPCOMING & COMPLETED */}
                                     {(status === "upcoming" ||

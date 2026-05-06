@@ -18,6 +18,9 @@ import Designations from "./pages/master/Designation";
 import HotelSearch from "./pages/HotelSearch";
 import RoomList from "./pages/RoomList";
 import HotelBookingList from "./pages/list/HotelBookingList";
+import BookingDetailedView from "./pages/list/BookingDetailedView";
+import BookingEditPage from "./pages/list/BookingEditPage";
+import BookingNotesPage from "./pages/list/BookingNotesPage";
 import CustomBookingList from "./pages/list/CustomBookingList";
 import Bank from "./pages/master/Bank";
 import ContactType from "./pages/master/ContactType";
@@ -296,6 +299,9 @@ export default function App() {
         <Route path="/api-room-list" element={<PrivateRoute><ExternalApiRoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
+        <Route path="/booking-details/hotel-booking/:id" element={<PrivateRoute><BookingDetailedView /></PrivateRoute>}/>
+        <Route path="/booking-details/hotel-booking/:id/edit" element={<PrivateRoute><BookingEditPage /></PrivateRoute>}/>
+        <Route path="/booking-details/hotel-booking/:id/notes" element={<PrivateRoute><BookingNotesPage /></PrivateRoute>}/>
         <Route path="/booking-details/custom-booking-list" element={<PrivateRoute><CustomBookingList /> </PrivateRoute>}/>
         <Route path="/make-your-pkg-room-list" element={<PrivateRoute><AccomodationRoomList /> </PrivateRoute>}/>
         <Route path="/make-your-own-package/generate-quotation-booking" element={<PrivateRoute><GenerateQuotationBooking /> </PrivateRoute>}/>
