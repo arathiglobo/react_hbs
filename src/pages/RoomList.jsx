@@ -129,15 +129,43 @@ const RoomList = () => {
           return;
         }
 
+        // ── 24 Hour Check-In rate uplift ────────────────────────────────
+        // When the search came in with is24HourCheckin=true, apply the
+        // configured percentage on every per-rate amount. We multiply the
+        // public-facing fields the FE / booking flow consume:
+        //   totalRate, rate, roomRateBasedOnRoomCount, recommendedRetailPrice
+        // (the *_WithoutMarkup mirrors are left untouched so accounting can
+        // still reconstruct the base.) When the flag is false / absent, the
+        // helper is a no-op and the original rates flow through unchanged.
+        const upliftPct =
+          payload?.is24HourCheckin === true
+            ? Number(payload?.twentyFourHourPercentage || 0)
+            : 0;
+        const uplift = (n) =>
+          n == null ? n : +(Number(n) * (1 + upliftPct / 100)).toFixed(2);
+        const applyMarkupToRate = (r) =>
+          upliftPct > 0
+            ? {
+                ...r,
+                totalRate: uplift(r.totalRate),
+                rate: uplift(r.rate),
+                roomRateBasedOnRoomCount: uplift(r.roomRateBasedOnRoomCount),
+                recommendedRetailPrice: uplift(r.recommendedRetailPrice),
+                _twentyFourHourMarkupApplied: upliftPct, // diagnostic flag
+              }
+            : r;
+
         const enriched = {
           ...res.data,
           hotels: (res.data.hotels || []).map((h) => ({
             ...h,
-            // Sort availableRates within each category by totalRate asc
+            // Sort availableRates within each category by totalRate asc.
+            // Uplift first (so sort uses the marked-up rate) then sort.
             roomCategories: (h.roomCategories || []).map((c) => ({
               ...c,
               availableRates: (c.availableRates || [])
                 .slice()
+                .map(applyMarkupToRate)
                 .sort((a, b) => (a.totalRate || 0) - (b.totalRate || 0)),
             })),
           })),

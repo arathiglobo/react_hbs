@@ -346,6 +346,17 @@ export default function HotelSearch() {
   const [sortBy, setSortBy] = useState("priceAsc");
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
+
+  // ── 24 Hour Check-In opt-in state ────────────────────────────────────
+  // When `is24HourCheckin` is true, the search post-processes results: each
+  // hotel is probed against /api/24-hour-checkin/probe-bulk; ineligible
+  // hotels are filtered out and the displayed rate is uplifted by the
+  // configured percentage. When false, the search behaves exactly as before.
+  const [is24HourCheckin, setIs24HourCheckin] = useState(false);
+  const [checkInTime24, setCheckInTime24] = useState("14:00");
+  const [checkOutTime24, setCheckOutTime24] = useState("14:00"); // +24h default
+  // Map of hotelId → { eligible, percentage } returned by the probe endpoint.
+  const [twentyFourHourMap, setTwentyFourHourMap] = useState({});
   const [clickedHotelIds, setClickedHotelIds] = useState([]);
 
   const [allResults, setAllResults] = useState([]);
@@ -500,8 +511,37 @@ export default function HotelSearch() {
         selectedChannels.includes(hotel.channelType),
       );
     }
+
+    // ── 24 Hour Check-In transform ──────────────────────────────────
+    // When the toggle is on, keep ONLY hotels the probe marked eligible
+    // and uplift the displayed price by the configured percentage.
+    //
+    // The probe-bulk response is keyed by the numeric hotel_id ("5"), but
+    // hotel.hotelCode is the prefixed string ("IN5"). Strip the non-digit
+    // prefix the same way we did when building the probe payload, so the
+    // map lookup actually hits.
+    if (is24HourCheckin) {
+      const numericId = (code) => {
+        const m = String(code || "").match(/(\d+)$/);
+        return m ? m[1] : null;
+      };
+      results = results
+        .filter((hotel) => {
+          const meta = twentyFourHourMap[numericId(hotel.hotelCode)];
+          return meta && meta.eligible;
+        })
+        .map((hotel) => {
+          const meta = twentyFourHourMap[numericId(hotel.hotelCode)];
+          const pct = Number(meta?.percentage || 0);
+          const base = Number(hotel.price || 0);
+          const uplifted = +(base * (1 + pct / 100)).toFixed(2);
+          return { ...hotel, price: uplifted, _twentyFourHourPercentage: pct };
+        });
+    }
+
     return results;
-  }, [allResults, hotelSearchTerm, starRating, hotelType, channelType]);
+  }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
+      is24HourCheckin, twentyFourHourMap]);
 
   const effectiveTotalPages = useMemo(
     () => Math.max(1, totalPages),
@@ -880,7 +920,7 @@ export default function HotelSearch() {
         // "jumeirah",
       ];
 
-      await pollUntilComplete(
+      const finalPollData = await pollUntilComplete(
         `/api/hotel-search/results/${newSearchId}`,
         params,
         (data) => data.finalStatus === "COMPLETED",
@@ -949,6 +989,49 @@ export default function HotelSearch() {
         20000,
         2000,
       );
+      // ── 24 Hour Check-In post-processing ───────────────────────────
+      // Probe each hotel's 24-hour config eligibility for the requested
+      // check-in date+time. The result map keys hotelId -> { eligible,
+      // percentage }; filteredResults uses it to filter non-eligible hotels
+      // and uplift displayed rates.
+      //
+      // We read `finalPollData.result` (the freshest payload from the last
+      // poll) rather than `allResults`, because setAllResults inside the
+      // poll's onUpdate callback hasn't been flushed back into this
+      // closure — reading allResults here returns the stale value (empty
+      // list on the first search), which would cause the probe to receive
+      // no IDs and return {}, filtering every hotel out.
+      if (is24HourCheckin) {
+        try {
+          // hotelCode comes back as a string like "IN5" / "IN12" — the
+          // numeric tail is the real hotel_id. Strip the leading "IN" (or
+          // any non-digit prefix) before sending to the probe endpoint.
+          const idsAfterSearch = (finalPollData?.result || [])
+            .map((h) => {
+              const raw = String(h.hotelCode || "");
+              const m = raw.match(/(\d+)$/);
+              return m ? Number(m[1]) : NaN;
+            })
+            .filter((n) => Number.isFinite(n) && n > 0);
+
+          if (idsAfterSearch.length > 0 && checkIn && checkInTime24) {
+            const probeRes = await axiosInstance.post(
+              "/api/24-hour-checkin/probe-bulk",
+              {
+                hotelIds: idsAfterSearch,
+                date: checkIn,
+                time: checkInTime24,
+              }
+            );
+            setTwentyFourHourMap(probeRes.data || {});
+          } else {
+            setTwentyFourHourMap({});
+          }
+        } catch (probeErr) {
+          console.warn("24-hour probe failed (non-fatal):", probeErr);
+          setTwentyFourHourMap({});
+        }
+      }
     } catch (err) {
       console.error("Search failed:", err);
       setHasSearched(false);
@@ -1246,6 +1329,59 @@ export default function HotelSearch() {
                   </Row>
                 )}
 
+                {/* ── 24 Hour Check-In opt-in row ──────────────────────
+                    Toggling this on reveals two time pickers (check-in
+                    time & check-out time). On submit, results are
+                    post-processed to filter to hotels with active configs
+                    and apply the percentage markup. Off = original flow. */}
+                <Row className="g-3 mt-2 align-items-end">
+                  <Col md={4}>
+                    <Form.Check
+                      type="checkbox"
+                      id="lm-24hour-toggle"
+                      label="Enable 24 Hour Check-In"
+                      checked={is24HourCheckin}
+                      onChange={(e) => {
+                        const v = e.target.checked;
+                        setIs24HourCheckin(v);
+                        // When toggled OFF, drop any prior probe data so
+                        // results render at base rate again on next search.
+                        if (!v) setTwentyFourHourMap({});
+                      }}
+                    />
+                  </Col>
+                  {is24HourCheckin && (
+                    <>
+                      <Col md={4}>
+                        <Form.Label className="fw-semibold text-dark mb-1">
+                          Check-In Time (24-hour)
+                        </Form.Label>
+                        <Form.Control
+                          type="time"
+                          value={checkInTime24}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setCheckInTime24(v);
+                            // Auto-bump check-out to the same time → 24h later.
+                            // User can override afterwards.
+                            if (v) setCheckOutTime24(v);
+                          }}
+                        />
+                      </Col>
+                      <Col md={4}>
+                        <Form.Label className="fw-semibold text-dark mb-1">
+                          Check-Out Time
+                        </Form.Label>
+                        <Form.Control
+                          type="time"
+                          value={checkOutTime24}
+                          onChange={(e) => setCheckOutTime24(e.target.value)}
+                        />
+                      </Col>
+                    </>
+                  )}
+                </Row>
+
                 <Row className="mt-3">
                   <Col className="d-flex justify-content-center gap-3">
                     <Button
@@ -1266,7 +1402,9 @@ export default function HotelSearch() {
                       ) : (
                         <>
                           <FaSearch className="me-2" />
-                          SEARCH HOTELS
+                          {is24HourCheckin
+                            ? "SEARCH 24-HOUR STAYS"
+                            : "SEARCH HOTELS"}
                         </>
                       )}
                     </Button>
@@ -1689,6 +1827,23 @@ export default function HotelSearch() {
                                             rooms: roomsPayload,
                                             parentBookingCode:
                                               parentBookingCode || null,
+                                            // 24 Hour Check-In flags — only
+                                            // populated when the user opted
+                                            // in. RoomList / HotelBookingPage
+                                            // forward these to the create-
+                                            // booking endpoint, which stamps
+                                            // them onto the new HotelBooking
+                                            // row (additive, non-breaking).
+                                            is24HourCheckin: !!is24HourCheckin,
+                                            checkInTime: is24HourCheckin
+                                              ? checkInTime24
+                                              : null,
+                                            checkOutTime: is24HourCheckin
+                                              ? checkOutTime24
+                                              : null,
+                                            twentyFourHourPercentage:
+                                              hotel._twentyFourHourPercentage ||
+                                              null,
                                           };
                                           const meta = {
                                             hotelName: hotel.name,

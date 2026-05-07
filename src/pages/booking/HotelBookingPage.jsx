@@ -412,6 +412,14 @@ const HotelBookingPage = () => {
         // When set, backend generates child bookingCode like GLBIN37/1, GLBIN37/2...
         parentBookingCode: bookingData.payload.parentBookingCode || null,
 
+        // ── 24 Hour Check-In: forward the optional flags from the search
+        //    handoff payload through to the booking-create endpoint. The
+        //    backend stamps these onto the HotelBooking row when present.
+        //    Existing flows leave is24HourCheckin = false / times = null.
+        is24HourCheckin: !!bookingData.payload.is24HourCheckin,
+        checkInTime: bookingData.payload.checkInTime || null,
+        checkOutTime: bookingData.payload.checkOutTime || null,
+
         // ✅ Metadata
       };
 

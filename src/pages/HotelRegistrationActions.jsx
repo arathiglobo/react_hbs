@@ -214,6 +214,8 @@ const HotelRegistrationActions = () => {
     { label: "Contract Rate", icon: FaMoneyBill, status: "count", count: 0 },
     // Last Minute Booking — Phase 1 entry point (separate from normal contract rate)
     { label: "Last Minute Contract Rate", icon: FaMoneyBill, status: "count", count: 0 },
+    // 24 Hour Check-In configuration entry point
+    { label: "24 Hour Check-In", icon: FaCalendarAlt, status: "count", count: 0 },
     { label: "Long Stay Contract", icon: FaCalendarAlt, status: "count", count: 0 },
     { label: "Promotion", icon: FaGift, status: "count", count: 0 },
     { label: "Policy", icon: FaFileAlt, status: "count", count: 0 },
@@ -732,6 +734,9 @@ const HotelRegistrationActions = () => {
     } else if (actionLabel === "Last Minute Contract Rate") {
       // Last Minute Booking module — separate page, separate APIs
       navigate(`/hotel-actions/${id}/last-minute-contract-rate`);
+    } else if (actionLabel === "24 Hour Check-In") {
+      // 24 Hour Check-In configuration page
+      navigate(`/hotel-actions/${id}/24-hour-checkin`);
     } else if (actionLabel === "Long Stay Contract") {
       navigate(`/hotel-actions/${id}/long-stay-contract`);
     } else if (actionLabel === "Promotion") {

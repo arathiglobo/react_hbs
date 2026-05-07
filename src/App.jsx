@@ -20,6 +20,9 @@ import RoomList from "./pages/RoomList";
 import HotelBookingList from "./pages/list/HotelBookingList";
 // Last Minute Booking — list page (Phase 4)
 import LastMinuteBookingList from "./pages/list/LastMinuteBookingList";
+// 24 Hour Check-In configuration pages (new feature)
+import Hotel24HourCheckin from "./pages/HotelActions/TwentyFourHourCheckin/Hotel24HourCheckin";
+import Hotel24HourCheckinForm from "./pages/HotelActions/TwentyFourHourCheckin/Hotel24HourCheckinForm";
 import BookingDetailedView from "./pages/list/BookingDetailedView";
 import BookingEditPage from "./pages/list/BookingEditPage";
 import BookingNotesPage from "./pages/list/BookingNotesPage";
@@ -384,6 +387,10 @@ export default function App() {
         <Route path="/hotel-actions/:id/long-stay-contract" element={<PrivateRoute><LongStayContract /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/create" element={<PrivateRoute><CreateLongStayContract /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/:contractId/edit" element={<PrivateRoute><EditLongStayContract /></PrivateRoute>} />
+        {/* 24 Hour Check-In configuration pages — list / create / edit. */}
+        <Route path="/hotel-actions/:id/24-hour-checkin" element={<PrivateRoute><Hotel24HourCheckin /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/24-hour-checkin/create" element={<PrivateRoute><Hotel24HourCheckinForm mode="create" /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/24-hour-checkin/:configId/edit" element={<PrivateRoute><Hotel24HourCheckinForm mode="edit" /></PrivateRoute>} />
         {/* promotion */}
         <Route path="/hotel-actions/:id/promotions" element={<PrivateRoute><Promotion /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/promotion/special-rate/save" element={<PrivateRoute><SpecialRates /></PrivateRoute>} />
