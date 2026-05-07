@@ -221,6 +221,8 @@ export default function Sidebar() {
       roles: ["admin", "agent"],
       children: [
         { label: "Hotel Booking", to: "/new-booking/hotel" },
+        // Last Minute Booking — Phase 2 entry (separate flow & APIs)
+        { label: "Last Minute Booking", to: "/new-booking/last-minute-booking" },
         { label: "Long Stay Booking", to: "/new-booking/long-stay" },
         {
           label: "Make Your Own Package",
@@ -255,6 +257,11 @@ export default function Sidebar() {
         {
           label: "Hotel Booking",
           to: "/booking-details/hotel-booking-list",
+        },
+        // Last Minute Booking list — Phase 4 entry
+        {
+          label: "Last Minute Booking",
+          to: "/booking-details/last-minute-booking-list",
         },
         {
           label: "Long Stay Booking",

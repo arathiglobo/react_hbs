@@ -18,6 +18,8 @@ import Designations from "./pages/master/Designation";
 import HotelSearch from "./pages/HotelSearch";
 import RoomList from "./pages/RoomList";
 import HotelBookingList from "./pages/list/HotelBookingList";
+// Last Minute Booking — list page (Phase 4)
+import LastMinuteBookingList from "./pages/list/LastMinuteBookingList";
 import BookingDetailedView from "./pages/list/BookingDetailedView";
 import BookingEditPage from "./pages/list/BookingEditPage";
 import BookingNotesPage from "./pages/list/BookingNotesPage";
@@ -72,6 +74,15 @@ import Policy from "./pages/HotelActions/Policy/Policy";
 import CreateContractRate from "./pages/HotelActions/ContractRate/CreateContractRate";
 import EditContractRate from "./pages/HotelActions/ContractRate/EditContractRate";
 import CopyContractRate from "./pages/HotelActions/ContractRate/CopyContractRate";
+// Last Minute Contract Rate (Phase 1 of Last Minute Booking module)
+import LastMinuteContractRate from "./pages/HotelActions/LastMinuteContractRate/LastMinuteContractRate";
+import LastMinuteContractRateForm from "./pages/HotelActions/LastMinuteContractRate/LastMinuteContractRateForm";
+// Last Minute Booking — search/listing page (Phase 2)
+import LastMinuteBookingPage from "./pages/booking/LastMinuteBookingPage";
+// Last Minute Booking — booking creation form (Phase 3)
+import LastMinuteBookingForm from "./pages/booking/LastMinuteBookingForm";
+// Last Minute Room List — opens in a new tab when "View Rooms" is clicked
+import LastMinuteRoomList from "./pages/LastMinuteRoomList";
 import LongStayContract from "./pages/HotelActions/LongStayContract/LongStayContract";
 import CreateLongStayContract from "./pages/HotelActions/LongStayContract/CreateLongStayContract";
 import EditLongStayContract from "./pages/HotelActions/LongStayContract/EditLongStayContract";
@@ -283,6 +294,12 @@ export default function App() {
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
+        {/* Last Minute Booking (Phase 2) — separate search flow */}
+        <Route path="/new-booking/last-minute-booking" element={<PrivateRoute><LastMinuteBookingPage /></PrivateRoute>} />
+        {/* Last Minute Booking (Phase 3) — booking creation form */}
+        <Route path="/new-booking/last-minute-booking/create" element={<PrivateRoute><LastMinuteBookingForm /></PrivateRoute>} />
+        {/* Last Minute Room List — opened from "View Rooms" button on the search page */}
+        <Route path="/last-minute-room-list" element={<PrivateRoute><LastMinuteRoomList /></PrivateRoute>} />
         <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
         <Route path="/new-booking/long-stay" element={<PrivateRoute><LongStaySearch /></PrivateRoute>} />
         <Route path="/long-stay-booking-page" element={<PrivateRoute><LongStayBookingPage /></PrivateRoute>} />
@@ -299,6 +316,8 @@ export default function App() {
         <Route path="/api-room-list" element={<PrivateRoute><ExternalApiRoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
+        {/* Last Minute Bookings list — view + cancel from this page */}
+        <Route path="/booking-details/last-minute-booking-list" element={<PrivateRoute><LastMinuteBookingList /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id" element={<PrivateRoute><BookingDetailedView /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id/edit" element={<PrivateRoute><BookingEditPage /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id/notes" element={<PrivateRoute><BookingNotesPage /></PrivateRoute>}/>
@@ -358,6 +377,10 @@ export default function App() {
         <Route path="/hotel-actions/hotel/:id/contract-rate/create" element={<PrivateRoute><CreateContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/contract-rate/:contractRateId/edit" element={<PrivateRoute><EditContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/copy" element={<PrivateRoute><CopyContractRate /></PrivateRoute>} />
+        {/* last-minute contract rate (Phase 1) — separate from normal contract rate */}
+        <Route path="/hotel-actions/:id/last-minute-contract-rate" element={<PrivateRoute><LastMinuteContractRate /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/last-minute-contract-rate/create" element={<PrivateRoute><LastMinuteContractRateForm mode="create" /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/last-minute-contract-rate/:rateId/edit" element={<PrivateRoute><LastMinuteContractRateForm mode="edit" /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/long-stay-contract" element={<PrivateRoute><LongStayContract /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/create" element={<PrivateRoute><CreateLongStayContract /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/:contractId/edit" element={<PrivateRoute><EditLongStayContract /></PrivateRoute>} />
