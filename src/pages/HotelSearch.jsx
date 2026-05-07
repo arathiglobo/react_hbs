@@ -13,7 +13,7 @@ import TopBar from "../components/TopBar";
 import Select from "react-select";
 import axiosInstance from "../components/AxiosInstance";
 import { FaSearch, FaStar } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -319,6 +319,14 @@ const fullText = "Search Hotel Name...";
 export default function HotelSearch() {
   const [placeholder, setPlaceholder] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
+  // When user came here via "Edit -> Book Again" from a booking detail page,
+  // parentBookingCode is in the URL (e.g. ?parentBookingCode=GLBIN37). It is
+  // threaded through to HotelBookingPage so the new booking is saved as a
+  // child of that primary booking (GLBIN37/1, GLBIN37/2, ...).
+  const parentBookingCode = new URLSearchParams(location.search).get(
+    "parentBookingCode"
+  );
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
   const [destinationOptions, setDestinationOptions] = useState([]);
@@ -1679,6 +1687,8 @@ export default function HotelSearch() {
                                             agentId: String(agent),
                                             apiId,
                                             rooms: roomsPayload,
+                                            parentBookingCode:
+                                              parentBookingCode || null,
                                           };
                                           const meta = {
                                             hotelName: hotel.name,

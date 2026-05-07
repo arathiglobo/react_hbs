@@ -408,6 +408,10 @@ const HotelBookingPage = () => {
         tourismDirhams: parseFloat(tourismDirhams) || 0,
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
 
+        // Parent booking code for Edit -> Search -> Book Again flow.
+        // When set, backend generates child bookingCode like GLBIN37/1, GLBIN37/2...
+        parentBookingCode: bookingData.payload.parentBookingCode || null,
+
         // ✅ Metadata
       };
 

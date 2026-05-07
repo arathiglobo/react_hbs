@@ -324,6 +324,122 @@ export default function BookingDetailedView() {
                   </div>
                 </div>
 
+                {/* ── Sub-Bookings (created via Edit) ────────────────── */}
+                {booking.subBookings && booking.subBookings.length > 0 && (
+                  <div style={card}>
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings ({booking.subBookings.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {booking.subBookings.map((sub) => {
+                        const subRooms = sub.rooms?.length ?? 0;
+                        const subAdults =
+                          sub.rooms?.reduce((s, r) => s + (r.adults || 0), 0) ?? 0;
+                        const subChildren =
+                          sub.rooms?.reduce((s, r) => s + (r.children || 0), 0) ?? 0;
+                        return (
+                          <div
+                            key={sub.bookingId}
+                            style={{
+                              borderTop: "1px solid #eee",
+                              padding: "10px 0",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color: "#c0392b",
+                                  fontWeight: "700",
+                                  fontSize: "0.9rem",
+                                }}
+                              >
+                                {sub.bookingCode || "-"}
+                                {sub.childBookingIndex != null && (
+                                  <span
+                                    style={{
+                                      marginLeft: "8px",
+                                      color: "#888",
+                                      fontWeight: "500",
+                                      fontSize: "0.8rem",
+                                    }}
+                                  >
+                                    (Edit #{sub.childBookingIndex})
+                                  </span>
+                                )}
+                              </span>
+                              <button
+                                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
+                                onClick={() =>
+                                  navigate(
+                                    `/booking-details/hotel-booking/${sub.bookingId}`
+                                  )
+                                }
+                              >
+                                View
+                              </button>
+                            </div>
+                            <Row>
+                              <Col md={6}>
+                                <InfoRow label="Reference No." value={sub.referenceNumber} />
+                                <InfoRow label="Hotel" value={sub.hotelName} />
+                                <InfoRow
+                                  label="Check-In"
+                                  value={formatDate(sub.checkInDate)}
+                                />
+                                <InfoRow
+                                  label="Check-Out"
+                                  value={formatDate(sub.checkOutDate)}
+                                />
+                              </Col>
+                              <Col md={6}>
+                                <InfoRow
+                                  label="Rooms / Guests"
+                                  value={`${subRooms} Room${
+                                    subRooms !== 1 ? "s" : ""
+                                  }, ${subAdults} Adult${
+                                    subAdults !== 1 ? "s" : ""
+                                  }${
+                                    subChildren > 0
+                                      ? `, ${subChildren} Child${
+                                          subChildren !== 1 ? "ren" : ""
+                                        }`
+                                      : ""
+                                  }`}
+                                />
+                                <InfoRow
+                                  label="Total Rate"
+                                  value={
+                                    sub.totalRate != null
+                                      ? Number(sub.totalRate).toFixed(2)
+                                      : "-"
+                                  }
+                                />
+                                <InfoRow
+                                  label="Status"
+                                  value={
+                                    <StatusBadge status={sub.confirmationStatus} />
+                                  }
+                                />
+                                <InfoRow
+                                  label="Booking Date"
+                                  value={formatDateTime(sub.bookingDate)}
+                                />
+                              </Col>
+                            </Row>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── Cancellation Policy ───────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>
@@ -396,7 +512,12 @@ export default function BookingDetailedView() {
                 <div style={{ marginBottom: "10px", display: "flex", gap: "8px" }}>
                   <button
                     style={BUTTON_STYLE}
-                    onClick={() => navigate(`/booking-details/hotel-booking/${id}/edit`)}
+                    onClick={() => {
+                      const parent = booking.parentBookingCode || booking.bookingCode;
+                      navigate(
+                        `/new-booking/hotel?parentBookingCode=${encodeURIComponent(parent)}`
+                      );
+                    }}
                   >
                     EDIT
                   </button>
