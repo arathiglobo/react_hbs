@@ -193,6 +193,54 @@ const CabProviderReg = () => {
   const [cabList, setCabList] = useState([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [pickupDropoffList, setPickupDropoffList] = useState([]);
+  // Hotel & Airport lookup lists used by the per-location Pickup/Dropoff Type dropdowns.
+  // Fetched once when the create/edit modal opens.
+  const [hotelOptionList, setHotelOptionList] = useState([]);
+  const [airportOptionList, setAirportOptionList] = useState([]);
+
+  const fetchHotelOptionList = async () => {
+    try {
+      const res = await axiosInstance.get("/api/hotels?page=0&limit=20");
+      const arr = Array.isArray(res.data)
+        ? res.data
+        : res.data?.content || res.data?.hotels || [];
+      const opts = (arr || []).map((h) => ({
+        value: String(h.id ?? h.hotelId ?? ""),
+        label: h.hotelName || h.name || `Hotel #${h.id ?? h.hotelId ?? ""}`,
+        location:
+          h.location ||
+          h.placeName ||
+          h.cityName ||
+          h.city ||
+          "",
+        address: h.address || "",
+      }));
+      setHotelOptionList(opts);
+    } catch {
+      setHotelOptionList([]);
+    }
+  };
+
+  const fetchAirportOptionList = async () => {
+    try {
+      const res = await axiosInstance.get("/api/airport?page=0&limit=10");
+      const arr = Array.isArray(res.data)
+        ? res.data
+        : res.data?.content || [];
+      const opts = (arr || []).map((a) => ({
+        value: String(a.id ?? ""),
+        label: a.airportName || `Airport #${a.id}`,
+        code: a.airportCode || "",
+        location:
+          [a.cityName, a.countryName].filter(Boolean).join(", ") ||
+          a.placeName ||
+          "",
+      }));
+      setAirportOptionList(opts);
+    } catch {
+      setAirportOptionList([]);
+    }
+  };
   const [editingCab, setEditingCab] = useState(null);
   const [placeLookup, setPlaceLookup] = useState({});
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
@@ -385,10 +433,20 @@ const CabProviderReg = () => {
 
     // Populate pickup/dropoff locations from the first cab
     if (firstCab && firstCab.cabLocationDTOList && firstCab.cabLocationDTOList.length > 0) {
+      if (hotelOptionList.length === 0) fetchHotelOptionList();
+      if (airportOptionList.length === 0) fetchAirportOptionList();
       const locations = firstCab.cabLocationDTOList.map((location, index) => ({
         id: location.cablocationId || Date.now() + index,
+        pickupType: location.pickupType || "Other",
+        pickupRefId: location.pickupRefId != null ? String(location.pickupRefId) : null,
         pickup: location.pickup || "",
+        pickupLocation: location.pickupLocation || "",
+        pickupAddress: location.pickupAddress || "",
+        dropoffType: location.dropoffType || "Other",
+        dropoffRefId: location.dropoffRefId != null ? String(location.dropoffRefId) : null,
         dropOff: location.dropoff || "",
+        dropoffLocation: location.dropoffLocation || "",
+        dropoffAddress: location.dropoffAddress || "",
       }));
       console.log("Setting pickup/dropoff locations for view:", locations);
       setPickupDropoffList(locations);
@@ -741,7 +799,19 @@ const CabProviderReg = () => {
         cablocationId: location.id || Date.now() + index,
         cabid: null,
         pickup: location.pickup,
-        dropoff: location.dropOff
+        dropoff: location.dropOff,
+        pickupType: location.pickupType || "Other",
+        pickupRefId: location.pickupRefId
+          ? Number(location.pickupRefId)
+          : null,
+        pickupLocation: location.pickupLocation || null,
+        pickupAddress: location.pickupAddress || null,
+        dropoffType: location.dropoffType || "Other",
+        dropoffRefId: location.dropoffRefId
+          ? Number(location.dropoffRefId)
+          : null,
+        dropoffLocation: location.dropoffLocation || null,
+        dropoffAddress: location.dropoffAddress || null,
       }))
     };
 
@@ -788,10 +858,21 @@ const CabProviderReg = () => {
 
     // Set pickup/dropoff locations for editing
     if (cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0) {
+      // Ensure lookup lists are warm so the dropdowns can preselect.
+      if (hotelOptionList.length === 0) fetchHotelOptionList();
+      if (airportOptionList.length === 0) fetchAirportOptionList();
       const locations = cab.cabLocationDTOList.map((location, index) => ({
         id: location.cablocationId || Date.now() + index,
+        pickupType: location.pickupType || "Other",
+        pickupRefId: location.pickupRefId != null ? String(location.pickupRefId) : null,
         pickup: location.pickup || "",
+        pickupLocation: location.pickupLocation || "",
+        pickupAddress: location.pickupAddress || "",
+        dropoffType: location.dropoffType || "Other",
+        dropoffRefId: location.dropoffRefId != null ? String(location.dropoffRefId) : null,
         dropOff: location.dropoff || "",
+        dropoffLocation: location.dropoffLocation || "",
+        dropoffAddress: location.dropoffAddress || "",
       }));
       setPickupDropoffList(locations);
     } else {
@@ -824,12 +905,64 @@ const CabProviderReg = () => {
 
   // Add pickup/dropoff location
   const addPickupDropoff = () => {
+    // Lazy-fetch lookups the first time a location is added in this modal session.
+    if (hotelOptionList.length === 0) fetchHotelOptionList();
+    if (airportOptionList.length === 0) fetchAirportOptionList();
     const newLocation = {
       id: Date.now(),
+      pickupType: "Other",
+      pickupRefId: null,
       pickup: "",
+      pickupLocation: "",
+      pickupAddress: "",
+      dropoffType: "Other",
+      dropoffRefId: null,
       dropOff: "",
+      dropoffLocation: "",
+      dropoffAddress: "",
     };
     setPickupDropoffList([...pickupDropoffList, newLocation]);
+  };
+
+  // When the user picks a Hotel/Airport from the typed dropdown, mirror the
+  // selection into the location row so the existing save/validation logic
+  // (which reads `pickup` / `dropOff`) continues to work, and we also retain
+  // the structured ref id + location + address for richer display/save.
+  const setLocationTypeSelection = (locationId, side, option) => {
+    const isPickup = side === "pickup";
+    setPickupDropoffList((prev) =>
+      prev.map((loc) =>
+        loc.id !== locationId
+          ? loc
+          : {
+              ...loc,
+              [isPickup ? "pickupRefId" : "dropoffRefId"]: option ? option.value : null,
+              [isPickup ? "pickup" : "dropOff"]: option ? option.label : "",
+              [isPickup ? "pickupLocation" : "dropoffLocation"]: option ? option.location || "" : "",
+              [isPickup ? "pickupAddress" : "dropoffAddress"]:
+                option ? option.address || option.code || "" : "",
+            }
+      )
+    );
+  };
+
+  const setLocationType = (locationId, side, type) => {
+    const isPickup = side === "pickup";
+    setPickupDropoffList((prev) =>
+      prev.map((loc) =>
+        loc.id !== locationId
+          ? loc
+          : {
+              ...loc,
+              [isPickup ? "pickupType" : "dropoffType"]: type,
+              // Reset the dependent fields when the type changes
+              [isPickup ? "pickupRefId" : "dropoffRefId"]: null,
+              [isPickup ? "pickup" : "dropOff"]: "",
+              [isPickup ? "pickupLocation" : "dropoffLocation"]: "",
+              [isPickup ? "pickupAddress" : "dropoffAddress"]: "",
+            }
+      )
+    );
   };
 
   // Remove pickup/dropoff location
@@ -1351,7 +1484,14 @@ const CabProviderReg = () => {
             </Card.Body>
           </Card>
 
-          <Modal show={showModal} onHide={closeModal} centered size="lg">
+          <Modal
+            show={showModal}
+            onHide={closeModal}
+            centered
+            size="lg"
+            backdrop="static"
+            keyboard={false}
+          >
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
                 {isViewMode
@@ -1709,36 +1849,265 @@ const CabProviderReg = () => {
                           </Card.Header>
                           <Card.Body className="py-2">
                             <Row>
+                              {/* ── Pickup ───────────────────────────────── */}
                               <Col md={6}>
                                 <Form.Group className="mb-2">
                                   <Form.Label>
-                                    <span style={{ color: 'red' }}>*</span>Pickup
+                                    <span style={{ color: "red" }}>*</span>Pickup Type
                                   </Form.Label>
-                                  <Form.Control
-                                    value={location.pickup}
-                                    placeholder="Enter pickup location"
-                                    {...getFormControlProps(
-                                      "pickup",
-                                      (e) => updatePickupDropoff(location.id, 'pickup', e.target.value),
-                                      {}
-                                    )}
-                                  />
+                                  <Form.Select
+                                    value={location.pickupType || "Other"}
+                                    disabled={isViewMode}
+                                    onChange={(e) =>
+                                      setLocationType(
+                                        location.id,
+                                        "pickup",
+                                        e.target.value
+                                      )
+                                    }
+                                  >
+                                    <option value="Other">Other</option>
+                                    <option value="Hotel">Hotel</option>
+                                    <option value="Airport">Airport</option>
+                                  </Form.Select>
+                                </Form.Group>
+
+                                <Form.Group className="mb-2">
+                                  <Form.Label>
+                                    <span style={{ color: "red" }}>*</span>Pickup
+                                  </Form.Label>
+                                  {location.pickupType === "Hotel" ? (
+                                    <>
+                                      <Select
+                                        options={hotelOptionList}
+                                        value={
+                                          hotelOptionList.find(
+                                            (o) =>
+                                              String(o.value) ===
+                                              String(location.pickupRefId)
+                                          ) || null
+                                        }
+                                        onChange={(opt) =>
+                                          setLocationTypeSelection(
+                                            location.id,
+                                            "pickup",
+                                            opt
+                                          )
+                                        }
+                                        placeholder="Select Hotel"
+                                        isClearable
+                                        isSearchable
+                                        isDisabled={isViewMode}
+                                        menuPortalTarget={document.body}
+                                        menuPosition="fixed"
+                                        styles={{
+                                          menuPortal: (base) => ({
+                                            ...base,
+                                            zIndex: 9999,
+                                          }),
+                                        }}
+                                      />
+                                      {(location.pickupLocation ||
+                                        location.pickupAddress) && (
+                                        <small className="text-muted d-block mt-1">
+                                          {location.pickupLocation}
+                                          {location.pickupLocation &&
+                                          location.pickupAddress
+                                            ? " · "
+                                            : ""}
+                                          {location.pickupAddress}
+                                        </small>
+                                      )}
+                                    </>
+                                  ) : location.pickupType === "Airport" ? (
+                                    <>
+                                      <Select
+                                        options={airportOptionList}
+                                        value={
+                                          airportOptionList.find(
+                                            (o) =>
+                                              String(o.value) ===
+                                              String(location.pickupRefId)
+                                          ) || null
+                                        }
+                                        onChange={(opt) =>
+                                          setLocationTypeSelection(
+                                            location.id,
+                                            "pickup",
+                                            opt
+                                          )
+                                        }
+                                        placeholder="Select Airport"
+                                        isClearable
+                                        isSearchable
+                                        isDisabled={isViewMode}
+                                        menuPortalTarget={document.body}
+                                        menuPosition="fixed"
+                                        styles={{
+                                          menuPortal: (base) => ({
+                                            ...base,
+                                            zIndex: 9999,
+                                          }),
+                                        }}
+                                      />
+                                      {(location.pickupAddress ||
+                                        location.pickupLocation) && (
+                                        <small className="text-muted d-block mt-1">
+                                          {location.pickupAddress &&
+                                            `Code: ${location.pickupAddress}`}
+                                          {location.pickupAddress &&
+                                          location.pickupLocation
+                                            ? " · "
+                                            : ""}
+                                          {location.pickupLocation}
+                                        </small>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <Form.Control
+                                      value={location.pickup}
+                                      placeholder="Enter pickup location"
+                                      disabled={isViewMode}
+                                      onChange={(e) =>
+                                        updatePickupDropoff(
+                                          location.id,
+                                          "pickup",
+                                          e.target.value
+                                        )
+                                      }
+                                    />
+                                  )}
                                 </Form.Group>
                               </Col>
+
+                              {/* ── Drop Off ─────────────────────────────── */}
                               <Col md={6}>
                                 <Form.Group className="mb-2">
                                   <Form.Label>
-                                    <span style={{ color: 'red' }}>*</span>Drop Off
+                                    <span style={{ color: "red" }}>*</span>Dropoff Type
                                   </Form.Label>
-                                  <Form.Control
-                                    value={location.dropOff}
-                                    placeholder="Enter drop off location"
-                                    {...getFormControlProps(
-                                      "dropOff",
-                                      (e) => updatePickupDropoff(location.id, 'dropOff', e.target.value),
-                                      {}
-                                    )}
-                                  />
+                                  <Form.Select
+                                    value={location.dropoffType || "Other"}
+                                    disabled={isViewMode}
+                                    onChange={(e) =>
+                                      setLocationType(
+                                        location.id,
+                                        "dropoff",
+                                        e.target.value
+                                      )
+                                    }
+                                  >
+                                    <option value="Other">Other</option>
+                                    <option value="Hotel">Hotel</option>
+                                    <option value="Airport">Airport</option>
+                                  </Form.Select>
+                                </Form.Group>
+
+                                <Form.Group className="mb-2">
+                                  <Form.Label>
+                                    <span style={{ color: "red" }}>*</span>Drop Off
+                                  </Form.Label>
+                                  {location.dropoffType === "Hotel" ? (
+                                    <>
+                                      <Select
+                                        options={hotelOptionList}
+                                        value={
+                                          hotelOptionList.find(
+                                            (o) =>
+                                              String(o.value) ===
+                                              String(location.dropoffRefId)
+                                          ) || null
+                                        }
+                                        onChange={(opt) =>
+                                          setLocationTypeSelection(
+                                            location.id,
+                                            "dropoff",
+                                            opt
+                                          )
+                                        }
+                                        placeholder="Select Hotel"
+                                        isClearable
+                                        isSearchable
+                                        isDisabled={isViewMode}
+                                        menuPortalTarget={document.body}
+                                        menuPosition="fixed"
+                                        styles={{
+                                          menuPortal: (base) => ({
+                                            ...base,
+                                            zIndex: 9999,
+                                          }),
+                                        }}
+                                      />
+                                      {(location.dropoffLocation ||
+                                        location.dropoffAddress) && (
+                                        <small className="text-muted d-block mt-1">
+                                          {location.dropoffLocation}
+                                          {location.dropoffLocation &&
+                                          location.dropoffAddress
+                                            ? " · "
+                                            : ""}
+                                          {location.dropoffAddress}
+                                        </small>
+                                      )}
+                                    </>
+                                  ) : location.dropoffType === "Airport" ? (
+                                    <>
+                                      <Select
+                                        options={airportOptionList}
+                                        value={
+                                          airportOptionList.find(
+                                            (o) =>
+                                              String(o.value) ===
+                                              String(location.dropoffRefId)
+                                          ) || null
+                                        }
+                                        onChange={(opt) =>
+                                          setLocationTypeSelection(
+                                            location.id,
+                                            "dropoff",
+                                            opt
+                                          )
+                                        }
+                                        placeholder="Select Airport"
+                                        isClearable
+                                        isSearchable
+                                        isDisabled={isViewMode}
+                                        menuPortalTarget={document.body}
+                                        menuPosition="fixed"
+                                        styles={{
+                                          menuPortal: (base) => ({
+                                            ...base,
+                                            zIndex: 9999,
+                                          }),
+                                        }}
+                                      />
+                                      {(location.dropoffAddress ||
+                                        location.dropoffLocation) && (
+                                        <small className="text-muted d-block mt-1">
+                                          {location.dropoffAddress &&
+                                            `Code: ${location.dropoffAddress}`}
+                                          {location.dropoffAddress &&
+                                          location.dropoffLocation
+                                            ? " · "
+                                            : ""}
+                                          {location.dropoffLocation}
+                                        </small>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <Form.Control
+                                      value={location.dropOff}
+                                      placeholder="Enter drop off location"
+                                      disabled={isViewMode}
+                                      onChange={(e) =>
+                                        updatePickupDropoff(
+                                          location.id,
+                                          "dropOff",
+                                          e.target.value
+                                        )
+                                      }
+                                    />
+                                  )}
                                 </Form.Group>
                               </Col>
                             </Row>

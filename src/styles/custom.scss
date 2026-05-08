@@ -1,12 +1,12 @@
-$font-family-sans-serif: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+$font-family-sans-serif: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 $font-family-base: $font-family-sans-serif;
 
 /* IMPORTANT: Bootstrap must be imported AFTER font variables */
 @import "~bootstrap/scss/bootstrap";
 
 :root {
-  --bs-body-font-family: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --bs-heading-font-family: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --bs-body-font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --bs-heading-font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 body,
@@ -22,8 +22,35 @@ select,
 .nav-link,
 .form-control,
 .form-select {
-  font-family: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
-  font-weight: 350;   
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-weight: 350;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Global Form.Select chevron — restored.
+ *
+ * Several page-level stylesheets (e.g. PackageBooking_Stepper.css) use the
+ * `background:` shorthand on `.form-select`, which resets background-image
+ * and removes Bootstrap's built-in down-arrow SVG. Re-applying it here with
+ * !important keeps every <Form.Select> across the app showing the toggle
+ * indicator on the right edge.
+ * ────────────────────────────────────────────────────────────────────────── */
+select.form-select,
+.form-select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.75rem center !important;
+  background-size: 16px 12px !important;
+  padding-right: 2.25rem !important;
+}
+
+select.form-select.form-select-sm,
+.form-select.form-select-sm {
+  background-position: right 0.5rem center !important;
+  padding-right: 2rem !important;
 }
 
 table,
@@ -32,7 +59,7 @@ tbody,
 tr,
 th,
 td {
-  font-family: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 td{
       font-weight: 500;

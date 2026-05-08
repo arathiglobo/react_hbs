@@ -134,6 +134,7 @@ export default function Sidebar() {
             { label: "Province", to: "/masters/states" },
             { label: "Destinations", to: "/masters/destination" },
             { label: "Locality", to: "/masters/sub-location" },
+            { label: "Airport", to: "/masters/airport" },
           ],
         },
         {

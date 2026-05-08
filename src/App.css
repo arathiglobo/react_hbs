@@ -9,8 +9,8 @@
 
 
 :root {
-  --bs-body-font-family: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --bs-font-sans-serif: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --bs-body-font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --bs-font-sans-serif: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 body {
