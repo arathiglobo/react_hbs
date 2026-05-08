@@ -327,8 +327,8 @@ export default function LastMinuteBookingPage() {
     const payload = {
       hotelId: null,
       cityId: selectedDestination?.value ?? null,
-      checkInDate: checkIn,
-      checkOutDate: checkOut,
+      checkInDate: checkIn ? `${checkIn}T00:00:00` : null,
+      checkOutDate: checkOut ? `${checkOut}T00:00:00` : null,
       adults: totalAdults,
       children: totalChildren,
       rooms: rooms.length,

@@ -61,8 +61,8 @@ export default function Invoice() {
     setError("");
     try {
       const params = new URLSearchParams();
-      if (fromDate) params.append("fromDate", fromDate);
-      if (toDate) params.append("toDate", toDate);
+      if (fromDate) params.append("fromDate", `${fromDate}T00:00:00`);
+      if (toDate) params.append("toDate", `${toDate}T23:59:59`);
       if (agent) params.append("agent", agent);
       params.append("page", String(pageNumber));
       params.append("limit", String(itemsPerPage));
@@ -108,50 +108,34 @@ export default function Invoice() {
     }
   };
 
+  // Normalize LocalDateTime strings — treats plain "YYYY-MM-DD" as local midnight
+  const parseLocal = (str) => {
+    if (!str) return null;
+    const normalized = String(str).includes("T") ? str : `${str}T00:00:00`;
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
   const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return dateString;
-    }
+    const d = parseLocal(dateString);
+    if (!d) return "-";
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   };
 
   const formatDateTime = (dateTimeString) => {
-    if (!dateTimeString) return "-";
-    try {
-      const date = new Date(dateTimeString);
-      return date.toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }) + " " + date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
-    } catch {
-      return dateTimeString;
-    }
+    const d = parseLocal(dateTimeString);
+    if (!d) return "-";
+    return (
+      d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) +
+      " " +
+      d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
+    );
   };
 
   const formatDateShort = (dateString) => {
-    if (!dateString) return "-";
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return dateString;
-    }
+    const d = parseLocal(dateString);
+    if (!d) return "-";
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   };
 
   const formatCurrency = (amount) => {

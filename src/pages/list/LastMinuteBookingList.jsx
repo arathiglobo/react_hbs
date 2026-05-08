@@ -17,6 +17,7 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import Swal from "sweetalert2";
+import { formatDateTime } from "../../utils/dateUtils";
 
 /**
  * LastMinuteBookingList — mirrors HotelBookingList.jsx structure for the
@@ -186,8 +187,8 @@ export default function LastMinuteBookingList() {
                             {b.bookingCode || "-"}
                           </td>
                           <td>{b.hotelName || "-"}</td>
-                          <td>{b.checkInDate || "-"}</td>
-                          <td>{b.checkOutDate || "-"}</td>
+                          <td>{formatDateTime(b.checkInDate)}</td>
+                          <td>{formatDateTime(b.checkOutDate)}</td>
                           <td>
                             {b.totalRate != null
                               ? `AED ${Number(b.totalRate).toFixed(2)}`
@@ -269,8 +270,14 @@ export default function LastMinuteBookingList() {
 // ─── Detail content used inside the View modal ─────────────────────────────
 function BookingDetailContent({ booking: b }) {
   const fmt = (v) => (v == null || v === "" ? "—" : String(v));
-  const fmtDt = (v) =>
-    v ? new Date(v).toLocaleString() : "—";
+  const fmtDt = (v) => {
+    if (!v) return "—";
+    const normalized = String(v).includes("T") ? v : `${v}T00:00:00`;
+    return new Date(normalized).toLocaleString("en-GB", {
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+  };
   const c = b.customer || {};
   return (
     <div>

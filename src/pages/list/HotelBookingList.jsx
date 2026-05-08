@@ -31,16 +31,16 @@ import toast from "react-hot-toast";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 const COLUMN_WIDTHS = {
-  sn: "64px",
-  agentName: "clamp(10ch, 12ch + 1vw, 18ch)",
-  customerName: "clamp(14ch, 18ch + 1vw, 26ch)",
-  bookingCode: "clamp(10ch, 12ch + 0.5vw, 16ch)",
-  referenceCode: "clamp(18ch, 20ch + 1vw, 30ch)",
-  bookDate: "clamp(11ch, 12ch + 0.5vw, 16ch)",
-  bookingDetails: "clamp(20ch, 24ch + 1vw, 36ch)",
-  deadlineDate: "clamp(11ch, 12ch + 0.5vw, 16ch)",
-  notification: "clamp(11ch, 12ch + 0.5vw, 16ch)",
-  action: "clamp(10ch, 11ch + 0.5vw, 15ch)",
+  sn: "45px",
+  agentName: "85px",
+  customerName: "115px",
+  bookingCode: "85px",
+  referenceCode: "140px",
+  bookDate: "80px",
+  bookingDetails: "155px",
+  deadlineDate: "90px",
+  notification: "95px",
+  action: "110px",
 };
 
 const normalizeBoolean = (value, truthyMatchers = [], falsyMatchers = []) => {
@@ -750,11 +750,12 @@ const HotelBookingList = () => {
 
     const formatDate = (dateString) => {
       if (!dateString) return "";
-      const date = new Date(dateString);
+      const normalized = String(dateString).includes("T") ? dateString : `${dateString}T00:00:00`;
+      const date = new Date(normalized);
+      if (isNaN(date.getTime())) return "";
       const day = String(date.getDate()).padStart(2, "0");
       const month = String(date.getMonth() + 1).padStart(2, "0");
-      const year = date.getFullYear();
-      return `${day}/${month}/${year}`;
+      return `${day}/${month}/${date.getFullYear()}`;
     };
 
     const formatDeadlineDate = (dateString) => {
@@ -866,37 +867,15 @@ const HotelBookingList = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main
-          className="flex-grow-1 p-4"
+          className="flex-grow-1 p-3"
           style={{ width: "100%", overflow: "hidden" }}
         >
-          <Container
-            fluid
-            style={{
-              maxWidth: "100%",
-              paddingLeft: "1rem",
-              paddingRight: "1rem",
-            }}
-          >
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <h3
-                className="fw-bold text-dark"
-                style={{ position: "relative", top: "26px" }}
-              >
-                Hotel Bookings
-              </h3>
-            </div>
-
-            {/* Search Section */}
-            <Row className="mb-3 align-items-end">
-              <Col
-                md={4}
-                sm={6}
-                xs={12}
-                style={{ position: "relative", top: "-46px" }}
-              >
-                <InputGroup style={{ height: "46px" }}>
-                  {" "}
-                  {/* ✅ FIXED */}
+          <Container fluid className="px-0">
+            {/* Header: Title + Search (left) | Time Period (right) */}
+            <div className="d-flex justify-content-between align-items-end mb-3">
+              <div>
+                <h3 className="fw-bold text-dark mb-2">Hotel Bookings</h3>
+                <InputGroup style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text
                     style={{
                       backgroundColor: "#f8f9fa",
@@ -915,70 +894,62 @@ const HotelBookingList = () => {
                       borderLeft: "none",
                       fontSize: "0.85rem",
                       borderColor: "#dee2e6",
-                      height: "46px",
+                      height: "40px",
                     }}
                   />
                 </InputGroup>
-              </Col>
-
-              <Col md={4} sm={12} className="ms-lg-auto">
-                <Card
-                  className="shadow-sm border-0 h-60"
-                  style={{ borderRadius: "8px" }}
-                >
-                  <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Time Period
-                    </h6>
-
-                    <Row className="g-2">
-                      <Col xs={6}>
-                        <Form.Select
-                          value={selectedMonth}
-                          onChange={(e) => handleMonthChange(e.target.value)}
-                          className="form-control"
-                          size="sm"
-                          style={{ fontSize: "0.82rem", height: "46px" }}
-                        >
-                          <option value="">Month</option>
-                          {months.map((month, index) => (
-                            <option key={month} value={index + 1}>
-                              {month.slice(0, 3)}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-
-                      <Col xs={6}>
-                        <Form.Select
-                          value={selectedYear}
-                          onChange={(e) => handleYearChange(e.target.value)}
-                          className="form-control"
-                          size="sm"
-                          style={{ fontSize: "0.82rem", height: "46px" }}
-                        >
-                          <option value="">Year</option>
-                          {years.map((year) => (
-                            <option key={year} value={year}>
-                              {year}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
+              </div>
+              <Card
+                className="shadow-sm border-0"
+                style={{ borderRadius: "8px", minWidth: "260px" }}
+              >
+                <Card.Body className="p-3">
+                  <h6
+                    className="mb-2 fw-bold text-dark"
+                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                  >
+                    Time Period
+                  </h6>
+                  <Row className="g-2">
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedMonth}
+                        onChange={(e) => handleMonthChange(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "38px" }}
+                      >
+                        <option value="">Month</option>
+                        {months.map((month, index) => (
+                          <option key={month} value={index + 1}>
+                            {month.slice(0, 3)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedYear}
+                        onChange={(e) => handleYearChange(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "38px" }}
+                      >
+                        <option value="">Year</option>
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
+            </div>
 
             {/* Filters Section */}
-            <Row
-              className="mb-2 g-1"
-              style={{ position: "relative", top: "-6px" }}
-            >
+            <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card
                   className="shadow-sm border-0 w-100"
@@ -1082,7 +1053,7 @@ const HotelBookingList = () => {
                       size="sm"
                       className="mb-0 align-middle table-bordered"
                       style={{
-                        tableLayout: "auto",
+                        tableLayout: "fixed",
                         width: "100%",
                         fontSize: "0.82rem",
                         borderCollapse: "separate",
@@ -1094,8 +1065,8 @@ const HotelBookingList = () => {
                           backgroundColor: "#f8f9fa",
                           borderBottom: "2px solid #dee2e6",
                           boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
-                          fontSize: "0.68rem",
-                          letterSpacing: "0.04em",
+                          fontSize: "0.7rem",
+                          letterSpacing: "0.03em",
                         }}
                       >
                         <tr>
@@ -1109,7 +1080,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.sn,
+                              width: COLUMN_WIDTHS.sn,
                             }}
                           >
                             S.N
@@ -1124,7 +1095,7 @@ const HotelBookingList = () => {
                                 border: "1px solid #dee2e6",
                                 whiteSpace: "normal",
                                 lineHeight: 1.2,
-                                minWidth: COLUMN_WIDTHS.agentName,
+                                width: COLUMN_WIDTHS.agentName,
                               }}
                             >
                               Agent Name
@@ -1139,7 +1110,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.customerName,
+                              width: COLUMN_WIDTHS.customerName,
                             }}
                           >
                             Customer Name
@@ -1153,7 +1124,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.bookingCode,
+                              width: COLUMN_WIDTHS.bookingCode,
                             }}
                           >
                             Booking Code
@@ -1167,7 +1138,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.referenceCode,
+                              width: COLUMN_WIDTHS.referenceCode,
                             }}
                           >
                             Reference Code
@@ -1182,7 +1153,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.bookDate,
+                              width: COLUMN_WIDTHS.bookDate,
                             }}
                           >
                             Book Date
@@ -1196,7 +1167,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.bookingDetails,
+                              width: COLUMN_WIDTHS.bookingDetails,
                             }}
                           >
                             Booking Details
@@ -1211,7 +1182,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.deadlineDate,
+                              width: COLUMN_WIDTHS.deadlineDate,
                             }}
                           >
                             Deadline Date
@@ -1226,7 +1197,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.notification,
+                              width: COLUMN_WIDTHS.notification,
                             }}
                           >
                             Notification
@@ -1241,7 +1212,7 @@ const HotelBookingList = () => {
                               border: "1px solid #dee2e6",
                               whiteSpace: "normal",
                               lineHeight: 1.2,
-                              minWidth: COLUMN_WIDTHS.action,
+                              width: COLUMN_WIDTHS.action,
                             }}
                           >
                             Action
@@ -1273,36 +1244,33 @@ const HotelBookingList = () => {
                           </tr>
                         ) : (
                           filteredBookings.map((b, i) => {
-                            // Format dates
+                            // Format dates — handles both "YYYY-MM-DD" and "YYYY-MM-DDTHH:mm:ss"
                             const formatDate = (dateString) => {
                               if (!dateString) return "";
-                              const date = new Date(dateString);
-                              const day = String(date.getDate()).padStart(
-                                2,
-                                "0",
-                              );
-                              const month = String(
-                                date.getMonth() + 1,
-                              ).padStart(2, "0");
-                              const year = date.getFullYear();
-                              return `${day}/${month}/${year}`;
+                              const normalized = String(dateString).includes("T")
+                                ? dateString
+                                : `${dateString}T00:00:00`;
+                              const date = new Date(normalized);
+                              if (isNaN(date.getTime())) return "";
+                              const day = String(date.getDate()).padStart(2, "0");
+                              const month = String(date.getMonth() + 1).padStart(2, "0");
+                              return `${day}/${month}/${date.getFullYear()}`;
                             };
 
                             // Format deadlineDate to show only YYYY-MM-DD
                             const formatDeadlineDate = (dateString) => {
                               if (!dateString) return "-";
-                              // Extract date part from datetime string (e.g., "2025-11-04T00:00:00" -> "2025-11-04")
-                              const datePart = dateString.split("T")[0];
-                              return datePart || "-";
+                              return dateString.split("T")[0] || "-";
                             };
 
                             const baseCellStyle = {
-                              padding: "0.45rem 0.6rem",
-                              fontSize: "0.82rem",
+                              padding: "0.4rem 0.5rem",
+                              fontSize: "0.8rem",
                               border: "1px solid #dee2e6",
                               verticalAlign: "middle",
-                              whiteSpace: "normal",
-                              wordBreak: "break-word",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
                               lineHeight: 1.35,
                             };
 
@@ -1329,7 +1297,7 @@ const HotelBookingList = () => {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     color: "#6c757d",
-                                    minWidth: COLUMN_WIDTHS.sn,
+                                    width: COLUMN_WIDTHS.sn,
                                   }}
                                 >
                                   {serialNumberBase + i + 1}
@@ -1338,7 +1306,7 @@ const HotelBookingList = () => {
                                   <td
                                     style={{
                                       ...baseCellStyle,
-                                      minWidth: COLUMN_WIDTHS.agentName,
+                                      width: COLUMN_WIDTHS.agentName,
                                     }}
                                   >
                                     <span className="fw-medium text-dark">
@@ -1349,7 +1317,7 @@ const HotelBookingList = () => {
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    minWidth: COLUMN_WIDTHS.customerName,
+                                    width: COLUMN_WIDTHS.customerName,
                                   }}
                                 >
                                   <span className="fw-medium text-dark">
@@ -1359,7 +1327,7 @@ const HotelBookingList = () => {
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    minWidth: COLUMN_WIDTHS.bookingCode,
+                                    width: COLUMN_WIDTHS.bookingCode,
                                   }}
                                 >
                                   <span className="fw-bold text-primary">
@@ -1369,7 +1337,7 @@ const HotelBookingList = () => {
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    minWidth: COLUMN_WIDTHS.referenceCode,
+                                    width: COLUMN_WIDTHS.referenceCode,
                                   }}
                                 >
                                   <span
@@ -1384,7 +1352,7 @@ const HotelBookingList = () => {
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    minWidth: COLUMN_WIDTHS.bookDate,
+                                    width: COLUMN_WIDTHS.bookDate,
                                   }}
                                 >
                                   {formatDate(b.bookingDate) || "-"}
@@ -1392,7 +1360,7 @@ const HotelBookingList = () => {
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    minWidth: COLUMN_WIDTHS.bookingDetails,
+                                    width: COLUMN_WIDTHS.bookingDetails,
                                   }}
                                 >
                                   <div
@@ -1423,7 +1391,7 @@ const HotelBookingList = () => {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     fontFamily: "monospace",
-                                    minWidth: COLUMN_WIDTHS.deadlineDate,
+                                    width: COLUMN_WIDTHS.deadlineDate,
                                   }}
                                 >
                                   {formatDeadlineDate(b.deadlineDate)}
@@ -1432,7 +1400,7 @@ const HotelBookingList = () => {
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    minWidth: COLUMN_WIDTHS.notification,
+                                    width: COLUMN_WIDTHS.notification,
                                   }}
                                 >
                                   {(() => {
@@ -1567,7 +1535,7 @@ const HotelBookingList = () => {
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    minWidth: COLUMN_WIDTHS.action,
+                                    width: COLUMN_WIDTHS.action,
                                   }}
                                 >
                                   <div className="d-flex gap-3 justify-content-center align-items-center flex-wrap">

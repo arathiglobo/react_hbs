@@ -24,6 +24,7 @@ import {
 } from "react-bootstrap";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 
 const ApiBookingPageForHotels = () => {
   const navigate = useNavigate();
@@ -269,8 +270,10 @@ const ApiBookingPageForHotels = () => {
       // ---------------------------
 
       // Calculate nights difference between check-in and check-out
-      const checkIn = new Date(bookingData.payload.checkInDate);
-      const checkOut = new Date(bookingData.payload.checkOutDate);
+      const cinStr = toLocalDateTime(bookingData.payload.checkInDate);
+      const coutStr = toLocalDateTime(bookingData.payload.checkOutDate);
+      const checkIn = new Date(cinStr);
+      const checkOut = new Date(coutStr);
       const nights = Math.max(
         1,
         Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24)),
@@ -284,8 +287,8 @@ const ApiBookingPageForHotels = () => {
         hotelName: bookingData.hotelStaticData.hotelName,
         address: bookingData.hotelStaticData.address,
         starRating: bookingData.hotelStaticData.starRating,
-        checkInDate: bookingData.payload.checkInDate,
-        checkOutDate: bookingData.payload.checkOutDate,
+        checkInDate: cinStr,
+        checkOutDate: coutStr,
         nights: nights,
         employeeId: primaryGuest.employeeId || null,
         roomStatus: "Available",
@@ -578,7 +581,7 @@ const ApiBookingPageForHotels = () => {
                             Check-in
                           </h6>
                           <p className="mb-0 fw-semibold text-dark">
-                            {payload.checkInDate}
+                            {formatDateTime(payload.checkInDate)}
                           </p>
                         </div>
                       </Col>
@@ -589,7 +592,7 @@ const ApiBookingPageForHotels = () => {
                             Check-out
                           </h6>
                           <p className="mb-0 fw-semibold text-dark">
-                            {payload.checkOutDate}
+                            {formatDateTime(payload.checkOutDate)}
                           </p>
                         </div>
                       </Col>
@@ -1184,7 +1187,7 @@ const ApiBookingPageForHotels = () => {
                             <strong>Check-In:</strong>
                             <br />
                             <span className="text-dark">
-                              {pendingPayload.checkInDate}
+                              {formatDateTime(pendingPayload.checkInDate)}
                             </span>
                           </p>
                         </Col>
@@ -1193,7 +1196,7 @@ const ApiBookingPageForHotels = () => {
                             <strong>Check-Out:</strong>
                             <br />
                             <span className="text-dark">
-                              {pendingPayload.checkOutDate}
+                              {formatDateTime(pendingPayload.checkOutDate)}
                             </span>
                           </p>
                         </Col>

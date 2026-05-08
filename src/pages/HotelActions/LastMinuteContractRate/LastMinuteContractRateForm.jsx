@@ -646,38 +646,64 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                                           { field: "rate", normal: s?.normalRate, max: s?.maxAllowedRate },
                                           { field: "adultRate", normal: s?.normalAdultRate, max: s?.suggestedAdultRate },
                                           { field: "childRate", normal: s?.normalChildRate, max: s?.suggestedChildRate },
-                                        ].map(({ field, normal, max }) => (
+                                        ].map(({ field, normal, max }) => {
+                                          const currentVal = cellValue(room.hotelRoomcategoryId, occ.id, rt.roomTypeId, field);
+                                          const exceedsMax = max != null && Number(currentVal) > max;
+                                          return (
                                           <td key={field} style={{ minWidth: 130 }}>
-                                            <Form.Control
-                                              type="number"
-                                              min="0"
-                                              step="0.01"
-                                              value={cellValue(room.hotelRoomcategoryId, occ.id, rt.roomTypeId, field)}
-                                              onChange={(e) =>
-                                                handleRateChange(
-                                                  room.hotelRoomcategoryId,
-                                                  occ.id,
-                                                  rt.roomTypeId,
-                                                  field,
-                                                  e.target.value
-                                                )
-                                              }
-                                            />
-                                            {normal != null && (
-                                              <div style={{ fontSize: "0.7rem" }} className="mt-1">
-                                                <Badge bg="light" text="dark" className="me-1">
-                                                  Normal: {Number(normal).toFixed(2)}
-                                                </Badge>
-                                                <Badge bg="success">Max: {Number(max).toFixed(2)}</Badge>
+                                            {normal == null ? (
+                                              <div
+                                                style={{
+                                                  fontSize: "0.72rem",
+                                                  lineHeight: "1.3",
+                                                  color: "#b45309",
+                                                  background: "#fffbeb",
+                                                  border: "1px solid #fcd34d",
+                                                  borderRadius: "6px",
+                                                  padding: "6px 8px",
+                                                }}
+                                              >
+                                                No contract rate yet.
+                                                <br />
+                                                Add a normal contract rate first before entering a last-minute rate.
                                               </div>
-                                            )}
-                                            {normal == null && (
-                                              <div style={{ fontSize: "0.7rem" }} className="mt-1 text-muted">
-                                                no normal rate
-                                              </div>
+                                            ) : (
+                                              <>
+                                                <Form.Control
+                                                  type="number"
+                                                  min="0"
+                                                  max={max != null ? max : undefined}
+                                                  step="0.01"
+                                                  value={currentVal}
+                                                  isInvalid={exceedsMax}
+                                                  onChange={(e) => {
+                                                    const raw = e.target.value;
+                                                    const cleaned =
+                                                      raw === "" ? "" : String(Number(raw));
+                                                    const capped =
+                                                      max != null && Number(cleaned) > max
+                                                        ? String(max)
+                                                        : cleaned;
+                                                    handleRateChange(
+                                                      room.hotelRoomcategoryId,
+                                                      occ.id,
+                                                      rt.roomTypeId,
+                                                      field,
+                                                      capped
+                                                    );
+                                                  }}
+                                                />
+                                                <div style={{ fontSize: "0.7rem" }} className="mt-1">
+                                                  <Badge bg="light" text="dark" className="me-1">
+                                                    Normal: {Number(normal).toFixed(2)}
+                                                  </Badge>
+                                                  <Badge bg="success">Max: {Number(max).toFixed(2)}</Badge>
+                                                </div>
+                                              </>
                                             )}
                                           </td>
-                                        ))}
+                                        );
+                                        })}
                                       </tr>
                                     );
                                   })

@@ -13,6 +13,7 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
+import { formatDateTime } from "../../utils/dateUtils";
 
 export default function NoShowRisk() {
   const [horizonDays, setHorizonDays] = useState(30);
@@ -142,7 +143,7 @@ export default function NoShowRisk() {
                           <br />
                           <small className="text-muted">{r.guestEmail}</small>
                         </td>
-                        <td>{r.checkInDate}</td>
+                        <td>{formatDateTime(r.checkInDate)}</td>
                         <td>{r.leadTimeDays} days</td>
                         <td>{r.bookingValue?.toFixed(2)}</td>
                         <td>
@@ -193,7 +194,7 @@ export default function NoShowRisk() {
               <Col md={6}>
                 <small className="text-muted">Check-in / out</small>
                 <div>
-                  {showDetail.checkInDate} → {showDetail.checkOutDate}
+                  {formatDateTime(showDetail.checkInDate)} → {formatDateTime(showDetail.checkOutDate)}
                 </div>
               </Col>
               <Col md={4} className="mt-2">

@@ -43,19 +43,28 @@ const INFO_VALUE = {
   fontSize: "0.82rem",
 };
 
+const parseLocal = (str) => {
+  if (!str) return null;
+  const normalized = str.includes("T") ? str : `${str}T00:00:00`;
+  const d = new Date(normalized);
+  return isNaN(d.getTime()) ? null : d;
+};
+
 const formatDate = (dateStr) => {
-  if (!dateStr) return "-";
-  const d = new Date(dateStr);
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
   const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day} ${d.toLocaleString("default", { month: "short" })} ${year}`;
+  const mon = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day} ${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
 };
 
 const formatDateTime = (dateStr) => {
-  if (!dateStr) return "-";
-  const d = new Date(dateStr);
-  return `${formatDate(dateStr)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const hrs = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${formatDate(dateStr)} ${hrs}:${min}:${sec}`;
 };
 
 const StatusBadge = ({ status }) => {
@@ -156,8 +165,8 @@ export default function BookingDetailedView() {
                         <InfoRow label="Hotel Name" value={booking.hotelName} />
                         <InfoRow label="Address" value={booking.address} />
                         <InfoRow label="Star Rating" value={booking.starRating ? `${booking.starRating} Star` : "-"} />
-                        <InfoRow label="Check-In" value={formatDate(booking.checkInDate)} />
-                        <InfoRow label="Check-Out" value={formatDate(booking.checkOutDate)} />
+                        <InfoRow label="Check-In" value={formatDateTime(booking.checkInDate)} />
+                        <InfoRow label="Check-Out" value={formatDateTime(booking.checkOutDate)} />
                         <InfoRow label="No. of Nights" value={booking.nights ? `${booking.nights} Nights` : "-"} />
                       </Col>
                       <Col md={6}>
@@ -165,7 +174,7 @@ export default function BookingDetailedView() {
                         <InfoRow label="Source" value={booking.source} />
                         <InfoRow label="Created By" value={booking.createdByRole} />
                         <InfoRow label="Supplier Ref." value={booking.supplierReference} />
-                        <InfoRow label="Deadline Date" value={booking.deadlineDate ? booking.deadlineDate.split("T")[0] : "-"} />
+                        <InfoRow label="Deadline Date"   value={booking.deadlineDate? booking.deadlineDate.replace("T", " "): "-"} />
                         <InfoRow label="Refund Status" value={booking.refundStatus} />
                         <InfoRow label="Voucher" value={booking.voucherGenerated} />
                         <InfoRow
@@ -391,11 +400,11 @@ export default function BookingDetailedView() {
                                 <InfoRow label="Hotel" value={sub.hotelName} />
                                 <InfoRow
                                   label="Check-In"
-                                  value={formatDate(sub.checkInDate)}
+                                  value={formatDateTime(sub.checkInDate)}
                                 />
                                 <InfoRow
                                   label="Check-Out"
-                                  value={formatDate(sub.checkOutDate)}
+                                  value={formatDateTime(sub.checkOutDate)}
                                 />
                               </Col>
                               <Col md={6}>
@@ -519,7 +528,7 @@ export default function BookingDetailedView() {
                       );
                     }}
                   >
-                    EDIT
+                    ADD NEW ITEM
                   </button>
                   <button
                     style={BUTTON_STYLE}

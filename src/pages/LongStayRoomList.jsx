@@ -390,6 +390,9 @@ export default function LongStayRoomList() {
         hotelName: draft.meta.hotelName,
         checkIn: draft.payload.checkInDate,
         checkOut: draft.payload.checkOutDate,
+        agentId: draft.payload.agentId || null,
+        nationality: draft.payload.nationality || null,
+        rooms: draft.payload.rooms || [],
         contract,
         room,
       })

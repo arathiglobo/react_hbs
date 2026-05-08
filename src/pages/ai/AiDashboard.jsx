@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
+import { formatDateTime } from "../../utils/dateUtils";
 
 const Tile = ({ title, value, hint, link, color = "primary" }) => (
   <Card className="h-100 shadow-sm">
@@ -152,7 +153,7 @@ export default function AiDashboard() {
                           <tbody>
                             {highDemand.slice(0, 12).map((d, i) => (
                               <tr key={i}>
-                                <td>{d.date}</td>
+                                <td>{formatDateTime(d.date)}</td>
                                 <td>{d.dayOfWeek}</td>
                                 <td>{d.hotelCount}</td>
                                 <td>
@@ -195,7 +196,7 @@ export default function AiDashboard() {
                           <tbody>
                             {lowOcc.slice(0, 12).map((d, i) => (
                               <tr key={i}>
-                                <td>{d.date}</td>
+                                <td>{formatDateTime(d.date)}</td>
                                 <td>{d.dayOfWeek}</td>
                                 <td>{d.hotelCount}</td>
                                 <td>
@@ -240,7 +241,7 @@ export default function AiDashboard() {
                           <tbody>
                             {overbookDates.slice(0, 10).map((d, i) => (
                               <tr key={i}>
-                                <td>{d.date}</td>
+                                <td>{formatDateTime(d.date)}</td>
                                 <td>
                                   <Badge bg="warning" text="dark">
                                     {d.count}

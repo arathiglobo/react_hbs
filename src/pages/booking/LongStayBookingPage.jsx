@@ -10,25 +10,33 @@ import {
   Badge,
   Table,
   Modal,
+  Accordion,
 } from "react-bootstrap";
 import { FaHotel } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
+import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 
 export default function LongStayBookingPage() {
   const navigate = useNavigate();
   const [draft, setDraft] = useState(null);
   const [agents, setAgents] = useState([]);
   const [agentId, setAgentId] = useState("");
-  const [guest, setGuest] = useState({
-    name: "",
+  const [rooms, setRooms] = useState([]);
+  const [primaryGuest, setPrimaryGuest] = useState({
+    salutation: "",
+    firstName: "",
+    middleName: "",
+    lastName: "",
     email: "",
     phone: "",
+    passportNo: "",
     nationality: "",
-    remarks: "",
+    gender: "",
   });
+  const [remarks, setRemarks] = useState("");
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -42,7 +50,33 @@ export default function LongStayBookingPage() {
       navigate("/new-booking/long-stay", { replace: true });
       return;
     }
-    setDraft(JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    setDraft(parsed);
+    if (parsed.agentId) setAgentId(String(parsed.agentId));
+    if (parsed.nationality) {
+      setPrimaryGuest((g) => ({ ...g, nationality: parsed.nationality }));
+    }
+
+    // Initialize rooms with guests array based on search criteria
+    const initialRooms = (parsed.rooms || [{ adults: 1, children: 0, childAges: [] }]).map(
+      (room) => ({
+        adults: room.adults || 1,
+        children: room.children || 0,
+        childAges: room.childAges || [],
+        guests: Array.from(
+          { length: (room.adults || 1) + (room.children || 0) },
+          (_, i) => ({
+            salutation: "",
+            firstName: "",
+            lastName: "",
+            gender: "",
+            isChild: i >= (room.adults || 1),
+          })
+        ),
+      })
+    );
+    setRooms(initialRooms);
+
     axiosInstance
       .get("/api/agent")
       .then((res) => setAgents(res.data || []))
@@ -57,8 +91,8 @@ export default function LongStayBookingPage() {
         const res = await axiosInstance.post("/api/longStayBooking/quote", {
           hotelId: draft.hotelId,
           longStayRoomId: draft.room.longStayRoomId,
-          checkInDate: draft.checkIn,
-          checkOutDate: draft.checkOut,
+          checkInDate: toLocalDateTime(draft.checkIn),
+          checkOutDate: toLocalDateTime(draft.checkOut),
         });
         setQuote(res.data);
       } catch (err) {
@@ -70,28 +104,57 @@ export default function LongStayBookingPage() {
     fetchQuote();
   }, [draft]);
 
-  const validateGuest = () => {
+  const handleGuestChange = (rIdx, gIdx, field, value) => {
+    setRooms((prev) => {
+      const updated = [...prev];
+      updated[rIdx] = {
+        ...updated[rIdx],
+        guests: updated[rIdx].guests.map((g, i) =>
+          i === gIdx ? { ...g, [field]: value } : g
+        ),
+      };
+      return updated;
+    });
+    // Auto-populate primary guest from Room 1 Adult 1
+    if (rIdx === 0 && gIdx === 0 && ["salutation", "firstName", "lastName", "gender"].includes(field)) {
+      setPrimaryGuest((p) => ({ ...p, [field]: value }));
+    }
+    const key = `r${rIdx}_g${gIdx}_${field}`;
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+  };
+
+  const handlePrimaryGuestChange = (field, value) => {
+    setPrimaryGuest((p) => ({ ...p, [field]: value }));
+    if (errors[field]) setErrors((e) => ({ ...e, [field]: undefined }));
+  };
+
+  const validate = () => {
     const e = {};
-    if (!guest.name.trim()) e.name = "Guest name is required";
-    if (!guest.email.trim()) {
-      e.email = "Guest email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email.trim())) {
-      e.email = "Enter a valid email address";
+    if (!primaryGuest.salutation) e.salutation = "Salutation is required";
+    if (!primaryGuest.firstName.trim()) e.firstName = "First name is required";
+    if (!primaryGuest.lastName.trim()) e.lastName = "Last name is required";
+    if (!primaryGuest.email.trim()) {
+      e.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.email.trim())) {
+      e.email = "Enter a valid email";
     }
-    if (!guest.phone.trim()) {
-      e.phone = "Guest phone is required";
-    } else if (!/^[+0-9\s\-()]{7,}$/.test(guest.phone.trim())) {
-      e.phone = "Enter a valid phone number";
+    if (!primaryGuest.phone.trim()) {
+      e.phone = "Phone is required";
+    } else if (!/^[+0-9\s\-()]{7,}$/.test(primaryGuest.phone.trim())) {
+      e.phone = "Enter a valid phone";
     }
-    if (guest.nationality && guest.nationality.length !== 2) {
-      e.nationality = "Use 2-letter ISO code (e.g. IN, AE)";
-    }
+    rooms.forEach((room, rIdx) => {
+      room.guests.forEach((g, gIdx) => {
+        if (!g.salutation) e[`r${rIdx}_g${gIdx}_salutation`] = "Required";
+        if (!g.firstName?.trim()) e[`r${rIdx}_g${gIdx}_firstName`] = "Required";
+        if (!g.lastName?.trim()) e[`r${rIdx}_g${gIdx}_lastName`] = "Required";
+      });
+    });
     return e;
   };
 
-  // Step 1: validate, then open the order-summary modal
   const handleBook = () => {
-    const e = validateGuest();
+    const e = validate();
     setErrors(e);
     if (Object.keys(e).length > 0) {
       toast.error("Please fix the highlighted fields");
@@ -104,22 +167,56 @@ export default function LongStayBookingPage() {
     setShowConfirmModal(true);
   };
 
-  // Step 2: actually create the booking after the user confirms in the modal
   const confirmBooking = async () => {
     try {
       setSubmitting(true);
+      const fullName = [
+        primaryGuest.salutation,
+        primaryGuest.firstName,
+        primaryGuest.middleName,
+        primaryGuest.lastName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
       const payload = {
         hotelId: draft.hotelId,
         longStayContractId: draft.contract.longStayContractId,
         longStayRoomId: draft.room.longStayRoomId,
         agentId: agentId ? Number(agentId) : null,
-        checkInDate: draft.checkIn,
-        checkOutDate: draft.checkOut,
-        primaryGuestName: guest.name.trim(),
-        primaryGuestEmail: guest.email.trim(),
-        primaryGuestPhone: guest.phone.trim(),
-        nationality: guest.nationality || null,
-        remarks: guest.remarks || null,
+        checkInDate: toLocalDateTime(draft.checkIn),
+        checkOutDate: toLocalDateTime(draft.checkOut),
+        primaryGuestName: fullName,
+        primaryGuestEmail: primaryGuest.email.trim(),
+        primaryGuestPhone: primaryGuest.phone.trim(),
+        nationality: primaryGuest.nationality || null,
+        remarks: remarks || null,
+        primaryGuestDetails: {
+          salutation: primaryGuest.salutation,
+          firstName: primaryGuest.firstName.trim(),
+          middleName: primaryGuest.middleName?.trim() || null,
+          lastName: primaryGuest.lastName.trim(),
+          email: primaryGuest.email.trim(),
+          phone: primaryGuest.phone.trim(),
+          passportNo: primaryGuest.passportNo?.trim() || null,
+          nationality: primaryGuest.nationality || null,
+          gender: primaryGuest.gender || null,
+        },
+        rooms: rooms.map((room) => ({
+          adults: room.adults,
+          children: room.children,
+          childAges: room.childAges,
+          guests: room.guests.map((g, gIdx) => ({
+            salutation: g.salutation,
+            firstName: g.firstName?.trim() || "",
+            lastName: g.lastName?.trim() || "",
+            gender: g.gender || null,
+            isChild: !!g.isChild,
+            childAge: g.isChild
+              ? room.childAges[gIdx - room.adults] ?? null
+              : null,
+          })),
+        })),
       };
       const res = await axiosInstance.post("/api/longStayBooking/create", payload);
       toast.success(`Booking confirmed: ${res.data.bookingCode}`);
@@ -134,7 +231,6 @@ export default function LongStayBookingPage() {
   };
 
   if (!draft) return null;
-
   const fmt = (n) => (n == null ? "-" : Number(n).toFixed(2));
 
   return (
@@ -142,7 +238,7 @@ export default function LongStayBookingPage() {
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <div className="p-4">
+        <div className="p-4 flex-grow-1">
           <h4 className="mb-3">Long Stay Booking — Confirmation</h4>
 
           <Row>
@@ -153,8 +249,7 @@ export default function LongStayBookingPage() {
                   <strong>Hotel:</strong> {draft.hotelName} (id {draft.hotelId})
                 </p>
                 <p className="mb-1">
-                  <strong>Selected contract (start of stay):</strong>{" "}
-                  {draft.contract.rateCode}{" "}
+                  <strong>Selected contract:</strong> {draft.contract.rateCode}{" "}
                   <Badge bg="info">
                     {draft.contract.additionalCostType === "WEEKLY" ? "Weekly" : "Day-wise"}
                   </Badge>
@@ -168,21 +263,10 @@ export default function LongStayBookingPage() {
                   <strong>Meal Plan:</strong>{" "}
                   {draft.room.roomTypeName ||
                     (draft.room.meal ? "Meal included" : "Room only")}
-                  {draft.room.meal && (
-                    <Badge bg="success" className="ms-2">
-                      Meal included
-                    </Badge>
-                  )}
                 </p>
                 <p className="mb-1">
                   <strong>Occupancy:</strong>{" "}
-                  {draft.room.occupancyTypeName ||
-                    `Occ-${draft.room.occupancyTypeId}`}
-                  {draft.room.extraBed && (
-                    <Badge bg="info" className="ms-2">
-                      Extra bed
-                    </Badge>
-                  )}
+                  {draft.room.occupancyTypeName || `Occ-${draft.room.occupancyTypeId}`}
                 </p>
                 <p className="mb-1">
                   <strong>Refund:</strong>{" "}
@@ -193,115 +277,200 @@ export default function LongStayBookingPage() {
                   )}
                 </p>
                 <p className="mb-1">
-                  <strong>Check-in:</strong> {draft.checkIn}
+                  <strong>Check-in:</strong> {formatDateTime(draft.checkIn)}
                 </p>
                 <p className="mb-1">
-                  <strong>Check-out:</strong> {draft.checkOut}
-                </p>
-                <p className="mb-0 text-muted small">
-                  Room ID #{draft.room.longStayRoomId}
+                  <strong>Check-out:</strong> {formatDateTime(draft.checkOut)}
                 </p>
               </Card>
 
-              <Card className="p-3 mb-3">
-                <h5 className="mb-3">Primary Guest</h5>
-                <Row className="g-2">
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Name *</Form.Label>
-                      <Form.Control
-                        value={guest.name}
-                        isInvalid={!!errors.name}
-                        onChange={(e) => {
-                          setGuest({ ...guest, name: e.target.value });
-                          if (errors.name) setErrors({ ...errors, name: undefined });
-                        }}
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.name}
-                      </Form.Control.Feedback>
-                    </Form.Group>
+              {/* Passenger / Guest details */}
+              <Card className="mb-3 shadow-sm border-0">
+                <Card.Header className="bg-light">
+                  <h5 className="mb-0 fw-bold">Guest Details</h5>
+                </Card.Header>
+                <Card.Body className="p-0">
+                  <Accordion defaultActiveKey="0">
+                    {rooms.map((room, rIdx) => (
+                      <Accordion.Item key={rIdx} eventKey={String(rIdx)}>
+                        <Accordion.Header>
+                          <strong>
+                            Room {rIdx + 1} — {room.adults} Adult
+                            {room.adults > 1 ? "s" : ""}
+                            {room.children > 0
+                              ? `, ${room.children} Child${room.children > 1 ? "ren" : ""}`
+                              : ""}
+                          </strong>
+                        </Accordion.Header>
+                        <Accordion.Body>
+                          {room.guests.map((g, gIdx) => (
+                            <div key={gIdx} className="mb-3">
+                              <Row className="g-2 align-items-center">
+                                <Col md={2}>
+                                  <span className="fw-semibold text-muted small">
+                                    {g.isChild
+                                      ? `Child ${gIdx - room.adults + 1} (Age ${
+                                          room.childAges[gIdx - room.adults] ?? "-"
+                                        })`
+                                      : `Adult ${gIdx + 1}`}
+                                    {" *"}
+                                  </span>
+                                </Col>
+                                <Col md={2}>
+                                  <Form.Select
+                                    size="sm"
+                                    value={g.salutation}
+                                    isInvalid={!!errors[`r${rIdx}_g${gIdx}_salutation`]}
+                                    onChange={(e) =>
+                                      handleGuestChange(rIdx, gIdx, "salutation", e.target.value)
+                                    }
+                                  >
+                                    <option value="">Sal *</option>
+                                    <option value="Mr">Mr</option>
+                                    <option value="Mrs">Mrs</option>
+                                    <option value="Ms">Ms</option>
+                                    <option value="Master">Master</option>
+                                  </Form.Select>
+                                </Col>
+                                <Col md={3}>
+                                  <Form.Control
+                                    size="sm"
+                                    placeholder="First Name *"
+                                    value={g.firstName}
+                                    isInvalid={!!errors[`r${rIdx}_g${gIdx}_firstName`]}
+                                    onChange={(e) =>
+                                      handleGuestChange(rIdx, gIdx, "firstName", e.target.value)
+                                    }
+                                  />
+                                </Col>
+                                <Col md={3}>
+                                  <Form.Control
+                                    size="sm"
+                                    placeholder="Last Name *"
+                                    value={g.lastName}
+                                    isInvalid={!!errors[`r${rIdx}_g${gIdx}_lastName`]}
+                                    onChange={(e) =>
+                                      handleGuestChange(rIdx, gIdx, "lastName", e.target.value)
+                                    }
+                                  />
+                                </Col>
+                                <Col md={2}>
+                                  <Form.Select
+                                    size="sm"
+                                    value={g.gender}
+                                    onChange={(e) =>
+                                      handleGuestChange(rIdx, gIdx, "gender", e.target.value)
+                                    }
+                                  >
+                                    <option value="">Gender</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                    <option value="Other">Other</option>
+                                  </Form.Select>
+                                </Col>
+                              </Row>
+                            </div>
+                          ))}
+                        </Accordion.Body>
+                      </Accordion.Item>
+                    ))}
+                  </Accordion>
+                </Card.Body>
+              </Card>
+
+              {/* Primary Guest */}
+              <Card className="p-3 mb-3 shadow-sm border-0">
+                <h5 className="mb-3 fw-bold">Primary Guest Details</h5>
+                <Row className="g-3">
+                  <Col md={3}>
+                    <Form.Label>
+                      <span style={{ color: "red" }}>*</span>Salutation
+                    </Form.Label>
+                    <Form.Select
+                      value={primaryGuest.salutation}
+                      isInvalid={!!errors.salutation}
+                      onChange={(e) => handlePrimaryGuestChange("salutation", e.target.value)}
+                    >
+                      <option value="">Select</option>
+                      <option value="Mr">Mr</option>
+                      <option value="Mrs">Mrs</option>
+                      <option value="Ms">Ms</option>
+                      <option value="Dr">Dr</option>
+                    </Form.Select>
                   </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Email *</Form.Label>
-                      <Form.Control
-                        type="email"
-                        value={guest.email}
-                        isInvalid={!!errors.email}
-                        onChange={(e) => {
-                          setGuest({ ...guest, email: e.target.value });
-                          if (errors.email) setErrors({ ...errors, email: undefined });
-                        }}
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.email}
-                      </Form.Control.Feedback>
-                    </Form.Group>
+                  <Col md={3}>
+                    <Form.Label>
+                      <span style={{ color: "red" }}>*</span>First Name
+                    </Form.Label>
+                    <Form.Control
+                      value={primaryGuest.firstName}
+                      isInvalid={!!errors.firstName}
+                      onChange={(e) => handlePrimaryGuestChange("firstName", e.target.value)}
+                    />
                   </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Phone *</Form.Label>
-                      <Form.Control
-                        value={guest.phone}
-                        isInvalid={!!errors.phone}
-                        onChange={(e) => {
-                          setGuest({ ...guest, phone: e.target.value });
-                          if (errors.phone) setErrors({ ...errors, phone: undefined });
-                        }}
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.phone}
-                      </Form.Control.Feedback>
-                    </Form.Group>
+                  <Col md={3}>
+                    <Form.Label>Middle Name</Form.Label>
+                    <Form.Control
+                      value={primaryGuest.middleName}
+                      onChange={(e) => handlePrimaryGuestChange("middleName", e.target.value)}
+                    />
                   </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Nationality (ISO 2)</Form.Label>
-                      <Form.Control
-                        maxLength={2}
-                        value={guest.nationality}
-                        isInvalid={!!errors.nationality}
-                        onChange={(e) => {
-                          setGuest({
-                            ...guest,
-                            nationality: e.target.value.toUpperCase(),
-                          });
-                          if (errors.nationality)
-                            setErrors({ ...errors, nationality: undefined });
-                        }}
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.nationality}
-                      </Form.Control.Feedback>
-                    </Form.Group>
+                  <Col md={3}>
+                    <Form.Label>
+                      <span style={{ color: "red" }}>*</span>Last Name
+                    </Form.Label>
+                    <Form.Control
+                      value={primaryGuest.lastName}
+                      isInvalid={!!errors.lastName}
+                      onChange={(e) => handlePrimaryGuestChange("lastName", e.target.value)}
+                    />
+                  </Col>
+                  <Col md={3}>
+                    <Form.Label>
+                      <span style={{ color: "red" }}>*</span>Email
+                    </Form.Label>
+                    <Form.Control
+                      type="email"
+                      value={primaryGuest.email}
+                      isInvalid={!!errors.email}
+                      onChange={(e) => handlePrimaryGuestChange("email", e.target.value)}
+                    />
+                  </Col>
+                  <Col md={3}>
+                    <Form.Label>
+                      <span style={{ color: "red" }}>*</span>Phone
+                    </Form.Label>
+                    <Form.Control
+                      value={primaryGuest.phone}
+                      isInvalid={!!errors.phone}
+                      onChange={(e) => handlePrimaryGuestChange("phone", e.target.value)}
+                    />
+                  </Col>
+                  <Col md={3}>
+                    <Form.Label>Passport No</Form.Label>
+                    <Form.Control
+                      value={primaryGuest.passportNo}
+                      onChange={(e) => handlePrimaryGuestChange("passportNo", e.target.value)}
+                    />
+                  </Col>
+                  <Col md={3}>
+                    <Form.Label>Nationality</Form.Label>
+                    <Form.Control
+                      maxLength={2}
+                      value={primaryGuest.nationality}
+                      onChange={(e) =>
+                        handlePrimaryGuestChange("nationality", e.target.value.toUpperCase())
+                      }
+                    />
                   </Col>
                   <Col md={12}>
-                    <Form.Group>
-                      <Form.Label>Remarks</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={2}
-                        value={guest.remarks}
-                        onChange={(e) => setGuest({ ...guest, remarks: e.target.value })}
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Agent</Form.Label>
-                      <Form.Select
-                        value={agentId}
-                        onChange={(e) => setAgentId(e.target.value)}
-                      >
-                        <option value="">-- (none) --</option>
-                        {agents.map((a) => (
-                          <option key={a.agentId || a.id} value={a.agentId || a.id}>
-                            {a.companyName || a.name || `Agent ${a.agentId || a.id}`}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
+                    <Form.Label>Remarks</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={2}
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                    />
                   </Col>
                 </Row>
               </Card>
@@ -346,7 +515,6 @@ export default function LongStayBookingPage() {
                                   <tr>
                                     <th>Validity</th>
                                     <th>Days</th>
-                                    <th>Per-day</th>
                                     <th className="text-end">Sub-total</th>
                                   </tr>
                                 </thead>
@@ -355,9 +523,6 @@ export default function LongStayBookingPage() {
                                     <tr key={i}>
                                       <td>{s.rateCode}</td>
                                       <td>{s.days}</td>
-                                      <td>
-                                        {fmt(s.monthlyRate)} ÷ 30 = {fmt(s.perDayPortion)}
-                                      </td>
                                       <td className="text-end">{fmt(s.amount)}</td>
                                     </tr>
                                   ))}
@@ -381,35 +546,6 @@ export default function LongStayBookingPage() {
                             {fmt(quote.remainder.amount)}
                           </span>
                         </div>
-                        {quote.remainder.costType === "WEEKLY" && (
-                          <small className="text-muted">
-                            {quote.remainder.weeks} full week
-                            {quote.remainder.weeks === 1 ? "" : "s"} ({fmt(quote.remainder.weeksAmount)}) +{" "}
-                            {quote.remainder.dayRemainder} day
-                            {quote.remainder.dayRemainder === 1 ? "" : "s"} (
-                            {fmt(quote.remainder.daysAmount)})
-                          </small>
-                        )}
-                        {quote.remainder.slices && quote.remainder.slices.length > 0 && (
-                          <Table size="sm" className="mt-2 mb-0">
-                            <thead>
-                              <tr>
-                                <th>Validity</th>
-                                <th>Days</th>
-                                <th className="text-end">Sub-total</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {quote.remainder.slices.map((s, i) => (
-                                <tr key={i}>
-                                  <td>{s.rateCode}</td>
-                                  <td>{s.days}</td>
-                                  <td className="text-end">{fmt(s.amount)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </Table>
-                        )}
                       </Card>
                     )}
 
@@ -418,20 +554,6 @@ export default function LongStayBookingPage() {
                       <strong>Total</strong>
                       <strong className="text-success">{fmt(quote.totalAmount)}</strong>
                     </div>
-
-                    {quote.contractsUsed && quote.contractsUsed.length > 0 && (
-                      <small className="text-muted d-block mt-2">
-                        Rate plans used:{" "}
-                        {quote.contractsUsed
-                          .map(
-                            (c) =>
-                              `${c.rateCode}${
-                                c.maxBookingDays ? ` (max ${c.maxBookingDays} nights)` : ""
-                              }`
-                          )
-                          .join(", ")}
-                      </small>
-                    )}
                   </>
                 )}
               </Card>
@@ -453,7 +575,6 @@ export default function LongStayBookingPage() {
         </div>
       </div>
 
-      {/* Order Summary / Confirmation Modal */}
       <Modal
         show={showConfirmModal}
         onHide={() => !submitting && setShowConfirmModal(false)}
@@ -461,92 +582,61 @@ export default function LongStayBookingPage() {
         backdrop="static"
         size="md"
       >
-        <Modal.Header
-          closeButton={!submitting}
-          className="bg-primary text-white py-2"
-          style={{ borderBottom: "none" }}
-        >
+        <Modal.Header closeButton={!submitting} className="bg-primary text-white py-2">
           <Modal.Title className="fw-semibold d-flex align-items-center">
-            <FaHotel className="me-2" /> Confirm Your Long Stay Booking
+            <FaHotel className="me-2" /> Confirm Long Stay Booking
           </Modal.Title>
         </Modal.Header>
-
         <Modal.Body className="px-4 py-3 bg-light">
           {draft && (
             <div className="border rounded-3 bg-white shadow-sm p-3">
-              <div className="mb-3">
-                <h5 className="fw-bold text-primary mb-1">{draft.hotelName}</h5>
-                <p className="text-muted mb-0 small">
-                  Contract <strong>{draft.contract.rateCode}</strong>
-                  {" · "}
-                  {draft.contract.additionalCostType === "WEEKLY"
-                    ? "Weekly billing"
-                    : "Day-wise billing"}
-                </p>
-              </div>
-
+              <h5 className="fw-bold text-primary mb-1">{draft.hotelName}</h5>
               <hr />
-
               <Row className="gy-2">
                 <Col xs={6}>
                   <p className="mb-1">
                     <strong>Check-In:</strong>
                     <br />
-                    <span className="text-dark">{draft.checkIn}</span>
+                    {formatDateTime(draft.checkIn)}
                   </p>
                 </Col>
                 <Col xs={6}>
                   <p className="mb-1">
                     <strong>Check-Out:</strong>
                     <br />
-                    <span className="text-dark">{draft.checkOut}</span>
+                    {formatDateTime(draft.checkOut)}
                   </p>
                 </Col>
                 <Col xs={6}>
                   <p className="mb-1">
-                    <strong>Nights:</strong>{" "}
-                    {quote?.totalNights ?? "—"}
+                    <strong>Nights:</strong> {quote?.totalNights ?? "—"}
                   </p>
                 </Col>
                 <Col xs={6}>
                   <p className="mb-1">
-                    <strong>Occupancy:</strong>{" "}
-                    {draft.room.occupancyTypeName ||
-                      `Occ-${draft.room.occupancyTypeId}`}
+                    <strong>Guests:</strong>{" "}
+                    {rooms.reduce((s, r) => s + r.adults, 0)} Adult
+                    {rooms.reduce((s, r) => s + r.adults, 0) !== 1 ? "s" : ""}
+                    {rooms.reduce((s, r) => s + r.children, 0) > 0
+                      ? `, ${rooms.reduce((s, r) => s + r.children, 0)} Child${
+                          rooms.reduce((s, r) => s + r.children, 0) > 1 ? "ren" : ""
+                        }`
+                      : ""}
                   </p>
                 </Col>
                 <Col xs={12}>
                   <p className="mb-1">
-                    <strong>Room:</strong>{" "}
-                    {draft.room.roomCategoryName ||
-                      `Category #${draft.room.hotelRoomCategoryId}`}
-                    {" — "}
-                    {draft.room.roomTypeName ||
-                      (draft.room.meal ? "Meal included" : "Room only")}
-                  </p>
-                </Col>
-                <Col xs={12}>
-                  <p className="mb-1">
-                    <strong>Primary Guest:</strong> {guest.name}
+                    <strong>Primary Guest:</strong> {primaryGuest.salutation}{" "}
+                    {primaryGuest.firstName} {primaryGuest.lastName}
                   </p>
                   <p className="mb-1 small text-muted">
-                    {guest.email} · {guest.phone}
-                    {guest.nationality ? ` · ${guest.nationality}` : ""}
+                    {primaryGuest.email} · {primaryGuest.phone}
+                    {primaryGuest.nationality ? ` · ${primaryGuest.nationality}` : ""}
                   </p>
                 </Col>
                 <Col xs={12}>
-                  <p className="mb-1">
-                    <strong>Refund:</strong>{" "}
-                    {draft.room.refundable ? (
-                      <Badge bg="success">Flexible</Badge>
-                    ) : (
-                      <Badge bg="danger">Non-Refundable</Badge>
-                    )}
-                  </p>
-                </Col>
-
-                <Col xs={12}>
-                  <div className="p-3 rounded text-white text-center mt-2"
+                  <div
+                    className="p-3 rounded text-white text-center mt-2"
                     style={{ background: "linear-gradient(135deg,#198754,#157347)" }}
                   >
                     <h6 className="mb-0 fw-bold">Total Price</h6>
@@ -555,20 +645,12 @@ export default function LongStayBookingPage() {
                         ? Number(quote.totalAmount).toFixed(2)
                         : "—"}
                     </h4>
-                    <small>Final amount as quoted</small>
                   </div>
                 </Col>
               </Row>
-
-              <div className="mt-3 text-center">
-                <p className="text-muted small mb-0">
-                  Please review the booking details carefully before confirming.
-                </p>
-              </div>
             </div>
           )}
         </Modal.Body>
-
         <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
           <Button
             variant="outline-secondary"
@@ -585,11 +667,7 @@ export default function LongStayBookingPage() {
           >
             {submitting ? (
               <>
-                <Spinner
-                  size="sm"
-                  animation="border"
-                  className="me-2"
-                />
+                <Spinner size="sm" animation="border" className="me-2" />
                 Processing…
               </>
             ) : (
