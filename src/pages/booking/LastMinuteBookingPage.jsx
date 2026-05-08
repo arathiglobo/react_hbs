@@ -173,12 +173,33 @@ const addDays = (date, days) => {
 
 // ─── main page ─────────────────────────────────────────────────────────────
 export default function LastMinuteBookingPage() {
-  // Allowed check-in dates (today / +1 / +2). Used to clamp the date input.
+  // Number of days the check-in calendar should stay open from today —
+  // pulled from the backend at mount (driven by the "Check-in Window (Days)"
+  // configured on each Last Minute Contract Rate). Default 2.
+  const [checkInWindowDays, setCheckInWindowDays] = useState(2);
+
+  useEffect(() => {
+    let cancelled = false;
+    axiosInstance
+      .get("/api/last-minute-hotel-search/check-in-window")
+      .then((res) => {
+        const v = Number(res?.data?.maxDays);
+        if (!cancelled && Number.isFinite(v) && v > 0) setCheckInWindowDays(v);
+      })
+      .catch(() => {
+        // silent — fall back to the default of 2 days
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Allowed check-in dates (today / +1 / ... / +checkInWindowDays). Used to clamp the date input.
   const allowedCheckIns = useMemo(() => {
     const arr = [];
-    for (let i = 0; i <= 2; i++) arr.push(formatDate(addDays(new Date(), i)));
+    for (let i = 0; i <= checkInWindowDays; i++) arr.push(formatDate(addDays(new Date(), i)));
     return arr;
-  }, []);
+  }, [checkInWindowDays]);
   const today = allowedCheckIns[0];
   const maxCheckIn = allowedCheckIns[allowedCheckIns.length - 1];
 
@@ -300,7 +321,7 @@ export default function LastMinuteBookingPage() {
     if (!checkIn) e.checkIn = "Check-in date is required";
     if (!checkOut) e.checkOut = "Check-out date is required";
     if (checkIn && (checkIn < today || checkIn > maxCheckIn)) {
-      e.checkIn = "Check-in must be within today / +1 / +2 days";
+      e.checkIn = `Check-in must be within today + ${checkInWindowDays} day(s)`;
     }
     if (checkIn && checkOut && checkOut <= checkIn) {
       e.checkOut = "Check-out must be after check-in";
@@ -321,9 +342,6 @@ export default function LastMinuteBookingPage() {
     const totalAdults = rooms.reduce((a, r) => a + (r.adults || 0), 0);
     const totalChildren = rooms.reduce((a, r) => a + (r.children || 0), 0);
 
-    // The BE accepts hotelId (not yet used) and cityId — we pass cityId from
-    // the destination select. Nationality/agent are sent for traceability /
-    // future use; they don't filter results today.
     const payload = {
       hotelId: null,
       cityId: selectedDestination?.value ?? null,
@@ -332,6 +350,11 @@ export default function LastMinuteBookingPage() {
       adults: totalAdults,
       children: totalChildren,
       rooms: rooms.length,
+      roomGuests: rooms.map((r) => ({
+        adults: r.adults || 1,
+        children: r.children || 0,
+        childAges: r.childAges || [],
+      })),
     };
 
     try {
@@ -372,7 +395,7 @@ export default function LastMinuteBookingPage() {
                   <p className="text-muted mb-0">Discounted rooms for check-in within 2 days</p>
                 </div>
                 <Badge bg="warning" text="dark" className="align-self-center">
-                  Check-in: today / +1 / +2 only
+                  Check-in: today through +{checkInWindowDays} day{checkInWindowDays === 1 ? "" : "s"} only
                 </Badge>
               </div>
 

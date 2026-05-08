@@ -47,6 +47,7 @@ const HotelBookingPage = () => {
   console.log("currentActiveRole::", activeUserRole);
 
   const [bookingData, setBookingData] = useState(null);
+  const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [primaryGuest, setPrimaryGuest] = useState({
     salutation: "",
@@ -84,6 +85,27 @@ const HotelBookingPage = () => {
     };
     fetchEmployees();
   }, []);
+
+  // Fetch the selected agent's available credit balance for display
+  useEffect(() => {
+    const aId = bookingData?.payload?.agentId;
+    if (!aId) {
+      setAgentAvailableBalance(null);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentAvailableBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingData]);
 
   // Load bookingData once
   useEffect(() => {
@@ -550,9 +572,20 @@ const HotelBookingPage = () => {
               <Col>
                 <Card className="shadow-lg rounded-xl mb-3 booking-summary-card border-0 overflow-hidden">
                   <Card.Header className="bg-gradient-secondary text-black py-2 rounded-top">
-                    <h4 className="mb-0 d-flex align-items-center">
-                      <FaHotel className="me-1 fs-4" /> Booking Summary
-                    </h4>
+                    <div className="d-flex justify-content-between align-items-center">
+                      <h4 className="mb-0 d-flex align-items-center">
+                        <FaHotel className="me-1 fs-4" /> Booking Summary
+                      </h4>
+                      {agentAvailableBalance != null && (
+                        <span
+                          className="fw-bold"
+                          style={{ color: "#dc3545", fontSize: "0.95rem" }}
+                        >
+                          Available Balance:{" "}
+                          {Number(agentAvailableBalance).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
                   </Card.Header>
                   <Card.Body className="p-4 bg-light">
                     <Row className="gy-4">

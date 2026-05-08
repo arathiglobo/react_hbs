@@ -25,6 +25,7 @@ import TopBar from "../../components/TopBar";
 import "../../styles/HotelBookingPage.css";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import { toLocalDateTime } from "../../utils/dateUtils";
 
 /**
  * LastMinuteBookingForm — booking creation page for the Last Minute flow.
@@ -76,16 +77,33 @@ export default function LastMinuteBookingForm() {
     email: "",
     phone: "",
     passportNo: "",
-    customerNationality: "",
+    customerNationality:
+      state?.ctx?.nationalityCode || state?.ctx?.nationalityName || "",
     agentLpo: "",
   });
 
   // Each "room" is a single room in this booking. The Last Minute search
   // returns one rate per room slot, so we default to a 1-room booking and
   // let the user add more rooms (each room duplicates the chosen rate).
-  const [rooms, setRooms] = useState([
-    { adults: 1, children: 0, childAges: [], guests: [defaultGuest(false)] },
-  ]);
+  const [rooms, setRooms] = useState(() => {
+    const sr = state?.ctx?.searchRooms;
+    if (Array.isArray(sr) && sr.length > 0) {
+      return sr.map((r) => {
+        const adults = r.adults || 1;
+        const children = r.children || 0;
+        const childAges = r.childAges || [];
+        const guests = [];
+        for (let i = 0; i < adults; i++) guests.push(defaultGuest(false));
+        for (let i = 0; i < children; i++) {
+          const g = defaultGuest(true);
+          g.childAge = childAges[i] ?? 5;
+          guests.push(g);
+        }
+        return { adults, children, childAges: [...childAges], guests };
+      });
+    }
+    return [{ adults: 1, children: 0, childAges: [], guests: [defaultGuest(false)] }];
+  });
 
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
@@ -103,14 +121,30 @@ export default function LastMinuteBookingForm() {
   // submit only fires on Confirm inside the modal.
   const [showSummaryModal, setShowSummaryModal] = useState(false);
 
-  // ── Total price computed from per-night × nights × roomCount ──
+  // ── Total price computed from per-night × nights × roomCount + extras ──
   const perNight = Number(ctx?.room?.lastMinuteRate || 0);
+  const adultRate = Number(ctx?.room?.adultRate || 0);
+  const childRate = Number(ctx?.room?.childRate || 0);
   const nights = Number(ctx?.nights || 1);
   const totalRoomCount = rooms.length;
-  const totalPrice = useMemo(
-    () => perNight * nights * totalRoomCount,
-    [perNight, nights, totalRoomCount]
-  );
+  const { totalPrice, extraAdults, totalChildren } = useMemo(() => {
+    let extra = 0;
+    let kids = 0;
+    rooms.forEach((r) => {
+      const a = Number(r.adults) || 1;
+      const c = Number(r.children) || 0;
+      extra += Math.max(0, a - 2);
+      kids += c;
+    });
+    const base = perNight * nights * totalRoomCount;
+    const adultExtra = extra * adultRate * nights;
+    const childExtra = kids * childRate * nights;
+    return {
+      totalPrice: base + adultExtra + childExtra,
+      extraAdults: extra,
+      totalChildren: kids,
+    };
+  }, [perNight, adultRate, childRate, nights, totalRoomCount, rooms]);
 
   // Resync rooms[].guests array when adults/children counts change.
   useEffect(() => {
@@ -253,19 +287,30 @@ export default function LastMinuteBookingForm() {
     setError(null);
 
     const agentId =
+      (ctx?.agentId && String(ctx.agentId)) ||
       localStorage.getItem("userId") ||
       localStorage.getItem("agentId") ||
       "0";
     const createdByRole =
       localStorage.getItem("currentActiveRole") || "agent";
 
+    const customerWithNationality = {
+      ...primaryGuest,
+      customerNationality:
+        primaryGuest.customerNationality ||
+        ctx?.nationalityCode ||
+        ctx?.nationalityName ||
+        "",
+    };
+
     const payload = {
       lastMinuteRateId: ctx.room.lastMinuteRateId,
-      checkInDate: ctx.checkInDate,
-      checkOutDate: ctx.checkOutDate,
+      checkInDate: toLocalDateTime(ctx.checkInDate),
+      checkOutDate: toLocalDateTime(ctx.checkOutDate),
       agentId,
+      nationalityId: ctx?.nationalityId ?? null,
       createdByRole,
-      customer: primaryGuest,
+      customer: customerWithNationality,
       rooms: rooms.map((r) => ({
         adults: Number(r.adults) || 1,
         children: Number(r.children) || 0,
@@ -452,23 +497,7 @@ export default function LastMinuteBookingForm() {
 
         {/* ── Form ── */}
         <Form onSubmit={handleConfirmClick} noValidate>
-          {/* Room count selector */}
-          <Card className="mb-2 shadow-sm border-0">
-            <Card.Body className="d-flex align-items-center gap-3">
-              <span className="fw-semibold">Number of rooms:</span>
-              <Form.Control
-                type="number"
-                min="1"
-                max="10"
-                value={totalRoomCount}
-                onChange={(e) => setRoomCount(Number(e.target.value) || 1)}
-                style={{ width: 100 }}
-              />
-              <small className="text-muted">
-                Same room category will be booked for each room.
-              </small>
-            </Card.Body>
-          </Card>
+        
 
           {/* ── Guest Details accordion ── */}
           <Card className="mb-2 shadow-sm border-0">
@@ -488,36 +517,11 @@ export default function LastMinuteBookingForm() {
                         Room {roomIdx + 1} -{" "}
                         {room.roomCategoryName || `Category #${room.roomCategoryId}`}{" "}
                         ({room.roomTypeName || `Type #${room.roomTypeId}`})
+                         ({r.adults} Adult{r.adults !== 1 ? "s" : ""} ,  {r.children} Child{r.children !== 1 ? "ren" : ""})
                       </h6>
                     </Accordion.Header>
                     <Accordion.Body className="p-3">
-                      {/* Per-room adult/children counts */}
-                      <Row className="g-2 mb-3">
-                        <Col md={3}>
-                          <Form.Label>Adults</Form.Label>
-                          <Form.Control
-                            type="number"
-                            min="1"
-                            max="6"
-                            value={r.adults}
-                            onChange={(e) =>
-                              setRoomField(roomIdx, "adults", e.target.value)
-                            }
-                          />
-                        </Col>
-                        <Col md={3}>
-                          <Form.Label>Children</Form.Label>
-                          <Form.Control
-                            type="number"
-                            min="0"
-                            max="4"
-                            value={r.children}
-                            onChange={(e) =>
-                              setRoomField(roomIdx, "children", e.target.value)
-                            }
-                          />
-                        </Col>
-                      </Row>
+                    
 
                       {/* Per-guest rows */}
                       {r.guests.map((g, gIdx) => (
@@ -730,7 +734,7 @@ export default function LastMinuteBookingForm() {
                     {validationErrors.primary_phone}
                   </Form.Control.Feedback>
                 </Col>
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Label>Nationality</Form.Label>
                   <Form.Control
                     value={primaryGuest.customerNationality}
@@ -741,7 +745,7 @@ export default function LastMinuteBookingForm() {
                       })
                     }
                   />
-                </Col>
+                </Col> */}
               </Row>
               <Row className="g-2 mt-2">
                 <Col md={4}>

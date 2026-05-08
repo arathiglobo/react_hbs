@@ -335,6 +335,31 @@ export default function HotelSearch() {
   const [checkOut, setCheckOut] = useState("");
   const [nights, setNights] = useState(1);
   const [agent, setAgent] = useState("");
+  const [agentBalance, setAgentBalance] = useState(null);
+  const [agentBalanceLoading, setAgentBalanceLoading] = useState(false);
+
+  useEffect(() => {
+    if (!agent) {
+      setAgentBalance(null);
+      return;
+    }
+    let cancelled = false;
+    setAgentBalanceLoading(true);
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${agent}`)
+      .then((res) => {
+        if (!cancelled) setAgentBalance(res?.data?.availableCreditLimit ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentBalance(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAgentBalanceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent]);
   const [rooms, setRooms] = useState([
     { adults: 1, children: 0, childAges: [] },
   ]);
@@ -1216,10 +1241,27 @@ export default function HotelSearch() {
                           {errors.agent}
                         </div>
                       )}
+                      {agent && (
+                        <div className="mt-1 small">
+                          {agentBalanceLoading ? (
+                            <span className="text-muted">
+                              Loading available balance…
+                            </span>
+                          ) : agentBalance != null ? (
+                            <span className="fw-semibold" style={{ color: "#dc3545" }}>
+                              Available Balance: {Number(agentBalance).toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-muted">
+                              Available balance unavailable
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 
-                
+
 
                     <Col lg={2} md={6}>
                     <Form.Group>

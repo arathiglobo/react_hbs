@@ -56,6 +56,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
     validityList: [{ validityFrom: "", validityTo: "" }],
     roomRates: [],
     isLive: true,
+    checkInWindowDays: 2,
   });
 
   const [markets, setMarkets] = useState([]);
@@ -198,6 +199,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
               refundable: !!r.refundable,
             })),
             isLive: !!e.isLive,
+            checkInWindowDays: e.checkInWindowDays != null ? Number(e.checkInWindowDays) : 2,
           });
         } else {
           // CREATE mode: pre-fill cells from suggestions
@@ -368,6 +370,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
       weekEndDay,
       allDays,
       isLive: formData.isLive,
+      checkInWindowDays: Number(formData.checkInWindowDays) || 2,
       contractRateValidityDTO: formData.validityList.map((v) => ({
         validityFrom: v.validityFrom ? `${v.validityFrom}:00` : null,
         validityTo: v.validityTo ? `${v.validityTo}:00` : null,
@@ -502,6 +505,30 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                           }))}
                           value={formData.excludeCountry}
                           onChange={(sel) => setFormData({ ...formData, excludeCountry: sel || [] })}
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>
+                          Check-in Window (Days)
+                          <small className="text-muted ms-1">
+                            — booking page calendar opens for this many days from today
+                          </small>
+                        </Form.Label>
+                        <Form.Control
+                          type="number"
+                          min="1"
+                          max="30"
+                          step="1"
+                          value={formData.checkInWindowDays}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const n =
+                              raw === "" ? "" : Math.max(1, Math.min(30, Number(raw) || 1));
+                            setFormData({ ...formData, checkInWindowDays: n });
+                          }}
                         />
                       </Form.Group>
                     </Col>

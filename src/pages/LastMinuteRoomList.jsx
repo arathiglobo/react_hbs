@@ -142,7 +142,9 @@ export default function LastMinuteRoomList() {
   }, []);
 
   const handleBookRate = (rate, hotel, results) => {
-    // Persist context that the booking form will read.
+    const sc = payload?.searchContext || {};
+    const searchRooms = sc.rooms || [{ adults: 1, children: 0, childAges: [] }];
+    const nat = sc.nationality || null;
     navigate("/new-booking/last-minute-booking/create", {
       state: {
         ctx: {
@@ -158,6 +160,11 @@ export default function LastMinuteRoomList() {
           checkInDate: results.checkInDate,
           checkOutDate: results.checkOutDate,
           nights: results.nights,
+          searchRooms,
+          agentId: sc.agent || null,
+          nationalityId: nat?.value ?? null,
+          nationalityCode: nat?.code ?? null,
+          nationalityName: nat?.label ?? null,
         },
       },
     });
@@ -425,6 +432,22 @@ export default function LastMinuteRoomList() {
                                           <FaShieldAlt className="me-2 text-muted" />
                                           Last-minute rates are typically non-refundable.
                                         </div>
+                                        {rate.adultRate != null &&
+                                          Number(rate.adultRate) > 0 && (
+                                            <div className="feature-item">
+                                              <FaUsers className="me-2 text-muted" />
+                                              Extra Adult: <strong>{formatPrice(rate.adultRate)}</strong>{" "}
+                                              <span className="text-muted">/ night</span>
+                                            </div>
+                                          )}
+                                        {rate.childRate != null &&
+                                          Number(rate.childRate) > 0 && (
+                                            <div className="feature-item">
+                                              <FaUsers className="me-2 text-muted" />
+                                              Child: <strong>{formatPrice(rate.childRate)}</strong>{" "}
+                                              <span className="text-muted">/ night</span>
+                                            </div>
+                                          )}
                                         <div className="feature-item">
                                           <FaMoneyBillWave className="me-2 text-muted" />
                                           Total ({results.nights} nt):{" "}
@@ -486,6 +509,16 @@ export default function LastMinuteRoomList() {
                                           Total: {formatPrice(rate.totalPriceForStay)}
                                         </div>
                                         <div className="small text-muted">per night</div>
+                                        {rate.adultRate != null && Number(rate.adultRate) > 0 && (
+                                          <div className="small text-muted">
+                                            Extra Adult: {formatPrice(rate.adultRate)}/nt
+                                          </div>
+                                        )}
+                                        {rate.childRate != null && Number(rate.childRate) > 0 && (
+                                          <div className="small text-muted">
+                                            Child: {formatPrice(rate.childRate)}/nt
+                                          </div>
+                                        )}
                                       </div>
                                       <div className="ps-2">
                                         <Button

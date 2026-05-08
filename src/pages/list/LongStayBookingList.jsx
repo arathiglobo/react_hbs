@@ -277,6 +277,23 @@ export default function LongStayBookingList() {
                 </Col>
               </Row>
               <hr />
+              <h6 className="fw-bold">Room & Rate Plan</h6>
+              <Row className="mb-3">
+                <Col md={6}>
+                  <InfoRow label="Room Category" value={detail.roomCategoryName} />
+                  <InfoRow label="Room Type" value={detail.roomTypeName} />
+                  <InfoRow label="Occupancy" value={detail.occupancyTypeName} />
+                </Col>
+                <Col md={6}>
+                  <InfoRow label="Meal Plan" value={detail.mealPlanName} />
+                  <InfoRow label="Contract Rate Code" value={detail.contractRateCode} />
+                  <InfoRow
+                    label="Refundable"
+                    value={detail.refundable ? "Flexible" : "Non-Refundable"}
+                  />
+                </Col>
+              </Row>
+              <hr />
               <h6 className="fw-bold">Pricing</h6>
               <Row>
                 <Col md={6}>
@@ -420,6 +437,35 @@ export default function LongStayBookingList() {
                 <div style={{ flex: "1 1 220px" }}>
                   <div className="label">Total Nights</div>
                   <div className="value">{voucher.totalNights}</div>
+                </div>
+              </div>
+              <h5>Room & Rate Plan</h5>
+              <div className="row-info" style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+                <div style={{ flex: "1 1 220px" }}>
+                  <div className="label">Room Category</div>
+                  <div className="value">{voucher.roomCategoryName || "-"}</div>
+                </div>
+                <div style={{ flex: "1 1 220px" }}>
+                  <div className="label">Room Type</div>
+                  <div className="value">{voucher.roomTypeName || "-"}</div>
+                </div>
+                <div style={{ flex: "1 1 220px" }}>
+                  <div className="label">Occupancy</div>
+                  <div className="value">{voucher.occupancyTypeName || "-"}</div>
+                </div>
+                <div style={{ flex: "1 1 220px" }}>
+                  <div className="label">Meal Plan</div>
+                  <div className="value">{voucher.mealPlanName || "-"}</div>
+                </div>
+                <div style={{ flex: "1 1 220px" }}>
+                  <div className="label">Contract Rate Code</div>
+                  <div className="value">{voucher.contractRateCode || "-"}</div>
+                </div>
+                <div style={{ flex: "1 1 220px" }}>
+                  <div className="label">Refundable</div>
+                  <div className="value">
+                    {voucher.refundable ? "Flexible" : "Non-Refundable"}
+                  </div>
                 </div>
               </div>
               <h5>Primary Guest</h5>

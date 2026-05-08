@@ -67,6 +67,7 @@ const RoomList = () => {
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
   const [policyList, setPolicyList] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
+  const [agentBalance, setAgentBalance] = useState(null);
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
   // console.log("currentActiveRole::", activeUserRole);
@@ -398,6 +399,27 @@ const RoomList = () => {
     ));
   };
 
+  // Fetch the agent's available credit balance once roomData/payload is loaded
+  useEffect(() => {
+    const aId = roomData?.payload?.agentId;
+    if (!aId) {
+      setAgentBalance(null);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) setAgentBalance(res?.data?.availableCreditLimit ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomData]);
+
   // Second useEffect to fetch policy details when roomData is available
   useEffect(() => {
     const fetchInhousePolicyDetails = async () => {
@@ -531,6 +553,17 @@ const RoomList = () => {
           className="content-wrapper"
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
+            {/* Agent available balance — top-right indicator */}
+            {agentBalance != null && (
+              <div
+                className="d-flex justify-content-end mb-2"
+                style={{ fontSize: "0.95rem" }}
+              >
+                <span className="fw-bold" style={{ color: "#dc3545" }}>
+                  Available Balance: {Number(agentBalance).toFixed(2)}
+                </span>
+              </div>
+            )}
             {/* Loader Modal */}
             <Modal
               show={loadingRate}
