@@ -212,39 +212,57 @@ const CabProviderReg = () => {
   // so picking a cab from the dropdown shows its prior data instantly.
   const [zonesByCabId, setZonesByCabId] = useState({});
 
-  const buildZoneOption = (item, source) => {
-    const id = source === "SUBLOCATION" ? item.id : item.id;
-    const name =
-      source === "SUBLOCATION"
-        ? item.locationName || item.subLocationName || `Sub-Location #${id}`
-        : item.name || `Place #${id}`;
-    return {
-      value: `${source}:${id}`,
-      label: source === "SUBLOCATION" ? `${name} (Locality)` : `${name} (Destination)`,
-      source,
-      locationId: Number(id),
-      locationName: name,
-    };
-  };
+  const buildZoneOption = (item) => ({
+    value: `${item.source}:${item.id}`,
+    label: item.name,
+    subtitle: item.subtitle || "",
+    source: item.source,
+    locationId: Number(item.id),
+    locationName: item.name,
+    code: item.code || null,
+    subLocationId: item.subLocationId || null,
+    subLocationName: item.subLocationName || null,
+  });
 
-  const fetchZoneLocationOptions = async () => {
+  // Combined Zones / Hotels / Airports source — driven by the new
+  // /api/cab-search/lookup endpoint. The provider registers the cab's
+  // pickup / dropoff against any of these so the cab-search can match
+  // them later.
+  const fetchZoneLocationOptions = async (search = "") => {
     try {
-      const [subRes, destRes] = await Promise.all([
-        axiosInstance.get("/api/sub-locations?page=0&limit=1000"),
-        axiosInstance.get("/api/destination?page=0&limit=1000"),
-      ]);
-      const subs = Array.isArray(subRes.data) ? subRes.data : [];
-      const dests = Array.isArray(destRes.data) ? destRes.data : [];
-      const opts = [
-        ...subs.map((s) => buildZoneOption(s, "SUBLOCATION")),
-        ...dests.map((d) => buildZoneOption(d, "PLACE")),
-      ];
-      setZoneLocationOptions(opts);
+      const res = await axiosInstance.get(
+        `/api/cab-search/lookup?search=${encodeURIComponent(search)}&limit=20`
+      );
+      const d = res?.data || {};
+      const groups = [];
+      const zones = Array.isArray(d.zones) ? d.zones : [];
+      const hotels = Array.isArray(d.hotels) ? d.hotels : [];
+      const airports = Array.isArray(d.airports) ? d.airports : [];
+      if (zones.length > 0) {
+        groups.push({ label: "ZONES", options: zones.map(buildZoneOption) });
+      }
+      if (hotels.length > 0) {
+        groups.push({ label: "HOTELS", options: hotels.map(buildZoneOption) });
+      }
+      if (airports.length > 0) {
+        groups.push({
+          label: "AIRPORTS",
+          options: airports.map(buildZoneOption),
+        });
+      }
+      setZoneLocationOptions(groups);
     } catch (err) {
       console.error("Error loading zone location options:", err);
       setZoneLocationOptions([]);
     }
   };
+
+  const formatZoneOptionLabel = (opt) => (
+    <div>
+      <div className="fw-semibold">{opt.label}</div>
+      {opt.subtitle && <small className="text-muted">{opt.subtitle}</small>}
+    </div>
+  );
 
   const zoneLocationToOption = (loc) => ({
     value: `${loc.source}:${loc.locationId}`,
@@ -2523,12 +2541,29 @@ const CabProviderReg = () => {
                       onChange={(opts) =>
                         setZonePickupSelected(opts ? [...opts] : [])
                       }
-                      placeholder="Search localities & destinations…"
+                      onInputChange={(input, { action }) => {
+                        if (action !== "input-change") return;
+                        clearTimeout(window.__zonePickupDebounce);
+                        window.__zonePickupDebounce = setTimeout(
+                          () => fetchZoneLocationOptions(input || ""),
+                          300
+                        );
+                      }}
+                      filterOption={() => true}
+                      formatOptionLabel={formatZoneOptionLabel}
+                      placeholder="Search zones / hotels / airports…"
                       isDisabled={!zoneSelectedCabId || zoneSaving}
                       menuPortalTarget={document.body}
                       menuPosition="fixed"
                       styles={{
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        groupHeading: (base) => ({
+                          ...base,
+                          fontWeight: 700,
+                          color: "#212529",
+                          textTransform: "uppercase",
+                          fontSize: "0.75rem",
+                        }),
                       }}
                     />
                   </Form.Group>
@@ -2542,12 +2577,29 @@ const CabProviderReg = () => {
                       onChange={(opts) =>
                         setZoneDropoffSelected(opts ? [...opts] : [])
                       }
-                      placeholder="Search localities & destinations…"
+                      onInputChange={(input, { action }) => {
+                        if (action !== "input-change") return;
+                        clearTimeout(window.__zoneDropoffDebounce);
+                        window.__zoneDropoffDebounce = setTimeout(
+                          () => fetchZoneLocationOptions(input || ""),
+                          300
+                        );
+                      }}
+                      filterOption={() => true}
+                      formatOptionLabel={formatZoneOptionLabel}
+                      placeholder="Search zones / hotels / airports…"
                       isDisabled={!zoneSelectedCabId || zoneSaving}
                       menuPortalTarget={document.body}
                       menuPosition="fixed"
                       styles={{
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        groupHeading: (base) => ({
+                          ...base,
+                          fontWeight: 700,
+                          color: "#212529",
+                          textTransform: "uppercase",
+                          fontSize: "0.75rem",
+                        }),
                       }}
                     />
                   </Form.Group>

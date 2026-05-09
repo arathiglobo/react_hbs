@@ -42,10 +42,17 @@ export default function Airport() {
   const [selectedPlaceOption, setSelectedPlaceOption] = useState(null);
   const [isPlaceLoading, setIsPlaceLoading] = useState(false);
 
+  // Sub-Location (locality) the airport sits in — surfaced in cab-search.
+  const [subLocationOptions, setSubLocationOptions] = useState([]);
+  const [selectedSubLocation, setSelectedSubLocation] = useState("");
+  const [selectedSubLocationOption, setSelectedSubLocationOption] = useState(null);
+  const [isSubLocationLoading, setIsSubLocationLoading] = useState(false);
+
   const countryDebounceRef = useRef(null);
   const cityDebounceRef = useRef(null);
   const placeDebounceRef = useRef(null);
   const regionDebounceRef = useRef(null);
+  const subLocationDebounceRef = useRef(null);
   const searchDebounceRef = useRef(null);
 
   const PAGE_SIZE = 10;
@@ -109,6 +116,7 @@ export default function Airport() {
     countryId: selectedCountry || null,
     cityId: selectedCity || null,
     placeId: selectedPlace || null,
+    subLocationId: selectedSubLocation || null,
   });
 
   const validateForm = () => {
@@ -281,6 +289,42 @@ export default function Airport() {
     }
   };
 
+  // Sub-location list filtered to the currently-selected place. The endpoint
+  // also supports an optional ?placeId= filter so we keep the dropdown
+  // scoped to the airport's destination.
+  const fetchSubLocations = async (placeId, search = "") => {
+    setIsSubLocationLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: "0",
+        limit: "50",
+      });
+      if (placeId) params.append("placeId", String(placeId));
+      if (search) params.append("search", search);
+      const res = await axiosInstance.get(
+        `/api/sub-locations?${params.toString()}`
+      );
+      if (Array.isArray(res.data)) {
+        const opts = res.data.map((s) => ({
+          value: s.id,
+          label:
+            s.locationCode
+              ? `${s.locationName} (${s.locationCode})`
+              : s.locationName,
+        }));
+        setSubLocationOptions(opts);
+        return opts;
+      }
+      setSubLocationOptions([]);
+      return [];
+    } catch {
+      setSubLocationOptions([]);
+      return [];
+    } finally {
+      setIsSubLocationLoading(false);
+    }
+  };
+
   // ─── Modal open/close ─────────────────────────────────────────────────
   const resetForm = () => {
     setEditing(null);
@@ -294,10 +338,13 @@ export default function Airport() {
     setSelectedCityOption(null);
     setSelectedPlace("");
     setSelectedPlaceOption(null);
+    setSelectedSubLocation("");
+    setSelectedSubLocationOption(null);
     setRegionOptions([]);
     setCountryOptions([]);
     setCityOptions([]);
     setPlaceOptions([]);
+    setSubLocationOptions([]);
     setError("");
   };
 
@@ -317,6 +364,7 @@ export default function Airport() {
     setSelectedCountry(item.countryId || "");
     setSelectedCity(item.cityId || "");
     setSelectedPlace(item.placeId || "");
+    setSelectedSubLocation(item.subLocationId || "");
 
     fetchRegions("").then((opts) => {
       const m = (opts || []).find((o) => String(o.value) === String(item.regionId));
@@ -338,6 +386,12 @@ export default function Airport() {
         setSelectedPlaceOption(m || null);
       });
     }
+    fetchSubLocations(item.placeId, "").then((opts) => {
+      const m = (opts || []).find(
+        (o) => String(o.value) === String(item.subLocationId)
+      );
+      setSelectedSubLocationOption(m || null);
+    });
     setShowModal(true);
   };
 
@@ -632,6 +686,12 @@ export default function Airport() {
                         onChange={(option) => {
                           setSelectedPlaceOption(option);
                           setSelectedPlace(option ? option.value : "");
+                          // Reset sub-location whenever place changes — the
+                          // available localities depend on the chosen place.
+                          setSelectedSubLocation("");
+                          setSelectedSubLocationOption(null);
+                          setSubLocationOptions([]);
+                          if (option) fetchSubLocations(option.value, "");
                         }}
                         onMenuOpen={() => {
                           if (selectedCity && placeOptions.length === 0) {
@@ -653,6 +713,50 @@ export default function Airport() {
                         isDisabled={!selectedCity}
                         styles={customSelectStyles}
                       />
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                {/* Sub-Location (optional locality the airport sits in) */}
+                <Row className="mt-3">
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label>Sub-Location / Locality</Form.Label>
+                      <Select
+                        options={subLocationOptions}
+                        value={selectedSubLocationOption}
+                        onChange={(option) => {
+                          setSelectedSubLocationOption(option);
+                          setSelectedSubLocation(option ? option.value : "");
+                        }}
+                        onMenuOpen={() => {
+                          if (subLocationOptions.length === 0) {
+                            fetchSubLocations(selectedPlace, "");
+                          }
+                        }}
+                        onInputChange={(input, { action }) => {
+                          if (action !== "input-change") return;
+                          clearTimeout(subLocationDebounceRef.current);
+                          subLocationDebounceRef.current = setTimeout(
+                            () => fetchSubLocations(selectedPlace, input),
+                            400
+                          );
+                        }}
+                        filterOption={() => true}
+                        placeholder={
+                          selectedPlace
+                            ? "Search and Select Sub-Location"
+                            : "Optional — pick a locality (or leave blank)"
+                        }
+                        isSearchable
+                        isClearable
+                        isLoading={isSubLocationLoading}
+                        styles={customSelectStyles}
+                      />
+                      <small className="text-muted">
+                        Used by the cab-search dropdown so this airport shows
+                        with its locality context.
+                      </small>
                     </Form.Group>
                   </Col>
                 </Row>

@@ -148,50 +148,76 @@ export const CabSearch = () => {
   const [departureTime, setDepartureTime] = useState("");
   const [returnTime, setReturnTime] = useState("");
 
-  // Combined locality + destination options used by Origin / Destination
-  // dropdowns. Same combined source as the cab-zone modal so the search
-  // matches what's been registered against each cab.
-  const [zoneLocationOptions, setZoneLocationOptions] = useState([]);
+  // Combined Origin / Destination options grouped into Zones / Hotels /
+  // Airports. Sourced from the new /api/cab-search/lookup endpoint, which
+  // searches across master_sub_locations, master_place, hotel, and
+  // master_airport in parallel so a single typed query like "burj" surfaces
+  // matches across every type.
+  const [zoneLocationOptions, setZoneLocationOptions] = useState([]); // grouped
   const [isZoneOptsLoading, setIsZoneOptsLoading] = useState(false);
 
-  const buildLocOption = (item, source) => {
-    const id = item.id;
-    const name =
-      source === "SUBLOCATION"
-        ? item.locationName || item.subLocationName || `Sub-Location #${id}`
-        : item.name || `Place #${id}`;
-    return {
-      value: `${source}:${id}`,
-      label: source === "SUBLOCATION" ? `${name} (Locality)` : `${name} (Destination)`,
-      source,
-      locationId: Number(id),
-      locationName: name,
-    };
+  const buildLookupOption = (item) => ({
+    // value is unique across the four sources
+    value: `${item.source}:${item.id}`,
+    label: item.name,
+    subtitle: item.subtitle || "",
+    source: item.source,
+    locationId: Number(item.id),
+    locationName: item.name,
+    code: item.code || null,
+    subLocationId: item.subLocationId || null,
+    subLocationName: item.subLocationName || null,
+  });
+
+  const fetchLookup = (search = "") => {
+    setIsZoneOptsLoading(true);
+    axiosInstance
+      .get(
+        `/api/cab-search/lookup?search=${encodeURIComponent(search)}&limit=20`
+      )
+      .then((res) => {
+        const d = res?.data || {};
+        const groups = [];
+        const zones = Array.isArray(d.zones) ? d.zones : [];
+        const hotels = Array.isArray(d.hotels) ? d.hotels : [];
+        const airports = Array.isArray(d.airports) ? d.airports : [];
+        if (zones.length > 0) {
+          groups.push({
+            label: "ZONES",
+            options: zones.map(buildLookupOption),
+          });
+        }
+        if (hotels.length > 0) {
+          groups.push({
+            label: "HOTELS",
+            options: hotels.map(buildLookupOption),
+          });
+        }
+        if (airports.length > 0) {
+          groups.push({
+            label: "AIRPORTS",
+            options: airports.map(buildLookupOption),
+          });
+        }
+        setZoneLocationOptions(groups);
+      })
+      .catch(() => setZoneLocationOptions([]))
+      .finally(() => setIsZoneOptsLoading(false));
   };
 
   useEffect(() => {
-    let cancelled = false;
-    setIsZoneOptsLoading(true);
-    Promise.all([
-      axiosInstance.get("/api/sub-locations?page=0&limit=1000").catch(() => ({ data: [] })),
-      axiosInstance.get("/api/destination?page=0&limit=1000").catch(() => ({ data: [] })),
-    ])
-      .then(([subRes, destRes]) => {
-        if (cancelled) return;
-        const subs = Array.isArray(subRes?.data) ? subRes.data : [];
-        const dests = Array.isArray(destRes?.data) ? destRes.data : [];
-        setZoneLocationOptions([
-          ...subs.map((s) => buildLocOption(s, "SUBLOCATION")),
-          ...dests.map((d) => buildLocOption(d, "PLACE")),
-        ]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsZoneOptsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    fetchLookup("");
   }, []);
+
+  // Custom react-select option renderer: name on top, light subtitle below.
+  const formatLookupOptionLabel = (opt) => (
+    <div>
+      <div className="fw-semibold">{opt.label}</div>
+      {opt.subtitle && (
+        <small className="text-muted">{opt.subtitle}</small>
+      )}
+    </div>
+  );
 
   // ── Per-field validation errors ──────────────────────────────────────
   // Keyed by field name; values are the error message to display under the
@@ -675,12 +701,25 @@ export const CabSearch = () => {
                         setOrigin(opt);
                         if (opt) clearError("origin");
                       }}
+                      onInputChange={(input, { action }) => {
+                        if (action !== "input-change") return;
+                        clearTimeout(window.__cabOriginDebounce);
+                        window.__cabOriginDebounce = setTimeout(
+                          () => fetchLookup(input || ""),
+                          300
+                        );
+                      }}
+                      filterOption={() => true}
+                      formatOptionLabel={formatLookupOptionLabel}
                       isLoading={isZoneOptsLoading}
-                      placeholder="Search origin (locality / destination)"
+                      placeholder="Search zone / hotel / airport"
                       isSearchable
                       isClearable
                       className="modern-select-sm"
                       menuPortalTarget={document.body}
+                      noOptionsMessage={({ inputValue }) =>
+                        inputValue ? "No matches" : "Type to search…"
+                      }
                       styles={{
                         ...customSelectStyles,
                         control: (base) => ({
@@ -688,6 +727,13 @@ export const CabSearch = () => {
                           borderColor: validationErrors.origin ? "#dc3545" : base.borderColor,
                         }),
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        groupHeading: (base) => ({
+                          ...base,
+                          fontWeight: 700,
+                          color: "#212529",
+                          textTransform: "uppercase",
+                          fontSize: "0.75rem",
+                        }),
                       }}
                     />
                     {validationErrors.origin && (
@@ -704,12 +750,25 @@ export const CabSearch = () => {
                         setDestination(opt);
                         if (opt) clearError("destination");
                       }}
+                      onInputChange={(input, { action }) => {
+                        if (action !== "input-change") return;
+                        clearTimeout(window.__cabDestDebounce);
+                        window.__cabDestDebounce = setTimeout(
+                          () => fetchLookup(input || ""),
+                          300
+                        );
+                      }}
+                      filterOption={() => true}
+                      formatOptionLabel={formatLookupOptionLabel}
                       isLoading={isZoneOptsLoading}
-                      placeholder="Search destination (locality / destination)"
+                      placeholder="Search zone / hotel / airport"
                       isSearchable
                       isClearable
                       className="modern-select-sm"
                       menuPortalTarget={document.body}
+                      noOptionsMessage={({ inputValue }) =>
+                        inputValue ? "No matches" : "Type to search…"
+                      }
                       styles={{
                         ...customSelectStyles,
                         control: (base) => ({
@@ -717,6 +776,13 @@ export const CabSearch = () => {
                           borderColor: validationErrors.destination ? "#dc3545" : base.borderColor,
                         }),
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        groupHeading: (base) => ({
+                          ...base,
+                          fontWeight: 700,
+                          color: "#212529",
+                          textTransform: "uppercase",
+                          fontSize: "0.75rem",
+                        }),
                       }}
                     />
                     {validationErrors.destination && (
