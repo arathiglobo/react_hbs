@@ -811,26 +811,44 @@ const CabBookingPage = () => {
     {/* ===== Price Section ===== */}
     <div className="p-4 bg-light">
 
-      <div className="d-flex justify-content-between mb-2 text-muted">
-        <span>Transfer Fare</span>
-        <span className="fw-medium">{formatPrice(totalRate)}</span>
-      </div>
+      {(() => {
+        const tdNum =
+          tourismDirham !== "" && !isNaN(Number(tourismDirham))
+            ? Number(tourismDirham)
+            : 0;
+        const grandTotal = Number(totalRate || 0) + tdNum;
+        return (
+          <>
+            <div className="d-flex justify-content-between mb-2 text-muted">
+              <span>Transfer Fare</span>
+              <span className="fw-medium">{formatPrice(totalRate)}</span>
+            </div>
 
-      <div className="d-flex justify-content-between mb-3 text-muted">
-        <span>Taxes & Fees</span>
-        <span className="fw-medium">{formatPrice(0)}</span>
-      </div>
+            {tdNum > 0 && (
+              <div className="d-flex justify-content-between mb-2 text-muted">
+                <span>Tourism Dirham</span>
+                <span className="fw-medium text-primary">
+                  {formatPrice(tdNum)}
+                </span>
+              </div>
+            )}
 
-      <hr className="my-3" />
+            <div className="d-flex justify-content-between mb-3 text-muted">
+              <span>Taxes &amp; Fees</span>
+              <span className="fw-medium">{formatPrice(0)}</span>
+            </div>
 
-      <div className="d-flex justify-content-between align-items-center">
-        <span className="fw-bold text-dark fs-5">
-          Total Amount
-        </span>
-        <span className="fw-bold text-primary fs-4">
-          {formatPrice(totalRate)}
-        </span>
-      </div>
+            <hr className="my-3" />
+
+            <div className="d-flex justify-content-between align-items-center">
+              <span className="fw-bold text-dark fs-5">Total Amount</span>
+              <span className="fw-bold text-primary fs-4">
+                {formatPrice(grandTotal)}
+              </span>
+            </div>
+          </>
+        );
+      })()}
     </div>
 
     {/* ===== Button ===== */}
@@ -1047,13 +1065,47 @@ const CabBookingPage = () => {
 
           <hr />
 
-          {/* Total */}
-          <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
-            <span className="fw-semibold">Total Amount</span>
-            <span className="fs-4 fw-bold text-success">
-              AED {Number(prices.totalPrice).toFixed(2)}
-            </span>
-          </div>
+          {/* Pricing breakdown — selling, total, optional TD, grand total */}
+          {(() => {
+            const tdNum =
+              tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                ? Number(tourismDirham)
+                : 0;
+            const sellingBase = Number(prices.sellingPrice) || 0;
+            const totalBase = Number(prices.totalPrice) || 0;
+            return (
+              <div className="p-3 bg-light rounded">
+                <div className="d-flex justify-content-between mb-2 text-muted">
+                  <span>Selling Price</span>
+                  <span className="fw-medium">
+                    AED {sellingBase.toFixed(2)}
+                  </span>
+                </div>
+                <div className="d-flex justify-content-between mb-2 text-muted">
+                  <span>Total Price</span>
+                  <span className="fw-medium">
+                    AED {totalBase.toFixed(2)}
+                  </span>
+                </div>
+                {tdNum > 0 && (
+                  <div className="d-flex justify-content-between mb-2 text-primary">
+                    <span>Tourism Dirham</span>
+                    <span className="fw-medium">+ AED {tdNum.toFixed(2)}</span>
+                  </div>
+                )}
+                <hr className="my-2" />
+                <div className="d-flex justify-content-between align-items-center">
+                  <span className="fw-semibold">Grand Total</span>
+                  <span className="fs-4 fw-bold text-success">
+                    AED {(totalBase + tdNum).toFixed(2)}
+                  </span>
+                </div>
+                <small className="text-muted d-block mt-1">
+                  This is the amount that will be saved against the booking.
+                </small>
+              </div>
+            );
+          })()}
         </Modal.Body>
         <Modal.Footer>
           <Button
