@@ -71,8 +71,17 @@ const CabRates = () => {
     try {
       const res = await axiosInstance.get(`/api/cab-zones/by-cab/${cabId}`);
       const zone = res.data || {};
-      setCabZonePickup(Array.isArray(zone.pickupLocations) ? zone.pickupLocations : []);
-      setCabZoneDropoff(Array.isArray(zone.dropoffLocations) ? zone.dropoffLocations : []);
+      const pickups = Array.isArray(zone.pickupLocations) ? zone.pickupLocations : [];
+      const dropoffs = Array.isArray(zone.dropoffLocations) ? zone.dropoffLocations : [];
+      console.log(
+        `[CabRates] zone for cab ${cabId}:`,
+        pickups.length,
+        "pickup |",
+        dropoffs.length,
+        "dropoff"
+      );
+      setCabZonePickup(pickups);
+      setCabZoneDropoff(dropoffs);
     } catch (err) {
       console.error("Error loading cab zone:", err);
       setCabZonePickup([]);
@@ -88,6 +97,17 @@ const CabRates = () => {
     cabProviderId: cabProviderId,
     cabratesId: "",
   });
+
+  // Safety-net: any code path that sets formData.cabId (handleEdit, handleView,
+  // updateFormData, programmatic seeds, etc.) refetches the cab's zone here.
+  useEffect(() => {
+    if (formData.cabId) {
+      fetchCabZone(formData.cabId);
+    } else {
+      setCabZonePickup([]);
+      setCabZoneDropoff([]);
+    }
+  }, [formData.cabId]);
 
   // Rate Grid state — now split into two:
   //   transfersRows  → travelType "1" (was "Airport"); no Hours field.

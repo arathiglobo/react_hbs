@@ -7,7 +7,6 @@ import {
   Button,
   Spinner,
   Table,
-  ProgressBar,
 } from "react-bootstrap";
 import { FaCar, FaSearch } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -139,58 +138,6 @@ export const CabSearch = () => {
 
   useEffect(() => {
     loadAgents();
-  }, []);
-
-  // ── New search criteria (Juniper-style layout) ────────────────────────
-  const [tripType, setTripType] = useState("ONE_WAY"); // "ONE_WAY" | "ROUND_TRIP"
-  const [timeType, setTimeType] = useState("PICKUP_TIME"); // "PICKUP_TIME" | "FLIGHT_TIME"
-  const [origin, setOrigin] = useState(null);
-  const [departureTime, setDepartureTime] = useState("");
-  const [returnTime, setReturnTime] = useState("");
-
-  // Combined locality + destination options used by Origin / Destination
-  // dropdowns. Same combined source as the cab-zone modal so the search
-  // matches what's been registered against each cab.
-  const [zoneLocationOptions, setZoneLocationOptions] = useState([]);
-  const [isZoneOptsLoading, setIsZoneOptsLoading] = useState(false);
-
-  const buildLocOption = (item, source) => {
-    const id = item.id;
-    const name =
-      source === "SUBLOCATION"
-        ? item.locationName || item.subLocationName || `Sub-Location #${id}`
-        : item.name || `Place #${id}`;
-    return {
-      value: `${source}:${id}`,
-      label: source === "SUBLOCATION" ? `${name} (Locality)` : `${name} (Destination)`,
-      source,
-      locationId: Number(id),
-      locationName: name,
-    };
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsZoneOptsLoading(true);
-    Promise.all([
-      axiosInstance.get("/api/sub-locations?page=0&limit=1000").catch(() => ({ data: [] })),
-      axiosInstance.get("/api/destination?page=0&limit=1000").catch(() => ({ data: [] })),
-    ])
-      .then(([subRes, destRes]) => {
-        if (cancelled) return;
-        const subs = Array.isArray(subRes?.data) ? subRes.data : [];
-        const dests = Array.isArray(destRes?.data) ? destRes.data : [];
-        setZoneLocationOptions([
-          ...subs.map((s) => buildLocOption(s, "SUBLOCATION")),
-          ...dests.map((d) => buildLocOption(d, "PLACE")),
-        ]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsZoneOptsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   // ── Per-field validation errors ──────────────────────────────────────
@@ -403,14 +350,8 @@ export const CabSearch = () => {
 
     // Mandatory fields (existing behaviour, now per-field).
     if (!nationality) errs.nationality = "Nationality is required.";
-    if (!origin) errs.origin = "Origin is required.";
     if (!destination) errs.destination = "Destination is required.";
-    if (!transferPickupDate) errs.pickupDate = "Departure date is required.";
-
-    // Round-trip needs a return date.
-    if (tripType === "ROUND_TRIP" && !transferDropoffDate) {
-      errs.dropoffDate = "Return date is required for round trip.";
-    }
+    if (!transferPickupDate) errs.pickupDate = "Pickup date is required.";
 
     // Drop-off date (already required by data flow); flag if check-out
     // somehow falls strictly before pickup.
@@ -419,7 +360,7 @@ export const CabSearch = () => {
       transferDropoffDate &&
       transferDropoffDate < transferPickupDate
     ) {
-      errs.dropoffDate = "Return date cannot be before departure date.";
+      errs.dropoffDate = "Dropoff date cannot be before pickup date.";
     }
 
     // Pickup section — only meaningful once a type is chosen.
@@ -472,35 +413,35 @@ export const CabSearch = () => {
                    || localStorage.getItem("makeYourOwnPackageAgentId")
                    || "1";
 
-      // New zone-based search payload — matches CabSearchRequestDTO on the
-      // backend. The endpoint filters cabs by their CabZone (registered in
-      // CabProvider → Manage Zones) and surfaces matching CabRates rows.
       const transferPayload = {
-        originSource: origin?.source || "SUBLOCATION",
-        originLocationId: origin?.locationId || null,
-        originLocationName: origin?.locationName || null,
-        destinationSource: destination?.source || "SUBLOCATION",
-        destinationLocationId: destination?.locationId || null,
-        destinationLocationName: destination?.locationName || null,
-        tripType,                          // "ONE_WAY" | "ROUND_TRIP"
-        timeType,                          // "PICKUP_TIME" | "FLIGHT_TIME"
-        departureDate: transferPickupDate || null,
-        departureTime: departureTime || null,
-        returnDate: tripType === "ROUND_TRIP" ? transferDropoffDate || null : null,
-        returnTime: tripType === "ROUND_TRIP" ? returnTime || null : null,
-        adults: transferAdults || 1,
-        children: transferChildren || 0,
-        childAges:
-          transferChildAges && transferChildAges.length > 0
+        checkIn: transferPickupDate,
+        checkOut: transferDropoffDate || transferPickupDate,
+        nativeCountryId: nationality.value ? Number(nationality.value) : null,
+        destinationCountryId: destination.countryId || "",
+        destinationCityId: destination.value || "",
+        searchCorCtype: "city",
+        agentid: String(agentId),
+        childAge: transferChildAges && transferChildAges.length > 0
             ? transferChildAges.map((age) => parseInt(age) || 0)
             : transferChildren > 0
-            ? Array(transferChildren).fill(0)
-            : [],
-        agentId: agentId ? Number(agentId) : null,
+              ? Array(transferChildren).fill(0)
+              : [],
+        adult: transferAdults || 1,
+        child: transferChildren || 0,
+        // ── NEW: pickup / drop-off details ─────────────────────────
+        // Sent only when the user filled them in — empty/blank values
+        // are sent as null so the backend's IS NULL guards skip the
+        // extra filter clauses (backwards compatible).
+        pickupType: pickupType || null,
+        pickupName: pickupName?.trim() || null,
+        pickupTime: pickupType === "AIRPORT" && pickupTime ? pickupTime : null,
+        dropoffType: dropoffType || null,
+        dropoffName: dropoffName?.trim() || null,
+        dropoffTime: dropoffTime || null,
       };
 
       const response = await axiosInstance.post(
-        "/api/cab-search/search",
+        "/api/makeYourOwnPackage/getTransferInhouse",
         transferPayload
       );
 
@@ -527,13 +468,6 @@ export const CabSearch = () => {
           cabdetails: cab.cabdetails || "",
           cabpic: ensureHttpImage(cab.cabpic || cab.cabPic),
           noOfCabs: cab.noOfCabs || 1,
-          // Additions surfaced by the new /api/cab-search/search endpoint.
-          cabProviderId: cab.cabProviderId || null,
-          cabProviderName: cab.cabProviderName || "",
-          originLocationName: cab.originLocationName || "",
-          destinationLocationName: cab.destinationLocationName || "",
-          capacityMin: cab.capacityMin ?? null,
-          capacityMax: cab.capacityMax ?? null,
           searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
             ? cab.searchCabDetailsDTO
             : [],
@@ -642,200 +576,7 @@ export const CabSearch = () => {
             <Card.Body>
               <Form onSubmit={handleTransferSearchSubmit}>
 
-                {/* ── NEW: Trip Type radios (top of form) ─────────────── */}
-                <div className="mb-3 d-flex gap-4 align-items-center">
-                  <Form.Check
-                    inline
-                    type="radio"
-                    id="trip-one-way"
-                    name="tripType"
-                    label="One way"
-                    checked={tripType === "ONE_WAY"}
-                    onChange={() => setTripType("ONE_WAY")}
-                  />
-                  <Form.Check
-                    inline
-                    type="radio"
-                    id="trip-round"
-                    name="tripType"
-                    label="Round trip"
-                    checked={tripType === "ROUND_TRIP"}
-                    onChange={() => setTripType("ROUND_TRIP")}
-                  />
-                </div>
-
-                {/* ── NEW: Origin / Destination / Passengers row ──────── */}
-                <Row className="g-3 mb-3">
-                  <Col md={4}>
-                    <Form.Label className="fw-semibold">Origin</Form.Label>
-                    <Select
-                      options={zoneLocationOptions}
-                      value={origin}
-                      onChange={(opt) => {
-                        setOrigin(opt);
-                        if (opt) clearError("origin");
-                      }}
-                      isLoading={isZoneOptsLoading}
-                      placeholder="Search origin (locality / destination)"
-                      isSearchable
-                      isClearable
-                      className="modern-select-sm"
-                      menuPortalTarget={document.body}
-                      styles={{
-                        ...customSelectStyles,
-                        control: (base) => ({
-                          ...customSelectStyles.control(base),
-                          borderColor: validationErrors.origin ? "#dc3545" : base.borderColor,
-                        }),
-                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                      }}
-                    />
-                    {validationErrors.origin && (
-                      <div className="text-danger small mt-1">{validationErrors.origin}</div>
-                    )}
-                  </Col>
-
-                  <Col md={4}>
-                    <Form.Label className="fw-semibold">Destination</Form.Label>
-                    <Select
-                      options={zoneLocationOptions}
-                      value={destination && destination.source ? destination : null}
-                      onChange={(opt) => {
-                        setDestination(opt);
-                        if (opt) clearError("destination");
-                      }}
-                      isLoading={isZoneOptsLoading}
-                      placeholder="Search destination (locality / destination)"
-                      isSearchable
-                      isClearable
-                      className="modern-select-sm"
-                      menuPortalTarget={document.body}
-                      styles={{
-                        ...customSelectStyles,
-                        control: (base) => ({
-                          ...customSelectStyles.control(base),
-                          borderColor: validationErrors.destination ? "#dc3545" : base.borderColor,
-                        }),
-                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                      }}
-                    />
-                    {validationErrors.destination && (
-                      <div className="text-danger small mt-1">{validationErrors.destination}</div>
-                    )}
-                  </Col>
-
-                  <Col md={4}>
-                    <Form.Label className="fw-semibold">Passengers</Form.Label>
-                    <Row className="g-2">
-                      <Col xs={6}>
-                        <Form.Select
-                          style={{ height: "46px" }}
-                          value={transferAdults}
-                          onChange={(e) => setTransferAdults(parseInt(e.target.value) || 1)}
-                        >
-                          {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
-                            <option key={num} value={num}>
-                              {num} Adult{num > 1 ? "s" : ""}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                      <Col xs={6}>
-                        <Form.Select
-                          style={{ height: "46px" }}
-                          value={transferChildren}
-                          onChange={(e) => setTransferChildren(parseInt(e.target.value) || 0)}
-                        >
-                          {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                            <option key={num} value={num}>
-                              {num} Child{num !== 1 ? "ren" : ""}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                    </Row>
-                  </Col>
-                </Row>
-
-                {/* ── NEW: Time Type + Departure / Return rows ────────── */}
-                <Row className="g-3 mb-3 align-items-end">
-                  <Col md={2}>
-                    <Form.Label className="fw-semibold">Time Type</Form.Label>
-                    <Form.Select
-                      style={{ height: "46px" }}
-                      value={timeType}
-                      onChange={(e) => setTimeType(e.target.value)}
-                    >
-                      <option value="">--SELECT--</option>
-                      <option value="PICKUP_TIME">Pickup time</option>
-                      <option value="FLIGHT_TIME">Flight time</option>
-                    </Form.Select>
-                  </Col>
-
-                  <Col md={3}>
-                    <Form.Label className="fw-semibold">Departure</Form.Label>
-                    <Form.Control
-                      style={{ height: "46px" }}
-                      type="date"
-                      value={transferPickupDate}
-                      isInvalid={!!validationErrors.pickupDate}
-                      onChange={(e) => {
-                        setTransferPickupDate(e.target.value);
-                        if (e.target.value) clearError("pickupDate");
-                      }}
-                      min={new Date().toISOString().split("T")[0]}
-                    />
-                    <Form.Control.Feedback type="invalid">
-                      {validationErrors.pickupDate}
-                    </Form.Control.Feedback>
-                  </Col>
-
-                  <Col md={2}>
-                    <Form.Label className="fw-semibold">
-                      {timeType === "FLIGHT_TIME" ? "Flight time" : "Pickup time"}
-                    </Form.Label>
-                    <Form.Control
-                      style={{ height: "46px" }}
-                      type="time"
-                      value={departureTime}
-                      onChange={(e) => setDepartureTime(e.target.value)}
-                    />
-                  </Col>
-
-                  <Col md={3}>
-                    <Form.Label className="fw-semibold">Return</Form.Label>
-                    <Form.Control
-                      style={{ height: "46px" }}
-                      type="date"
-                      value={transferDropoffDate}
-                      disabled={tripType === "ONE_WAY"}
-                      isInvalid={!!validationErrors.dropoffDate}
-                      onChange={(e) => {
-                        setTransferDropoffDate(e.target.value);
-                        clearError("dropoffDate");
-                      }}
-                      min={transferPickupDate || undefined}
-                    />
-                    <Form.Control.Feedback type="invalid">
-                      {validationErrors.dropoffDate}
-                    </Form.Control.Feedback>
-                  </Col>
-
-                  <Col md={2}>
-                    <Form.Label className="fw-semibold">
-                      {timeType === "FLIGHT_TIME" ? "Flight time" : "Pickup time"}
-                    </Form.Label>
-                    <Form.Control
-                      style={{ height: "46px" }}
-                      type="time"
-                      value={returnTime}
-                      disabled={tripType === "ONE_WAY"}
-                      onChange={(e) => setReturnTime(e.target.value)}
-                    />
-                  </Col>
-                </Row>
-
-                {/* Nationality kept on its own row */}
+                {/* Row 1 */}
                 <Row className="g-3 mb-3">
                   <Col md={4}>
                     <Form.Label className="fw-semibold">Nationality</Form.Label>
@@ -869,12 +610,7 @@ export const CabSearch = () => {
                       <div className="text-danger small mt-1">{validationErrors.nationality}</div>
                     )}
                   </Col>
-                </Row>
 
-                {/* ── Legacy form rows hidden — values still tracked in state for
-                    backward compat with the existing search payload. */}
-                <div className="d-none">
-                <Row className="g-3 mb-3">
                   <Col md={4}>
                     <Form.Label className="fw-semibold">Destination</Form.Label>
                     <Select
@@ -1229,7 +965,6 @@ export const CabSearch = () => {
                     />
                   </Col>
                 </Row>
-                </div>
 
              <Row className="justify-content-center">
   <Col md={4} className="d-flex justify-content-center mt-3">
@@ -1291,17 +1026,8 @@ export const CabSearch = () => {
                   Searching Transfers...
                 </h5>
                 <p className="text-muted small mb-0">
-                  {transferPickupDate
-                    ? `Searching for transfer from ${transferPickupDate}${
-                        tripType === "ROUND_TRIP" && transferDropoffDate
-                          ? ` to ${transferDropoffDate}`
-                          : ""
-                      }`
-                    : "Finding available transfer options for you"}
+                  Finding available transfer options for you
                 </p>
-                <div className="mt-3 mx-auto" style={{ maxWidth: 480 }}>
-                  <ProgressBar animated now={100} variant="primary" />
-                </div>
               </Card.Body>
             </Card>
           )}
@@ -1342,30 +1068,11 @@ export const CabSearch = () => {
                 <h5 className="fw-semibold mb-1">
                   {cab.cabname || "Transfer Vehicle"}
                 </h5>
-                {cab.cabProviderName && (
-                  <div className="text-muted small mb-1">
-                    by {cab.cabProviderName}
-                  </div>
-                )}
-                {(cab.originLocationName || cab.destinationLocationName) && (
-                  <div className="small text-primary mb-1">
-                    {cab.originLocationName || "—"} → {cab.destinationLocationName || "—"}
-                  </div>
-                )}
-                <div className="d-flex flex-wrap gap-2 align-items-center">
-                  <span className="text-muted small">
-                    <FaCar className="me-1" />
-                    {cab.noOfCabs || "1"} Vehicle
-                  </span>
-                  {(cab.capacityMin != null || cab.capacityMax != null) && (
-                    <span className="badge bg-light text-dark border">
-                      Capacity{" "}
-                      {cab.capacityMin != null ? cab.capacityMin : "?"}
-                      –
-                      {cab.capacityMax != null ? cab.capacityMax : "?"} pax
-                    </span>
-                  )}
-                </div>
+
+                <span className="text-muted small">
+                  <FaCar className="me-1" />
+                  {cab.noOfCabs || "1"} Vehicle
+                </span>
               </div>
 
               {/* RIGHT IMAGE */}

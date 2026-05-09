@@ -17,6 +17,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -99,6 +100,24 @@ const ActivitySearch = () => {
   const [hasTourSearched, setHasTourSearched] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState(null);
+
+  // ── Agent selector (mirrors HotelSearch.jsx pattern) ─────────────────
+  const [agent, setAgent] = useState("");
+  const [agents, setAgents] = useState([]);
+
+  const loadAgents = async () => {
+    try {
+      const res = await axiosInstance.get("/api/agent");
+      setAgents(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error("Failed to load agents:", err);
+      setAgents([]);
+    }
+  };
+
+  useEffect(() => {
+    loadAgents();
+  }, []);
 
   // Country & Destination state
   const [nationalityList, setNationalityList] = useState([]);
@@ -288,7 +307,8 @@ const ActivitySearch = () => {
     setTourResults([]);
 
     try {
-      const agentId = sessionStorage.getItem("makeYourOwnPackageAgentId") 
+      const agentId = (agent && String(agent))
+                   || sessionStorage.getItem("makeYourOwnPackageAgentId")
                    || localStorage.getItem("makeYourOwnPackageAgentId")
                    || "1";
 
@@ -397,9 +417,30 @@ const ActivitySearch = () => {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl mb-4 border-0">
             <Card.Body>
-              <h4 className="fw-bold mb-4 text-primary">
-                Tours & Activities Search
-              </h4>
+              <div className="d-flex justify-content-between align-items-start mb-4">
+                <h4 className="fw-bold text-primary mb-0">
+                  Tours & Activities Search
+                </h4>
+                <div style={{ minWidth: 260 }}>
+                  <Form.Label className="fw-semibold text-dark mb-1 small">
+                    Agent
+                  </Form.Label>
+                  <Form.Select
+                    style={{ height: "42px" }}
+                    className="form-control-modern"
+                    value={agent}
+                    onChange={(e) => setAgent(e.target.value)}
+                  >
+                    <option value="">Select Agent</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.companyName}
+                      </option>
+                    ))}
+                  </Form.Select>
+                  <AgentBalanceDisplay agentId={agent} />
+                </div>
+              </div>
 
               <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
                <Card.Body>
