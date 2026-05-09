@@ -28,6 +28,7 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
+import AgentBalanceDisplay from "../components/AgentBalanceDisplay";
 import "../styles/RoomList.css";
 
 /**
@@ -230,6 +231,9 @@ export default function LastMinuteRoomList() {
         <Sidebar />
         <main className="content-wrapper">
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
+            <div className="d-flex justify-content-end mb-2">
+              <AgentBalanceDisplay agentId={payload?.searchContext?.agent} />
+            </div>
             {/* ── Hotel Header ────────────────────────────────────────── */}
             <Card className="hotel-header-card mb-4">
               <Card.Body className="p-4">

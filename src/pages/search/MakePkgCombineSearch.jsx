@@ -36,6 +36,7 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { useLocation, useNavigate } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
@@ -1254,6 +1255,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
+          <div className="d-flex justify-content-end mb-2">
+            <AgentBalanceDisplay agentId={agentId} />
+          </div>
           <Card className="shadow-sm rounded-xl mb-4">
             <Card.Body>
               <div className="mb-4">

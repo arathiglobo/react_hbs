@@ -33,6 +33,7 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import axiosInstance from "../../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
@@ -68,6 +69,7 @@ const MakePkgBookingPage = () => {
   const [hotelBookingConfirmation, setHotelBookingConfirmation] = useState({});
   const [totalPrice, setTotalPrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
+  const [tourismDirham, setTourismDirham] = useState("");
 
   // Itinerary state
   const [itineraryList, setItineraryList] = useState([]);
@@ -1045,11 +1047,16 @@ const MakePkgBookingPage = () => {
         };
       });
 
+      const tdNumber =
+        tourismDirham !== "" && !isNaN(Number(tourismDirham))
+          ? Number(tourismDirham)
+          : 0;
       const bookingPayload = {
         customPackageId: "",
         quoteId: quoteId ? parseInt(quoteId) : null, // Include quoteId if booking is from quotation
-        sellingPrice: String(sellingPrice.toFixed(2)),
-        totalPrice: String(totalPrice.toFixed(2)),
+        sellingPrice: String((sellingPrice + tdNumber).toFixed(2)),
+        totalPrice: String((totalPrice + tdNumber).toFixed(2)),
+        tourismDirham: tdNumber > 0 ? tdNumber : null,
         tourDate: tourDate,
         visaStatus: visaRequired,
         visaAdult: parseInt(visaDetails.visaAdult || "0") || 0,
@@ -1319,6 +1326,11 @@ const MakePkgBookingPage = () => {
         <Sidebar />
         <main className="content-wrapper py-4">
           <Container fluid>
+            <div className="d-flex justify-content-end mb-2">
+              <AgentBalanceDisplay
+                agentId={sessionStorage.getItem("makePkgAgentId")}
+              />
+            </div>
             <div className="booking-page-header mb-3">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
@@ -3258,7 +3270,12 @@ const MakePkgBookingPage = () => {
                     Subtotal (Selling Price)
                   </span>
                   <strong style={{ fontSize: "1.125rem", color: "#198754" }}>
-                    AED {sellingPrice.toFixed(2)}
+                    AED {(
+                      sellingPrice +
+                      (tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                        ? Number(tourismDirham)
+                        : 0)
+                    ).toFixed(2)}
                   </strong>
                 </div>
                 <div className="d-flex justify-content-between align-items-center">
@@ -3266,9 +3283,35 @@ const MakePkgBookingPage = () => {
                     Subtotal (Without Markup)
                   </span>
                   <strong style={{ fontSize: "1.125rem", color: "#0d6efd" }}>
-                    AED {totalPrice.toFixed(2)}
+                    AED {(
+                      totalPrice +
+                      (tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                        ? Number(tourismDirham)
+                        : 0)
+                    ).toFixed(2)}
                   </strong>
                 </div>
+              </div>
+
+              <div className="mb-3 pt-3 border-top">
+                <label
+                  className="form-label fw-semibold"
+                  style={{ fontSize: "0.875rem" }}
+                >
+                  Tourism Dirham
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="form-control"
+                  placeholder="0.00"
+                  value={tourismDirham}
+                  onChange={(e) => setTourismDirham(e.target.value)}
+                />
+                <small className="text-muted">
+                  Optional — added to both subtotals above.
+                </small>
               </div>
 
               {visaRequired && (

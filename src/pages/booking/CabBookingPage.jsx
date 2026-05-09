@@ -17,6 +17,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 
 const formatDateToDDMMYYYY = (dateString) => {
   if (!dateString) return "";
@@ -66,6 +67,7 @@ const CabBookingPage = () => {
     sellingPrice: initialTotalRate.toString(),
     totalPrice: initialTotalRate.toString(),
   });
+  const [tourismDirham, setTourismDirham] = useState("");
 
   // If no state, show prompt
   if (!hasValidState) {
@@ -176,6 +178,13 @@ const CabBookingPage = () => {
                  || localStorage.getItem("makeYourOwnPackageAgentId")
                  || "1";
 
+    const tdNumber =
+      tourismDirham !== "" && !isNaN(Number(tourismDirham))
+        ? Number(tourismDirham)
+        : 0;
+    const sellingWithTd = (parseFloat(prices.sellingPrice) || 0) + tdNumber;
+    const totalWithTd = (parseFloat(prices.totalPrice) || totalRate) + tdNumber;
+
     const payload = {
       cabId: cab.cabid,
       noOfCabs: cab.noOfCabs || 1,
@@ -186,8 +195,9 @@ const CabBookingPage = () => {
       noOfAdult: parseInt(searchCriteria.adults) || 1,
       noOfChild: parseInt(searchCriteria.children) || 0,
       childAgeArray: (searchCriteria.childAges || []).map(age => parseInt(age)),
-      totalRate: parseFloat(prices.totalPrice) || totalRate,
+      totalRate: totalWithTd,
       totalRateWithoutmrk: parseFloat(selectedOption.totalRateWithoutMrk || totalRate),
+      tourismDirham: tdNumber > 0 ? tdNumber : null,
       agentId: parseInt(agentId),
       userId: parseInt(agentId),
       customerDTO: {
@@ -203,8 +213,8 @@ const CabBookingPage = () => {
       contactNumber: transporterDetails.contactNumber,
       driverName: transporterDetails.driverName,
       driverContact: transporterDetails.driverContact,
-      sellingPrice: prices.sellingPrice,
-      totalPrice: prices.totalPrice,
+      sellingPrice: String(sellingWithTd.toFixed(2)),
+      totalPrice: String(totalWithTd.toFixed(2)),
       // Pickup / Drop-off details forwarded from the search page.
       pickupType: searchCriteria.pickupType || null,
       pickupName: searchCriteria.pickupName || null,
@@ -258,8 +268,16 @@ const CabBookingPage = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid className="px-0">
-            <h4 className="fw-bold mb-4 text-primary">Cab Booking Checkout</h4>
-            
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <h4 className="fw-bold mb-0 text-primary">Cab Booking Checkout</h4>
+              <AgentBalanceDisplay
+                agentId={
+                  sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+                  localStorage.getItem("makeYourOwnPackageAgentId")
+                }
+              />
+            </div>
+
             <Row className="g-4">
               {/* Left Column: Guest Details */}
               <Col lg={8}>
@@ -577,6 +595,32 @@ const CabBookingPage = () => {
                 }
               />
             </div>
+          </div>
+        </Col>
+
+        {/* Tourism Dirham */}
+        <Col xs={12} md={6}>
+          <div className="bg-light border rounded-3 p-3 h-100">
+            <small className="text-muted fw-semibold d-block mb-1">
+              Tourism Dirham
+            </small>
+
+            <div className="d-flex align-items-center">
+              <span className="text-muted me-2">AED</span>
+
+              <Form.Control
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                className="border-0 bg-transparent p-0 fw-bold text-primary"
+                value={tourismDirham}
+                onChange={(e) => setTourismDirham(e.target.value)}
+              />
+            </div>
+            <small className="text-muted">
+              Optional — added to Selling &amp; Total Price.
+            </small>
           </div>
         </Col>
 

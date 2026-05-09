@@ -89,23 +89,40 @@ const CabRates = () => {
     cabratesId: "",
   });
 
-  // Rate Grid state
-  const [rateGridRows, setRateGridRows] = useState([
-    {
-      id: 1,
-      pickupZoneLocationId: "",
-      dropoffZoneLocationId: "",
-      minPax: "",
-      maxPax: "",
-      location: "",
-      sicPerWay: "",
-      privateTotal: "",
-      privatePerPax: "",
-      luggage: false,
-      type: "",
-      hours: "",
-    },
-  ]);
+  // Rate Grid state — now split into two:
+  //   transfersRows  → travelType "1" (was "Airport"); no Hours field.
+  //   carRentalRows → travelType "2" (was "Daily"); has Hours field.
+  // Both grids carry pickup/dropoff zone refs + pickup/dropoff times.
+  const newTransferRow = (id) => ({
+    id,
+    pickupZoneLocationId: "",
+    dropoffZoneLocationId: "",
+    pickupTime: "",
+    dropoffTime: "",
+    minPax: "",
+    maxPax: "",
+    sicPerWay: "",
+    privateTotal: "",
+    privatePerPax: "",
+    luggage: false,
+  });
+  const newCarRentalRow = (id) => ({
+    id,
+    pickupZoneLocationId: "",
+    dropoffZoneLocationId: "",
+    pickupTime: "",
+    dropoffTime: "",
+    minPax: "",
+    maxPax: "",
+    sicPerWay: "",
+    privateTotal: "",
+    privatePerPax: "",
+    luggage: false,
+    hours: "",
+  });
+
+  const [transfersRows, setTransfersRows] = useState([newTransferRow(1)]);
+  const [carRentalRows, setCarRentalRows] = useState([newCarRentalRow(1)]);
 
   // Validity dates state
   const [validityDates, setValidityDates] = useState([
@@ -137,23 +154,9 @@ const CabRates = () => {
       cabProviderId: cabProviderId,
       cabratesId: "",
     });
-    // Reset rate grid
-    setRateGridRows([
-      {
-        id: 1,
-        pickupZoneLocationId: "",
-        dropoffZoneLocationId: "",
-        minPax: "",
-        maxPax: "",
-        location: "",
-        sicPerWay: "",
-        privateTotal: "",
-        privatePerPax: "",
-        luggage: false,
-        type: "",
-        hours: "",
-      },
-    ]);
+    // Reset both rate grids
+    setTransfersRows([newTransferRow(1)]);
+    setCarRentalRows([newCarRentalRow(1)]);
     // Reset cab zone (so next open starts clean)
     setCabZonePickup([]);
     setCabZoneDropoff([]);
@@ -167,47 +170,28 @@ const CabRates = () => {
     ]);
   };
 
-  // Add new rate grid row
-  const addRateGridRow = () => {
-    const newRow = {
-      id: Date.now(),
-      pickupZoneLocationId: "",
-      dropoffZoneLocationId: "",
-      minPax: "",
-      maxPax: "",
-      location: "",
-      sicPerWay: "",
-      privateTotal: "",
-      privatePerPax: "",
-      luggage: false,
-      type: "",
-      hours: "",
-    };
-    setRateGridRows([...rateGridRows, newRow]);
-  };
-
-  // Remove rate grid row
-  const removeRateGridRow = (id) => {
-    if (rateGridRows.length > 1) {
-      setRateGridRows(rateGridRows.filter((row) => row.id !== id));
-    }
-  };
-
-  // Update rate grid row
-  const updateRateGridRow = (id, field, value) => {
-    setRateGridRows(
-      rateGridRows.map((row) => {
-        if (row.id === id) {
-          // If type is changed to Airport, clear the hours field
-          if (field === "type" && value === "Airport") {
-            return { ...row, [field]: value, hours: "" };
-          }
-          return { ...row, [field]: value };
-        }
-        return row;
-      })
+  // ── Rate Grid helpers (per-grid: transfers + carRental) ───────────────
+  const addTransferRow = () =>
+    setTransfersRows((prev) => [...prev, newTransferRow(Date.now())]);
+  const removeTransferRow = (id) =>
+    setTransfersRows((prev) =>
+      prev.length > 1 ? prev.filter((r) => r.id !== id) : prev
     );
-  };
+  const updateTransferRow = (id, field, value) =>
+    setTransfersRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
+
+  const addCarRentalRow = () =>
+    setCarRentalRows((prev) => [...prev, newCarRentalRow(Date.now())]);
+  const removeCarRentalRow = (id) =>
+    setCarRentalRows((prev) =>
+      prev.length > 1 ? prev.filter((r) => r.id !== id) : prev
+    );
+  const updateCarRentalRow = (id, field, value) =>
+    setCarRentalRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
 
   // Add new validity date range
   const addValidityDate = () => {
@@ -244,13 +228,14 @@ const CabRates = () => {
     // selections on existing rate-grid rows so we don't keep stale ids.
     if (field === "cabId") {
       fetchCabZone(value);
-      setRateGridRows((prev) =>
-        prev.map((row) => ({
+      const clearZones = (rows) =>
+        rows.map((row) => ({
           ...row,
           pickupZoneLocationId: "",
           dropoffZoneLocationId: "",
-        }))
-      );
+        }));
+      setTransfersRows(clearZones);
+      setCarRentalRows(clearZones);
     }
 
     // Clear validation error when user makes changes
@@ -343,30 +328,62 @@ const CabRates = () => {
         validityFrom: formatDateForAPI(date.validityFrom),
         validityTo: formatDateForAPI(date.validityTo)
       })),
-      cabRateDetailsDTOList: rateGridRows.map((row) => ({
-        minpax: parseInt(row.minPax) || 0,
-        maxpax: parseInt(row.maxPax) || 0,
-        locationId: parseInt(row.location) || 0,
-        sicRate: parseFloat(row.sicPerWay) || 0,
-        luggage: Boolean(row.luggage),
-        hourDetails: row.hours || "",
-        cabRatesdetailsId: editing ? (row.cabRatesdetailsId || null) : null,
-        travelType: row.type === "Daily" ? "2" : "1", // Daily = 2, Airport = 1
-        pickupZoneLocationId: row.pickupZoneLocationId
-          ? parseInt(row.pickupZoneLocationId)
-          : null,
-        dropoffZoneLocationId: row.dropoffZoneLocationId
-          ? parseInt(row.dropoffZoneLocationId)
-          : null,
-        privateTotalRate:
-          row.privateTotal !== "" && row.privateTotal != null
-            ? parseFloat(row.privateTotal)
+      cabRateDetailsDTOList: [
+        // Transfers (travelType "1") — no Hours
+        ...transfersRows.map((row) => ({
+          minpax: parseInt(row.minPax) || 0,
+          maxpax: parseInt(row.maxPax) || 0,
+          locationId: 0,
+          sicRate: parseFloat(row.sicPerWay) || 0,
+          luggage: Boolean(row.luggage),
+          hourDetails: "",
+          cabRatesdetailsId: editing ? (row.cabRatesdetailsId || null) : null,
+          travelType: "1",
+          pickupZoneLocationId: row.pickupZoneLocationId
+            ? parseInt(row.pickupZoneLocationId)
             : null,
-        privatePerPaxRate:
-          row.privatePerPax !== "" && row.privatePerPax != null
-            ? parseFloat(row.privatePerPax)
+          dropoffZoneLocationId: row.dropoffZoneLocationId
+            ? parseInt(row.dropoffZoneLocationId)
             : null,
-      })),
+          pickupTime: row.pickupTime || "",
+          dropoffTime: row.dropoffTime || "",
+          privateTotalRate:
+            row.privateTotal !== "" && row.privateTotal != null
+              ? parseFloat(row.privateTotal)
+              : null,
+          privatePerPaxRate:
+            row.privatePerPax !== "" && row.privatePerPax != null
+              ? parseFloat(row.privatePerPax)
+              : null,
+        })),
+        // Car Rental (travelType "2") — has Hours
+        ...carRentalRows.map((row) => ({
+          minpax: parseInt(row.minPax) || 0,
+          maxpax: parseInt(row.maxPax) || 0,
+          locationId: 0,
+          sicRate: parseFloat(row.sicPerWay) || 0,
+          luggage: Boolean(row.luggage),
+          hourDetails: row.hours || "",
+          cabRatesdetailsId: editing ? (row.cabRatesdetailsId || null) : null,
+          travelType: "2",
+          pickupZoneLocationId: row.pickupZoneLocationId
+            ? parseInt(row.pickupZoneLocationId)
+            : null,
+          dropoffZoneLocationId: row.dropoffZoneLocationId
+            ? parseInt(row.dropoffZoneLocationId)
+            : null,
+          pickupTime: row.pickupTime || "",
+          dropoffTime: row.dropoffTime || "",
+          privateTotalRate:
+            row.privateTotal !== "" && row.privateTotal != null
+              ? parseFloat(row.privateTotal)
+              : null,
+          privatePerPaxRate:
+            row.privatePerPax !== "" && row.privatePerPax != null
+              ? parseFloat(row.privatePerPax)
+              : null,
+        })),
+      ],
     };
     return payload;
   };
@@ -402,17 +419,18 @@ const CabRates = () => {
         return;
       }
 
+      const transferRowInvalid = (row) =>
+        !row.minPax ||
+        !row.maxPax ||
+        !row.sicPerWay ||
+        !row.privateTotal ||
+        !row.privatePerPax;
+      const carRentalRowInvalid = (row) =>
+        transferRowInvalid(row) || !row.hours;
+
       if (
-        rateGridRows.some(
-          (row) =>
-            !row.minPax ||
-            !row.maxPax ||
-            !row.location ||
-            !row.sicPerWay ||
-            !row.privateTotal ||
-            !row.privatePerPax ||
-            !row.type
-        )
+        transfersRows.some(transferRowInvalid) ||
+        carRentalRows.some(carRentalRowInvalid)
       ) {
         toast.error("Please fill in all rate grid fields");
         return;
@@ -609,47 +627,52 @@ const CabRates = () => {
       }]);
     }
 
-    // Populate rate grid - mapping API structure
-    if (rate.cabRateDetailsDTOList && rate.cabRateDetailsDTOList.length > 0) {
-      const mappedRateGrid = rate.cabRateDetailsDTOList.map((detail, index) => ({
-        id: index + 1,
-        minPax: detail.minpax ? detail.minpax.toString() : "",
-        maxPax: detail.maxpax ? detail.maxpax.toString() : "",
-        location: detail.locationId ? detail.locationId.toString() : "",
-        sicPerWay: detail.sicRate ? detail.sicRate.toString() : "",
-        privateTotal:
-          detail.privateTotalRate != null ? detail.privateTotalRate.toString() : "",
-        privatePerPax:
-          detail.privatePerPaxRate != null ? detail.privatePerPaxRate.toString() : "",
-        luggage: detail.luggage || false,
-        type: detail.travelType === "2" ? "Daily" : "Airport",
-        hours: detail.hourDetails || "",
-        pickupZoneLocationId: detail.pickupZoneLocationId
-          ? detail.pickupZoneLocationId.toString()
-          : "",
-        dropoffZoneLocationId: detail.dropoffZoneLocationId
-          ? detail.dropoffZoneLocationId.toString()
-          : "",
-        cabRatesdetailsId: detail.cabRatesdetailsId || null,
-      }));
-      setRateGridRows(mappedRateGrid);
-    } else {
-      // Reset to default if no rate details
-      setRateGridRows([{
-        id: 1,
-        pickupZoneLocationId: "",
-        dropoffZoneLocationId: "",
-        minPax: "",
-        maxPax: "",
-        location: "",
-        sicPerWay: "",
-        privateTotal: "",
-        privatePerPax: "",
-        luggage: false,
-        type: "",
-        hours: "",
-      }]);
+    // Split incoming rate details by travelType into the two grids.
+    populateGridsFromRateDetails(rate.cabRateDetailsDTOList);
+  };
+
+  // Helper: split a server-side cabRateDetailsDTOList into transfers + carRental rows.
+  const populateGridsFromRateDetails = (list) => {
+    if (!Array.isArray(list) || list.length === 0) {
+      setTransfersRows([newTransferRow(1)]);
+      setCarRentalRows([newCarRentalRow(1)]);
+      return;
     }
+    const baseFromDetail = (detail, index) => ({
+      id: index + 1,
+      minPax: detail.minpax != null ? detail.minpax.toString() : "",
+      maxPax: detail.maxpax != null ? detail.maxpax.toString() : "",
+      sicPerWay: detail.sicRate != null ? detail.sicRate.toString() : "",
+      privateTotal:
+        detail.privateTotalRate != null ? detail.privateTotalRate.toString() : "",
+      privatePerPax:
+        detail.privatePerPaxRate != null ? detail.privatePerPaxRate.toString() : "",
+      luggage: detail.luggage || false,
+      pickupZoneLocationId: detail.pickupZoneLocationId
+        ? detail.pickupZoneLocationId.toString()
+        : "",
+      dropoffZoneLocationId: detail.dropoffZoneLocationId
+        ? detail.dropoffZoneLocationId.toString()
+        : "",
+      pickupTime: detail.pickupTime || "",
+      dropoffTime: detail.dropoffTime || "",
+      cabRatesdetailsId: detail.cabRatesdetailsId || null,
+    });
+
+    const transfers = [];
+    const carRental = [];
+    list.forEach((detail, idx) => {
+      if (String(detail.travelType) === "2") {
+        carRental.push({
+          ...baseFromDetail(detail, idx),
+          hours: detail.hourDetails || "",
+        });
+      } else {
+        transfers.push(baseFromDetail(detail, idx));
+      }
+    });
+    setTransfersRows(transfers.length > 0 ? transfers : [newTransferRow(1)]);
+    setCarRentalRows(carRental.length > 0 ? carRental : [newCarRentalRow(1)]);
   };
 
   // View cab rate
@@ -688,44 +711,7 @@ const CabRates = () => {
     }
     
     // Populate rate grid - mapping API structure
-    if (rate.cabRateDetailsDTOList && rate.cabRateDetailsDTOList.length > 0) {
-      const mappedRateGrid = rate.cabRateDetailsDTOList.map((detail, index) => ({
-        id: index + 1,
-        minPax: detail.minpax ? detail.minpax.toString() : "",
-        maxPax: detail.maxpax ? detail.maxpax.toString() : "",
-        location: detail.locationId ? detail.locationId.toString() : "",
-        sicPerWay: detail.sicRate ? detail.sicRate.toString() : "",
-        privateTotal:
-          detail.privateTotalRate != null ? detail.privateTotalRate.toString() : "",
-        privatePerPax:
-          detail.privatePerPaxRate != null ? detail.privatePerPaxRate.toString() : "",
-        luggage: detail.luggage || false,
-        type: detail.travelType === "2" ? "Daily" : "Airport",
-        hours: detail.hourDetails || "",
-        pickupZoneLocationId: detail.pickupZoneLocationId
-          ? detail.pickupZoneLocationId.toString()
-          : "",
-        dropoffZoneLocationId: detail.dropoffZoneLocationId
-          ? detail.dropoffZoneLocationId.toString()
-          : "",
-      }));
-      setRateGridRows(mappedRateGrid);
-    } else {
-      setRateGridRows([{
-        id: 1,
-        pickupZoneLocationId: "",
-        dropoffZoneLocationId: "",
-        minPax: "",
-        maxPax: "",
-        location: "",
-        sicPerWay: "",
-        privateTotal: "",
-        privatePerPax: "",
-        luggage: false,
-        type: "",
-        hours: "",
-      }]);
-    }
+    populateGridsFromRateDetails(rate.cabRateDetailsDTOList);
   };
 
   // Delete cab rate
@@ -797,17 +783,18 @@ const CabRates = () => {
         return;
       }
 
+      const transferRowInvalid = (row) =>
+        !row.minPax ||
+        !row.maxPax ||
+        !row.sicPerWay ||
+        !row.privateTotal ||
+        !row.privatePerPax;
+      const carRentalRowInvalid = (row) =>
+        transferRowInvalid(row) || !row.hours;
+
       if (
-        rateGridRows.some(
-          (row) =>
-            !row.minPax ||
-            !row.maxPax ||
-            !row.location ||
-            !row.sicPerWay ||
-            !row.privateTotal ||
-            !row.privatePerPax ||
-            !row.type
-        )
+        transfersRows.some(transferRowInvalid) ||
+        carRentalRows.some(carRentalRowInvalid)
       ) {
         toast.error("Please fill in all rate grid fields");
         return;
@@ -1156,16 +1143,16 @@ const CabRates = () => {
                   ))}
                 </div>
 
-                {/* Rate Grid Section */}
+                {/* ── Transfers Rate Grid (travelType "1") ───────────── */}
                 <div className="border-top pt-3 mt-3">
                   <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6 className="text-muted mb-0">Rate Grid</h6>
+                    <h6 className="text-muted mb-0">Rate Grid — Transfers</h6>
                     {!isViewMode && (
                       <Button
                         variant="outline-primary"
                         size="sm"
-                        onClick={addRateGridRow}
-                        title="Add Rate Grid Row"
+                        onClick={addTransferRow}
+                        title="Add Transfer Row"
                       >
                         <FaPlus className="me-2" />
                         Add Row
@@ -1183,32 +1170,27 @@ const CabRates = () => {
                       <thead className="table-light">
                         <tr>
                           <th style={{ minWidth: 170 }}>Pickup</th>
+                          <th style={{ minWidth: 110 }}>Pickup Time</th>
                           <th style={{ minWidth: 170 }}>Dropoff</th>
+                          <th style={{ minWidth: 110 }}>Dropoff Time</th>
                           <th style={{ minWidth: 80 }}>Min Pax</th>
                           <th style={{ minWidth: 80 }}>Max Pax</th>
-                          <th style={{ minWidth: 140 }}>Location</th>
-                          <th style={{ minWidth: 110 }}>SIC (Per Way)</th>
+                          <th style={{ minWidth: 110 }}>SIC</th>
                           <th style={{ minWidth: 130 }}>Private (Total)</th>
                           <th style={{ minWidth: 130 }}>Private Per Pax</th>
                           <th style={{ minWidth: 70 }}>Luggage</th>
-                          <th style={{ minWidth: 110 }}>Type</th>
-                          <th style={{ minWidth: 110 }}>Hours</th>
                           {!isViewMode && <th style={{ minWidth: 90 }}>Actions</th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {rateGridRows.map((row, index) => (
+                        {transfersRows.map((row) => (
                           <tr key={row.id}>
-                            <td style={{ minWidth: 160 }}>
+                            <td>
                               <Form.Select
                                 size="sm"
                                 value={row.pickupZoneLocationId || ""}
                                 onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "pickupZoneLocationId",
-                                    e.target.value
-                                  )
+                                  updateTransferRow(row.id, "pickupZoneLocationId", e.target.value)
                                 }
                                 disabled={isViewMode || !formData.cabId}
                               >
@@ -1226,16 +1208,23 @@ const CabRates = () => {
                                 ))}
                               </Form.Select>
                             </td>
-                            <td style={{ minWidth: 160 }}>
+                            <td>
+                              <Form.Control
+                                type="time"
+                                size="sm"
+                                value={row.pickupTime || ""}
+                                onChange={(e) =>
+                                  updateTransferRow(row.id, "pickupTime", e.target.value)
+                                }
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
                               <Form.Select
                                 size="sm"
                                 value={row.dropoffZoneLocationId || ""}
                                 onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "dropoffZoneLocationId",
-                                    e.target.value
-                                  )
+                                  updateTransferRow(row.id, "dropoffZoneLocationId", e.target.value)
                                 }
                                 disabled={isViewMode || !formData.cabId}
                               >
@@ -1255,98 +1244,52 @@ const CabRates = () => {
                             </td>
                             <td>
                               <Form.Control
-                                type="number"
+                                type="time"
                                 size="sm"
-                                placeholder="Min"
+                                value={row.dropoffTime || ""}
+                                onChange={(e) =>
+                                  updateTransferRow(row.id, "dropoffTime", e.target.value)
+                                }
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="Min"
                                 value={row.minPax}
-                                onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "minPax",
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(e) => updateTransferRow(row.id, "minPax", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
                               <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="Max"
+                                type="number" size="sm" placeholder="Max"
                                 value={row.maxPax}
-                                onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "maxPax",
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(e) => updateTransferRow(row.id, "maxPax", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
-                              <Form.Select
-                                size="sm"
-                                value={row.location}
-                                onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "location",
-                                    e.target.value
-                                  )
-                                }
-                                disabled={isViewMode}
-                              >
-                                <option value="">Select an Option</option>
-                                <option value="1">Airport to Hotel</option>
-                                <option value="2">Hotel to Airport</option>
-                              </Form.Select>
-                            </td>
-                            <td>
                               <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="SIC Rate"
+                                type="number" size="sm" placeholder="SIC"
                                 value={row.sicPerWay}
-                                onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "sicPerWay",
-                                    e.target.value
-                                  )
-                                }
-                              />
-                            </td>
-                            <td>
-                              <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="Total"
-                                value={row.privateTotal || ""}
-                                onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "privateTotal",
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(e) => updateTransferRow(row.id, "sicPerWay", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
                               <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="Per Pax"
+                                type="number" size="sm" placeholder="Total"
+                                value={row.privateTotal || ""}
+                                onChange={(e) => updateTransferRow(row.id, "privateTotal", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="Per Pax"
                                 value={row.privatePerPax || ""}
-                                onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "privatePerPax",
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(e) => updateTransferRow(row.id, "privatePerPax", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
@@ -1354,12 +1297,104 @@ const CabRates = () => {
                               <Form.Check
                                 type="checkbox"
                                 checked={row.luggage}
+                                onChange={(e) => updateTransferRow(row.id, "luggage", e.target.checked)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            {!isViewMode && (
+                              <td>
+                                <div className="d-flex gap-1">
+                                  <Button variant="outline-primary" size="sm" onClick={addTransferRow} title="Clone Row">
+                                    <FaPlus size={10} />
+                                  </Button>
+                                  {transfersRows.length > 1 && (
+                                    <Button variant="outline-danger" size="sm" onClick={() => removeTransferRow(row.id)} title="Remove Row">
+                                      <FaTrash size={10} />
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* ── Car Rental Rate Grid (travelType "2") ──────────── */}
+                <div className="border-top pt-3 mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="text-muted mb-0">Rate Grid — Car Rental</h6>
+                    {!isViewMode && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={addCarRentalRow}
+                        title="Add Car Rental Row"
+                      >
+                        <FaPlus className="me-2" />
+                        Add Row
+                      </Button>
+                    )}
+                  </div>
+                  <div className="table-responsive">
+                    <Table
+                      striped
+                      bordered
+                      hover
+                      size="sm"
+                      className="rate-grid-table"
+                    >
+                      <thead className="table-light">
+                        <tr>
+                          <th style={{ minWidth: 170 }}>Pickup</th>
+                          <th style={{ minWidth: 110 }}>Pickup Time</th>
+                          <th style={{ minWidth: 170 }}>Dropoff</th>
+                          <th style={{ minWidth: 110 }}>Dropoff Time</th>
+                          <th style={{ minWidth: 80 }}>Min Pax</th>
+                          <th style={{ minWidth: 80 }}>Max Pax</th>
+                          <th style={{ minWidth: 110 }}>SIC</th>
+                          <th style={{ minWidth: 130 }}>Private (Total)</th>
+                          <th style={{ minWidth: 130 }}>Private Per Pax</th>
+                          <th style={{ minWidth: 70 }}>Luggage</th>
+                          <th style={{ minWidth: 110 }}>Hours</th>
+                          {!isViewMode && <th style={{ minWidth: 90 }}>Actions</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {carRentalRows.map((row) => (
+                          <tr key={row.id}>
+                            <td>
+                              <Form.Select
+                                size="sm"
+                                value={row.pickupZoneLocationId || ""}
                                 onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "luggage",
-                                    e.target.checked
-                                  )
+                                  updateCarRentalRow(row.id, "pickupZoneLocationId", e.target.value)
+                                }
+                                disabled={isViewMode || !formData.cabId}
+                              >
+                                <option value="">
+                                  {!formData.cabId
+                                    ? "Select cab first"
+                                    : cabZonePickup.length === 0
+                                    ? "No pickup zones"
+                                    : "Select pickup"}
+                                </option>
+                                {cabZonePickup.map((loc) => (
+                                  <option key={loc.id} value={loc.id}>
+                                    {loc.locationName}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="time"
+                                size="sm"
+                                value={row.pickupTime || ""}
+                                onChange={(e) =>
+                                  updateCarRentalRow(row.id, "pickupTime", e.target.value)
                                 }
                                 disabled={isViewMode}
                               />
@@ -1367,87 +1402,108 @@ const CabRates = () => {
                             <td>
                               <Form.Select
                                 size="sm"
-                                value={row.type}
+                                value={row.dropoffZoneLocationId || ""}
                                 onChange={(e) =>
-                                  updateRateGridRow(
-                                    row.id,
-                                    "type",
-                                    e.target.value
-                                  )
+                                  updateCarRentalRow(row.id, "dropoffZoneLocationId", e.target.value)
                                 }
-                                disabled={isViewMode}
+                                disabled={isViewMode || !formData.cabId}
                               >
-                                <option value="">Select Type</option>
-                                <option value="Airport">Transfers</option>
-                                <option value="Daily">Car Rental</option>
+                                <option value="">
+                                  {!formData.cabId
+                                    ? "Select cab first"
+                                    : cabZoneDropoff.length === 0
+                                    ? "No dropoff zones"
+                                    : "Select dropoff"}
+                                </option>
+                                {cabZoneDropoff.map((loc) => (
+                                  <option key={loc.id} value={loc.id}>
+                                    {loc.locationName}
+                                  </option>
+                                ))}
                               </Form.Select>
                             </td>
                             <td>
-                              <div className="position-relative">
-                                <Form.Select
-                                  size="sm"
-                                  value={row.hours}
-                                  disabled={row.type !== "Daily" || isViewMode}
-                                  onChange={(e) =>
-                                    updateRateGridRow(
-                                      row.id,
-                                      "hours",
-                                      e.target.value
-                                    )
-                                  }
-                                  className={
-                                    row.type !== "Daily" ? "text-muted" : ""
-                                  }
-                                >
-                                  <option value="">SELEC</option>
-                                  <option value="1">1 Hour</option>
-                                  <option value="2">2 Hours</option>
-                                  <option value="3">3 Hours</option>
-                                  <option value="4">4 Hours</option>
-                                  <option value="5">5 Hours</option>
-                                  <option value="6">6 Hours</option>
-                                  <option value="7">7 Hours</option>
-                                  <option value="8">8 Hours</option>
-                                  <option value="9">9 Hours</option>
-                                  <option value="10">10 Hours</option>
-                                  <option value="11">11 Hours</option>
-                                  <option value="12">12 Hours</option>
-                                  <option value="13">13 Hours</option>
-                                  <option value="14">14 Hours</option>
-                                  <option value="15">15 Hours</option>
-                                  <option value="16">16 Hours</option>
-                                  <option value="17">17 Hours</option>
-                                  <option value="18">18 Hours</option>
-                                  <option value="19">19 Hours</option>
-                                  <option value="20">20 Hours</option>
-                                </Form.Select>
-                                {row.type !== "Daily" && (
-                                  <FaLock
-                                    className="position-absolute top-50 end-0 translate-middle-y me-2 text-muted"
-                                    size={12}
-                                    style={{ pointerEvents: "none" }}
-                                  />
-                                )}
-                              </div>
+                              <Form.Control
+                                type="time"
+                                size="sm"
+                                value={row.dropoffTime || ""}
+                                onChange={(e) =>
+                                  updateCarRentalRow(row.id, "dropoffTime", e.target.value)
+                                }
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="Min"
+                                value={row.minPax}
+                                onChange={(e) => updateCarRentalRow(row.id, "minPax", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="Max"
+                                value={row.maxPax}
+                                onChange={(e) => updateCarRentalRow(row.id, "maxPax", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="SIC"
+                                value={row.sicPerWay}
+                                onChange={(e) => updateCarRentalRow(row.id, "sicPerWay", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="Total"
+                                value={row.privateTotal || ""}
+                                onChange={(e) => updateCarRentalRow(row.id, "privateTotal", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="Per Pax"
+                                value={row.privatePerPax || ""}
+                                onChange={(e) => updateCarRentalRow(row.id, "privatePerPax", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Check
+                                type="checkbox"
+                                checked={row.luggage}
+                                onChange={(e) => updateCarRentalRow(row.id, "luggage", e.target.checked)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Select
+                                size="sm"
+                                value={row.hours || ""}
+                                onChange={(e) => updateCarRentalRow(row.id, "hours", e.target.value)}
+                                disabled={isViewMode}
+                              >
+                                <option value="">Select</option>
+                                {Array.from({ length: 20 }, (_, i) => i + 1).map((h) => (
+                                  <option key={h} value={h}>
+                                    {h} Hour{h > 1 ? "s" : ""}
+                                  </option>
+                                ))}
+                              </Form.Select>
                             </td>
                             {!isViewMode && (
                               <td>
                                 <div className="d-flex gap-1">
-                                  <Button
-                                    variant="outline-primary"
-                                    size="sm"
-                                    onClick={addRateGridRow}
-                                    title="Clone Row"
-                                  >
+                                  <Button variant="outline-primary" size="sm" onClick={addCarRentalRow} title="Clone Row">
                                     <FaPlus size={10} />
                                   </Button>
-                                  {rateGridRows.length > 1 && (
-                                    <Button
-                                      variant="outline-danger"
-                                      size="sm"
-                                      onClick={() => removeRateGridRow(row.id)}
-                                      title="Remove Row"
-                                    >
+                                  {carRentalRows.length > 1 && (
+                                    <Button variant="outline-danger" size="sm" onClick={() => removeCarRentalRow(row.id)} title="Remove Row">
                                       <FaTrash size={10} />
                                     </Button>
                                   )}

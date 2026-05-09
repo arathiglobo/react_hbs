@@ -12,6 +12,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import Select from "react-select";
 import axiosInstance from "../../components/AxiosInstance";
+import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../styles/HotelSearch.css";
@@ -867,6 +868,7 @@ export default function LongStaySearch() {
                       {errors.agent && (
                         <div className="text-danger small mt-1">{errors.agent}</div>
                       )}
+                      <AgentBalanceDisplay agentId={agent} />
                     </Form.Group>
                   </Col>
 

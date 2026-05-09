@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { Row, Col, Spinner } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { FaChevronLeft } from "react-icons/fa";
@@ -146,6 +147,10 @@ const PackageBooking = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 booking-stepper-container">
+
+          <div className="d-flex justify-content-end mb-2">
+            <AgentBalanceDisplay agentId={agentId} />
+          </div>
 
           {/* Page header */}
           <div className="mb-4">

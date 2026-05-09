@@ -12,6 +12,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import Select from "react-select";
 import axiosInstance from "../../components/AxiosInstance";
+import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import {
   FaSearch,
   FaGlobe,
@@ -394,6 +395,7 @@ export default function MakeUrOwnPackage() {
                           {errors.agent}
                         </div>
                       )}
+                      <AgentBalanceDisplay agentId={agent} />
                     </Form.Group>
                   </Col>
 

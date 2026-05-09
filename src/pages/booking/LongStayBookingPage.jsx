@@ -33,6 +33,7 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
+import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { toast } from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 
@@ -54,6 +55,7 @@ export default function LongStayBookingPage() {
     gender: "",
   });
   const [remarks, setRemarks] = useState("");
+  const [tourismDirham, setTourismDirham] = useState("");
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -207,6 +209,10 @@ export default function LongStayBookingPage() {
         primaryGuestPhone: primaryGuest.phone.trim(),
         nationality: primaryGuest.nationality || null,
         remarks: remarks || null,
+        tourismDirham:
+          tourismDirham !== "" && !isNaN(Number(tourismDirham))
+            ? Number(tourismDirham)
+            : null,
         primaryGuestDetails: {
           salutation: primaryGuest.salutation,
           firstName: primaryGuest.firstName.trim(),
@@ -295,6 +301,12 @@ export default function LongStayBookingPage() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          <div
+            className="d-flex justify-content-end px-4 pt-2"
+            style={{ background: "#fff" }}
+          >
+            <AgentBalanceDisplay agentId={agentId} />
+          </div>
           {/* ── Hero Banner ───────────────────────────────────────────── */}
           <div
             style={{
@@ -1205,12 +1217,33 @@ export default function LongStayBookingPage() {
                 </div>
                 <h3 className="fw-bold mb-0">
                   {quote?.totalAmount != null
-                    ? Number(quote.totalAmount).toFixed(2)
+                    ? (
+                        Number(quote.totalAmount) +
+                        (tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                          ? Number(tourismDirham)
+                          : 0)
+                      ).toFixed(2)
                     : "—"}
                 </h3>
               </div>
             </div>
           )}
+          <div className="mt-3">
+            <Form.Label className="fw-semibold mb-1 small text-uppercase">
+              Tourism Dirham
+            </Form.Label>
+            <Form.Control
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={tourismDirham}
+              onChange={(e) => setTourismDirham(e.target.value)}
+            />
+            <Form.Text className="text-muted">
+              Optional — added to the Total Amount above.
+            </Form.Text>
+          </div>
         </Modal.Body>
         <Modal.Footer
           style={{ background: "#f8fafc", borderTop: "1px solid #e5e7eb" }}

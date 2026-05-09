@@ -4,6 +4,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
+import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import {
   FaSearch,
   FaEye,
@@ -290,6 +291,7 @@ const PackageSearch = () => {
                           {errors.agent}
                         </div>
                       )}
+                      <AgentBalanceDisplay agentId={agentId} />
                     </Form.Group>
                   </Col>
                 </Row>

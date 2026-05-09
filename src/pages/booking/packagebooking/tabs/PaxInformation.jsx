@@ -23,6 +23,7 @@ const PaxInformation = ({
   const navigate = useNavigate();
   const [showSummary, setShowSummary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tourismDirham, setTourismDirham] = useState("");
 
   const [localData, setLocalData] = useState(
     bookingData.paxInfo || {
@@ -135,6 +136,10 @@ const PaxInformation = ({
         packageCategory: searchParams.packageCategory,
         nativeCountry: searchParams.nativeCountry,
         totalPrice: totalPrice,
+        tourismDirham:
+          tourismDirham !== "" && !isNaN(Number(tourismDirham))
+            ? Number(tourismDirham)
+            : null,
         counts: {
           adultCount: Number(searchParams.adultCount),
           childCount: Number(searchParams.childCount),
@@ -411,11 +416,31 @@ const PaxInformation = ({
                     className="text-end text-primary"
                     style={{ fontSize: "1.1rem" }}
                   >
-                    AED {totalPrice}
+                    AED {(
+                      Number(totalPrice || 0) +
+                      (tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                        ? Number(tourismDirham)
+                        : 0)
+                    ).toFixed(2)}
                   </td>
                 </tr>
               </tfoot>
             </Table>
+            <div className="mt-3">
+              <label className="form-label fw-semibold">Tourism Dirham</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="form-control"
+                placeholder="0.00"
+                value={tourismDirham}
+                onChange={(e) => setTourismDirham(e.target.value)}
+              />
+              <small className="text-muted">
+                Optional — added to the Grand Total above.
+              </small>
+            </div>
           </div>
 
           <div className="summary-section">

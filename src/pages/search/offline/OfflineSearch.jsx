@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, Form, Row, Col, Button, Spinner } from "react-bootstrap";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
+import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import { toast } from "react-hot-toast";
@@ -428,6 +429,7 @@ const OfflineSearch = () => {
                           isClearable
                         />
                         {errors.agentId && <div className="text-danger small mt-1">{errors.agentId}</div>}
+                        <AgentBalanceDisplay agentId={formData.agentId?.value} />
                       </Form.Group>
                     </Col>
 

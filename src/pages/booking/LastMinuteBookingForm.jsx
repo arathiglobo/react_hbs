@@ -22,6 +22,7 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import "../../styles/HotelBookingPage.css";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
@@ -108,6 +109,7 @@ export default function LastMinuteBookingForm() {
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
   const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
+  const [tourismDirham, setTourismDirham] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -310,6 +312,10 @@ export default function LastMinuteBookingForm() {
       agentId,
       nationalityId: ctx?.nationalityId ?? null,
       createdByRole,
+      tourismDirham:
+        tourismDirham !== "" && !isNaN(Number(tourismDirham))
+          ? Number(tourismDirham)
+          : null,
       customer: customerWithNationality,
       rooms: rooms.map((r) => ({
         adults: Number(r.adults) || 1,
@@ -391,6 +397,9 @@ export default function LastMinuteBookingForm() {
           <Badge bg="warning" text="dark" className="ms-2">
             LAST MINUTE
           </Badge>
+          <div className="ms-auto">
+            <AgentBalanceDisplay agentId={ctx?.agentId} />
+          </div>
         </div>
 
         {/* ── Booking Summary card (HotelBookingPage style) ── */}
@@ -949,13 +958,43 @@ export default function LastMinuteBookingForm() {
             )}
 
             <hr />
+            <Row className="align-items-end mb-2">
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label className="fw-semibold mb-1">
+                    Tourism Dirham
+                  </Form.Label>
+                  <Form.Control
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={tourismDirham}
+                    onChange={(e) => setTourismDirham(e.target.value)}
+                  />
+                  <Form.Text className="text-muted">
+                    Optional — added to the total below.
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
             <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
               <span className="fw-semibold">
                 Total ({nights} night{nights !== 1 ? "s" : ""} ×{" "}
                 {totalRoomCount} room{totalRoomCount !== 1 ? "s" : ""})
+                {tourismDirham !== "" && !isNaN(Number(tourismDirham)) && (
+                  <span className="text-muted small ms-2">
+                    + {formatPrice(Number(tourismDirham))} TD
+                  </span>
+                )}
               </span>
               <span className="fs-4 fw-bold text-success">
-                {formatPrice(totalPrice)}
+                {formatPrice(
+                  Number(totalPrice || 0) +
+                    (tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                      ? Number(tourismDirham)
+                      : 0)
+                )}
               </span>
             </div>
 

@@ -15,6 +15,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -523,11 +524,19 @@ export const CabSearch = () => {
         <Card.Body>
 
           {/* 🔷 Header */}
-          <div className="mb-4">
-            <h4 className="fw-bold text-primary mb-1">Cab Search</h4>
-            <p className="text-muted small mb-0">
-              Search and compare available transfer options
-            </p>
+          <div className="mb-4 d-flex justify-content-between align-items-start">
+            <div>
+              <h4 className="fw-bold text-primary mb-1">Cab Search</h4>
+              <p className="text-muted small mb-0">
+                Search and compare available transfer options
+              </p>
+            </div>
+            <AgentBalanceDisplay
+              agentId={
+                sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+                localStorage.getItem("makeYourOwnPackageAgentId")
+              }
+            />
           </div>
 
           {/* 🔷 Search Card */}
