@@ -154,9 +154,72 @@ export default function BookingDetailedView() {
               </div>
             ) : (
               <>
+                {/* ── 24-Hour Check-In highlight banner ────────────────
+                     Surfaced above Booking Information so the operator
+                     spots the special-flow status at a glance, with the
+                     chosen times when present. Hidden entirely when the
+                     booking is a normal stay. */}
+                {booking.is24HourCheckin && (
+                  <div
+                    style={{
+                      backgroundColor: "#fff8e1",
+                      border: "1px solid #f5c518",
+                      borderLeft: "6px solid #f5c518",
+                      borderRadius: 4,
+                      padding: "8px 12px",
+                      marginBottom: 10,
+                      fontSize: "0.85rem",
+                      color: "#5b4500",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <span
+                      style={{
+                        backgroundColor: "#f5c518",
+                        color: "#000",
+                        fontWeight: 700,
+                        fontSize: "0.7rem",
+                        padding: "2px 8px",
+                        borderRadius: 3,
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      24-HOUR CHECK-IN
+                    </span>
+                    <span>
+                      This booking was made via the 24-hour check-in flow.
+                      {booking.checkInTime && (
+                        <> Check-In: <strong>{booking.checkInTime}</strong></>
+                      )}
+                      {booking.checkOutTime && (
+                        <> · Check-Out: <strong>{booking.checkOutTime}</strong></>
+                      )}
+                    </span>
+                  </div>
+                )}
+
                 {/* ── Booking Info ─────────────────────────────────────── */}
                 <div style={card}>
-                  <div style={SECTION_HEADER}>Booking Information</div>
+                  <div style={SECTION_HEADER}>
+                    Booking Information
+                    {booking.is24HourCheckin && (
+                      <span
+                        style={{
+                          marginLeft: 8,
+                          backgroundColor: "#f5c518",
+                          color: "#000",
+                          fontWeight: 700,
+                          fontSize: "0.65rem",
+                          padding: "2px 6px",
+                          borderRadius: 3,
+                        }}
+                      >
+                        24H
+                      </span>
+                    )}
+                  </div>
                   <div style={{ padding: "12px 16px" }}>
                     <Row>
                       <Col md={6}>
@@ -243,36 +306,73 @@ export default function BookingDetailedView() {
                         Room {room.roomNo ?? idx + 1} -{" "}
                         <StatusBadge status={booking.confirmationStatus} />
                       </div>
-                      <Table
-                        bordered
-                        size="sm"
-                        style={{ fontSize: "0.82rem", marginBottom: "6px" }}
-                      >
-                        <thead style={{ backgroundColor: "#f8f8f8" }}>
-                          <tr>
-                            <th>Room Category</th>
-                            <th>Meal Type</th>
-                            <th>Supplier Ref.</th>
-                            <th>Hotel Conf No.</th>
-                            <th>Adults</th>
-                            <th>Children</th>
-                            <th>Rate</th>
-                            <th>Currency</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td>{room.roomCategory || "-"}</td>
-                            <td>{room.mealPlan || "-"}</td>
-                            <td>{booking.supplierReference || "-"}</td>
-                            <td>{booking.referenceNumber || "-"}</td>
-                            <td>{room.adults ?? "-"}</td>
-                            <td>{room.children ?? "0"}</td>
-                            <td>{room.rate != null ? Number(room.rate).toFixed(2) : "-"}</td>
-                            <td>{room.currency || "-"}</td>
-                          </tr>
-                        </tbody>
-                      </Table>
+                      {/* Per-room Rate cell already shows the room's
+                          billable rate. Per spec the Tourism Dirham
+                          captured on the booking now flows into Rate and
+                          Total Rate so the operator sees the FULL amount
+                          the customer pays. TD is shared across the
+                          booking, so we distribute it evenly across
+                          rooms (rounded to 2 dp) for the per-row Rate
+                          column — the totals row below still uses the
+                          single, untouched booking-level TD value. */}
+                      {(() => {
+                        const roomCount = Array.isArray(booking.rooms)
+                          ? booking.rooms.length
+                          : 1;
+                        const td = Number(booking.tourismDirham) || 0;
+                        const tdShare = roomCount > 0 ? td / roomCount : 0;
+                        const baseRate = Number(room.rate) || 0;
+                        const rateWithTd = baseRate + tdShare;
+                        return (
+                          <Table
+                            bordered
+                            size="sm"
+                            style={{ fontSize: "0.82rem", marginBottom: "6px" }}
+                          >
+                            <thead style={{ backgroundColor: "#f8f8f8" }}>
+                              <tr>
+                                <th>Room Category</th>
+                                <th>Meal Type</th>
+                                <th>Supplier Ref.</th>
+                                <th>Hotel Conf No.</th>
+                                <th>Adults</th>
+                                <th>Children</th>
+                                <th>Rate</th>
+                                <th>Currency</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td>{room.roomCategory || "-"}</td>
+                                <td>{room.mealPlan || "-"}</td>
+                                <td>{booking.supplierReference || "-"}</td>
+                                <td>{booking.referenceNumber || "-"}</td>
+                                <td>{room.adults ?? "-"}</td>
+                                <td>{room.children ?? "0"}</td>
+                                <td>
+                                  {room.rate != null
+                                    ? rateWithTd.toFixed(2)
+                                    : "-"}
+                                  {td > 0 && room.rate != null && (
+                                    <div
+                                      style={{
+                                        fontSize: "0.68rem",
+                                        color: "#888",
+                                        fontWeight: 500,
+                                        marginTop: 2,
+                                      }}
+                                    >
+                                      ({baseRate.toFixed(2)} + TD{" "}
+                                      {tdShare.toFixed(2)})
+                                    </div>
+                                  )}
+                                </td>
+                                <td>{room.currency || "-"}</td>
+                              </tr>
+                            </tbody>
+                          </Table>
+                        );
+                      })()}
 
                       {/* Room guests */}
                       {room.guests && room.guests.length > 0 && (
@@ -320,12 +420,34 @@ export default function BookingDetailedView() {
                       color: "#333",
                     }}
                   >
-                    <span>
-                      <span style={{ fontWeight: "600" }}>Total Rate: </span>
-                      {booking.totalRate != null
-                        ? `${Number(booking.totalRate).toFixed(2)}`
-                        : "-"}
-                    </span>
+                    {/* Total Rate now includes Tourism Dirham so the
+                        amount shown here matches what's billed. The
+                        original (pre-TD) total is retained as a small
+                        hint underneath whenever TD > 0. */}
+                    {(() => {
+                      const baseTotal = Number(booking.totalRate) || 0;
+                      const td = Number(booking.tourismDirham) || 0;
+                      const grand = baseTotal + td;
+                      return (
+                        <span>
+                          <span style={{ fontWeight: "600" }}>Total Rate: </span>
+                          {booking.totalRate != null
+                            ? grand.toFixed(2)
+                            : "-"}
+                          {td > 0 && booking.totalRate != null && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: "0.72rem",
+                                color: "#888",
+                              }}
+                            >
+                              ({baseTotal.toFixed(2)} + TD {td.toFixed(2)})
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })()}
                     <span>
                       <span style={{ fontWeight: "600" }}>Refund Type: </span>
                       {booking.refundStatus || "-"}

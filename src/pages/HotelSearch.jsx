@@ -316,7 +316,15 @@ const fullText = "Search Hotel Name...";
 // ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
-export default function HotelSearch() {
+// ── Props ────────────────────────────────────────────────────────────
+// `force24Hour` (default false) is a hard opt-in for the dedicated
+// "24 Hour Check-In" route at /new-booking/hotel-24hr. When true the
+// search runs in 24-hour mode permanently (the toggle row is hidden,
+// time inputs are always shown, and post-processing always probes the
+// 24-hour configs). When false (the default `/new-booking/hotel` flow)
+// the 24-hour UI is hidden entirely so the page is a clean normal
+// hotel-booking flow — no toggle, no post-processing, no probe call.
+export default function HotelSearch({ force24Hour = false } = {}) {
   const [placeholder, setPlaceholder] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
@@ -377,7 +385,10 @@ export default function HotelSearch() {
   // hotel is probed against /api/24-hour-checkin/probe-bulk; ineligible
   // hotels are filtered out and the displayed rate is uplifted by the
   // configured percentage. When false, the search behaves exactly as before.
-  const [is24HourCheckin, setIs24HourCheckin] = useState(false);
+  // Seeded from `force24Hour` so the dedicated 24-hour route ships in
+  // 24-hour mode from first render (no flicker). The normal route keeps
+  // this false and the entire 24-hour code path stays dormant.
+  const [is24HourCheckin, setIs24HourCheckin] = useState(force24Hour);
   const [checkInTime24, setCheckInTime24] = useState("14:00");
   const [checkOutTime24, setCheckOutTime24] = useState("14:00"); // +24h default
   // Map of hotelId → { eligible, percentage } returned by the probe endpoint.
@@ -1104,10 +1115,14 @@ export default function HotelSearch() {
             <Card.Body className="p-4">
               <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1">
-                  Find Your Perfect Stay
+                  {force24Hour
+                    ? "24 Hour Check-In Booking"
+                    : "Find Your Perfect Stay"}
                 </h2>
                 <p className="text-muted">
-                  Discover amazing hotels and exclusive deals
+                  {force24Hour
+                    ? "Pick a check-in time — we'll filter to hotels with an active 24-hour config and apply the per-hotel uplift."
+                    : "Discover amazing hotels and exclusive deals"}
                 </p>
               </div>
 
@@ -1371,58 +1386,44 @@ export default function HotelSearch() {
                   </Row>
                 )}
 
-                {/* ── 24 Hour Check-In opt-in row ──────────────────────
-                    Toggling this on reveals two time pickers (check-in
-                    time & check-out time). On submit, results are
-                    post-processed to filter to hotels with active configs
-                    and apply the percentage markup. Off = original flow. */}
-                <Row className="g-3 mt-2 align-items-end">
-                  <Col md={4}>
-                    <Form.Check
-                      type="checkbox"
-                      id="lm-24hour-toggle"
-                      label="Enable 24 Hour Check-In"
-                      checked={is24HourCheckin}
-                      onChange={(e) => {
-                        const v = e.target.checked;
-                        setIs24HourCheckin(v);
-                        // When toggled OFF, drop any prior probe data so
-                        // results render at base rate again on next search.
-                        if (!v) setTwentyFourHourMap({});
-                      }}
-                    />
-                  </Col>
-                  {is24HourCheckin && (
-                    <>
-                      <Col md={4}>
-                        <Form.Label className="fw-semibold text-dark mb-1">
-                          Check-In Time (24-hour)
-                        </Form.Label>
-                        <Form.Control
-                          type="time"
-                          value={checkInTime24}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setCheckInTime24(v);
-                            // Auto-bump check-out to the same time → 24h later.
-                            // User can override afterwards.
-                            if (v) setCheckOutTime24(v);
-                          }}
-                        />
-                      </Col>
-                      <Col md={4}>
-                        <Form.Label className="fw-semibold text-dark mb-1">
-                          Check-Out Time
-                        </Form.Label>
-                        <Form.Control
-                          type="time"
-                          value={checkOutTime24}
-                          onChange={(e) => setCheckOutTime24(e.target.value)}
-                        />
-                      </Col>
-                    </>
-                  )}
-                </Row>
+                {/* ── 24 Hour Check-In time inputs ─────────────────────
+                    Rendered ONLY on the dedicated 24-hour route
+                    (force24Hour=true). The legacy in-page toggle has
+                    been removed — the normal /new-booking/hotel route
+                    is now a clean normal-booking flow. The 24-hour
+                    post-processing / probe call still only runs when
+                    is24HourCheckin is true, which on the normal route
+                    stays false for the entire lifetime of the page. */}
+                {force24Hour && (
+                  <Row className="g-3 mt-2 align-items-end">
+                    <Col md={6}>
+                      <Form.Label className="fw-semibold text-dark mb-1">
+                        Check-In Time (24-hour)
+                      </Form.Label>
+                      <Form.Control
+                        type="time"
+                        value={checkInTime24}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setCheckInTime24(v);
+                          // Auto-bump check-out to the same time → 24h later.
+                          // User can override afterwards.
+                          if (v) setCheckOutTime24(v);
+                        }}
+                      />
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label className="fw-semibold text-dark mb-1">
+                        Check-Out Time
+                      </Form.Label>
+                      <Form.Control
+                        type="time"
+                        value={checkOutTime24}
+                        onChange={(e) => setCheckOutTime24(e.target.value)}
+                      />
+                    </Col>
+                  </Row>
+                )}
 
                 <Row className="mt-3">
                   <Col className="d-flex justify-content-center gap-3">
@@ -1444,7 +1445,7 @@ export default function HotelSearch() {
                       ) : (
                         <>
                           <FaSearch className="me-2" />
-                          {is24HourCheckin
+                          {force24Hour
                             ? "SEARCH 24-HOUR STAYS"
                             : "SEARCH HOTELS"}
                         </>

@@ -64,7 +64,14 @@ const isCancellationAllowed = (booking) => {
   return !isNonRefundable;
 };
 
-const HotelBookingList = () => {
+// ── Props ────────────────────────────────────────────────────────────
+// `force24HourOnly` is the opt-in for the dedicated 24-Hour Booking
+// List menu (/booking-details/24hr-booking-list). When true the page
+// post-filters every fetched booking list to rows where
+// `is24HourCheckin === true`, and tweaks the heading. The regular
+// /booking-details/hotel-booking-list route renders this component
+// with no prop and therefore stays unchanged.
+const HotelBookingList = ({ force24HourOnly = false } = {}) => {
   const navigate = useNavigate();
   const [role, setRole] = useState(() => {
     return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
@@ -665,9 +672,22 @@ const HotelBookingList = () => {
         currentBookings = [];
     }
 
-    setBookings(currentBookings);
-    setTotalPages(paginationMeta.totalPages || 0);
-    setTotalElements(paginationMeta.totalElements || 0);
+    // 24-hour-only menu: drop rows where the flag isn't set. Adjust the
+    // visible totals to the filtered count so the empty-state and the
+    // pagination footer reflect what the user actually sees. Pagination
+    // stays server-side; this is a presentational filter only.
+    if (force24HourOnly) {
+      const filtered = (currentBookings || []).filter(
+        (b) => b && (b.is24HourCheckin || b.Is24HourCheckin)
+      );
+      setBookings(filtered);
+      setTotalPages(paginationMeta.totalPages || 0);
+      setTotalElements(filtered.length);
+    } else {
+      setBookings(currentBookings);
+      setTotalPages(paginationMeta.totalPages || 0);
+      setTotalElements(paginationMeta.totalElements || 0);
+    }
 
     setPagination((prev) => {
       const currentState = prev[status];
@@ -874,7 +894,9 @@ const HotelBookingList = () => {
             {/* Header: Title + Search (left) | Time Period (right) */}
             <div className="d-flex justify-content-between align-items-end mb-3">
               <div>
-                <h3 className="fw-bold text-dark mb-2">Hotel Bookings</h3>
+                <h3 className="fw-bold text-dark mb-2">
+                  {force24HourOnly ? "24 Hour Check-In Bookings" : "Hotel Bookings"}
+                </h3>
                 <InputGroup style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text
                     style={{
@@ -1373,6 +1395,15 @@ const HotelBookingList = () => {
                                     >
                                       {b.hotelName || "-"}
                                     </span>
+                                    {b.is24HourCheckin && (
+                                      <span
+                                        className="badge bg-warning-subtle text-warning border border-warning-subtle"
+                                        style={{ fontSize: "0.65rem", padding: "2px 6px" }}
+                                        title="24-hour check-in booking"
+                                      >
+                                        24H
+                                      </span>
+                                    )}
                                     {formatDate(b.checkInDate) &&
                                       formatDate(b.checkOutDate) && (
                                         <span

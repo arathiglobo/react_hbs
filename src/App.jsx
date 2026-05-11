@@ -16,8 +16,10 @@ import LandingPage from "./pages/LandingPage";
 import { Toaster } from "react-hot-toast";
 import Designations from "./pages/master/Designation";
 import HotelSearch from "./pages/HotelSearch";
+import HotelSearch24Hour from "./pages/HotelSearch24Hour";
 import RoomList from "./pages/RoomList";
 import HotelBookingList from "./pages/list/HotelBookingList";
+import HotelBookingList24Hour from "./pages/list/HotelBookingList24Hour";
 // Last Minute Booking — list page (Phase 4)
 import LastMinuteBookingList from "./pages/list/LastMinuteBookingList";
 // 24 Hour Check-In configuration pages (new feature)
@@ -299,6 +301,11 @@ export default function App() {
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
+        {/* Dedicated 24-Hour Check-In hotel search — same component as
+            /new-booking/hotel but with `force24Hour` so it always runs
+            in 24-hour mode (toggle hidden, time pickers visible, probe
+            + uplift always applied). Keeps the normal route untouched. */}
+        <Route path="/new-booking/hotel-24hr" element={<PrivateRoute><HotelSearch24Hour /></PrivateRoute>} />
         {/* Last Minute Booking (Phase 2) — separate search flow */}
         <Route path="/new-booking/last-minute-booking" element={<PrivateRoute><LastMinuteBookingPage /></PrivateRoute>} />
         {/* Last Minute Booking (Phase 3) — booking creation form */}
@@ -321,6 +328,10 @@ export default function App() {
         <Route path="/api-room-list" element={<PrivateRoute><ExternalApiRoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
+        {/* Dedicated 24-Hour Check-In booking list — same component as
+            /booking-details/hotel-booking-list but with `force24HourOnly`
+            so only bookings flagged is24HourCheckin=true are shown. */}
+        <Route path="/booking-details/24hr-booking-list" element={<PrivateRoute><HotelBookingList24Hour /> </PrivateRoute>}/>
         {/* Last Minute Bookings list — view + cancel from this page */}
         <Route path="/booking-details/last-minute-booking-list" element={<PrivateRoute><LastMinuteBookingList /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id" element={<PrivateRoute><BookingDetailedView /></PrivateRoute>}/>

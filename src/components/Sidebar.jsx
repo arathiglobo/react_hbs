@@ -222,6 +222,9 @@ export default function Sidebar() {
       roles: ["admin", "agent"],
       children: [
         { label: "Hotel Booking", to: "/new-booking/hotel" },
+        // Dedicated 24-Hour Check-In entry — separate route renders the
+        // same HotelSearch component with force24Hour=true.
+        { label: "24 Hour Check-In", to: "/new-booking/hotel-24hr" },
         // Last Minute Booking — Phase 2 entry (separate flow & APIs)
         { label: "Last Minute Booking", to: "/new-booking/last-minute-booking" },
         { label: "Long Stay Booking", to: "/new-booking/long-stay" },
@@ -258,6 +261,12 @@ export default function Sidebar() {
         {
           label: "Hotel Booking",
           to: "/booking-details/hotel-booking-list",
+        },
+        // Dedicated 24-Hour Check-In list — same page wrapped with
+        // force24HourOnly so only is24HourCheckin=true rows are shown.
+        {
+          label: "24Hrs Booking List",
+          to: "/booking-details/24hr-booking-list",
         },
         // Last Minute Booking list — Phase 4 entry
         {
