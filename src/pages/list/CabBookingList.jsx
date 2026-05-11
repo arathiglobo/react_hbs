@@ -544,221 +544,179 @@ const CabBookingList = () => {
                   )}
                 </Modal.Title>
               </Modal.Header>
-              <Modal.Body>
+              <Modal.Body className="py-2">
                 {!detailsBooking ? (
-                  <div className="text-center py-4 text-muted">
+                  <div className="text-center py-3 text-muted">
                     No booking selected.
                   </div>
                 ) : (
                   <>
-                    {/* Booking meta */}
-                    <Row className="g-3 mb-3">
-                      <Col md={4}>
-                        <div className="text-muted small">Booking Code</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.packageBookCode || "—"}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small">Booked On</div>
-                        <div className="fw-semibold">
-                          {formatDate(detailsBooking.bookingDate)}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small">Status</div>
-                        <Badge
-                          bg={
-                            detailsBooking.cancelStatus
-                              ? "danger-subtle"
-                              : "success-subtle"
-                          }
-                          text={
-                            detailsBooking.cancelStatus ? "danger" : "success"
-                          }
-                        >
-                          {detailsBooking.cancelStatus
-                            ? "Cancelled"
-                            : "Confirmed"}
-                        </Badge>
-                      </Col>
-                    </Row>
-
-                    <hr />
-
-                    {/* Cab info */}
-                    <h6 className="fw-bold mb-2">
-                      <FaCar className="me-2 text-primary" />
-                      Cab
-                    </h6>
-                    <Row className="g-3 mb-3">
-                      <Col md={6}>
-                        <div className="text-muted small">Cab Name</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.cabName || "—"}
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        <div className="text-muted small">Transporter</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.transporter || "—"}
-                        </div>
-                      </Col>
-                      {detailsBooking.driverName && (
-                        <Col md={6}>
-                          <div className="text-muted small">Driver</div>
-                          <div className="fw-semibold">
-                            {detailsBooking.driverName}
-                            {detailsBooking.driverContact &&
-                              ` · ${detailsBooking.driverContact}`}
-                          </div>
-                        </Col>
-                      )}
-                      {detailsBooking.contactNumber && (
-                        <Col md={6}>
-                          <div className="text-muted small">
-                            Transporter Contact
-                          </div>
-                          <div className="fw-semibold">
-                            {detailsBooking.contactNumber}
-                          </div>
-                        </Col>
-                      )}
-                    </Row>
-
-                    <hr />
-
-                    {/* Trip / route */}
-                    <h6 className="fw-bold mb-2">
-                      <FaMapMarkerAlt className="me-2 text-primary" />
-                      Trip
-                    </h6>
-                    <Row className="g-3 mb-3">
-                      <Col md={6}>
-                        <div className="text-muted small">Pickup Date</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.pickupDate || "—"}
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        <div className="text-muted small">Dropoff Date</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.dropOffDate ||
-                            detailsBooking.dropoffDate ||
-                            detailsBooking.pickupDate ||
-                            "—"}
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        <div className="text-muted small">Pickup</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.pickupName ||
-                            detailsBooking.pickup ||
-                            "—"}
-                          {detailsBooking.pickupTime
-                            ? ` · ${detailsBooking.pickupTime}`
-                            : ""}
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        <div className="text-muted small">Dropoff</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.dropoffName ||
-                            detailsBooking.dropoff ||
-                            "—"}
-                          {detailsBooking.dropoffTime
-                            ? ` · ${detailsBooking.dropoffTime}`
-                            : ""}
-                        </div>
-                      </Col>
-                    </Row>
-
-                    <hr />
-
-                    {/* Pax */}
-                    <h6 className="fw-bold mb-2">
-                      <FaUserAlt className="me-2 text-primary" />
-                      Passengers
-                    </h6>
-                    <Row className="g-3 mb-3">
-                      <Col md={4}>
-                        <div className="text-muted small">Adults</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.noOfAdult ?? 0}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small">Children</div>
-                        <div className="fw-semibold">
-                          {detailsBooking.noOfChild ?? 0}
-                        </div>
-                      </Col>
-                      {Array.isArray(detailsBooking.childAgeArray) &&
-                        detailsBooking.childAgeArray.length > 0 && (
-                          <Col md={4}>
-                            <div className="text-muted small">Child Ages</div>
-                            <div className="fw-semibold">
-                              {detailsBooking.childAgeArray.join(", ")}
-                            </div>
-                          </Col>
+                    {/* ── Top strip: meta + cab/route in a single compact
+                        table so the modal stays dense and scannable. */}
+                    <Table size="sm" borderless className="mb-2">
+                      <tbody>
+                        <tr>
+                          <td className="text-muted small" style={{ width: 130 }}>Code</td>
+                          <td className="fw-semibold">
+                            {detailsBooking.packageBookCode || "—"}
+                          </td>
+                          <td className="text-muted small" style={{ width: 100 }}>Booked</td>
+                          <td className="fw-semibold">
+                            {formatDate(detailsBooking.bookingDate)}
+                          </td>
+                          <td className="text-muted small" style={{ width: 70 }}>Status</td>
+                          <td>
+                            <Badge
+                              bg={detailsBooking.cancelStatus ? "danger-subtle" : "success-subtle"}
+                              text={detailsBooking.cancelStatus ? "danger" : "success"}
+                            >
+                              {detailsBooking.cancelStatus ? "Cancelled" : "Confirmed"}
+                            </Badge>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="text-muted small">Cab</td>
+                          <td className="fw-semibold">
+                            {detailsBooking.cabName || "—"}
+                          </td>
+                          <td className="text-muted small">Pickup</td>
+                          <td className="fw-semibold">
+                            {detailsBooking.pickupDate || "—"}
+                            {detailsBooking.pickupName ? ` · ${detailsBooking.pickupName}` : ""}
+                            {detailsBooking.pickupTime ? ` ${detailsBooking.pickupTime}` : ""}
+                          </td>
+                          <td className="text-muted small">Dropoff</td>
+                          <td className="fw-semibold">
+                            {detailsBooking.dropOffDate || detailsBooking.dropoffDate || detailsBooking.pickupDate || "—"}
+                            {detailsBooking.dropoffName ? ` · ${detailsBooking.dropoffName}` : ""}
+                            {detailsBooking.dropoffTime ? ` ${detailsBooking.dropoffTime}` : ""}
+                          </td>
+                        </tr>
+                        {(detailsBooking.transporter || detailsBooking.driverName) && (
+                          <tr>
+                            <td className="text-muted small">Transporter</td>
+                            <td className="fw-semibold">
+                              {detailsBooking.transporter || "—"}
+                              {detailsBooking.contactNumber ? ` · ${detailsBooking.contactNumber}` : ""}
+                            </td>
+                            <td className="text-muted small">Driver</td>
+                            <td className="fw-semibold" colSpan={3}>
+                              {detailsBooking.driverName || "—"}
+                              {detailsBooking.driverContact ? ` · ${detailsBooking.driverContact}` : ""}
+                            </td>
+                          </tr>
                         )}
-                    </Row>
+                      </tbody>
+                    </Table>
 
-                    <hr />
+                    {/* ── Passenger manifest — one row per pax from
+                        cab_guest. Falls back to the legacy adult/child
+                        counts when the backend has no manifest yet. */}
+                    <div className="d-flex justify-content-between align-items-center mt-3 mb-1">
+                      <h6 className="fw-bold mb-0">
+                        <FaUserAlt className="me-2 text-primary" />
+                        Passengers
+                      </h6>
+                      <span className="text-muted small">
+                        {detailsBooking.noOfAdult ?? 0} Adult
+                        {(detailsBooking.noOfAdult ?? 0) !== 1 ? "s" : ""}
+                        {(detailsBooking.noOfChild ?? 0) > 0
+                          ? `, ${detailsBooking.noOfChild} Child${detailsBooking.noOfChild !== 1 ? "ren" : ""}`
+                          : ""}
+                      </span>
+                    </div>
+                    {Array.isArray(detailsBooking.guests) && detailsBooking.guests.length > 0 ? (
+                      <Table size="sm" bordered hover className="mb-3">
+                        <thead className="table-light">
+                          <tr>
+                            <th style={{ width: 50 }}>#</th>
+                            <th style={{ width: 80 }}>Type</th>
+                            <th>Name</th>
+                            <th style={{ width: 80 }}>Age</th>
+                            <th>Passport</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detailsBooking.guests.map((g, idx) => (
+                            <tr key={g.id || idx}>
+                              <td>{g.guestIndex || idx + 1}</td>
+                              <td>
+                                <Badge
+                                  bg={g.isChild ? "info-subtle" : "primary-subtle"}
+                                  text={g.isChild ? "info" : "primary"}
+                                >
+                                  {g.isChild ? "Child" : "Adult"}
+                                </Badge>
+                              </td>
+                              <td>
+                                {[g.salutation, g.firstName, g.middleName, g.lastName]
+                                  .filter(Boolean).join(" ") || "—"}
+                              </td>
+                              <td>{g.age ?? "—"}</td>
+                              <td>{g.passportNo || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    ) : (
+                      <div className="small text-muted mb-3">
+                        No per-pax manifest captured for this booking.
+                        {Array.isArray(detailsBooking.childAgeArray) &&
+                          detailsBooking.childAgeArray.length > 0 && (
+                            <span> Child ages: {detailsBooking.childAgeArray.join(", ")}.</span>
+                          )}
+                      </div>
+                    )}
 
-                    {/* Customer */}
-                    <h6 className="fw-bold mb-2">Primary Guest</h6>
-                    <Row className="g-3 mb-3">
-                      <Col md={6}>
-                        <div className="text-muted small">Name</div>
-                        <div className="fw-semibold">
-                          {[
-                            detailsBooking.customer?.salutaion,
-                            detailsBooking.customer?.firstName,
-                            detailsBooking.customer?.lastName,
-                          ]
-                            .filter(Boolean)
-                            .join(" ") || "—"}
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        <div className="text-muted small">
-                          <FaEnvelope className="me-1" />
-                          Email
-                        </div>
-                        <div className="fw-semibold">
-                          {detailsBooking.customer?.emailId || "—"}
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        <div className="text-muted small">
-                          <FaPhoneAlt className="me-1" />
-                          Phone
-                        </div>
-                        <div className="fw-semibold">
-                          {detailsBooking.customer?.contactNumber || "—"}
-                        </div>
-                      </Col>
-                      {detailsBooking.customer?.passportNumber && (
-                        <Col md={6}>
-                          <div className="text-muted small">
-                            <FaIdCard className="me-1" />
-                            Passport
-                          </div>
-                          <div className="fw-semibold">
-                            {detailsBooking.customer.passportNumber}
-                          </div>
-                        </Col>
-                      )}
-                    </Row>
+                    {/* ── Primary contact + LPO — single compact row. */}
+                    <h6 className="fw-bold mb-1">Primary Contact</h6>
+                    <Table size="sm" borderless className="mb-3">
+                      <tbody>
+                        <tr>
+                          <td className="text-muted small" style={{ width: 80 }}>Name</td>
+                          <td className="fw-semibold">
+                            {[
+                              detailsBooking.customer?.salutaion,
+                              detailsBooking.customer?.firstName,
+                              detailsBooking.customer?.lastName,
+                            ].filter(Boolean).join(" ") || "—"}
+                          </td>
+                          <td className="text-muted small" style={{ width: 60 }}>
+                            <FaPhoneAlt className="me-1" />Phone
+                          </td>
+                          <td className="fw-semibold">
+                            {detailsBooking.customer?.contactNumber || "—"}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="text-muted small">
+                            <FaEnvelope className="me-1" />Email
+                          </td>
+                          <td className="fw-semibold">
+                            {detailsBooking.customer?.emailId || "—"}
+                          </td>
+                          <td className="text-muted small">
+                            <FaIdCard className="me-1" />Passport
+                          </td>
+                          <td className="fw-semibold">
+                            {detailsBooking.customer?.passportNumber || "—"}
+                          </td>
+                        </tr>
+                        {detailsBooking.lpo && (
+                          <tr>
+                            <td className="text-muted small">LPO</td>
+                            <td className="fw-semibold" colSpan={3}>
+                              {detailsBooking.lpo}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </Table>
 
-                    <hr />
-
-                    {/* Pricing */}
-                    <h6 className="fw-bold mb-2">Pricing</h6>
-                    <div className="p-3 bg-light rounded">
+                    {/* ── Pricing — kept tight (single rounded panel). */}
+                    <div className="p-2 px-3 bg-light rounded">
                       {detailsBooking.sellingPrice != null && (
-                        <div className="d-flex justify-content-between mb-2 text-muted">
+                        <div className="d-flex justify-content-between text-muted small">
                           <span>Selling Price</span>
                           <span className="fw-medium">
                             {formatPrice(detailsBooking.sellingPrice)}
@@ -768,7 +726,7 @@ const CabBookingList = () => {
                       {detailsBooking.totalRate != null &&
                         Number(detailsBooking.totalRate) !==
                           Number(detailsBooking.totalPrice) && (
-                          <div className="d-flex justify-content-between mb-2 text-muted">
+                          <div className="d-flex justify-content-between text-muted small">
                             <span>Total Rate</span>
                             <span className="fw-medium">
                               {formatPrice(detailsBooking.totalRate)}
@@ -777,28 +735,20 @@ const CabBookingList = () => {
                         )}
                       {detailsBooking.tourismDirham != null &&
                         Number(detailsBooking.tourismDirham) > 0 && (
-                          <div className="d-flex justify-content-between mb-2 text-primary">
+                          <div className="d-flex justify-content-between text-primary small">
                             <span>Tourism Dirham</span>
                             <span className="fw-medium">
                               + {formatPrice(detailsBooking.tourismDirham)}
                             </span>
                           </div>
                         )}
-                      <hr className="my-2" />
-                      <div className="d-flex justify-content-between align-items-center">
+                      <div className="d-flex justify-content-between align-items-center border-top pt-1 mt-1">
                         <span className="fw-semibold">Total Amount</span>
-                        <span className="fs-5 fw-bold text-success">
+                        <span className="fs-6 fw-bold text-success">
                           {formatPrice(detailsBooking.totalPrice)}
                         </span>
                       </div>
                     </div>
-
-                    {detailsBooking.lpo && (
-                      <div className="mt-3">
-                        <div className="text-muted small">LPO</div>
-                        <div className="fw-semibold">{detailsBooking.lpo}</div>
-                      </div>
-                    )}
                   </>
                 )}
               </Modal.Body>

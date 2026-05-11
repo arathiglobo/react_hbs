@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -43,6 +43,100 @@ const CabBookingPage = () => {
     lpo: "",
   });
 
+  // ── Full pax manifest (one row per adult + child) ────────────────────
+  // Seeded from the searchCriteria counts so the operator can capture
+  // names for every traveller. Adult 1 stays in lock-step with the
+  // primary guest contact above — editing one updates the other.
+  const totalAdults = Math.max(0, Number(searchCriteria?.adults) || 0);
+  const totalChildren = Math.max(0, Number(searchCriteria?.children) || 0);
+  const childAges = Array.isArray(searchCriteria?.childAges)
+    ? searchCriteria.childAges
+    : [];
+  const initialGuests = useMemo(() => {
+    const out = [];
+    for (let i = 0; i < totalAdults; i++) {
+      out.push({
+        salutation: i === 0 ? "Mr" : "",
+        firstName: "",
+        middleName: "",
+        lastName: "",
+        gender: "",
+        isChild: false,
+        age: null,
+        passportNo: "",
+      });
+    }
+    for (let i = 0; i < totalChildren; i++) {
+      out.push({
+        salutation: "",
+        firstName: "",
+        middleName: "",
+        lastName: "",
+        gender: "",
+        isChild: true,
+        age: childAges[i] != null ? Number(childAges[i]) : null,
+        passportNo: "",
+      });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [guests, setGuests] = useState(initialGuests);
+
+  // Keep Adult 1 in sync with primary guest contact whenever either side
+  // changes, so the operator never has to retype names. Only the three
+  // name-related fields are mirrored.
+  useEffect(() => {
+    if (guests.length === 0) return;
+    setGuests((prev) => {
+      const next = [...prev];
+      if (!next[0]) return prev;
+      const a1 = next[0];
+      if (
+        a1.salutation === primaryGuest.salutation &&
+        a1.firstName === primaryGuest.firstName &&
+        a1.lastName === primaryGuest.lastName
+      ) {
+        return prev;
+      }
+      next[0] = {
+        ...a1,
+        salutation: primaryGuest.salutation || a1.salutation,
+        firstName: primaryGuest.firstName,
+        lastName: primaryGuest.lastName,
+      };
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryGuest.salutation, primaryGuest.firstName, primaryGuest.lastName]);
+
+  const handleGuestChange = (index, field, value) => {
+    setGuests((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+    // Mirror Adult 1 name fields back to primary guest contact card.
+    if (
+      index === 0 &&
+      ["salutation", "firstName", "lastName"].includes(field)
+    ) {
+      setPrimaryGuest((prev) =>
+        prev[field] === value ? prev : { ...prev, [field]: value }
+      );
+    }
+    // Clear inline error if any.
+    const key = `guest_${index}_${field}`;
+    if (validationErrors[key]) {
+      setValidationErrors((prev) => {
+        const updated = { ...prev };
+        delete updated[key];
+        return updated;
+      });
+    }
+  };
+
   const [transporterDetails, setTransporterDetails] = useState({
     transporter: "",
     contactNumber: "",
@@ -61,7 +155,17 @@ const CabBookingPage = () => {
   const [pendingPayload, setPendingPayload] = useState(null);
 
   const rate = selectedOption?.types === "SIC" ? selectedOption.sicRate : selectedOption?.privateRate;
-  const initialTotalRate = selectedOption?.totalRateWithoutMrk || rate || 0;
+  // Prefer the new markup-applied total (`totalRate`) from the search
+  // result so the price shown here matches what the operator clicked.
+  // Fall back to the legacy `totalRateWithoutMrk` for older responses
+  // and finally to the per-row rate. The supplier-base (no markup)
+  // amount is still kept on `selectedOption.totalRateWithoutMrk` and
+  // sent as `totalRateWithoutmrk` in the booking POST below.
+  const initialTotalRate =
+    selectedOption?.totalRate ||
+    selectedOption?.totalRateWithoutMrk ||
+    rate ||
+    0;
 
   const [prices, setPrices] = useState({
     sellingPrice: initialTotalRate.toString(),
@@ -160,6 +264,23 @@ const CabBookingPage = () => {
       hasErrors = true;
     }
 
+    // Each pax row needs at least a first + last name. Salutation is
+    // required for adults; children can leave it blank.
+    guests.forEach((g, idx) => {
+      if (!g.firstName || !g.firstName.trim()) {
+        errors[`guest_${idx}_firstName`] = "Required";
+        hasErrors = true;
+      }
+      if (!g.lastName || !g.lastName.trim()) {
+        errors[`guest_${idx}_lastName`] = "Required";
+        hasErrors = true;
+      }
+      if (!g.isChild && (!g.salutation || !g.salutation.trim())) {
+        errors[`guest_${idx}_salutation`] = "Required";
+        hasErrors = true;
+      }
+    });
+
     return { errors, hasErrors };
   };
 
@@ -209,6 +330,24 @@ const CabBookingPage = () => {
         passportNumber: primaryGuest.passportNumber,
         lpo: primaryGuest.lpo
       },
+      // Full pax manifest — backend persists each row into cab_guest.
+      guests: guests.map((g, idx) => {
+        const adultsBefore = totalAdults;
+        const seatNumber = g.isChild
+          ? idx - adultsBefore + 1
+          : idx + 1;
+        return {
+          salutation: g.salutation || null,
+          firstName: g.firstName || null,
+          middleName: g.middleName || null,
+          lastName: g.lastName || null,
+          gender: g.gender || null,
+          isChild: !!g.isChild,
+          age: g.age != null ? Number(g.age) : null,
+          passportNo: g.passportNo || null,
+          guestIndex: seatNumber,
+        };
+      }),
       transporter: transporterDetails.transporter,
       contactNumber: transporterDetails.contactNumber,
       driverName: transporterDetails.driverName,
@@ -466,6 +605,101 @@ const CabBookingPage = () => {
 
   </Card.Body>
 </Card>
+
+                {/* ── Pax Manifest ─────────────────────────────────────
+                     One compact row per traveller (Adult 1..N, Child
+                     1..M). Adult 1 mirrors the Primary Guest card. */}
+                {guests.length > 0 && (
+                  <Card className="shadow border-0 rounded-4 mb-4">
+                    <Card.Header className="bg-white border-0 pt-3 px-4 pb-2">
+                      <h6 className="fw-semibold text-dark d-flex align-items-center mb-0">
+                        <FaUserAlt className="me-2 text-primary" />
+                        Passenger Details
+                        <span className="text-muted small ms-2">
+                          ({totalAdults} Adult{totalAdults !== 1 ? "s" : ""}
+                          {totalChildren > 0 ? `, ${totalChildren} Child${totalChildren !== 1 ? "ren" : ""}` : ""})
+                        </span>
+                      </h6>
+                    </Card.Header>
+                    <Card.Body className="px-4 pt-2 pb-3">
+                      {guests.map((g, idx) => {
+                        const adultSeat = idx + 1;
+                        const childSeat = idx - totalAdults + 1;
+                        const label = g.isChild
+                          ? `Child ${childSeat}${g.age != null ? ` (Age ${g.age})` : ""}`
+                          : `Adult ${adultSeat}`;
+                        return (
+                          <Row key={idx} className="g-2 align-items-center mb-2">
+                            <Col xs={12} md={2}>
+                              <span className="fw-semibold text-muted small">
+                                {label} {idx === 0 ? <span className="text-danger">*</span> : ""}
+                              </span>
+                            </Col>
+                            <Col xs={6} md={2}>
+                              <Form.Select
+                                size="sm"
+                                value={g.salutation}
+                                onChange={(e) =>
+                                  handleGuestChange(idx, "salutation", e.target.value)
+                                }
+                                isInvalid={!!validationErrors[`guest_${idx}_salutation`]}
+                              >
+                                <option value="">Title</option>
+                                {g.isChild ? (
+                                  <>
+                                    <option value="Mstr">Mstr</option>
+                                    <option value="Miss">Miss</option>
+                                  </>
+                                ) : (
+                                  <>
+                                    <option value="Mr">Mr</option>
+                                    <option value="Mrs">Mrs</option>
+                                    <option value="Ms">Ms</option>
+                                  </>
+                                )}
+                              </Form.Select>
+                            </Col>
+                            <Col xs={6} md={3}>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="First Name"
+                                value={g.firstName}
+                                onChange={(e) =>
+                                  handleGuestChange(idx, "firstName", e.target.value)
+                                }
+                                isInvalid={!!validationErrors[`guest_${idx}_firstName`]}
+                              />
+                            </Col>
+                            <Col xs={6} md={3}>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="Last Name"
+                                value={g.lastName}
+                                onChange={(e) =>
+                                  handleGuestChange(idx, "lastName", e.target.value)
+                                }
+                                isInvalid={!!validationErrors[`guest_${idx}_lastName`]}
+                              />
+                            </Col>
+                            <Col xs={6} md={2}>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="Passport (opt)"
+                                value={g.passportNo}
+                                onChange={(e) =>
+                                  handleGuestChange(idx, "passportNo", e.target.value)
+                                }
+                              />
+                            </Col>
+                          </Row>
+                        );
+                      })}
+                    </Card.Body>
+                  </Card>
+                )}
 
                 {/* Transporter & Driver Details Card */}
                <Card className="shadow border-0 rounded-4 mb-4">
@@ -1009,6 +1243,41 @@ const CabBookingPage = () => {
           </Row>
 
           <hr />
+
+          {/* Pax manifest in the order summary so the operator can
+              double-check every traveller before confirming. */}
+          {guests.length > 0 && (
+            <>
+              <h6 className="fw-bold mb-2">Passengers ({guests.length})</h6>
+              <Table size="sm" bordered className="mb-3">
+                <thead className="table-light">
+                  <tr>
+                    <th>#</th>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th>Passport</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {guests.map((g, idx) => (
+                    <tr key={idx}>
+                      <td>{idx + 1}</td>
+                      <td>
+                        {g.isChild
+                          ? `Child${g.age != null ? ` (${g.age})` : ""}`
+                          : "Adult"}
+                      </td>
+                      <td>
+                        {[g.salutation, g.firstName, g.lastName]
+                          .filter(Boolean).join(" ") || "—"}
+                      </td>
+                      <td>{g.passportNo || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </>
+          )}
 
           {/* Primary guest */}
           <h6 className="fw-bold mb-2">Primary Guest</h6>
