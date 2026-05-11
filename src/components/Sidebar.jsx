@@ -204,7 +204,7 @@ export default function Sidebar() {
         { label: "Agent", to: "/registration/agent" },
         { label: "Employee", to: "/registration/employee" },
         { label: "Transfers", to: "/registration/cabProvider" },
-        { label: "Activity", to: "/registration/activityProvider" },
+        { label: "Tours and Activity", to: "/registration/activityProvider" },
         { label: "Package", to: "/registration/package" },
         { label: "Supplier", to: "/registration/supplier" },
       ],

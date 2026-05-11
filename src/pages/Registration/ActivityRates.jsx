@@ -248,7 +248,18 @@ const ActivityRates = () => {
     activityType: "", countryId: "", placeId: "",
     durationHr: "", durationMin: "", reportingPoint: "", rating: "", marketType: "",
     activityImage: null, activityImagePreview: null,
+    // Multi-image gallery + linked hotels (new).
+    //   activityImages       : File[] – new uploads from the form
+    //   activityImagesPreview: string[] – data: URLs for new uploads
+    //   existingImagePaths   : string[] – URLs already saved on backend
+    //   includedHotelIds     : Long[] – hotel IDs to link to this activity
+    activityImages: [], activityImagesPreview: [],
+    existingImagePaths: [],
+    includedHotelIds: [],
   });
+  // Hotel options loaded once for the included-hotels multi-select.
+  const [hotelOptions, setHotelOptions] = useState([]);
+  const [hotelsLoading, setHotelsLoading] = useState(false);
 
   const [validityDates, setValidityDates] = useState([{ id: 1, validityFrom: "", validityTo: "" }]);
 
@@ -301,6 +312,83 @@ const ActivityRates = () => {
 
   useEffect(() => { fetchActivityRatesList(); }, [providerId]);
   useEffect(() => { fetchCountries(""); loadMarketTypes(); }, []);
+
+  // Hotel lookup for the "Included Hotels" picker. Uses the existing
+  // lightweight /api/hotels/lookup endpoint (no country filter — operator
+  // can pick across regions). Loaded once when the modal opens.
+  const fetchHotelOptions = async () => {
+    if (hotelOptions.length > 0) return;
+    try {
+      setHotelsLoading(true);
+      const res = await axiosInstance.get("/api/hotels/lookup");
+      const opts = Array.isArray(res.data)
+        ? res.data.map((h) => ({
+            value: h.hotelId,
+            label: h.hotelName || `Hotel #${h.hotelId}`,
+          }))
+        : [];
+      setHotelOptions(opts);
+    } catch (err) {
+      console.warn("Hotel lookup failed:", err);
+      setHotelOptions([]);
+    } finally {
+      setHotelsLoading(false);
+    }
+  };
+
+  // Multi-image handlers — appends to the staged list, dedupes by name.
+  const handleImagesChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const valid = files.filter((f) => {
+      if (!f.type.startsWith("image/")) {
+        toast.error(`${f.name}: not an image`);
+        return false;
+      }
+      if (f.size > 5 * 1024 * 1024) {
+        toast.error(`${f.name}: over 5 MB`);
+        return false;
+      }
+      return true;
+    });
+    if (valid.length === 0) return;
+    Promise.all(
+      valid.map(
+        (f) =>
+          new Promise((resolve) => {
+            const r = new FileReader();
+            r.onloadend = () => resolve({ file: f, preview: r.result });
+            r.readAsDataURL(f);
+          })
+      )
+    ).then((entries) => {
+      setFormData((prev) => ({
+        ...prev,
+        activityImages: [...prev.activityImages, ...entries.map((x) => x.file)],
+        activityImagesPreview: [
+          ...prev.activityImagesPreview,
+          ...entries.map((x) => x.preview),
+        ],
+      }));
+    });
+    // Allow re-selecting the same file later.
+    e.target.value = "";
+  };
+
+  const removeStagedImage = (idx) => {
+    setFormData((prev) => ({
+      ...prev,
+      activityImages: prev.activityImages.filter((_, i) => i !== idx),
+      activityImagesPreview: prev.activityImagesPreview.filter((_, i) => i !== idx),
+    }));
+  };
+
+  const removeExistingImage = (idx) => {
+    setFormData((prev) => ({
+      ...prev,
+      existingImagePaths: prev.existingImagePaths.filter((_, i) => i !== idx),
+    }));
+  };
   useEffect(() => {
     if (searchTimeout) clearTimeout(searchTimeout);
     const t = setTimeout(() => fetchActivityRatesList(0, search), 500);
@@ -316,12 +404,15 @@ const ActivityRates = () => {
     activityType:"", countryId:"", placeId:"",
     durationHr:"", durationMin:"", reportingPoint:"", rating:"", marketType:"",
     activityImage:null, activityImagePreview:null,
+    activityImages: [], activityImagesPreview: [],
+    existingImagePaths: [],
+    includedHotelIds: [],
   });
 
   const openCreate = () => {
     setEditing(null); setIsViewMode(false); setValidationErrors({});
     setFormData(emptyForm()); setSelectedCountryOption(null);
-    fetchCountries("");
+    fetchCountries(""); fetchHotelOptions();
     setValidityDates([{ id:1, validityFrom:"", validityTo:"" }]);
     setShowModal(true);
   };
@@ -446,6 +537,22 @@ const ActivityRates = () => {
     fd.append("rating",          formData.rating);
     fd.append("marketType",      formData.marketType);
     if (formData.activityImage)  fd.append("activityImage", formData.activityImage);
+    // Multi-image gallery — every file under the same param name. Spring
+    // binds them into ActivityRateDTO.activityImages (List<MultipartFile>).
+    (formData.activityImages || []).forEach((file) => {
+      fd.append("activityImages", file);
+    });
+    // Existing gallery URLs the operator chose to KEEP. Backend reads
+    // these into ActivityRateDTO.imagePaths and prunes any persisted
+    // image whose URL isn't in this list — so adding a new image
+    // appends instead of wiping the old ones.
+    (formData.existingImagePaths || []).forEach((p) => {
+      if (p) fd.append("imagePaths", p);
+    });
+    // Linked hotels — repeat param so Spring binds List<Long>.
+    (formData.includedHotelIds || []).forEach((id) => {
+      fd.append("includedHotelIds", String(id));
+    });
     validityDates.forEach((v, i) => {
       fd.append(`validity[${i}].validityFrom`, formatDateForAPI(v.validityFrom));
       fd.append(`validity[${i}].validityTo`,   formatDateForAPI(v.validityTo));
@@ -503,7 +610,21 @@ const ActivityRates = () => {
       marketType:      Array.isArray(data.marketType) ? data.marketType[0] : (data.marketType || ""),
       activityImage:        null,
       activityImagePreview: data.imagePath || data.activityImage || null,
+      activityImages:       [],
+      activityImagesPreview: [],
+      // imagePaths is the persisted gallery returned by GET — render it
+      // as the "existing" thumbnails the operator can remove.
+      existingImagePaths: Array.isArray(data.imagePaths) ? data.imagePaths : [],
+      // Hotel inclusion — backend returns includedHotelIds (Long[]) and
+      // optionally includedHotels (id+name). Use whichever arrived.
+      includedHotelIds: Array.isArray(data.includedHotelIds)
+        ? data.includedHotelIds
+        : Array.isArray(data.includedHotels)
+          ? data.includedHotels.map((h) => h.hotelId).filter(Boolean)
+          : [],
     });
+    // Ensure the hotel picker has options when entering edit/view.
+    fetchHotelOptions();
     const vd = data.validity || [];
     setValidityDates(
       vd.length > 0
@@ -866,18 +987,134 @@ const ActivityRates = () => {
                       </Col>
                     </Row>
 
-                    <Form.Group className="mb-3">
-                      <Form.Label>Activity Image</Form.Label>
+                    {/* ── Activity Images (multi-upload) ───────────────
+                        Backwards compatible with the legacy single
+                        Activity Image field (still uploaded as cover);
+                        on top of that, the operator can attach a
+                        gallery that's shown on the search info modal. */}
+                    <Form.Group className="mb-2">
+                      <Form.Label>Activity Image (cover)</Form.Label>
                       <Form.Control type="file" accept="image/*" disabled={isViewMode} onChange={handleImageChange}/>
                       {formData.activityImagePreview && (
                         <div className="mt-2">
                           <img src={formData.activityImagePreview} alt="preview"
                             style={{ maxWidth:200, maxHeight:200, objectFit:"contain", border:"1px solid #dee2e6", borderRadius:4, padding:4 }}
                             onError={e=>e.target.style.display="none"}/>
-                          {!isViewMode && <div className="mt-2"><small className="text-muted">Selected image will replace the existing one</small></div>}
+                          {!isViewMode && <div className="mt-2"><small className="text-muted">Selected image will replace the existing cover</small></div>}
                         </div>
                       )}
-                      {!formData.activityImagePreview && isViewMode && <div className="mt-2"><small className="text-muted">No image available</small></div>}
+                      {!formData.activityImagePreview && isViewMode && <div className="mt-2"><small className="text-muted">No cover image</small></div>}
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Activity Gallery (multiple images)</Form.Label>
+                      <Form.Control
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={isViewMode}
+                        onChange={handleImagesChange}
+                      />
+                      {(formData.existingImagePaths.length > 0 ||
+                        formData.activityImagesPreview.length > 0) && (
+                        <div className="mt-2 d-flex flex-wrap gap-2">
+                          {formData.existingImagePaths.map((src, i) => (
+                            <div key={`ex-${i}`} className="position-relative">
+                              <img
+                                src={src}
+                                alt={`existing-${i}`}
+                                style={{
+                                  width: 90, height: 90, objectFit: "cover",
+                                  border: "1px solid #dee2e6", borderRadius: 4,
+                                }}
+                                onError={(e) => (e.target.style.display = "none")}
+                              />
+                              {!isViewMode && (
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  className="position-absolute top-0 end-0 px-1 py-0"
+                                  style={{ borderRadius: 0 }}
+                                  onClick={() => removeExistingImage(i)}
+                                  title="Remove"
+                                >
+                                  <FaTimes size={10} />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                          {formData.activityImagesPreview.map((src, i) => (
+                            <div key={`new-${i}`} className="position-relative">
+                              <img
+                                src={src}
+                                alt={`new-${i}`}
+                                style={{
+                                  width: 90, height: 90, objectFit: "cover",
+                                  border: "2px solid #0d6efd", borderRadius: 4,
+                                }}
+                              />
+                              <span
+                                className="position-absolute bottom-0 start-0 badge bg-primary"
+                                style={{ fontSize: "0.6rem", borderRadius: 0 }}
+                              >
+                                NEW
+                              </span>
+                              {!isViewMode && (
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  className="position-absolute top-0 end-0 px-1 py-0"
+                                  style={{ borderRadius: 0 }}
+                                  onClick={() => removeStagedImage(i)}
+                                  title="Remove"
+                                >
+                                  <FaTimes size={10} />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!isViewMode && (
+                        <small className="text-muted d-block mt-1">
+                          Drop multiple files at once. Existing gallery is replaced
+                          on save when new files are uploaded.
+                        </small>
+                      )}
+                    </Form.Group>
+
+                    {/* ── Included Hotels (multi-select) ───────────────
+                        Persisted as comma-separated IDs on
+                        activity_rates.linked_hotel_ids — surfaced on the
+                        search info modal so the operator knows which
+                        hotels this activity is offered with. */}
+                    <Form.Group className="mb-3">
+                      <Form.Label>Included Hotels (optional)</Form.Label>
+                      <Select
+                        isMulti
+                        isDisabled={isViewMode}
+                        options={hotelOptions}
+                        isLoading={hotelsLoading}
+                        placeholder={
+                          hotelsLoading
+                            ? "Loading hotels…"
+                            : "Select hotels offered with this activity"
+                        }
+                        value={hotelOptions.filter((o) =>
+                          (formData.includedHotelIds || []).includes(o.value)
+                        )}
+                        onChange={(opts) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            includedHotelIds: (opts || []).map((o) => o.value),
+                          }))
+                        }
+                        menuPortalTarget={document.body}
+                        styles={{ menuPortal: (b) => ({ ...b, zIndex: 9999 }) }}
+                      />
+                      <small className="text-muted">
+                        Shown to agents on the Tours & Activities info popup.
+                      </small>
                     </Form.Group>
 
                     <Form.Group className="mb-3">

@@ -9,6 +9,7 @@ import {
   Table,
   Modal,
   Badge,
+  Carousel,
 } from "react-bootstrap";
 import { FaTicketAlt, FaSearch, FaStar, FaUsers, FaEye } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -87,12 +88,76 @@ const ActivitySearch = () => {
   
   // Form State
   const [nationality, setNationality] = useState(searchCriteria.nationality || null);
-  const [destination, setDestination] = useState(searchCriteria.destination || null);
+  // Destination is now multi-select — the backend's
+  // SearchActivityRequestDTO already supports `destinationCityIds` so
+  // the operator can search across several cities in one go. Seeded
+  // from prior single-city state for backwards compatibility.
+  const [destinations, setDestinations] = useState(() => {
+    if (Array.isArray(searchCriteria.destinations)) return searchCriteria.destinations;
+    if (searchCriteria.destination) return [searchCriteria.destination];
+    return [];
+  });
   
   const [tourDate, setTourDate] = useState(searchCriteria.travelDate || "");
   const [tourAdults, setTourAdults] = useState(searchCriteria.adults || 1);
   const [tourChildren, setTourChildren] = useState(searchCriteria.children || 0);
   const [tourChildAges, setTourChildAges] = useState(searchCriteria.childAges || []);
+
+  // ── Duration filter ────────────────────────────────────────────────
+  // Maps each dropdown option to a {min,max} day window. Backend
+  // returns each activity's duration as durationHr + durationMin
+  // (or `viatorActivityDuration*` for Viator); we convert to days
+  // (always ≥1 if any duration is present) and keep rows that fall
+  // inside the window. "Flexible length" applies no filter.
+  const DURATION_OPTIONS = [
+    { value: "ANY",        label: "Flexible length",      min: null, max: null },
+    { value: "ONE_DAY",    label: "1 day",                min: 1,    max: 1 },
+    { value: "TWO_DAYS",   label: "2 days",               min: 2,    max: 2 },
+    { value: "LT_4_DAYS",  label: "Less than 4 days",     min: 1,    max: 3 },
+    { value: "BTW_5_15",   label: "Between 5 and 15 days", min: 5,   max: 15 },
+    { value: "MT_15_DAYS", label: "More than 15 days",    min: 16,   max: null },
+    { value: "UP_TO_37",   label: "Up to 37 days",        min: 1,    max: 37 },
+  ];
+  const [tourDuration, setTourDuration] = useState(
+    searchCriteria.tourDuration || "ANY"
+  );
+
+  // Per-field validation errors. Keyed by field name so the matching
+  // Form control can show inline feedback and the field outline turns
+  // red until the user fixes it.
+  const [searchErrors, setSearchErrors] = useState({});
+  const clearSearchError = (field) =>
+    setSearchErrors((prev) => {
+      if (!prev[field]) return prev;
+      const { [field]: _omit, ...rest } = prev;
+      return rest;
+    });
+
+  // Compute an activity's duration in whole days. Prefers backend
+  // {durationHr, durationMin}; falls back to Viator's hour range when
+  // present. Returns null when the activity carries no duration data
+  // — those rows are kept in results regardless of the filter (so a
+  // missing field doesn't accidentally hide everything).
+  const activityDurationInDays = (a) => {
+    const hrs =
+      Number(a.durationHr) ||
+      Number(a.viatorActivityDurationFrom) ||
+      0;
+    const mins = Number(a.durationMin) || 0;
+    const totalMins = hrs * 60 + mins;
+    if (totalMins <= 0) return null;
+    return Math.max(1, Math.ceil(totalMins / (60 * 24)));
+  };
+
+  const passesDurationFilter = (activity, optionValue) => {
+    const opt = DURATION_OPTIONS.find((o) => o.value === optionValue);
+    if (!opt || (opt.min == null && opt.max == null)) return true;
+    const days = activityDurationInDays(activity);
+    if (days == null) return true; // unknown duration → don't filter out
+    if (opt.min != null && days < opt.min) return false;
+    if (opt.max != null && days > opt.max) return false;
+    return true;
+  };
   
   // Results State
   const [tourResults, setTourResults] = useState([]);
@@ -100,6 +165,8 @@ const ActivitySearch = () => {
   const [hasTourSearched, setHasTourSearched] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState(null);
+  // Index for the gallery thumbnail strip inside the details modal.
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   // ── Agent selector (mirrors HotelSearch.jsx pattern) ─────────────────
   const [agent, setAgent] = useState("");
@@ -286,22 +353,46 @@ const ActivitySearch = () => {
 
   const handleTourSearchSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!nationality) {
-      toast.error("Please select a nationality.");
+
+    // ── Inline validation ────────────────────────────────────────
+    // Build the full error map up-front so every invalid field
+    // surfaces its inline message at once (not one toast per field).
+    const errs = {};
+    if (!nationality) errs.nationality = "Nationality is required.";
+    if (!agent) errs.agent = "Agent is required.";
+    if (!destinations || destinations.length === 0)
+      errs.destinations = "Select at least one destination.";
+    if (!tourDate) errs.tourDate = "Tour date is required.";
+    if (tourDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selected = new Date(tourDate);
+      if (Number.isNaN(selected.getTime())) {
+        errs.tourDate = "Tour date is invalid.";
+      } else if (selected < today) {
+        errs.tourDate = "Tour date cannot be in the past.";
+      }
+    }
+    if (!tourAdults || Number(tourAdults) < 1) {
+      errs.tourAdults = "At least 1 adult required.";
+    }
+    if (Number(tourChildren) > 0) {
+      const missing = tourChildAges.findIndex(
+        (age) => age === "" || age == null || Number.isNaN(Number(age))
+      );
+      if (missing !== -1) {
+        errs.tourChildAges = "Enter an age for every child.";
+      }
+    }
+    if (!tourDuration) {
+      errs.tourDuration = "Choose a duration option.";
+    }
+    setSearchErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      // toast.error("Please fix the highlighted fields and try again.");
       return;
     }
-    
-    if (!destination) {
-      toast.error("Please select a destination.");
-      return;
-    }
-    
-    if (!tourDate) {
-      toast.error("Please select a tour date.");
-      return;
-    }
-    
+
     setTourLoading(true);
     setHasTourSearched(true);
     setTourResults([]);
@@ -312,12 +403,18 @@ const ActivitySearch = () => {
                    || localStorage.getItem("makeYourOwnPackageAgentId")
                    || "1";
 
+      // Multi-city support — send `destinationCityIds` as an array, and
+      // keep `destinationCityId` set to the first one so older backend
+      // builds without the array support still get a sensible request.
+      const cityIds = destinations.map((d) => Number(d.value)).filter(Boolean);
+      const firstDest = destinations[0] || {};
       const activityPayload = {
         activityDate: formatDate(tourDate),
         nativeCountryId: nationality.value ? String(nationality.value) : "",
-        destinationCountryId: destination.countryId || "",
-        destinationCityId: destination.value || "",
-        searchCorCtype: destination.type || "State",
+        destinationCountryId: firstDest.countryId || "",
+        destinationCityId: firstDest.value || "",
+        destinationCityIds: cityIds,
+        searchCorCtype: firstDest.type || "State",
         agentId: String(agentId),
         childAge: tourChildAges && tourChildAges.length > 0
             ? tourChildAges.map((age) => String(parseInt(age) || 0))
@@ -334,31 +431,95 @@ const ActivitySearch = () => {
       );
 
       const mappedResults = Array.isArray(response.data)
-        ? response.data.map((activity, index) => ({
-          id: activity.activityId || `activity-${index}`,
-          activityName: activity.activityname || "",
-          activityDetails: activity.activityDetails || "",
-          starRating: activity.starRating || 0,
-          totalRate: activity.totalRate || activity.activityRate || 0,
-          totalRateWithoutMrk: activity.totalRateWithoutmrk || activity.activityRate || 0,
-          activityImage: activity.activityImage || "https://via.placeholder.com/400x225?text=Activity",
-          childMax: activity.childMax || 0,
-          childMin: activity.childMin || 0,
-          adultRate: activity.adultRate || 0,
-          childRate: activity.childRate || 0,
-          activityType: activity.activityType || 1,
-          maxPax: activity.maxPax || 0,
-          minPaxsic: activity.minPaxsic || 0,
-          currency: activity.currencyCode || "AED",
-          duration: activity.viatorActivityDurationFrom && activity.viatorActivityDurationTo
-              ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
-              : null,
-          apiType: activity.apiType || null,
-          viatorProductCode: activity.viatorProductCode || null,
-        }))
+        ? response.data.map((activity, index) => {
+          // Normalise images. Backend may send a single string field
+          // (`activityImage`) or a list (`activityImages` / `images`)
+          // once multi-image support lands — accept both, fall back
+          // to the placeholder when nothing is configured.
+          const imagesRaw =
+            (Array.isArray(activity.activityImages) && activity.activityImages.length > 0)
+              ? activity.activityImages
+              : (Array.isArray(activity.images) && activity.images.length > 0)
+                ? activity.images
+                : (activity.activityImage ? [activity.activityImage] : []);
+          const images = imagesRaw.length > 0
+            ? imagesRaw
+            : ["https://via.placeholder.com/400x225?text=Activity"];
+          // Hotel inclusions for the info modal — backend may send a
+          // simple string list or a list of {hotelId, hotelName} objects.
+          const includedHotels = Array.isArray(activity.includedHotels)
+            ? activity.includedHotels.map((h) =>
+                typeof h === "string"
+                  ? { hotelName: h }
+                  : {
+                      hotelId: h.hotelId,
+                      hotelName: h.hotelName || h.name,
+                      // Backend (TripServiceImpl) populates these from
+                      // Hotel.address + the first HotelContactDetails
+                      // row. Fall back to common alternate field names.
+                      address: h.address || h.hotelAddress || null,
+                      email: h.email || h.hotelEmail || h.personalEmail || null,
+                      mobile:
+                        h.mobile ||
+                        h.hotelMobile ||
+                        h.mobileNumber ||
+                        h.teleNumber ||
+                        h.phone ||
+                        null,
+                    }
+              )
+            : [];
+          const itinerary = Array.isArray(activity.itinerary)
+            ? activity.itinerary
+            : (activity.itineraryText ? [{ description: activity.itineraryText }] : []);
+          return {
+            id: activity.activityId || `activity-${index}`,
+            activityRateId: activity.activityRateId || activity.activityId,
+            activityName: activity.activityname || "",
+            activityDetails: activity.activityDetails || "",
+            starRating: activity.starRating || 0,
+            totalRate: activity.totalRate || activity.activityRate || 0,
+            // Backend's typo'd field is the canonical one; keep both
+            // shapes available so any consumer (booking page, summary)
+            // can read whichever it expects.
+            totalRateWithoutMrk: activity.totalRateWithoutmrk || activity.totalRateWithoutMarkup || activity.activityRate || 0,
+            totalRateWithoutMarkup: activity.totalRateWithoutmrk || activity.totalRateWithoutMarkup || activity.activityRate || 0,
+            // Primary image (first image) kept for the result-card thumb;
+            // the full gallery lives on `images` for the info modal.
+            activityImage: images[0],
+            images,
+            includedHotels,
+            itinerary,
+            cityId: activity.cityId || null,
+            cityName: activity.cityName || "",
+            childMax: activity.childMax || 0,
+            childMin: activity.childMin || 0,
+            adultRate: activity.adultRate || 0,
+            childRate: activity.childRate || 0,
+            activityType: activity.activityType || 1,
+            maxPax: activity.maxPax || 0,
+            minPaxsic: activity.minPaxsic || 0,
+            currency: activity.currencyCode || "AED",
+            duration: activity.viatorActivityDurationFrom && activity.viatorActivityDurationTo
+                ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
+                : null,
+            apiType: activity.apiType || null,
+            viatorProductCode: activity.viatorProductCode || null,
+            reportingPoint: activity.reportingPoint || activity.reportingpoint || null,
+            durationHr: activity.durationHr ?? null,
+            durationMin: activity.durationMin ?? null,
+          };
+        })
         : [];
 
-      setTourResults(mappedResults);
+      // Apply the duration filter on the client. We keep activities
+      // with unknown duration so a malformed/missing field doesn't
+      // wipe out all results — see `passesDurationFilter`.
+      const filteredByDuration =
+        tourDuration && tourDuration !== "ANY"
+          ? mappedResults.filter((a) => passesDurationFilter(a, tourDuration))
+          : mappedResults;
+      setTourResults(filteredByDuration);
     } catch (err) {
       console.error("Activity search failed:", err);
       toast.error("Failed to search for activities.");
@@ -369,17 +530,23 @@ const ActivitySearch = () => {
   };
 
   const handleBookNow = (activity) => {
-    // Navigate to ActivityBookingPage and carry over search data and selected activity data
+    // Navigate to ActivityBookingPage and carry over search data and
+    // selected activity data. Forward both the new `destinations`
+    // list and a single `destination` (first selected) so the booking
+    // page keeps working whether it reads either shape.
     navigate("/new-booking/tours-and-activities/booking", {
       state: {
         activity,
         searchCriteria: {
           nationality,
-          destination,
+          destination: destinations[0] || null,
+          destinations,
           tourDate,
+          tourDuration,
           adults: tourAdults,
           children: tourChildren,
           childAges: tourChildAges,
+          agent,
         }
       }
     });
@@ -421,39 +588,26 @@ const ActivitySearch = () => {
                 <h4 className="fw-bold text-primary mb-0">
                   Tours & Activities Search
                 </h4>
-                <div style={{ minWidth: 260 }}>
-                  <Form.Label className="fw-semibold text-dark mb-1 small">
-                    Agent
-                  </Form.Label>
-                  <Form.Select
-                    style={{ height: "42px" }}
-                    className="form-control-modern"
-                    value={agent}
-                    onChange={(e) => setAgent(e.target.value)}
-                  >
-                    <option value="">Select Agent</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.companyName}
-                      </option>
-                    ))}
-                  </Form.Select>
-                  <AgentBalanceDisplay agentId={agent} />
-                </div>
+               
               </div>
 
               <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
                <Card.Body>
   <Form onSubmit={handleTourSearchSubmit}>
 
-    {/* 🔷 Row 1 */}
+    {/* 🔷 Row 1 — Nationality + Destinations (both required). */}
     <Row className="g-3 mb-3">
-      <Col md={6}>
-        <Form.Label className="fw-semibold">Nationality</Form.Label>
+      <Col md={4}>
+        <Form.Label className="fw-semibold">
+          Nationality <span className="text-danger">*</span>
+        </Form.Label>
         <Select
           options={nationalityList}
           value={nationality}
-          onChange={setNationality}
+          onChange={(opt) => {
+            setNationality(opt);
+            if (opt) clearSearchError("nationality");
+          }}
           onInputChange={handleCountryInputChange}
           isLoading={isNationalityLoading}
           placeholder="Search Nationality"
@@ -463,20 +617,35 @@ const ActivitySearch = () => {
           menuPortalTarget={document.body}
           styles={{
             ...customSelectStyles,
+            control: (base) => ({
+              ...customSelectStyles.control(base),
+              borderColor: searchErrors.nationality ? "#dc3545" : base.borderColor,
+            }),
             menuPortal: base => ({ ...base, zIndex: 9999 }),
           }}
         />
+        {searchErrors.nationality && (
+          <div className="text-danger small mt-1">{searchErrors.nationality}</div>
+        )}
       </Col>
 
-      <Col md={6}>
-        <Form.Label className="fw-semibold">Destination</Form.Label>
+      <Col md={4}>
+        <Form.Label className="fw-semibold">
+          Destinations <span className="text-danger">*</span>
+          <span className="text-muted small ms-2">(select one or more)</span>
+        </Form.Label>
         <Select
           options={destinationOptions}
-          value={destination}
-          onChange={setDestination}
+          value={destinations}
+          onChange={(opts) => {
+            const next = Array.isArray(opts) ? opts : [];
+            setDestinations(next);
+            if (next.length > 0) clearSearchError("destinations");
+          }}
           placeholder="Search destinations..."
           isSearchable
           isClearable
+          isMulti
           className="modern-select-sm"
           isLoading={isDestinationLoading}
           noOptionsMessage={() =>
@@ -497,32 +666,120 @@ const ActivitySearch = () => {
           menuPortalTarget={document.body}
           styles={{
             ...customSelectStyles,
+            // react-select renders multi tags inside the control — relax
+            // the fixed height so multiple selections wrap cleanly.
+            control: (base) => ({
+              ...customSelectStyles.control(base),
+              minHeight: 46,
+              height: "auto",
+              borderColor: searchErrors.destinations ? "#dc3545" : base.borderColor,
+            }),
+            valueContainer: (base) => ({
+              ...customSelectStyles.valueContainer(base),
+              height: "auto",
+              padding: "4px 8px",
+            }),
             menuPortal: base => ({ ...base, zIndex: 9999 }),
           }}
         />
+        {searchErrors.destinations && (
+          <div className="text-danger small mt-1">{searchErrors.destinations}</div>
+        )}
       </Col>
 
-     
+      <Col md={4}>
+
+       <div style={{ minWidth: 260 }}>
+                  <Form.Label className="fw-semibold text-dark mb-1 small">
+                    Agent
+                  </Form.Label>
+                  <Form.Select
+                    style={{ height: "42px" }}
+                    className="form-control-modern"
+                    value={agent}
+                    onChange={(e) => setAgent(e.target.value)}
+                  >
+                    <option value="">Select Agent</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.companyName}
+                      </option>
+                    ))}
+                  </Form.Select>
+                  <AgentBalanceDisplay agentId={agent} />
+                </div>
+                 {searchErrors.agent && (
+          <div className="text-danger small mt-1">{searchErrors.agent}</div>
+        )}
+      </Col>
+      
     </Row>
 
-    {/* 🔷 Row 2 */}
-    <Row className="g-3 align-items-end">
-       <Col md={4}>
-        <Form.Label className="fw-semibold">Tour Date</Form.Label>
+    {/* 🔷 Row 2 — Tour Date + Duration. */}
+    <Row className="g-3 mb-3 align-items-end">
+      <Col md={6}>
+        <Form.Label className="fw-semibold">
+          Tour Date <span className="text-danger">*</span>
+        </Form.Label>
         <Form.Control
-        style={{height:"46px"}}
+          style={{height:"46px"}}
           type="date"
           value={tourDate}
-          onChange={(e) => setTourDate(e.target.value)}
+          isInvalid={!!searchErrors.tourDate}
+          onChange={(e) => {
+            setTourDate(e.target.value);
+            if (e.target.value) clearSearchError("tourDate");
+          }}
           min={new Date().toISOString().split("T")[0]}
         />
+        <Form.Control.Feedback type="invalid">
+          {searchErrors.tourDate}
+        </Form.Control.Feedback>
       </Col>
-      <Col md={4}>
-        <Form.Label className="fw-semibold">Adults</Form.Label>
+
+      <Col md={6}>
+        <Form.Label className="fw-semibold">
+          Duration <span className="text-danger">*</span>
+        </Form.Label>
         <Form.Select
-        style={{height:"46px"}}
+          style={{height:"46px"}}
+          value={tourDuration}
+          isInvalid={!!searchErrors.tourDuration}
+          onChange={(e) => {
+            setTourDuration(e.target.value);
+            if (e.target.value) clearSearchError("tourDuration");
+          }}
+        >
+          {DURATION_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Form.Select>
+        <Form.Control.Feedback type="invalid">
+          {searchErrors.tourDuration}
+        </Form.Control.Feedback>
+        <small className="text-muted">
+          Filters results to activities whose duration falls in this window.
+          Activities with no duration data are kept.
+        </small>
+      </Col>
+    </Row>
+
+    {/* 🔷 Row 3 — Pax counts. */}
+    <Row className="g-3 align-items-end">
+      <Col md={6}>
+        <Form.Label className="fw-semibold">
+          Adults <span className="text-danger">*</span>
+        </Form.Label>
+        <Form.Select
+          style={{height:"46px"}}
           value={tourAdults}
-          onChange={(e) => setTourAdults(parseInt(e.target.value) || 1)}
+          isInvalid={!!searchErrors.tourAdults}
+          onChange={(e) => {
+            setTourAdults(parseInt(e.target.value) || 1);
+            clearSearchError("tourAdults");
+          }}
         >
           {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
             <option key={num} value={num}>
@@ -530,14 +787,20 @@ const ActivitySearch = () => {
             </option>
           ))}
         </Form.Select>
+        <Form.Control.Feedback type="invalid">
+          {searchErrors.tourAdults}
+        </Form.Control.Feedback>
       </Col>
 
-      <Col md={4}>
+      <Col md={6}>
         <Form.Label className="fw-semibold">Children</Form.Label>
         <Form.Select
-        style={{height:"46px"}}
+          style={{height:"46px"}}
           value={tourChildren}
-          onChange={(e) => setTourChildren(parseInt(e.target.value) || 0)}
+          onChange={(e) => {
+            setTourChildren(parseInt(e.target.value) || 0);
+            clearSearchError("tourChildAges");
+          }}
         >
           {Array.from({ length: 6 }, (_, i) => i).map((num) => (
             <option key={num} value={num}>
@@ -546,9 +809,6 @@ const ActivitySearch = () => {
           ))}
         </Form.Select>
       </Col>
-
-      {/* Button aligned nicely */}
-   
     </Row>
    <Row className="mt-4">
   <Col md={12} className="d-flex justify-content-center">
@@ -577,7 +837,9 @@ const ActivitySearch = () => {
     {tourChildren > 0 && (
       <Row className="mt-3">
         <Col md={12}>
-          <Form.Label className="fw-semibold">Child Ages</Form.Label>
+          <Form.Label className="fw-semibold">
+            Child Ages <span className="text-danger">*</span>
+          </Form.Label>
 
           <div className="d-flex flex-wrap gap-2">
             {tourChildAges.map((age, index) => (
@@ -589,12 +851,19 @@ const ActivitySearch = () => {
                 placeholder="Age"
                 value={age}
                 style={{ width: "80px" }}
-                onChange={(e) =>
-                  handleTourChildAgeChange(index, e.target.value)
-                }
+                isInvalid={!!searchErrors.tourChildAges}
+                onChange={(e) => {
+                  handleTourChildAgeChange(index, e.target.value);
+                  clearSearchError("tourChildAges");
+                }}
               />
             ))}
           </div>
+          {searchErrors.tourChildAges && (
+            <div className="text-danger small mt-1">
+              {searchErrors.tourChildAges}
+            </div>
+          )}
         </Col>
       </Row>
     )}
@@ -627,80 +896,184 @@ const ActivitySearch = () => {
                 </div>
               )}
 
-              {/* Results Display */}
+              {/* Results Display — denser horizontal card layout:
+                  left thumbnail with city/rating overlay chips, middle
+                  block with title + description + key facts, right
+                  block with pricing + actions. */}
               {hasTourSearched && !tourLoading && tourResults.length > 0 && (
                 <div className="mt-4">
-                  <h5 className="fw-bold mb-3 text-dark">
-                    Activity Results <span className="text-muted fs-6 fw-normal">({tourResults.length} found)</span>
-                  </h5>
-                  <Row className="g-4">
-                    {tourResults.map((activity) => (
-                      <Col key={activity.id} xs={12} md={11} lg={10} xl={10} className="mx-auto">
-                        <Card className="shadow-sm border-0" style={{ borderRadius: "12px", overflow: 'hidden' }}>
-                          <Card.Body className="p-0">
-                            <Row className="g-0">
-                              <Col md={3} sm={4} className="bg-light">
-                                <div style={{ height: "100%", minHeight: "110px" }}>
-                                  <LazyImage src={activity.activityImage} alt={activity.activityName} />
-                                </div>
-                              </Col>
-                              <Col md={9} sm={8} className="p-3 d-flex flex-column">
-                                <div className="mb-3">
-                                  <div className="d-flex justify-content-between align-items-start">
-                                    <h4 className="fw-bold mb-1 text-dark">
+                  <div className="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+                    <h5 className="fw-bold text-dark mb-0">
+                      Activity Results
+                      <span className="text-muted fs-6 fw-normal ms-2">
+                        ({tourResults.length} found
+                        {destinations.length > 1
+                          ? ` across ${destinations.length} cities`
+                          : ""}
+                        )
+                      </span>
+                    </h5>
+                  </div>
+
+                  <Row className="g-3">
+                    {tourResults.map((activity) => {
+                      const adultRate = Number(activity.adultRate) || 0;
+                      const childRate = Number(activity.childRate) || 0;
+                      const baseTotal = Number(activity.totalRateWithoutMarkup) || 0;
+                      const finalTotal = Number(activity.totalRate) || baseTotal;
+                      const markupAmount =
+                        finalTotal > 0 && baseTotal > 0 && finalTotal !== baseTotal
+                          ? finalTotal - baseTotal
+                          : 0;
+                      const durationLabel =
+                        activity.durationHr != null || activity.durationMin != null
+                          ? `${activity.durationHr || 0}h ${activity.durationMin || 0}m`
+                          : activity.duration;
+                      return (
+                        <Col key={activity.id} xs={12}>
+                          <Card
+                            className="border-0 shadow-sm activity-result-card"
+                            style={{ borderRadius: 14, overflow: "hidden" }}
+                          >
+                            <Card.Body className="p-0">
+                              <Row className="g-0">
+                                {/* ── Thumbnail (with overlay badges) ── */}
+                                <Col md={3} className="bg-light position-relative">
+                                  <div style={{ height: "100%", minHeight: 180 }}>
+                                    <LazyImage
+                                      src={activity.activityImage}
+                                      alt={activity.activityName}
+                                    />
+                                  </div>
+                                  {activity.cityName && (
+                                    <span
+                                      className="position-absolute top-0 start-0 m-2 badge bg-dark bg-opacity-75 text-white"
+                                      style={{ fontSize: "0.7rem" }}
+                                    >
+                                      {activity.cityName}
+                                    </span>
+                                  )}
+                                  {Array.isArray(activity.images) && activity.images.length > 1 && (
+                                    <span
+                                      className="position-absolute bottom-0 end-0 m-2 badge bg-white text-dark border"
+                                      style={{ fontSize: "0.7rem" }}
+                                    >
+                                      +{activity.images.length - 1} photos
+                                    </span>
+                                  )}
+                                </Col>
+
+                                {/* ── Title + description + facts ── */}
+                                <Col md={6} className="p-3 d-flex flex-column">
+                                  <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                                    <h5 className="fw-bold mb-0 text-dark">
                                       {activity.activityName || "Activity"}
-                                    </h4>
-                                    <div className="text-end">
-                                        <div className="fs-5 fw-bold text-dark mb-1">
-                                          {activity.currency} {activity.totalRate?.toLocaleString() || "0"}
-                                        </div>
-                                    </div>
+                                    </h5>
+                                    {activity.starRating > 0 && (
+                                      <span>{renderStars(activity.starRating)}</span>
+                                    )}
+                                    {activity.activityType === 2 ? (
+                                      <Badge bg="info-subtle" text="info" pill>
+                                        SIC
+                                      </Badge>
+                                    ) : (
+                                      <Badge bg="success-subtle" text="success" pill>
+                                        Private
+                                      </Badge>
+                                    )}
                                   </div>
-                                  {activity.starRating > 0 && (
-                                    <div className="mb-2">
-                                      {renderStars(activity.starRating)}
-                                    </div>
-                                  )}
+
                                   {activity.activityDetails && (
-                                    <p className="text-secondary mb-0 mt-2" style={{ fontSize: "0.9rem" }} dangerouslySetInnerHTML={{ __html: activity.activityDetails.substring(0, 150) + (activity.activityDetails.length > 150 ? "..." : "") }}>
-                                    </p>
+                                    <p
+                                      className="text-secondary small mb-2"
+                                      style={{ lineHeight: 1.5 }}
+                                      dangerouslySetInnerHTML={{
+                                        __html:
+                                          activity.activityDetails.substring(0, 220) +
+                                          (activity.activityDetails.length > 220 ? "…" : ""),
+                                      }}
+                                    />
                                   )}
-                                  
-                                </div>
-                                
-                                <div className="mt-auto pt-2 d-flex justify-content-between align-items-center border-top">
-                                  <div className="text-secondary">
-                                      {activity.duration && <span className="me-3"><i className="bi bi-clock"></i> Duration: {activity.duration} hrs</span>}
-                                      <span><FaUsers className="me-1"/> Max: {activity.maxPax || "N/A"}</span>
+
+                                  <div className="d-flex gap-3 flex-wrap small text-muted mt-auto">
+                                    {durationLabel && (
+                                      <span>
+                                        <i className="bi bi-clock me-1" />
+                                        {durationLabel}
+                                      </span>
+                                    )}
+                                    <span>
+                                      <FaUsers className="me-1" />
+                                      Max: {activity.maxPax || "N/A"}
+                                    </span>
+                                    {activity.includedHotels?.length > 0 && (
+                                      <span>
+                                        🏨 {activity.includedHotels.length} hotel
+                                        {activity.includedHotels.length !== 1 ? "s" : ""} included
+                                      </span>
+                                    )}
                                   </div>
-                                  <div className="d-flex gap-2">
+                                </Col>
+
+                                {/* ── Pricing + actions ── */}
+                                <Col
+                                  md={3}
+                                  className="p-3 d-flex flex-column justify-content-between border-start text-center bg-light"
+                                >
+                                  <div>
+                                    <div className="text-muted small">Total from</div>
+                                    <div className="fs-4 fw-bold text-dark">
+                                      {activity.currency}{" "}
+                                      {finalTotal.toLocaleString()}
+                                    </div>
+                                    {markupAmount > 0 && (
+                                      <div
+                                        className="text-muted"
+                                        style={{ fontSize: "0.7rem" }}
+                                      >
+                                        Base {baseTotal.toLocaleString()} + markup{" "}
+                                        {markupAmount.toFixed(2)}
+                                      </div>
+                                    )}
+                                    {(adultRate > 0 || childRate > 0) && (
+                                      <div
+                                        className="text-muted mt-1"
+                                        style={{ fontSize: "0.72rem" }}
+                                      >
+                                        {adultRate > 0 && `Adult: ${adultRate}`}
+                                        {adultRate > 0 && childRate > 0 ? " · " : ""}
+                                        {childRate > 0 && `Child: ${childRate}`}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="d-flex gap-2 justify-content-center mt-3">
                                     <Button
-                                      variant="info"
-                                      className="rounded-pill d-flex align-items-center justify-content-center text-white"
-                                      style={{ width: "40px", height: "40px", padding: 0 }}
+                                      variant="outline-primary"
+                                      size="sm"
                                       onClick={() => {
                                         setSelectedActivity(activity);
                                         setShowActivityModal(true);
                                       }}
                                       title="View Details"
                                     >
-                                      <FaEye size={16} />
+                                      <FaEye className="me-1" />
+                                      Info
                                     </Button>
                                     <Button
                                       variant="primary"
-                                      className="px-4 rounded-pill fw-medium shadow-sm transition-all"
+                                      size="sm"
                                       onClick={() => handleBookNow(activity)}
                                     >
                                       Book Now
                                     </Button>
                                   </div>
-                                </div>
-                              </Col>
-                            </Row>
-                          </Card.Body>
-                        </Card>
-                      </Col>
-                    ))}
+                                </Col>
+                              </Row>
+                            </Card.Body>
+                          </Card>
+                        </Col>
+                      );
+                    })}
                   </Row>
                 </div>
               )}
@@ -715,122 +1088,304 @@ const ActivitySearch = () => {
             </Card.Body>
           </Card>
 
-          {/* Activity Details Modal */}
+          {/* ── Activity Details Modal ───────────────────────────────
+              Richer than the original: hero image + thumbnail strip,
+              quick facts, full description, itinerary (if any), and
+              included hotels (if any). Falls back gracefully when the
+              backend hasn't shipped the richer fields yet. */}
           <Modal
             show={showActivityModal}
             onHide={() => {
               setShowActivityModal(false);
               setSelectedActivity(null);
+              setActiveImageIndex(0);
             }}
             size="lg"
             centered
+            scrollable
           >
             <Modal.Header closeButton>
-              <Modal.Title>Activity Details</Modal.Title>
+              <Modal.Title className="fw-bold">
+                {selectedActivity?.activityName || "Activity Details"}
+              </Modal.Title>
             </Modal.Header>
             <Modal.Body>
               {selectedActivity && (
                 <>
-                  <div className="mb-4">
-                    <img
-                      src={selectedActivity.activityImage}
-                      alt={selectedActivity.activityName}
-                      style={{
-                        width: "100%",
-                        height: "300px",
-                        objectFit: "cover",
-                        borderRadius: "8px",
-                      }}
-                      onError={(e) => {
-                        e.target.src =
-                          "https://via.placeholder.com/800x300?text=Activity+Image";
-                      }}
-                    />
+                  {/* Image carousel — auto-rotates + arrow controls.
+                      `activeImageIndex` is the controlled index so the
+                      thumbnail strip below stays in sync with the
+                      current slide for keyboard / mouse navigation. */}
+                  <div className="mb-3">
+                    {(() => {
+                      const imgs =
+                        Array.isArray(selectedActivity.images) && selectedActivity.images.length > 0
+                          ? selectedActivity.images
+                          : [selectedActivity.activityImage].filter(Boolean);
+                      if (imgs.length === 0) return null;
+                      return (
+                        <Carousel
+                          activeIndex={activeImageIndex}
+                          onSelect={(idx) => setActiveImageIndex(idx)}
+                          interval={imgs.length > 1 ? 4000 : null}
+                          controls={imgs.length > 1}
+                          indicators={imgs.length > 1}
+                          fade
+                          className="bg-dark rounded"
+                          style={{ borderRadius: 8, overflow: "hidden" }}
+                        >
+                          {imgs.map((src, idx) => (
+                            <Carousel.Item key={idx}>
+                              <img
+                                src={src}
+                                alt={`${selectedActivity.activityName} ${idx + 1}`}
+                                style={{
+                                  width: "100%",
+                                  height: 360,
+                                  objectFit: "cover",
+                                  display: "block",
+                                }}
+                                onError={(e) => {
+                                  e.target.src =
+                                    "https://via.placeholder.com/800x360?text=Activity+Image";
+                                }}
+                              />
+                              <Carousel.Caption
+                                className="d-none d-md-block"
+                                style={{
+                                  background: "rgba(0,0,0,0.35)",
+                                  borderRadius: 6,
+                                  padding: "4px 10px",
+                                  bottom: 12,
+                                  left: "auto",
+                                  right: 12,
+                                  width: "auto",
+                                }}
+                              >
+                                <small className="m-0">
+                                  {idx + 1} / {imgs.length}
+                                </small>
+                              </Carousel.Caption>
+                            </Carousel.Item>
+                          ))}
+                        </Carousel>
+                      );
+                    })()}
+                    {Array.isArray(selectedActivity.images) &&
+                      selectedActivity.images.length > 1 && (
+                        <div className="d-flex gap-2 mt-2 overflow-auto pb-1">
+                          {selectedActivity.images.map((src, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setActiveImageIndex(idx)}
+                              className="border-0 p-0 bg-transparent"
+                              style={{ flex: "0 0 auto" }}
+                              title={`Image ${idx + 1}`}
+                            >
+                              <img
+                                src={src}
+                                alt={`thumb-${idx}`}
+                                style={{
+                                  width: 90,
+                                  height: 60,
+                                  objectFit: "cover",
+                                  borderRadius: 6,
+                                  border:
+                                    activeImageIndex === idx
+                                      ? "2px solid #0d6efd"
+                                      : "2px solid transparent",
+                                  cursor: "pointer",
+                                  opacity: activeImageIndex === idx ? 1 : 0.75,
+                                }}
+                                onError={(e) => {
+                                  e.target.src =
+                                    "https://via.placeholder.com/90x60?text=img";
+                                }}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
                   </div>
 
-                  <div className="mb-3">
-                    <h4 className="fw-bold">
-                      {selectedActivity.activityName || "Activity Name"}
-                    </h4>
+                  {/* Header chips: rating, city, type. */}
+                  <div className="d-flex flex-wrap gap-2 mb-3">
                     {selectedActivity.starRating > 0 && (
-                      <div className="d-flex align-items-center mb-2">
-                        <FaStar className="text-warning me-1" />
-                        <span>{selectedActivity.starRating} Star Rating</span>
-                      </div>
+                      <Badge bg="warning" text="dark">
+                        <FaStar className="me-1" />
+                        {selectedActivity.starRating} Star
+                      </Badge>
+                    )}
+                    {selectedActivity.cityName && (
+                      <Badge bg="secondary">{selectedActivity.cityName}</Badge>
+                    )}
+                    {selectedActivity.activityType === 2 ? (
+                      <Badge bg="info">SIC</Badge>
+                    ) : (
+                      <Badge bg="success">Private</Badge>
+                    )}
+                    {selectedActivity.apiType && (
+                      <Badge bg="dark">{selectedActivity.apiType}</Badge>
                     )}
                   </div>
 
-                  {selectedActivity.activityDetails && (
-                    <div className="mb-3">
-                      <h6 className="fw-semibold mb-2">Description</h6>
-                      <p
-                        className="text-muted"
-                        style={{ whiteSpace: "pre-wrap" }}
-                        dangerouslySetInnerHTML={{ __html: selectedActivity.activityDetails }}
-                      >
-                      </p>
-                    </div>
-                  )}
-
-                  <Row className="g-3 mb-3">
-                    {selectedActivity.minPaxsic > 0 && (
-                      <Col md={6}>
-                        <div>
-                          <strong>Min Pax:</strong> {selectedActivity.minPaxsic}
+                  {/* Quick facts grid. */}
+                  <Row className="g-2 mb-3 small">
+                    {(selectedActivity.durationHr != null ||
+                      selectedActivity.durationMin != null ||
+                      selectedActivity.duration) && (
+                      <Col md={4}>
+                        <div className="border rounded p-2 h-100">
+                          <div className="text-muted">Duration</div>
+                          <div className="fw-semibold">
+                            {selectedActivity.durationHr != null ||
+                            selectedActivity.durationMin != null
+                              ? `${selectedActivity.durationHr || 0}h ${selectedActivity.durationMin || 0}m`
+                              : selectedActivity.duration}
+                          </div>
                         </div>
                       </Col>
                     )}
                     {selectedActivity.maxPax > 0 && (
-                      <Col md={6}>
-                        <div>
-                          <strong>Max Pax:</strong> {selectedActivity.maxPax}
+                      <Col md={4}>
+                        <div className="border rounded p-2 h-100">
+                          <div className="text-muted">Max pax</div>
+                          <div className="fw-semibold">
+                            {selectedActivity.maxPax}
+                          </div>
                         </div>
                       </Col>
                     )}
-                    {selectedActivity.childMin > 0 && (
-                      <Col md={6}>
-                        <div>
-                          <strong>Child Age Range:</strong>{" "}
-                          {selectedActivity.childMin} -{" "}
-                          {selectedActivity.childMax} years
+                    {selectedActivity.minPaxsic > 0 && (
+                      <Col md={4}>
+                        <div className="border rounded p-2 h-100">
+                          <div className="text-muted">Min pax (SIC)</div>
+                          <div className="fw-semibold">
+                            {selectedActivity.minPaxsic}
+                          </div>
                         </div>
                       </Col>
                     )}
-                    {selectedActivity.duration && (
-                      <Col md={6}>
-                        <div>
-                          <FaTicketAlt className="me-2" />
-                          <strong>Duration:</strong> {selectedActivity.duration}
+                    {(selectedActivity.childMin > 0 ||
+                      selectedActivity.childMax > 0) && (
+                      <Col md={4}>
+                        <div className="border rounded p-2 h-100">
+                          <div className="text-muted">Child age range</div>
+                          <div className="fw-semibold">
+                            {selectedActivity.childMin}–{selectedActivity.childMax} yrs
+                          </div>
                         </div>
                       </Col>
                     )}
-                    {selectedActivity.adultRate > 0 && (
-                      <Col md={6}>
-                        <div>
-                          <strong>Adult Rate:</strong>{" "}
-                          {selectedActivity.currency}{" "}
-                          {selectedActivity.adultRate.toLocaleString()}
-                        </div>
-                      </Col>
-                    )}
-                    {selectedActivity.childRate > 0 && (
-                      <Col md={6}>
-                        <div>
-                          <strong>Child Rate:</strong>{" "}
-                          {selectedActivity.currency}{" "}
-                          {selectedActivity.childRate.toLocaleString()}
-                        </div>
-                      </Col>
-                    )}
-                    {selectedActivity.apiType && (
-                      <Col md={6}>
-                        <div>
-                          <strong>API Type:</strong> {selectedActivity.apiType}
+                    {selectedActivity.reportingPoint && (
+                      <Col md={8}>
+                        <div className="border rounded p-2 h-100">
+                          <div className="text-muted">Reporting point</div>
+                          <div className="fw-semibold">
+                            {selectedActivity.reportingPoint}
+                          </div>
                         </div>
                       </Col>
                     )}
                   </Row>
 
+                  {/* Description. */}
+                  {selectedActivity.activityDetails && (
+                    <div className="mb-3">
+                      <h6 className="fw-bold mb-2">Description</h6>
+                      <div
+                        className="text-secondary small"
+                        style={{ lineHeight: 1.6 }}
+                        dangerouslySetInnerHTML={{
+                          __html: selectedActivity.activityDetails,
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Itinerary (when provided by backend). */}
+                  {Array.isArray(selectedActivity.itinerary) &&
+                    selectedActivity.itinerary.length > 0 && (
+                      <div className="mb-3">
+                        <h6 className="fw-bold mb-2">Itinerary</h6>
+                        <ol className="ps-3 mb-0 small text-secondary">
+                          {selectedActivity.itinerary.map((step, idx) => (
+                            <li key={idx} className="mb-1">
+                              {step.title && (
+                                <strong className="me-1">{step.title}:</strong>
+                              )}
+                              {step.description || step.text || ""}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+
+                  {/* Included hotels — compact card per hotel so the
+                      operator can see contact details at a glance. */}
+                  {Array.isArray(selectedActivity.includedHotels) &&
+                    selectedActivity.includedHotels.length > 0 && (
+                      <div className="mb-3">
+                        <h6 className="fw-bold mb-2">
+                          Included Hotels
+                          <span className="text-muted small ms-2 fw-normal">
+                            ({selectedActivity.includedHotels.length})
+                          </span>
+                        </h6>
+                        <Row className="g-2">
+                          {selectedActivity.includedHotels.map((h, idx) => (
+                            <Col key={idx} md={6}>
+                              <div className="border rounded p-2 h-100 bg-light bg-opacity-50">
+                                <div className="d-flex align-items-start gap-2">
+                                  <span style={{ fontSize: "1.1rem" }}>🏨</span>
+                                  <div className="flex-grow-1">
+                                    <div className="fw-semibold text-dark">
+                                      {h.hotelName || `Hotel #${h.hotelId}`}
+                                    </div>
+                                    {h.address && (
+                                      <div className="text-muted small mt-1">
+                                        <i className="bi bi-geo-alt me-1" />
+                                        {h.address}
+                                      </div>
+                                    )}
+                                    {h.email && (
+                                      <div className="text-muted small">
+                                        <i className="bi bi-envelope me-1" />
+                                        <a
+                                          href={`mailto:${h.email}`}
+                                          className="text-decoration-none"
+                                        >
+                                          {h.email}
+                                        </a>
+                                      </div>
+                                    )}
+                                    {h.mobile && (
+                                      <div className="text-muted small">
+                                        <i className="bi bi-telephone me-1" />
+                                        <a
+                                          href={`tel:${h.mobile}`}
+                                          className="text-decoration-none"
+                                        >
+                                          {h.mobile}
+                                        </a>
+                                      </div>
+                                    )}
+                                    {!h.address && !h.email && !h.mobile && (
+                                      <div className="text-muted small fst-italic">
+                                        No contact details available
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </Col>
+                          ))}
+                        </Row>
+                      </div>
+                    )}
+
+                  {/* Pricing footer. */}
                   <div className="mt-4 p-3 bg-light rounded">
                     <div className="d-flex justify-content-between align-items-center">
                       <div>
@@ -839,12 +1394,12 @@ const ActivitySearch = () => {
                             ? `${selectedActivity.currency} ${selectedActivity.totalRate.toLocaleString()}`
                             : "Price on request"}
                         </h5>
-                        {selectedActivity.totalRateWithoutMrk > 0 &&
-                          selectedActivity.totalRateWithoutMrk !==
-                          selectedActivity.totalRate && (
+                        {selectedActivity.totalRateWithoutMarkup > 0 &&
+                          selectedActivity.totalRateWithoutMarkup !==
+                            selectedActivity.totalRate && (
                             <small className="text-muted">
                               Without markup: {selectedActivity.currency}{" "}
-                              {selectedActivity.totalRateWithoutMrk.toLocaleString()}
+                              {selectedActivity.totalRateWithoutMarkup.toLocaleString()}
                             </small>
                           )}
                       </div>
@@ -870,10 +1425,22 @@ const ActivitySearch = () => {
                 onClick={() => {
                   setShowActivityModal(false);
                   setSelectedActivity(null);
+                  setActiveImageIndex(0);
                 }}
               >
                 Close
               </Button>
+              {selectedActivity && (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setShowActivityModal(false);
+                    handleBookNow(selectedActivity);
+                  }}
+                >
+                  Book Now
+                </Button>
+              )}
             </Modal.Footer>
           </Modal>
         </main>

@@ -18,6 +18,12 @@ import {
   FaTrash,
   FaCalendarAlt,
   FaUserAlt,
+  FaEye,
+  FaTicketAlt,
+  FaMapMarkerAlt,
+  FaEnvelope,
+  FaPhoneAlt,
+  FaIdCard,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -42,6 +48,11 @@ const ActivityBookingList = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  // ── Booking-details view modal ────────────────────────────────────
+  // Same row clicked into the modal — we render every meaningful field
+  // the list response carries (customer, tour, pax, pricing, itinerary).
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [detailsBooking, setDetailsBooking] = useState(null);
   const [apiData, setApiData] = useState({
     upcomingBookings: { content: [] },
     completedBookings: { content: [] },
@@ -421,16 +432,31 @@ const ActivityBookingList = () => {
                               
                             </td>
                             <td className="text-center pe-4">
-                              {status === "upcoming" && (
+                              <div className="d-inline-flex gap-2">
                                 <Button
                                   variant="light"
                                   size="sm"
                                   className="rounded-pill px-3 border"
-                                  onClick={() => handleCancelClick(b)}
+                                  title="View booking details"
+                                  onClick={() => {
+                                    setDetailsBooking(b);
+                                    setShowDetailsModal(true);
+                                  }}
                                 >
-                                  <FaTrash size={12} className="text-danger" />
+                                  <FaEye size={12} className="text-primary" />
                                 </Button>
-                              )}
+                                {status === "upcoming" && (
+                                  <Button
+                                    variant="light"
+                                    size="sm"
+                                    className="rounded-pill px-3 border"
+                                    title="Cancel booking"
+                                    onClick={() => handleCancelClick(b)}
+                                  >
+                                    <FaTrash size={12} className="text-danger" />
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -492,6 +518,280 @@ const ActivityBookingList = () => {
                 <Button variant="light" className="px-4" onClick={() => setShowCancelModal(false)} disabled={cancelling}>No, Keep</Button>
                 <Button variant="dark" className="px-4" onClick={handleCancelBooking} disabled={cancelling}>
                   {cancelling ? <Spinner size="sm" className="me-2" /> : "Yes, Cancel"}
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* ── Booking Details modal ───────────────────────────────
+                Single dense layout: status strip up top, then customer
+                + tour + pricing in small tables. Itinerary list when
+                present. Falls back to "—" for missing fields. */}
+            <Modal
+              show={showDetailsModal}
+              onHide={() => setShowDetailsModal(false)}
+              size="lg"
+              centered
+              scrollable
+            >
+              <Modal.Header closeButton className="border-0 pb-0">
+                <Modal.Title className="d-flex align-items-center">
+                  <FaTicketAlt className="me-2 text-primary" />
+                  Booking Details
+                  {detailsBooking?.packageBookCode && (
+                    <Badge bg="primary-subtle" text="primary" className="ms-3">
+                      {detailsBooking.packageBookCode}
+                    </Badge>
+                  )}
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body className="py-2">
+                {!detailsBooking ? (
+                  <div className="text-center py-3 text-muted">
+                    No booking selected.
+                  </div>
+                ) : (
+                  <>
+                    {/* Top meta strip */}
+                    <Table size="sm" borderless className="mb-2">
+                      <tbody>
+                        <tr>
+                          <td className="text-muted small" style={{ width: 110 }}>Code</td>
+                          <td className="fw-semibold">
+                            {detailsBooking.packageBookCode || "—"}
+                          </td>
+                          <td className="text-muted small" style={{ width: 90 }}>Booked</td>
+                          <td className="fw-semibold">
+                            {formatDate(detailsBooking.bookingDate)}
+                          </td>
+                          <td className="text-muted small" style={{ width: 70 }}>Status</td>
+                          <td>
+                            <Badge
+                              bg={
+                                detailsBooking.cancelStatus
+                                  ? "danger-subtle"
+                                  : "success-subtle"
+                              }
+                              text={
+                                detailsBooking.cancelStatus ? "danger" : "success"
+                              }
+                            >
+                              {detailsBooking.cancelStatus ? "Cancelled" : "Confirmed"}
+                            </Badge>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="text-muted small">Agent</td>
+                          <td className="fw-semibold">{detailsBooking.agentName || "—"}</td>
+                          <td className="text-muted small">Source</td>
+                          <td className="fw-semibold">{detailsBooking.source || "—"}</td>
+                          <td className="text-muted small">Ref. #</td>
+                          <td className="fw-semibold">
+                            {detailsBooking.referenceNumber || "—"}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </Table>
+
+                    <hr className="my-2" />
+
+                    {/* Activity */}
+                    <h6 className="fw-bold mb-2">
+                      <FaTicketAlt className="me-2 text-primary" />
+                      Activity
+                    </h6>
+                    <Table size="sm" borderless className="mb-2">
+                      <tbody>
+                        <tr>
+                          <td className="text-muted small" style={{ width: 110 }}>Name</td>
+                          <td className="fw-semibold">
+                            {detailsBooking.activityName || "—"}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="text-muted small">
+                            <FaCalendarAlt className="me-1" />Tour Date
+                          </td>
+                          <td className="fw-semibold">
+                            {formatDate(detailsBooking.tourDate)}
+                          </td>
+                        </tr>
+                        {(detailsBooking.activityType || detailsBooking.reportingPoint) && (
+                          <tr>
+                            <td className="text-muted small">Reporting</td>
+                            <td className="fw-semibold">
+                              {detailsBooking.reportingPoint || "—"}
+                              {detailsBooking.activityType ? (
+                                <Badge
+                                  className="ms-2"
+                                  bg={
+                                    String(detailsBooking.activityType) === "2"
+                                      ? "info-subtle"
+                                      : "success-subtle"
+                                  }
+                                  text={
+                                    String(detailsBooking.activityType) === "2"
+                                      ? "info"
+                                      : "success"
+                                  }
+                                >
+                                  {String(detailsBooking.activityType) === "2" ? "SIC" : "Private"}
+                                </Badge>
+                              ) : null}
+                            </td>
+                          </tr>
+                        )}
+                        {(detailsBooking.cityName || detailsBooking.destination) && (
+                          <tr>
+                            <td className="text-muted small">
+                              <FaMapMarkerAlt className="me-1" />
+                              City
+                            </td>
+                            <td className="fw-semibold">
+                              {detailsBooking.cityName || detailsBooking.destination}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </Table>
+
+                    {/* Itinerary, if any */}
+                    {Array.isArray(detailsBooking.customBookingItinearyDTO) &&
+                      detailsBooking.customBookingItinearyDTO.length > 0 && (
+                        <>
+                          <h6 className="fw-bold mb-1 mt-2">Itinerary</h6>
+                          <ol className="ps-3 mb-3 small text-secondary">
+                            {detailsBooking.customBookingItinearyDTO.map((it, idx) => (
+                              <li key={idx} className="mb-1">
+                                {it.itinerary}
+                              </li>
+                            ))}
+                          </ol>
+                        </>
+                      )}
+
+                    {/* Passengers */}
+                    <h6 className="fw-bold mb-1 mt-2">
+                      <FaUserAlt className="me-2 text-primary" />
+                      Passengers
+                    </h6>
+                    <Table size="sm" borderless className="mb-2">
+                      <tbody>
+                        <tr>
+                          <td className="text-muted small" style={{ width: 110 }}>Adults</td>
+                          <td className="fw-semibold">{detailsBooking.noOfAdult ?? 0}</td>
+                          <td className="text-muted small" style={{ width: 90 }}>Children</td>
+                          <td className="fw-semibold">{detailsBooking.noOfChild ?? 0}</td>
+                          {Array.isArray(detailsBooking.childAgeArray) &&
+                            detailsBooking.childAgeArray.length > 0 && (
+                              <>
+                                <td className="text-muted small">Child ages</td>
+                                <td className="fw-semibold">
+                                  {detailsBooking.childAgeArray.join(", ")}
+                                </td>
+                              </>
+                            )}
+                        </tr>
+                      </tbody>
+                    </Table>
+
+                    {/* Customer */}
+                    <h6 className="fw-bold mb-1 mt-2">Primary Guest</h6>
+                    <Table size="sm" borderless className="mb-3">
+                      <tbody>
+                        <tr>
+                          <td className="text-muted small" style={{ width: 80 }}>Name</td>
+                          <td className="fw-semibold">
+                            {[
+                              detailsBooking.salutation,
+                              detailsBooking.firstName,
+                              detailsBooking.lastName,
+                            ].filter(Boolean).join(" ") || "—"}
+                          </td>
+                          <td className="text-muted small" style={{ width: 70 }}>
+                            <FaPhoneAlt className="me-1" />
+                            Phone
+                          </td>
+                          <td className="fw-semibold">
+                            {detailsBooking.contactNumber ||
+                              detailsBooking.mobileNumber ||
+                              detailsBooking.phone ||
+                              "—"}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="text-muted small">
+                            <FaEnvelope className="me-1" />Email
+                          </td>
+                          <td className="fw-semibold">
+                            {detailsBooking.emailId || "—"}
+                          </td>
+                          <td className="text-muted small">
+                            <FaIdCard className="me-1" />Passport
+                          </td>
+                          <td className="fw-semibold">
+                            {detailsBooking.passportNo ||
+                              detailsBooking.passportNumber ||
+                              "—"}
+                          </td>
+                        </tr>
+                        {detailsBooking.agentLpo && (
+                          <tr>
+                            <td className="text-muted small">LPO</td>
+                            <td className="fw-semibold" colSpan={3}>
+                              {detailsBooking.agentLpo}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </Table>
+
+                    {/* Pricing */}
+                    <h6 className="fw-bold mb-1 mt-2">Pricing</h6>
+                    <div className="p-2 px-3 bg-light rounded">
+                      {detailsBooking.sellingPrice != null && (
+                        <div className="d-flex justify-content-between text-muted small">
+                          <span>Selling Price</span>
+                          <span className="fw-medium">
+                            {formatPrice(detailsBooking.sellingPrice)}
+                          </span>
+                        </div>
+                      )}
+                      {detailsBooking.totalRate != null &&
+                        Number(detailsBooking.totalRate) !==
+                          Number(detailsBooking.totalPrice) && (
+                          <div className="d-flex justify-content-between text-muted small">
+                            <span>Total Rate</span>
+                            <span className="fw-medium">
+                              {formatPrice(detailsBooking.totalRate)}
+                            </span>
+                          </div>
+                        )}
+                      {detailsBooking.totalRateWithoutmrk != null &&
+                        Number(detailsBooking.totalRateWithoutmrk) !==
+                          Number(detailsBooking.totalPrice) && (
+                          <div className="d-flex justify-content-between text-muted small">
+                            <span>Total (without markup)</span>
+                            <span className="fw-medium">
+                              {formatPrice(detailsBooking.totalRateWithoutmrk)}
+                            </span>
+                          </div>
+                        )}
+                      <div className="d-flex justify-content-between align-items-center border-top pt-1 mt-1">
+                        <span className="fw-semibold">Total Amount</span>
+                        <span className="fs-6 fw-bold text-success">
+                          {formatPrice(detailsBooking.totalPrice)}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowDetailsModal(false)}
+                >
+                  Close
                 </Button>
               </Modal.Footer>
             </Modal>
