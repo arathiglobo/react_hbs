@@ -184,6 +184,14 @@ import OfflineBookingList from "./pages/list/OfflineBookingList";
 import SubUser from "./pages/Registration/agent/SubUser";
 import SubAgent from "./pages/Registration/agent/SubAgent";
 
+// Restaurant Module
+import RestaurantRegistration from "./pages/restaurant/RestaurantRegistration";
+import RestaurantList from "./pages/restaurant/RestaurantList";
+import RestaurantBookingList from "./pages/restaurant/RestaurantBookingList";
+import RestaurantSearch from "./pages/restaurant/RestaurantSearch";
+import RestaurantBooking from "./pages/restaurant/RestaurantBooking";
+import RestaurantViewPage from "./pages/restaurant/RestaurantViewPage";
+
 
 export default function App() {
   return (
@@ -376,6 +384,15 @@ export default function App() {
         <Route path="/registration/hotel" element={<PrivateRoute><HotelList /></PrivateRoute>} />
         <Route path="/registration/hotel/create" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
         <Route path="/registration/hotel/create/:id" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
+
+        {/* Restaurant Module */}
+        <Route path="/restaurant/register" element={<PrivateRoute><RestaurantRegistration /></PrivateRoute>} />
+        <Route path="/restaurant/edit/:id" element={<PrivateRoute><RestaurantRegistration /></PrivateRoute>} />
+        <Route path="/restaurant/list" element={<PrivateRoute><RestaurantList /></PrivateRoute>} />
+        <Route path="/restaurant/view/:id" element={<PrivateRoute><RestaurantViewPage /></PrivateRoute>} />
+        <Route path="/booking-details/restaurant-booking-list" element={<PrivateRoute><RestaurantBookingList /></PrivateRoute>} />
+        <Route path="/new-booking/restaurant" element={<PrivateRoute><RestaurantSearch /></PrivateRoute>} />
+        <Route path="/new-booking/restaurant/booking" element={<PrivateRoute><RestaurantBooking /></PrivateRoute>} />
 
 
         {/* Hotel Actions */}

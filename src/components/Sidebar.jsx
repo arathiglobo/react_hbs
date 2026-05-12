@@ -18,6 +18,7 @@ import {
   Tag,
   ImagePlus,
   Dot,
+  Utensils,
 } from "lucide-react";
 import { FaBrain, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
@@ -207,6 +208,10 @@ export default function Sidebar() {
         { label: "Tours and Activity", to: "/registration/activityProvider" },
         { label: "Package", to: "/registration/package" },
         { label: "Supplier", to: "/registration/supplier" },
+        // Restaurant follows the Hotel pattern: clicking opens the list
+        // page; the list page has a "+ New Restaurant" button that opens
+        // the registration form.
+        { label: "Restaurants", to: "/restaurant/list" },
       ],
     },
     {
@@ -241,6 +246,10 @@ export default function Sidebar() {
         {
           label: "Offline Booking",
           to: "/new-booking/offline-search",
+        },
+        {
+          label: "Restaurant Booking",
+          to: "/new-booking/restaurant",
         },
       ],
     },
@@ -304,6 +313,10 @@ export default function Sidebar() {
         {
           label: "Offline Booking List",
           to: "/booking-details/offline-booking-list",
+        },
+        {
+          label: "Restaurant Booking",
+          to: "/booking-details/restaurant-booking-list",
         },
       ],
     },
@@ -847,6 +860,9 @@ function getIcon(label) {
 
     case "Registration":
       return <ClipboardList {...iconProps} />;
+
+    case "Restaurant":
+      return <Utensils {...iconProps} />;
 
     case "New Booking":
       return <PlusCircle {...iconProps} />;
