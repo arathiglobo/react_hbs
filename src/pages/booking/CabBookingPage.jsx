@@ -79,7 +79,7 @@ const CabBookingPage = () => {
       });
     }
     return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, []);
   const [guests, setGuests] = useState(initialGuests);
 
@@ -107,7 +107,7 @@ const CabBookingPage = () => {
       };
       return next;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, [primaryGuest.salutation, primaryGuest.firstName, primaryGuest.lastName]);
 
   const handleGuestChange = (index, field, value) => {
