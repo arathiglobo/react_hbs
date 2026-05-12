@@ -212,6 +212,8 @@ export default function Sidebar() {
         // page; the list page has a "+ New Restaurant" button that opens
         // the registration form.
         { label: "Restaurants", to: "/restaurant/list" },
+        // Honeymoon Package — same list-then-create pattern.
+        { label: "Honeymoon Packages", to: "/honeymoon/list" },
       ],
     },
     {
@@ -250,6 +252,10 @@ export default function Sidebar() {
         {
           label: "Restaurant Booking",
           to: "/new-booking/restaurant",
+        },
+        {
+          label: "Honeymoon Package",
+          to: "/new-booking/honeymoon",
         },
       ],
     },
@@ -317,6 +323,10 @@ export default function Sidebar() {
         {
           label: "Restaurant Booking",
           to: "/booking-details/restaurant-booking-list",
+        },
+        {
+          label: "Honeymoon Package",
+          to: "/booking-details/honeymoon-booking-list",
         },
       ],
     },

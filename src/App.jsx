@@ -192,6 +192,14 @@ import RestaurantSearch from "./pages/restaurant/RestaurantSearch";
 import RestaurantBooking from "./pages/restaurant/RestaurantBooking";
 import RestaurantViewPage from "./pages/restaurant/RestaurantViewPage";
 
+// Honeymoon Module
+import HoneymoonRegistration from "./pages/honeymoon/HoneymoonRegistration";
+import HoneymoonList from "./pages/honeymoon/HoneymoonList";
+import HoneymoonSearch from "./pages/honeymoon/HoneymoonSearch";
+import HoneymoonViewPage from "./pages/honeymoon/HoneymoonViewPage";
+import HoneymoonBooking from "./pages/honeymoon/HoneymoonBooking";
+import HoneymoonBookingList from "./pages/honeymoon/HoneymoonBookingList";
+
 
 export default function App() {
   return (
@@ -393,6 +401,15 @@ export default function App() {
         <Route path="/booking-details/restaurant-booking-list" element={<PrivateRoute><RestaurantBookingList /></PrivateRoute>} />
         <Route path="/new-booking/restaurant" element={<PrivateRoute><RestaurantSearch /></PrivateRoute>} />
         <Route path="/new-booking/restaurant/booking" element={<PrivateRoute><RestaurantBooking /></PrivateRoute>} />
+
+        {/* Honeymoon Package Module */}
+        <Route path="/honeymoon/register" element={<PrivateRoute><HoneymoonRegistration /></PrivateRoute>} />
+        <Route path="/honeymoon/edit/:id" element={<PrivateRoute><HoneymoonRegistration /></PrivateRoute>} />
+        <Route path="/honeymoon/list" element={<PrivateRoute><HoneymoonList /></PrivateRoute>} />
+        <Route path="/honeymoon/view/:id" element={<PrivateRoute><HoneymoonViewPage /></PrivateRoute>} />
+        <Route path="/honeymoon/book" element={<PrivateRoute><HoneymoonBooking /></PrivateRoute>} />
+        <Route path="/new-booking/honeymoon" element={<PrivateRoute><HoneymoonSearch /></PrivateRoute>} />
+        <Route path="/booking-details/honeymoon-booking-list" element={<PrivateRoute><HoneymoonBookingList /></PrivateRoute>} />
 
 
         {/* Hotel Actions */}
