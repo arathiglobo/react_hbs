@@ -961,6 +961,73 @@ const CustomBookingList = () => {
                   </Row>
                 </Col>
               </Row>
+
+              {/* ── Add-On Services ─────────────────────────────────
+                  Renders when the side-panel selection was saved with
+                  the booking. We iterate the parsed JSON object so any
+                  catalogue future-additions surface automatically. */}
+              {bookingDetails.addOnServices &&
+                typeof bookingDetails.addOnServices === "object" &&
+                Object.keys(bookingDetails.addOnServices).length > 0 && (
+                  <Row className="mt-4">
+                    <Col xs={12}>
+                      <div className="p-3 bg-white rounded shadow-sm">
+                        <div className="d-flex justify-content-between align-items-center mb-3">
+                          <h6 className="fw-bold mb-0">Add-On Services</h6>
+                          <span className="badge bg-success-subtle text-success">
+                            {Object.keys(bookingDetails.addOnServices).length} selected
+                          </span>
+                        </div>
+                        <Row className="g-2">
+                          {Object.entries(bookingDetails.addOnServices).map(
+                            ([key, value]) => {
+                              if (!value || typeof value !== "object") return null;
+                              const label = key
+                                .replace(/([A-Z])/g, " $1")
+                                .replace(/^./, (c) => c.toUpperCase())
+                                .trim();
+                              const detailFields = Object.entries(value).filter(
+                                ([k, v]) =>
+                                  k !== "enabled" &&
+                                  v !== "" &&
+                                  v != null &&
+                                  v !== false
+                              );
+                              return (
+                                <Col md={6} key={key}>
+                                  <div className="border rounded p-2 h-100 bg-light bg-opacity-50">
+                                    <div className="fw-semibold text-dark small mb-1">
+                                      {label}
+                                    </div>
+                                    {detailFields.length === 0 ? (
+                                      <div className="text-muted small fst-italic">
+                                        Enabled (no extra details)
+                                      </div>
+                                    ) : (
+                                      detailFields.map(([fk, fv]) => (
+                                        <div
+                                          key={fk}
+                                          className="d-flex justify-content-between small"
+                                        >
+                                          <span className="text-muted text-capitalize">
+                                            {fk.replace(/([A-Z])/g, " $1")}
+                                          </span>
+                                          <span className="text-dark fw-medium ms-2">
+                                            {String(fv)}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </Col>
+                              );
+                            }
+                          )}
+                        </Row>
+                      </div>
+                    </Col>
+                  </Row>
+                )}
             </div>
           ) : (
             <div className="text-center py-5">

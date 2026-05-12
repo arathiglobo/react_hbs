@@ -34,6 +34,10 @@ import {
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
+import AddOnServicesPanel, {
+  collectEnabledAddOnServices,
+  readAddOnServices,
+} from "../../../components/AddOnServicesPanel";
 import axiosInstance from "../../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
@@ -70,6 +74,29 @@ const MakePkgBookingPage = () => {
   const [totalPrice, setTotalPrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
   const [tourismDirham, setTourismDirham] = useState("");
+
+  // ── Add-On Services badge counter ──────────────────────────────────
+  // The actual selections live in sessionStorage (driven by the
+  // AddOnServicesPanel) — we just track the count locally so the
+  // accordion header can show "(N on)" without re-reading storage on
+  // every render. Refreshed when the header is clicked / the inner
+  // panel loses focus.
+  const [addOnsCount, setAddOnsCount] = useState(() => {
+    try {
+      const all = readAddOnServices();
+      return Object.values(all).filter((v) => v && v.enabled).length;
+    } catch {
+      return 0;
+    }
+  });
+  const refreshAddOnsCount = () => {
+    try {
+      const all = readAddOnServices();
+      setAddOnsCount(Object.values(all).filter((v) => v && v.enabled).length);
+    } catch {
+      // ignore — sessionStorage rejected in private mode etc.
+    }
+  };
 
   // Itinerary state
   const [itineraryList, setItineraryList] = useState([]);
@@ -1211,6 +1238,11 @@ const MakePkgBookingPage = () => {
         paymentApiId: null,
         agentId: parseInt(sessionStorage.getItem("makePkgAgentId") || "0"),
         isCartBooking: true,
+        // Add-on services captured in the sticky side-panel (Visa, Meet &
+        // Greet, transfers, optional tours, rentals, etc.). Only services
+        // toggled ON are forwarded; null when none → backend persists
+        // null and the booking-details view simply skips the section.
+        addOnServices: collectEnabledAddOnServices(),
       };
 
       console.log("Makepkg Booking payload:", bookingPayload);
@@ -1331,27 +1363,80 @@ const MakePkgBookingPage = () => {
                 agentId={sessionStorage.getItem("makePkgAgentId")}
               />
             </div>
-            <div className="booking-page-header mb-3">
-              <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h2 className="mb-1">Confirm Booking</h2>
-                </div>
-                <div className="d-flex align-items-center gap-4">
-                  <div className="text-end">
-                    <div className="text-muted small mb-1">Selling Price</div>
-                    <div className="h4 mb-0 fw-bold text-primary">
-                      {sellingPrice.toFixed(2)}
+            {/* ── Booking Summary card (HotelBookingPage-style) ──
+                Mirrors the layout of the standard hotel booking summary
+                so the operator sees a consistent breakdown:
+                   Base prices  ▶ Tourism Dirham ▶ Final totals.
+                TD is always rolled into the displayed numbers — so the
+                Selling / Total figures shown here equal what the
+                booking POST will save. */}
+            {(() => {
+              const tdNum =
+                tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                  ? Number(tourismDirham)
+                  : 0;
+              const sellingWithTd = sellingPrice + tdNum;
+              const totalWithTd = totalPrice + tdNum;
+              return (
+                <Card className="shadow-sm border-0 rounded-4 mb-3">
+                  <Card.Body className="p-3">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <h4 className="mb-0 fw-bold text-primary d-flex align-items-center">
+                        <FaHotel className="me-2" />
+                        Confirm Booking
+                      </h4>
+                      <Badge
+                        bg="success-subtle"
+                        text="success"
+                        className="px-3 py-2"
+                        style={{ fontSize: "0.85rem" }}
+                      >
+                        Grand Total: AED {totalWithTd.toFixed(2)}
+                      </Badge>
                     </div>
-                  </div>
-                  <div className="text-end">
-                    <div className="text-muted small mb-1">Total Price</div>
-                    <div className="h4 mb-0 fw-bold text-primary">
-                      {totalPrice.toFixed(2)}
+                    <div className="px-2">
+                      <Row className="g-2">
+                        <Col md={3}>
+                          <div className="border rounded p-2 h-100">
+                            <div className="text-muted small">Selling Price</div>
+                            <div className="fw-bold text-dark">
+                              AED {sellingPrice.toFixed(2)}
+                            </div>
+                          </div>
+                        </Col>
+                        <Col md={3}>
+                          <div className="border rounded p-2 h-100">
+                            <div className="text-muted small">Total Price</div>
+                            <div className="fw-bold text-dark">
+                              AED {totalPrice.toFixed(2)}
+                            </div>
+                          </div>
+                        </Col>
+                        <Col md={3}>
+                          <div className="border rounded p-2 h-100">
+                            <div className="text-muted small">Tourism Dirham</div>
+                            <div className="fw-bold text-primary">
+                              {tdNum > 0 ? `+ AED ${tdNum.toFixed(2)}` : "—"}
+                            </div>
+                          </div>
+                        </Col>
+                        <Col md={3}>
+                          <div className="border rounded p-2 h-100 bg-success bg-opacity-10">
+                            <div className="text-muted small">Final Selling</div>
+                            <div className="fw-bold text-success">
+                              AED {sellingWithTd.toFixed(2)}
+                            </div>
+                            <div className="text-muted x-small mt-1">
+                              Total billable: AED {totalWithTd.toFixed(2)}
+                            </div>
+                          </div>
+                        </Col>
+                      </Row>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+                  </Card.Body>
+                </Card>
+              );
+            })()}
 
             <Row>
               <Col lg={12}>
@@ -2795,6 +2880,42 @@ const MakePkgBookingPage = () => {
                       </Form>
                     </Accordion.Body>
                   </Accordion.Item>
+
+                  {/* ── Add-On Services accordion ──────────────────
+                       Lives alongside Itinerary / Hotel / Activity /
+                       Cab / Visa / Primary-Guest so the operator can
+                       expand it from the booking page just like any
+                       other section. The inner panel manages its own
+                       sessionStorage; on close we refresh the count
+                       badge in the header. */}
+                  <Accordion.Item eventKey="6" className="mb-2">
+                    <Accordion.Header
+                      onClick={() => refreshAddOnsCount()}
+                    >
+                      <h5 className="mb-0 fw-bold d-flex align-items-center">
+                        Add-On Services
+                        <Badge
+                          bg={addOnsCount > 0 ? "success" : "secondary-subtle"}
+                          text={addOnsCount > 0 ? "light" : "secondary"}
+                          className="ms-2"
+                          style={{ fontSize: "0.7rem" }}
+                        >
+                          {addOnsCount > 0 ? `${addOnsCount} on` : "Optional"}
+                        </Badge>
+                      </h5>
+                    </Accordion.Header>
+                    <Accordion.Body
+                      onBlur={() => refreshAddOnsCount()}
+                    >
+                      <small className="text-muted d-block mb-2">
+                        Visa, Meet &amp; Greet, transfers, tours, rentals —
+                        toggle any service to <strong>Yes</strong> and fill in
+                        the details. Everything you enter here is saved with
+                        the booking.
+                      </small>
+                      <AddOnServicesPanel title="Services" />
+                    </Accordion.Body>
+                  </Accordion.Item>
                 </Accordion>
               </Col>
             </Row>
@@ -3643,6 +3764,7 @@ const MakePkgBookingPage = () => {
           </div>
         </Modal.Footer>
       </Modal>
+
     </div>
   );
 };
