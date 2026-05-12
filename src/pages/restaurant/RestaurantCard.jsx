@@ -1,5 +1,22 @@
 import React from "react";
 import { Card, Button, Badge, Row, Col } from "react-bootstrap";
+
+/** Renders one or two badges describing which booking modes a restaurant
+ *  accepts. "Both" expands to two badges so the agent sees both options. */
+const BookingModeBadges = ({ modes }) => {
+  if (!modes) return null;
+  const both = modes === "Both";
+  return (
+    <>
+      {(both || modes === "Walk-in") && (
+        <Badge bg="success" className="me-1">Walk-in</Badge>
+      )}
+      {(both || modes === "Advance") && (
+        <Badge bg="primary">Advance</Badge>
+      )}
+    </>
+  );
+};
 import {
   FaMapMarkerAlt,
   FaClock,
@@ -92,6 +109,9 @@ const RestaurantCard = ({ restaurant, viewMode = "grid", onView, onBook }) => {
                     </Col>
                   )}
                 </Row>
+                <div className="d-flex flex-wrap gap-1 mb-1">
+                  <BookingModeBadges modes={restaurant.bookingModes} />
+                </div>
                 <div className="d-flex flex-wrap gap-1 mb-2">
                   {(restaurant.cuisineTypes || []).slice(0, 5).map((c) => (
                     <Badge key={c} bg="light" text="dark" className="border">
@@ -198,6 +218,9 @@ const RestaurantCard = ({ restaurant, viewMode = "grid", onView, onBook }) => {
           <FaClock className="me-1 text-info" />
           {String(restaurant.openTime || "").slice(0, 5)} -{" "}
           {String(restaurant.closeTime || "").slice(0, 5)}
+        </div>
+        <div className="mb-2 d-flex flex-wrap gap-1">
+          <BookingModeBadges modes={restaurant.bookingModes} />
         </div>
         <div className="mb-2 d-flex flex-wrap gap-1">
           {(restaurant.cuisineTypes || []).slice(0, 3).map((c) => (

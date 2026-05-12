@@ -38,7 +38,12 @@ const RestaurantBooking = () => {
   const [errors, setErrors] = useState({});
   const [summaryOpen, setSummaryOpen] = useState(false);
 
+  // What modes does this restaurant offer? Defaults to "Both" when missing.
+  const offeredModes = restaurant?.bookingModes || "Both";
+  const initialMode = offeredModes === "Walk-in" ? "Walk-in" : "Advance";
+
   const [form, setForm] = useState({
+    bookingMode: initialMode,
     bookingDate: incoming.bookingDate || incoming.checkIn || "",
     bookingTime: incoming.bookingTime || "",
     memberCount: incoming.memberCount || 2,
@@ -79,8 +84,19 @@ const RestaurantBooking = () => {
   /** Returns an errors object, empty when the form is valid. */
   const validate = () => {
     const err = {};
+    const isAdvance = form.bookingMode === "Advance";
     if (!form.bookingDate) err.bookingDate = "Booking date is required";
-    if (!form.bookingTime) err.bookingTime = "Booking time is required";
+    // Time is required only for Advance bookings; Walk-ins are flexible.
+    if (isAdvance && !form.bookingTime) err.bookingTime = "Booking time is required";
+    // Enforce the venue's advance-booking lead time on the client too.
+    if (isAdvance && form.bookingDate && form.bookingTime) {
+      const slot = new Date(`${form.bookingDate}T${form.bookingTime}`);
+      const minHours = Number(restaurant?.advanceBookingMinHours) || 0;
+      const earliest = new Date(Date.now() + minHours * 3600 * 1000);
+      if (!isNaN(slot.getTime()) && slot < earliest) {
+        err.bookingTime = `Advance bookings need at least ${minHours} hour(s) notice`;
+      }
+    }
     if (!form.memberCount || Number(form.memberCount) < 1)
       err.memberCount = "At least 1 member";
     if (!form.customerName.trim()) err.customerName = "Customer name is required";
@@ -214,6 +230,54 @@ const RestaurantBooking = () => {
                 <Card className="mb-3 shadow-sm">
                   <Card.Header className="bg-white fw-semibold">Booking Details</Card.Header>
                   <Card.Body>
+                    {/* Booking mode picker — only renders the modes this restaurant offers. */}
+                    <Row className="g-3 mb-2">
+                      <Col md={12}>
+                        <Form.Label className="fw-semibold">Booking Mode *</Form.Label>
+                        <div className="d-flex flex-wrap gap-3">
+                          {(offeredModes === "Both" || offeredModes === "Advance") && (
+                            <Form.Check
+                              type="radio"
+                              id="mode-advance"
+                              name="bookingMode"
+                              label={
+                                <span>
+                                  <strong>Advance Booking</strong>{" "}
+                                  <span className="text-muted small">
+                                    — reserved slot
+                                    {restaurant?.advanceBookingMinHours
+                                      ? ` (min ${restaurant.advanceBookingMinHours}h notice)`
+                                      : ""}
+                                  </span>
+                                </span>
+                              }
+                              value="Advance"
+                              checked={form.bookingMode === "Advance"}
+                              onChange={handleChange}
+                            />
+                          )}
+                          {(offeredModes === "Both" || offeredModes === "Walk-in") && (
+                            <Form.Check
+                              type="radio"
+                              id="mode-walkin"
+                              name="bookingMode"
+                              label={
+                                <span>
+                                  <strong>Free to Available</strong>{" "}
+                                  <span className="text-muted small">
+                                    — walk-in, no specific slot
+                                  </span>
+                                </span>
+                              }
+                              value="Walk-in"
+                              checked={form.bookingMode === "Walk-in"}
+                              onChange={handleChange}
+                            />
+                          )}
+                        </div>
+                      </Col>
+                    </Row>
+
                     <Row className="g-3">
                       <Col md={4}>
                         <Form.Label>Booking Date *</Form.Label>
@@ -228,15 +292,26 @@ const RestaurantBooking = () => {
                         <Form.Control.Feedback type="invalid">{errors.bookingDate}</Form.Control.Feedback>
                       </Col>
                       <Col md={4}>
-                        <Form.Label>Booking Time *</Form.Label>
+                        <Form.Label>
+                          Booking Time {form.bookingMode === "Advance" ? "*" : ""}
+                        </Form.Label>
                         <Form.Control
                           type="time"
                           name="bookingTime"
                           value={form.bookingTime}
                           onChange={handleChange}
                           isInvalid={!!errors.bookingTime}
+                          disabled={form.bookingMode === "Walk-in"}
+                          placeholder={
+                            form.bookingMode === "Walk-in" ? "Anytime during open hours" : ""
+                          }
                         />
                         <Form.Control.Feedback type="invalid">{errors.bookingTime}</Form.Control.Feedback>
+                        {form.bookingMode === "Walk-in" && (
+                          <Form.Text muted>
+                            Walk-in — guest can arrive any time during open hours.
+                          </Form.Text>
+                        )}
                       </Col>
                       <Col md={4}>
                         <Form.Label>Members *</Form.Label>
@@ -452,9 +527,17 @@ const RestaurantBooking = () => {
                   <Col md={6}><strong>Restaurant:</strong> {restaurant.restaurantName}</Col>
                   <Col md={6}><strong>Place:</strong> {restaurant.place}</Col>
                   <Col md={6}>
-                    <strong>Date / Time:</strong> {form.bookingDate} {form.bookingTime}
+                    <strong>Date / Time:</strong>{" "}
+                    {form.bookingDate}
+                    {form.bookingMode === "Walk-in"
+                      ? " (Walk-in — anytime)"
+                      : ` ${form.bookingTime}`}
                   </Col>
                   <Col md={6}><strong>Members:</strong> {form.memberCount}</Col>
+                  <Col md={6}>
+                    <strong>Booking Mode:</strong>{" "}
+                    {form.bookingMode === "Walk-in" ? "Free to Available" : "Advance"}
+                  </Col>
                   <Col md={6}><strong>Meal Type:</strong> {form.mealType}</Col>
                   <Col md={6}><strong>Seating:</strong> {form.seatingPreference}</Col>
                   <Col md={6}>

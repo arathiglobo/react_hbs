@@ -20,7 +20,7 @@ import {
   FaSave,
   FaArrowLeft,
 } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import Sidebar from "../../components/Sidebar";
@@ -108,6 +108,12 @@ const initialState = {
   homeDelivery: false,
   takeAway: true,
 
+  // Booking modes — which reservation flow this restaurant offers.
+  // "Walk-in" = free to available, "Advance" = reserved slot, "Both" = either.
+  bookingModes: "Both",
+  // Minimum lead time (hours) for an Advance booking.
+  advanceBookingMinHours: 2,
+
   // Social
   facebookUrl: "",
   instagramUrl: "",
@@ -130,13 +136,97 @@ const emptyMenuRow = () => ({
 
 const RestaurantRegistration = () => {
   const navigate = useNavigate();
+  // /restaurant/edit/:id mounts this same component; presence of :id ⇒ edit mode.
+  const { id } = useParams();
+  const isEdit = !!id;
+
   const [formData, setFormData] = useState(initialState);
-  const [images, setImages] = useState([]); // File[]
+  const [images, setImages] = useState([]); // File[]  — newly uploaded files
   const [imagePreviews, setImagePreviews] = useState([]);
+  // When editing, the existing image URLs come back from the server; keep
+  // them separate so the user can delete individual ones.
+  const [existingImages, setExistingImages] = useState([]);
   const [menuList, setMenuList] = useState([emptyMenuRow()]);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(isEdit);
   const [previewImage, setPreviewImage] = useState(null);
+
+  // Prefill form when in edit mode.
+  useEffect(() => {
+    if (!isEdit) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axiosInstance.get(`/api/restaurant/${id}`);
+        const d = res.data;
+        if (cancelled) return;
+        setFormData({
+          restaurantName: d.restaurantName || "",
+          place: d.place || "",
+          address: d.address || "",
+          locationUrl: d.locationUrl || "",
+          latitude: d.latitude || "",
+          longitude: d.longitude || "",
+          contactNumber: d.contactNumber || "",
+          alternateNumber: d.alternateNumber || "",
+          email: d.email || "",
+          website: d.website || "",
+          openTime: (d.openTime || "").slice(0, 5),
+          closeTime: (d.closeTime || "").slice(0, 5),
+          description: d.description || "",
+          status: d.status || "Active",
+          cuisineTypes: Array.isArray(d.cuisineTypes) ? d.cuisineTypes : [],
+          foodType: d.foodType || "Both",
+          averageCostForTwo: d.averageCostForTwo ?? "",
+          seatingCapacity: d.seatingCapacity ?? "",
+          numberOfTables: d.numberOfTables ?? "",
+          dressCode: d.dressCode || "Casual",
+          reservationPolicy: d.reservationPolicy || "",
+          cancellationPolicy: d.cancellationPolicy || "",
+          hasParking: !!d.hasParking,
+          hasWifi: !!d.hasWifi,
+          hasAc: d.hasAc ?? true,
+          hasOutdoorSeating: !!d.hasOutdoorSeating,
+          hasLiveMusic: !!d.hasLiveMusic,
+          servesAlcohol: !!d.servesAlcohol,
+          isPureVeg: !!d.isPureVeg,
+          isFamilyFriendly: d.isFamilyFriendly ?? true,
+          petFriendly: !!d.petFriendly,
+          homeDelivery: !!d.homeDelivery,
+          takeAway: d.takeAway ?? true,
+          bookingModes: d.bookingModes || "Both",
+          advanceBookingMinHours: d.advanceBookingMinHours ?? 2,
+          facebookUrl: d.facebookUrl || "",
+          instagramUrl: d.instagramUrl || "",
+          gstNumber: d.gstNumber || "",
+          taxPercent: d.taxPercent ?? "",
+        });
+        setExistingImages(Array.isArray(d.images) ? d.images : []);
+        const menus = Array.isArray(d.menuList) && d.menuList.length
+          ? d.menuList.map((m) => ({
+              menuName: m.menuName || "",
+              category: m.category || "Main Course",
+              price: m.price ?? "",
+              description: m.description || "",
+              isVeg: m.isVeg ?? true,
+              isAvailable: m.isAvailable ?? true,
+              image: null,
+              imagePreview: m.image || "",
+            }))
+          : [emptyMenuRow()];
+        setMenuList(menus);
+      } catch (e) {
+        console.error(e);
+        toast.error("Failed to load restaurant");
+      } finally {
+        if (!cancelled) setLoadingExisting(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isEdit]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -203,7 +293,10 @@ const RestaurantRegistration = () => {
     else if (!/\S+@\S+\.\S+/.test(formData.email)) err.email = "Invalid email";
     if (!formData.openTime) err.openTime = "Open time is required";
     if (!formData.closeTime) err.closeTime = "Close time is required";
-    if (!images.length) err.images = "Please upload at least 1 image";
+    // For edit mode, the user can keep their existing images instead of
+    // re-uploading. Only require new files when creating from scratch.
+    if (!isEdit && !images.length && !existingImages.length)
+      err.images = "Please upload at least 1 image";
     if (menuList.length === 0 || !menuList.some((m) => m.menuName.trim() && m.price))
       err.menu = "Add at least 1 menu item with name & price";
 
@@ -226,6 +319,9 @@ const RestaurantRegistration = () => {
       // this into RestaurantDTO. Images travel as separate file parts.
       const data = {
         ...formData,
+        // Send back the existing image URLs the user kept so the backend
+        // retains them; new uploads are appended via the "images" file parts.
+        images: existingImages,
         menuList: menuList
           .filter((m) => m.menuName && m.price)
           .map((m) => ({
@@ -235,6 +331,8 @@ const RestaurantRegistration = () => {
             description: m.description || "",
             isVeg: !!m.isVeg,
             isAvailable: !!m.isAvailable,
+            // Keep the existing menu image URL when no new file was attached.
+            image: undefined,
           })),
       };
       // Send as a plain string field — wrapping in Blob would make Spring
@@ -250,12 +348,16 @@ const RestaurantRegistration = () => {
         if (row.image instanceof File) fd.append(`menuImage_${idx}`, row.image);
       });
 
-      await axiosInstance.post("/api/restaurant/save", fd);
+      if (isEdit) {
+        await axiosInstance.put(`/api/restaurant/${id}`, fd);
+      } else {
+        await axiosInstance.post("/api/restaurant/save", fd);
+      }
 
       Swal.fire({
         icon: "success",
-        title: "Restaurant Registered",
-        text: "Restaurant saved successfully.",
+        title: isEdit ? "Restaurant Updated" : "Restaurant Registered",
+        text: isEdit ? "Changes saved successfully." : "Restaurant saved successfully.",
         timer: 1800,
         showConfirmButton: false,
       });
@@ -285,7 +387,7 @@ const RestaurantRegistration = () => {
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h4 className="mb-0">
               <FaUtensils className="me-2 text-warning" />
-              Register Restaurant
+              {isEdit ? "Edit Restaurant" : "Register Restaurant"}
             </h4>
             <div>
               <Button variant="outline-secondary" size="sm" className="me-2" onClick={() => navigate("/restaurant/list")}>
@@ -532,6 +634,35 @@ const RestaurantRegistration = () => {
                     />
                   </Col>
 
+                  <Col md={3}>
+                    <Form.Label>Booking Modes Offered *</Form.Label>
+                    <Form.Select
+                      name="bookingModes"
+                      value={formData.bookingModes}
+                      onChange={handleChange}
+                    >
+                      <option value="Walk-in">Walk-in only (Free to Available)</option>
+                      <option value="Advance">Advance booking only</option>
+                      <option value="Both">Both</option>
+                    </Form.Select>
+                    <Form.Text muted>
+                      Walk-in = first-come basis · Advance = reserved table for a slot
+                    </Form.Text>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Label>Advance Booking Lead Time (hours)</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      name="advanceBookingMinHours"
+                      value={formData.advanceBookingMinHours}
+                      onChange={handleChange}
+                      disabled={formData.bookingModes === "Walk-in"}
+                      placeholder="e.g. 2"
+                    />
+                    <Form.Text muted>Minimum hours notice for advance bookings.</Form.Text>
+                  </Col>
+
                   <Col md={6}>
                     <Form.Label>Reservation Policy</Form.Label>
                     <Form.Control
@@ -608,6 +739,44 @@ const RestaurantRegistration = () => {
               <Card.Body>
                 <Form.Control type="file" multiple accept="image/*" onChange={handleImagesUpload} />
                 {errors.images && <div className="text-danger small mt-1">{errors.images}</div>}
+
+                {/* Existing images (only present in edit mode) — user can drop
+                 *  any they don't want and the rest get re-posted to the BE. */}
+                {existingImages.length > 0 && (
+                  <div className="d-flex flex-wrap gap-2 mt-3">
+                    {existingImages.map((src, i) => (
+                      <div key={`ex-${i}`} className="position-relative" style={{ width: 120, height: 90 }}>
+                        <Image
+                          src={src}
+                          alt={`existing-${i}`}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            borderRadius: 6,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => setPreviewImage(src)}
+                        />
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => setExistingImages((p) => p.filter((_, k) => k !== i))}
+                          style={{
+                            position: "absolute",
+                            top: 2,
+                            right: 2,
+                            padding: "0 6px",
+                            lineHeight: 1.1,
+                          }}
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {imagePreviews.length > 0 && (
                   <div className="d-flex flex-wrap gap-2 mt-3">
                     {imagePreviews.map((src, i) => (
@@ -768,7 +937,7 @@ const RestaurantRegistration = () => {
               </Button>
               <Button type="submit" variant="warning" disabled={saving}>
                 <FaSave className="me-1" />
-                {saving ? "Saving..." : "Save Restaurant"}
+                {saving ? (isEdit ? "Updating..." : "Saving...") : (isEdit ? "Update Restaurant" : "Save Restaurant")}
               </Button>
             </div>
           </Form>
