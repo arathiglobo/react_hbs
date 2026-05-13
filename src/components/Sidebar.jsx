@@ -294,6 +294,10 @@ export default function Sidebar() {
           to: "/booking-details/long-stay-booking-list",
         },
         {
+          label: "Day Stay Booking",
+          to: "/booking-details/day-stay-booking-list",
+        },
+        {
           label: "Custom Booking",
           to: "/booking-details/custom-booking-list",
         },

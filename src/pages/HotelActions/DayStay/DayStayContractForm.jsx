@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  Card,
-  Form,
-  Button,
+  Container,
   Row,
   Col,
+  Form,
+  Button,
+  Card,
   Spinner,
-  Alert,
   Table,
+  Overlay,
+  Popover,
 } from "react-bootstrap";
-import { FaArrowLeft } from "react-icons/fa";
+import { FaArrowLeft, FaPlus } from "react-icons/fa";
+import Select from "react-select";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -19,246 +22,409 @@ import { toast } from "react-hot-toast";
 /**
  * DayStayContractForm — used for both CREATE and EDIT.
  *
- * Day Stay contracts mirror Contract Rate / 24-hour fields:
- *   - rateCode, validityFrom/To
- *   - check-in window (start/end) — the daily time band during which day-stay
- *     check-ins are accepted
- *   - dayStayRate, percentage markup, active, remarks
- *   - per-room rate rows (category/type/occupancy + day-stay rate)
+ * Mirrors /hotel-actions/hotel/{hotelId}/contract-rate/create with every
+ * field intact (season, rate code, market types, exclude countries, day
+ * selection, multiple validity periods, per-room/occupancy rate matrix +
+ * refundable per category), PLUS the day-stay-specific fields:
+ *   - Check-In Window Start / End
+ *   - Markup %
+ *   - Remarks
  *
- * POST /api/day-stay-contract/save
- * PUT  /api/day-stay-contract/{id}
+ * POST /api/day-stay-contract/save     (create)
+ * PUT  /api/day-stay-contract/{id}     (edit)
  */
 export default function DayStayContractForm({ mode }) {
   const navigate = useNavigate();
   const { id: hotelId, contractId } = useParams();
   const isEdit = mode === "edit";
 
-  const [form, setForm] = useState({
+  const [formData, setFormData] = useState({
+    seasonId: "",
     rateCode: "",
-    validityFrom: "",
-    validityTo: "",
+    marketType: [],
+    excludeCountry: [],
+    daySelection: "allDays",
+    validityList: [{ validityFrom: "", validityTo: "" }],
+    roomRates: [],
+    // Day-stay extras
     checkInStartTime: "08:00",
     checkInEndTime: "17:00",
-    dayStayRate: "",
     percentage: "",
-    active: true,
     remarks: "",
-    rooms: [],
   });
 
+  const [markets, setMarkets] = useState([]);
+  const [countries, setCountries] = useState([]);
+  const [filteredCountries, setFilteredCountries] = useState([]);
   const [hotelRooms, setHotelRooms] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [serverError, setServerError] = useState(null);
-  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [roomLoading, setRoomLoading] = useState(false);
+  const [seasonTypes, setSeasonTypes] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load hotel rooms for the rates table, plus existing contract on edit.
+  const [showCellConfirm, setShowCellConfirm] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [confirmData, setConfirmData] = useState(null);
+
+  // ── Dropdown reference data ─────────────────────────────────────────
   useEffect(() => {
-    const init = async () => {
+    const fetchDropdowns = async () => {
       try {
         setLoading(true);
-        const roomRes = await axiosInstance
-          .get(`/api/hotelRoomDetailsController/${hotelId}`)
-          .catch(() => ({ data: [] }));
-        const mappedRooms = (roomRes.data || []).map((room) => {
-          const seenOcc = new Set();
-          const uniqueOcc = (room.occupancyDetailsDTOs || []).filter((o) => {
-            if (seenOcc.has(o.id)) return false;
-            seenOcc.add(o.id);
-            return true;
-          });
-          return {
-            hotelRoomCategoryId:
-              room.rommCategoryId || room.hotelRoomcategoryId,
-            roomCategory: room.roomCategory,
-            occupancyDetailsDTOs: uniqueOcc,
-            roomTypeDetailsDTOs: room.roomTypeDetailsDTOs || [],
-          };
-        });
-        setHotelRooms(mappedRooms);
-
-        if (isEdit && contractId) {
-          const res = await axiosInstance.get(
-            `/api/day-stay-contract/${contractId}`
-          );
-          const e = res.data;
-          setForm({
-            rateCode: e.rateCode || "",
-            validityFrom: e.validityFrom || "",
-            validityTo: e.validityTo || "",
-            checkInStartTime: e.checkInStartTime || "08:00",
-            checkInEndTime: e.checkInEndTime || "17:00",
-            dayStayRate: e.dayStayRate ?? "",
-            percentage: e.percentage ?? "",
-            active: e.active !== false,
-            remarks: e.remarks || "",
-            rooms: (e.rooms || []).map((r) => ({
-              hotelRoomCategoryId: r.hotelRoomCategoryId,
-              hotelRoomTypeId: r.hotelRoomTypeId,
-              occupancyTypeId: r.occupancyTypeId,
-              hotelMealId: r.hotelMealId || 0,
-              dayStayRate: Number(r.dayStayRate || 0),
-              adultRate: Number(r.adultRate || 0),
-              childRate: Number(r.childRate || 0),
-              extraBed: !!r.extraBed,
-              meal: !!r.meal,
-              refundable: !!r.refundable,
-            })),
-          });
-        }
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to load Day Stay contract");
+        const [marketRes, countryRes, seasonTypeRes] = await Promise.all([
+          axiosInstance.get("/api/marketType"),
+          axiosInstance.get("/api/country"),
+          axiosInstance.get("/api/seasonType"),
+        ]);
+        const marketsWithAll = [
+          { marketTypeId: 100, name: "All" },
+          ...(marketRes.data || []),
+        ];
+        setMarkets(marketsWithAll);
+        setCountries(countryRes.data || []);
+        setFilteredCountries(countryRes.data || []);
+        setSeasonTypes(seasonTypeRes.data || []);
+      } catch {
+        toast.error("Failed to load dropdown data");
       } finally {
         setLoading(false);
       }
     };
-    init();
-  }, [isEdit, contractId, hotelId]);
+    fetchDropdowns();
+  }, []);
 
-  const set = (field, value) => {
-    setForm((f) => ({ ...f, [field]: value }));
-    setErrors((e) => ({ ...e, [field]: undefined }));
-    setServerError(null);
-  };
-
-  const setRoomField = (
-    roomCategoryId,
-    occupancyId,
-    roomTypeId,
-    roomTypeName,
-    field,
-    value
-  ) => {
-    setForm((prev) => {
-      const updated = [...prev.rooms];
-      const idx = updated.findIndex(
-        (r) =>
-          Number(r.hotelRoomCategoryId) === Number(roomCategoryId) &&
-          Number(r.occupancyTypeId) === Number(occupancyId) &&
-          Number(r.hotelRoomTypeId) === Number(roomTypeId)
-      );
-      const numeric = Number(value);
-      if (idx !== -1) {
-        updated[idx][field] = numeric;
-        if (field === "adultRate" || field === "childRate") {
-          updated[idx].extraBed = numeric > 0;
+  // ── Hotel rooms ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchHotelRooms = async () => {
+      if (!hotelId) return;
+      try {
+        setRoomLoading(true);
+        const res = await axiosInstance.get(
+          `/api/hotelRoomDetailsController/${hotelId}`
+        );
+        if (res.data) {
+          const mapped = res.data.map((room) => {
+            const uniqueOccupancy = (room.occupancyDetailsDTOs || []).reduce(
+              (acc, current) => {
+                const i = acc.findIndex(
+                  (item) =>
+                    item.id === current.id &&
+                    item.occupanyType === current.occupanyType
+                );
+                if (i === -1) acc.push(current);
+                return acc;
+              },
+              []
+            );
+            return {
+              hotelRoomcategoryId:
+                room.rommCategoryId || room.hotelRoomcategoryId,
+              roomCategory: room.roomCategory,
+              occupancyDetailsDTOs: uniqueOccupancy,
+              roomTypeDetailsDTOs: room.roomTypeDetailsDTOs || [],
+            };
+          });
+          setHotelRooms(mapped);
         }
-      } else {
-        updated.push({
-          hotelRoomCategoryId: Number(roomCategoryId),
-          hotelRoomTypeId: Number(roomTypeId),
-          occupancyTypeId: Number(occupancyId),
-          hotelMealId: (roomTypeName || "").toLowerCase().includes("breakfast")
-            ? 1
-            : 0,
-          dayStayRate: field === "dayStayRate" ? numeric : 0,
-          adultRate: field === "adultRate" ? numeric : 0,
-          childRate: field === "childRate" ? numeric : 0,
-          extraBed:
-            field === "adultRate" || field === "childRate"
-              ? numeric > 0
-              : false,
-          meal: (roomTypeName || "").toLowerCase().includes("breakfast"),
-          refundable: false,
-        });
+      } catch {
+        toast.error("Failed to load hotel room details");
+      } finally {
+        setRoomLoading(false);
       }
-      return { ...prev, rooms: updated };
+    };
+    fetchHotelRooms();
+  }, [hotelId]);
+
+  // ── Edit-mode hydration ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!isEdit || !contractId) return;
+    const load = async () => {
+      try {
+        const res = await axiosInstance.get(
+          `/api/day-stay-contract/${contractId}`
+        );
+        const d = res.data || {};
+        const sel = d.allDays
+          ? "allDays"
+          : d.weekDay
+          ? "weekDays"
+          : d.weekEndDay
+          ? "weekendDays"
+          : "allDays";
+        setFormData((p) => ({
+          ...p,
+          seasonId: d.seasonId ? String(d.seasonId) : "",
+          rateCode: d.rateCode || "",
+          marketType: (d.marketType || []).map((mid) => ({
+            value: mid,
+            label: String(mid),
+          })),
+          excludeCountry: (d.excludeCountry || []).map((cid) => ({
+            value: cid,
+            label: String(cid),
+          })),
+          daySelection: sel,
+          validityList:
+            (d.validityList || []).length > 0
+              ? d.validityList.map((v) => ({
+                  validityFrom: (v.validityFrom || "").slice(0, 16),
+                  validityTo: (v.validityTo || "").slice(0, 16),
+                }))
+              : [{ validityFrom: "", validityTo: "" }],
+          roomRates: (d.roomRates || []).map((r) => ({
+            hotelRoomcategoryId: String(r.hotelRoomCategoryId || ""),
+            hotelRoomtypeId: String(r.hotelRoomTypeId || ""),
+            ocuppancytypeId: String(r.occupancyTypeId || ""),
+            mealType: r.mealType || "",
+            hotelMealId: r.hotelMealId || 0,
+            rate: Number(r.rate || 0),
+            adultRate: Number(r.adultRate || 0),
+            childRate: Number(r.childRate || 0),
+            meal: !!r.meal,
+            extraBed: !!r.extraBed,
+            refundable: !!r.refundable,
+          })),
+          checkInStartTime: (d.checkInStartTime || "08:00").slice(0, 5),
+          checkInEndTime: (d.checkInEndTime || "17:00").slice(0, 5),
+          percentage: d.percentage ?? "",
+          remarks: d.remarks || "",
+        }));
+      } catch (err) {
+        toast.error("Failed to load Day Stay contract");
+      }
+    };
+    load();
+  }, [isEdit, contractId]);
+
+  // Once markets / countries arrive, hydrate the multi-select labels for edit.
+  useEffect(() => {
+    if (!isEdit) return;
+    setFormData((p) => {
+      const mt = (p.marketType || []).map((opt) => {
+        const m = markets.find((x) => x.marketTypeId === opt.value);
+        return m ? { value: m.marketTypeId, label: m.name } : opt;
+      });
+      const ec = (p.excludeCountry || []).map((opt) => {
+        const c = countries.find((x) => x.id === opt.value);
+        return c
+          ? { value: c.id, label: `${c.name} (${c.marketType})` }
+          : opt;
+      });
+      return { ...p, marketType: mt, excludeCountry: ec };
+    });
+  }, [markets, countries, isEdit]);
+
+  const getMinValidityToDate = (fromDate) => fromDate || "";
+
+  const addValidity = () =>
+    setFormData((p) => ({
+      ...p,
+      validityList: [...p.validityList, { validityFrom: "", validityTo: "" }],
+    }));
+
+  const removeValidity = (index) =>
+    setFormData((p) => ({
+      ...p,
+      validityList: p.validityList.filter((_, i) => i !== index),
+    }));
+
+  const handleRefundableChange = (roomId, checked) => {
+    setFormData((prev) => {
+      const updated = [...prev.roomRates];
+      updated.forEach((r) => {
+        if (r.hotelRoomcategoryId === String(roomId)) r.refundable = checked;
+      });
+      return { ...prev, roomRates: updated };
     });
   };
 
-  const getRoomValue = (catId, occId, rtId, field) => {
-    const r = form.rooms.find(
-      (x) =>
-        Number(x.hotelRoomCategoryId) === Number(catId) &&
-        Number(x.occupancyTypeId) === Number(occId) &&
-        Number(x.hotelRoomTypeId) === Number(rtId)
-    );
-    if (!r) return "";
-    return r[field] || "";
+  const validateForm = () => {
+    const errors = {};
+    if (!formData.seasonId) errors.seasonId = "Please select a season.";
+    if (!formData.rateCode.trim()) errors.rateCode = "Please enter a rate code.";
+    if (!formData.marketType.length)
+      errors.marketType = "Please select at least one market type.";
+    if (!formData.checkInStartTime)
+      errors.checkInStartTime = "Required";
+    if (!formData.checkInEndTime) errors.checkInEndTime = "Required";
+    if (
+      formData.checkInStartTime &&
+      formData.checkInEndTime &&
+      formData.checkInStartTime >= formData.checkInEndTime
+    )
+      errors.checkInEndTime = "End time must be after start time";
+    if (formData.percentage !== "" && Number(formData.percentage) < 0)
+      errors.percentage = "Cannot be negative";
+
+    if (!formData.validityList.length) {
+      errors.validityList = "Please add a validity period.";
+    } else {
+      formData.validityList.forEach((v, index) => {
+        if (!v.validityFrom || !v.validityTo) {
+          errors[`validityFrom_${index}`] = "Please fill both validity dates.";
+        } else if (new Date(v.validityFrom) >= new Date(v.validityTo)) {
+          errors[`validityTo_${index}`] =
+            "Validity To must be after Validity From.";
+        }
+      });
+    }
+
+    if (formData.roomRates.length === 0) {
+      errors.roomRates = "Please add at least one room rate.";
+    } else {
+      const hasValid = formData.roomRates.some(
+        (r) => r.rate > 0 || r.adultRate > 0 || r.childRate > 0
+      );
+      if (!hasValid)
+        errors.roomRates =
+          "Please enter at least one valid rate (rate, adult, or child).";
+    }
+    return errors;
   };
 
-  const validate = () => {
-    const e = {};
-    if (!form.validityFrom) e.validityFrom = "Required";
-    if (!form.validityTo) e.validityTo = "Required";
-    if (
-      form.validityFrom &&
-      form.validityTo &&
-      form.validityFrom > form.validityTo
-    )
-      e.validityTo = "Validity To must be on/after Validity From";
-    if (!form.checkInStartTime) e.checkInStartTime = "Required";
-    if (!form.checkInEndTime) e.checkInEndTime = "Required";
-    if (
-      form.checkInStartTime &&
-      form.checkInEndTime &&
-      form.checkInStartTime >= form.checkInEndTime
-    )
-      e.checkInEndTime = "End time must be after start time";
-    if (form.dayStayRate !== "" && Number(form.dayStayRate) < 0)
-      e.dayStayRate = "Cannot be negative";
-    if (form.percentage !== "" && Number(form.percentage) < 0)
-      e.percentage = "Cannot be negative";
-    return e;
+  const handleBlur = (e, roomId, occName, roomTypeId, roomTypeName, field, value) => {
+    if (value && Number(value) > 0) {
+      const target = e.target;
+      setTimeout(() => {
+        setConfirmTarget(target);
+        setConfirmData({ roomId, occName, roomTypeId, roomTypeName, field, value });
+        setShowCellConfirm(true);
+      }, 150);
+    } else {
+      setShowCellConfirm(false);
+    }
   };
 
-  const handleSubmit = async (ev) => {
-    ev.preventDefault();
-    const errs = validate();
-    setErrors(errs);
-    if (Object.keys(errs).length) return;
+  const handleRateChange = (roomId, occId, roomTypeId, roomTypeName, field, value) => {
+    setFormData((prev) => {
+      const updated = [...prev.roomRates];
+      const idx = updated.findIndex(
+        (r) =>
+          r.hotelRoomcategoryId === String(roomId) &&
+          r.ocuppancytypeId === String(occId) &&
+          r.hotelRoomtypeId === String(roomTypeId)
+      );
+      if (idx !== -1) {
+        updated[idx][field] = Number(value);
+        if (field === "adultRate" || field === "childRate") {
+          updated[idx].extraBed = Number(value) > 0;
+        }
+      } else {
+        updated.push({
+          hotelRoomcategoryId: String(roomId),
+          hotelRoomtypeId: String(roomTypeId),
+          ocuppancytypeId: String(occId),
+          mealType: roomTypeName,
+          hotelMealId: roomTypeName.toLowerCase().includes("breakfast") ? 1 : 0,
+          rate: field === "rate" ? Number(value) : 0,
+          adultRate: field === "adultRate" ? Number(value) : 0,
+          childRate: field === "childRate" ? Number(value) : 0,
+          meal: roomTypeName.toLowerCase().includes("breakfast"),
+          extraBed:
+            field === "adultRate" || field === "childRate"
+              ? Number(value) > 0
+              : false,
+          refundable: false,
+        });
+      }
+      return { ...prev, roomRates: updated };
+    });
+  };
 
-    const payload = {
-      hotelId: Number(hotelId),
-      rateCode: form.rateCode?.trim() || null,
-      validityFrom: form.validityFrom,
-      validityTo: form.validityTo,
-      checkInStartTime: form.checkInStartTime,
-      checkInEndTime: form.checkInEndTime,
-      dayStayRate: form.dayStayRate === "" ? null : Number(form.dayStayRate),
-      percentage: form.percentage === "" ? null : Number(form.percentage),
-      active: !!form.active,
-      remarks: form.remarks?.trim() || null,
-      rooms: form.rooms
-        .filter(
-          (r) =>
-            r.dayStayRate > 0 || r.adultRate > 0 || r.childRate > 0
-        )
-        .map((r) => ({
-          hotelRoomCategoryId: Number(r.hotelRoomCategoryId),
-          hotelRoomTypeId: Number(r.hotelRoomTypeId),
-          occupancyTypeId: Number(r.occupancyTypeId),
+  const handleSaveClick = () => {
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors({});
+    submitData();
+  };
+
+  const submitData = async () => {
+    setIsSubmitting(true);
+    try {
+      let allDays = 0,
+        weekDay = 0,
+        weekEndDay = 0;
+      switch (formData.daySelection) {
+        case "allDays":
+          allDays = 1;
+          break;
+        case "weekDays":
+          weekDay = 1;
+          break;
+        case "weekendDays":
+          weekEndDay = 1;
+          break;
+        default:
+          allDays = 1;
+      }
+
+      const payload = {
+        hotelId: Number(hotelId),
+        rateCode: formData.rateCode.trim(),
+        seasonId: formData.seasonId ? Number(formData.seasonId) : null,
+        marketType: formData.marketType.map((m) => Number(m.value)),
+        excludeCountry: formData.excludeCountry.map((c) => Number(c.value)),
+        allDays,
+        weekDay,
+        weekEndDay,
+        checkInStartTime: formData.checkInStartTime,
+        checkInEndTime: formData.checkInEndTime,
+        percentage:
+          formData.percentage === "" ? null : Number(formData.percentage),
+        remarks: formData.remarks?.trim() || null,
+        validityList: formData.validityList.map((v) => ({
+          validityFrom: v.validityFrom ? `${v.validityFrom}:00` : null,
+          validityTo: v.validityTo ? `${v.validityTo}:00` : null,
+        })),
+        roomRates: formData.roomRates.map((r) => ({
+          hotelRoomCategoryId: Number(r.hotelRoomcategoryId),
+          hotelRoomTypeId: Number(r.hotelRoomtypeId),
+          occupancyTypeId: Number(r.ocuppancytypeId),
+          mealType: r.mealType || null,
           hotelMealId: Number(r.hotelMealId || 0),
-          dayStayRate: Number(r.dayStayRate || 0),
+          rate: Number(r.rate || 0),
+          dayStayRate: Number(r.rate || 0),
           adultRate: Number(r.adultRate || 0),
           childRate: Number(r.childRate || 0),
           extraBed: !!r.extraBed,
           meal: !!r.meal,
           refundable: !!r.refundable,
         })),
-    };
+        isLive: true,
+      };
 
-    try {
-      setSubmitting(true);
+      let res;
       if (isEdit) {
-        await axiosInstance.put(
+        res = await axiosInstance.put(
           `/api/day-stay-contract/${contractId}`,
           payload
         );
-        toast.success("Updated");
       } else {
-        await axiosInstance.post(`/api/day-stay-contract/save`, payload);
-        toast.success("Created");
+        res = await axiosInstance.post(
+          "/api/day-stay-contract/save",
+          payload
+        );
       }
-      navigate(`/hotel-actions/${hotelId}/day-stay-contract`);
+      if (res.status === 200 || res.status === 201) {
+        toast.success(
+          isEdit
+            ? "Day Stay contract updated successfully!"
+            : "Day Stay contract saved successfully!"
+        );
+        navigate(`/hotel-actions/${hotelId}/day-stay-contract`);
+      }
     } catch (err) {
-      const msg = err?.response?.data?.message || "Save failed";
-      setServerError(msg);
-      toast.error(msg);
+      toast.error(
+        `Failed to save Day Stay contract: ${
+          err.response?.data?.message || err.message
+        }`
+      );
     } finally {
-      setSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -267,310 +433,541 @@ export default function DayStayContractForm({ mode }) {
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4" style={{ overflow: "auto" }}>
-          <div className="d-flex align-items-center gap-2 mb-3">
-            <Button
-              variant="light"
-              onClick={() => navigate(-1)}
-              className="d-flex align-items-center gap-2"
-            >
-              <FaArrowLeft /> Back
-            </Button>
-            <h5 className="mb-0">
-              {isEdit ? "Edit" : "Add"} Day Stay Contract
-            </h5>
-          </div>
-
-          {loading ? (
-            <div className="text-center py-5">
-              <Spinner animation="border" />
+        <main className="flex-grow-1 p-4">
+          <Container fluid>
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <Button variant="outline-secondary" onClick={() => navigate(-1)}>
+                <FaArrowLeft className="me-2" /> Back
+              </Button>
+              <h4 className="fw-semibold text-dark mb-0">
+                {isEdit ? "Edit" : "Create"} Day Stay Contract
+              </h4>
             </div>
-          ) : (
-            <Card className="shadow-sm">
-              <Card.Body>
-                <Alert
-                  variant="info"
-                  className="py-2 mb-3"
-                  style={{ fontSize: "0.85rem" }}
-                >
-                  Day Stay differs from 24-hour check-in: define the daily
-                  window (e.g. 08:00–17:00). Guests checking in inside the
-                  window may stay until the window ends.
-                </Alert>
 
-                {serverError && (
-                  <Alert variant="danger" className="py-2 mb-3">
-                    {serverError}
-                  </Alert>
-                )}
-
-                <Form onSubmit={handleSubmit} noValidate>
-                  <Row>
-                    <Col md={3} className="mb-3">
-                      <Form.Label>Rate Code</Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={form.rateCode}
-                        onChange={(e) => set("rateCode", e.target.value)}
-                        placeholder="e.g. DS-VIP"
-                      />
+            <Card className="shadow-sm border-0 rounded-4 p-4">
+              {loading ? (
+                <div className="text-center py-5">
+                  <Spinner animation="border" />
+                </div>
+              ) : (
+                <>
+                  {/* Top Form Fields — mirror of Contract Rate */}
+                  <Row className="mb-4 g-4">
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Season</Form.Label>
+                        <Form.Select
+                          value={formData.seasonId}
+                          isInvalid={!!validationErrors.seasonId}
+                          onChange={(e) => {
+                            setFormData({ ...formData, seasonId: e.target.value });
+                            if (validationErrors.seasonId)
+                              setValidationErrors((p) => ({
+                                ...p,
+                                seasonId: "",
+                              }));
+                          }}
+                        >
+                          <option value="">Select Season Type</option>
+                          {seasonTypes.map((s) => (
+                            <option key={s.seasonTypeId} value={s.seasonTypeId}>
+                              {s.season}
+                            </option>
+                          ))}
+                        </Form.Select>
+                        {validationErrors.seasonId && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.seasonId}
+                          </Form.Control.Feedback>
+                        )}
+                      </Form.Group>
                     </Col>
-                    <Col md={3} className="mb-3">
-                      <Form.Label>Validity From *</Form.Label>
-                      <Form.Control
-                        type="date"
-                        value={form.validityFrom}
-                        isInvalid={!!errors.validityFrom}
-                        onChange={(e) => set("validityFrom", e.target.value)}
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.validityFrom}
-                      </Form.Control.Feedback>
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Rate Code</Form.Label>
+                        <Form.Control
+                          value={formData.rateCode}
+                          isInvalid={!!validationErrors.rateCode}
+                          onChange={(e) => {
+                            setFormData({
+                              ...formData,
+                              rateCode: e.target.value,
+                            });
+                            if (validationErrors.rateCode)
+                              setValidationErrors((p) => ({
+                                ...p,
+                                rateCode: "",
+                              }));
+                          }}
+                        />
+                        {validationErrors.rateCode && (
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.rateCode}
+                          </Form.Control.Feedback>
+                        )}
+                      </Form.Group>
                     </Col>
-                    <Col md={3} className="mb-3">
-                      <Form.Label>Validity To *</Form.Label>
-                      <Form.Control
-                        type="date"
-                        value={form.validityTo}
-                        min={form.validityFrom || undefined}
-                        isInvalid={!!errors.validityTo}
-                        onChange={(e) => set("validityTo", e.target.value)}
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.validityTo}
-                      </Form.Control.Feedback>
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Market Type</Form.Label>
+                        <Select
+                          isMulti
+                          options={markets.map((m) => ({
+                            value: m.marketTypeId,
+                            label: m.name,
+                          }))}
+                          value={formData.marketType}
+                          onChange={(sel) => {
+                            setFormData({ ...formData, marketType: sel });
+                            if (validationErrors.marketType)
+                              setValidationErrors((p) => ({
+                                ...p,
+                                marketType: "",
+                              }));
+                          }}
+                          className={
+                            validationErrors.marketType ? "is-invalid" : ""
+                          }
+                        />
+                        {validationErrors.marketType && (
+                          <div className="invalid-feedback d-block">
+                            {validationErrors.marketType}
+                          </div>
+                        )}
+                      </Form.Group>
                     </Col>
-                    <Col md={3} className="mb-3 d-flex align-items-end">
-                      <Form.Check
-                        type="switch"
-                        id="day-stay-active-switch"
-                        label="Active"
-                        checked={!!form.active}
-                        onChange={(e) => set("active", e.target.checked)}
-                      />
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Exclude Nationality</Form.Label>
+                        <Select
+                          isMulti
+                          options={filteredCountries.map((c) => ({
+                            value: c.id,
+                            label: `${c.name} (${c.marketType})`,
+                          }))}
+                          value={formData.excludeCountry}
+                          onChange={(sel) =>
+                            setFormData({ ...formData, excludeCountry: sel })
+                          }
+                        />
+                      </Form.Group>
                     </Col>
                   </Row>
 
-                  <Row>
-                    <Col md={3} className="mb-3">
-                      <Form.Label>Check-In Window — Start *</Form.Label>
-                      <Form.Control
-                        type="time"
-                        value={form.checkInStartTime}
-                        isInvalid={!!errors.checkInStartTime}
-                        onChange={(e) =>
-                          set("checkInStartTime", e.target.value)
-                        }
-                      />
-                      <small className="text-muted">
-                        Earliest day-stay check-in time.
-                      </small>
+                  {/* Day-stay extras: window + markup % + remarks */}
+                  <Row className="mb-4 g-4">
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Check-In Window — Start *</Form.Label>
+                        <Form.Control
+                          type="time"
+                          value={formData.checkInStartTime}
+                          isInvalid={!!validationErrors.checkInStartTime}
+                          onChange={(e) => {
+                            setFormData({
+                              ...formData,
+                              checkInStartTime: e.target.value,
+                            });
+                            if (validationErrors.checkInStartTime)
+                              setValidationErrors((p) => ({
+                                ...p,
+                                checkInStartTime: "",
+                              }));
+                          }}
+                        />
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors.checkInStartTime}
+                        </Form.Control.Feedback>
+                      </Form.Group>
                     </Col>
-                    <Col md={3} className="mb-3">
-                      <Form.Label>Check-In Window — End *</Form.Label>
-                      <Form.Control
-                        type="time"
-                        value={form.checkInEndTime}
-                        isInvalid={!!errors.checkInEndTime}
-                        onChange={(e) =>
-                          set("checkInEndTime", e.target.value)
-                        }
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.checkInEndTime}
-                      </Form.Control.Feedback>
-                      <small className="text-muted">
-                        Latest check-in & day-stay end time.
-                      </small>
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Check-In Window — End *</Form.Label>
+                        <Form.Control
+                          type="time"
+                          value={formData.checkInEndTime}
+                          isInvalid={!!validationErrors.checkInEndTime}
+                          onChange={(e) => {
+                            setFormData({
+                              ...formData,
+                              checkInEndTime: e.target.value,
+                            });
+                            if (validationErrors.checkInEndTime)
+                              setValidationErrors((p) => ({
+                                ...p,
+                                checkInEndTime: "",
+                              }));
+                          }}
+                        />
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors.checkInEndTime}
+                        </Form.Control.Feedback>
+                      </Form.Group>
                     </Col>
-                    <Col md={3} className="mb-3">
-                      <Form.Label>Day Stay Base Rate</Form.Label>
-                      <Form.Control
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="e.g. 150.00"
-                        value={form.dayStayRate}
-                        isInvalid={!!errors.dayStayRate}
-                        onChange={(e) => set("dayStayRate", e.target.value)}
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.dayStayRate}
-                      </Form.Control.Feedback>
-                    </Col>
-                    <Col md={3} className="mb-3">
-                      <Form.Label>Markup %</Form.Label>
-                      <Form.Control
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="e.g. 10.00"
-                        value={form.percentage}
-                        isInvalid={!!errors.percentage}
-                        onChange={(e) => set("percentage", e.target.value)}
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {errors.percentage}
-                      </Form.Control.Feedback>
-                    </Col>
-                  </Row>
-
-                  <Row>
-                    <Col md={12} className="mb-3">
-                      <Form.Label>Remarks</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={2}
-                        value={form.remarks}
-                        onChange={(e) => set("remarks", e.target.value)}
-                        placeholder="Optional notes"
-                      />
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label>Remarks</Form.Label>
+                        <Form.Control
+                          as="textarea"
+                          rows={1}
+                          value={formData.remarks}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              remarks: e.target.value,
+                            })
+                          }
+                        />
+                      </Form.Group>
                     </Col>
                   </Row>
 
-                  {hotelRooms.length > 0 && (
-                    <div className="mt-3">
-                      <h6 className="fw-bold mb-2">
-                        Per-Room Day Stay Rates (optional)
+                  {/* Day Selection */}
+                  <Row className="mb-4">
+                    <Col md={12}>
+                      <Card className="p-3 bg-light border-0 rounded-3">
+                        <h6 className="fw-bold text-primary mb-3">
+                          Day Selection
+                        </h6>
+                        <div className="d-flex gap-4">
+                          {[
+                            { id: "allDays", label: "All Days" },
+                            { id: "weekDays", label: "Week Days" },
+                            { id: "weekendDays", label: "Weekend Days" },
+                          ].map((d) => (
+                            <Form.Check
+                              key={d.id}
+                              type="radio"
+                              id={`ds-${d.id}`}
+                              name="daySelection"
+                              label={d.label}
+                              value={d.id}
+                              checked={formData.daySelection === d.id}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  daySelection: e.target.value,
+                                })
+                              }
+                            />
+                          ))}
+                        </div>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  {/* Validity Periods */}
+                  <Card className="p-3 bg-light border-0 mb-4 rounded-3">
+                    <div className="d-flex justify-content-between mb-3">
+                      <h6 className="fw-bold text-primary mb-0">
+                        Validity Periods
                       </h6>
-                      <small className="text-muted d-block mb-2">
-                        Leave blank to use the base Day Stay rate. Rows without
-                        any rate are ignored.
-                      </small>
-                      <Table bordered size="sm" responsive>
-                        <thead style={{ backgroundColor: "#f8f8f8" }}>
-                          <tr>
-                            <th>Room Category</th>
-                            <th>Occupancy</th>
-                            <th>Room Type</th>
-                            <th>Day Rate</th>
-                            <th>Adult Rate (extra bed)</th>
-                            <th>Child Rate (extra bed)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {hotelRooms.flatMap((cat) =>
-                            (cat.occupancyDetailsDTOs || []).flatMap((occ) =>
-                              (cat.roomTypeDetailsDTOs || []).map((rt) => (
-                                <tr
-                                  key={`${cat.hotelRoomCategoryId}-${occ.id}-${rt.hotelRoomtypeId || rt.hotelRoomTypeId || rt.id}`}
-                                >
-                                  <td>{cat.roomCategory}</td>
-                                  <td>{occ.name || occ.occupancyType}</td>
-                                  <td>{rt.roomType || rt.name}</td>
-                                  <td>
-                                    <Form.Control
-                                      size="sm"
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={getRoomValue(
-                                        cat.hotelRoomCategoryId,
-                                        occ.id,
-                                        rt.hotelRoomtypeId ||
-                                          rt.hotelRoomTypeId ||
-                                          rt.id,
-                                        "dayStayRate"
-                                      )}
-                                      onChange={(e) =>
-                                        setRoomField(
-                                          cat.hotelRoomCategoryId,
-                                          occ.id,
-                                          rt.hotelRoomtypeId ||
-                                            rt.hotelRoomTypeId ||
-                                            rt.id,
-                                          rt.roomType || rt.name,
-                                          "dayStayRate",
-                                          e.target.value
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        onClick={addValidity}
+                      >
+                        <FaPlus className="me-1" /> Add
+                      </Button>
+                    </div>
+                    {formData.validityList.map((v, index) => (
+                      <Row key={index} className="align-items-end mb-2">
+                        <Col md={4}>
+                          <Form.Control
+                            type="datetime-local"
+                            value={v.validityFrom}
+                            isInvalid={
+                              !!validationErrors[`validityFrom_${index}`]
+                            }
+                            onChange={(e) => {
+                              const updated = [...formData.validityList];
+                              updated[index].validityFrom = e.target.value;
+                              if (
+                                updated[index].validityTo &&
+                                new Date(updated[index].validityTo) <=
+                                  new Date(e.target.value)
+                              )
+                                updated[index].validityTo = "";
+                              setFormData({
+                                ...formData,
+                                validityList: updated,
+                              });
+                              if (validationErrors[`validityFrom_${index}`])
+                                setValidationErrors((p) => ({
+                                  ...p,
+                                  [`validityFrom_${index}`]: "",
+                                }));
+                            }}
+                          />
+                          {validationErrors[`validityFrom_${index}`] && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors[`validityFrom_${index}`]}
+                            </Form.Control.Feedback>
+                          )}
+                        </Col>
+                        <Col md={4}>
+                          <Form.Control
+                            type="datetime-local"
+                            value={v.validityTo}
+                            min={getMinValidityToDate(v.validityFrom)}
+                            isInvalid={
+                              !!validationErrors[`validityTo_${index}`]
+                            }
+                            onChange={(e) => {
+                              const updated = [...formData.validityList];
+                              updated[index].validityTo = e.target.value;
+                              setFormData({
+                                ...formData,
+                                validityList: updated,
+                              });
+                              if (validationErrors[`validityTo_${index}`])
+                                setValidationErrors((p) => ({
+                                  ...p,
+                                  [`validityTo_${index}`]: "",
+                                }));
+                            }}
+                          />
+                          {validationErrors[`validityTo_${index}`] && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors[`validityTo_${index}`]}
+                            </Form.Control.Feedback>
+                          )}
+                        </Col>
+                        <Col md="auto">
+                          <Button
+                            variant="outline-danger"
+                            size="sm"
+                            onClick={() => removeValidity(index)}
+                          >
+                            ✖
+                          </Button>
+                        </Col>
+                      </Row>
+                    ))}
+                  </Card>
+
+                  {/* Rate matrix */}
+                  <Card className="p-3 bg-light border-0 rounded-3">
+                    <h6 className="fw-bold mb-3 text-primary">
+                      Day Stay Rate Details
+                    </h6>
+                    {validationErrors.roomRates && (
+                      <div className="alert alert-danger mb-3">
+                        {validationErrors.roomRates}
+                      </div>
+                    )}
+                    {roomLoading ? (
+                      <div className="text-center py-5">
+                        <Spinner animation="border" />
+                      </div>
+                    ) : (
+                      hotelRooms.map((room) => (
+                        <div
+                          key={room.hotelRoomcategoryId}
+                          className="border rounded-4 bg-white p-3 mb-4 shadow-sm"
+                        >
+                          <div className="d-flex justify-content-between align-items-center mb-3">
+                            <span className="fw-semibold text-uppercase">
+                              {room.roomCategory}
+                            </span>
+                            <Form.Check
+                              label="Is Refundable"
+                              checked={
+                                formData.roomRates.find(
+                                  (r) =>
+                                    r.hotelRoomcategoryId ===
+                                    String(room.hotelRoomcategoryId)
+                                )?.refundable || false
+                              }
+                              onChange={(e) =>
+                                handleRefundableChange(
+                                  room.hotelRoomcategoryId,
+                                  e.target.checked
+                                )
+                              }
+                            />
+                          </div>
+
+                          <Table bordered hover responsive size="sm">
+                            <thead className="table-light">
+                              <tr>
+                                <th>Occupancy</th>
+                                <th>Room Type</th>
+                                <th>Rate</th>
+                                <th>Extra Adult</th>
+                                <th>Extra Child</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {room.occupancyDetailsDTOs.length > 0 &&
+                              room.roomTypeDetailsDTOs.length > 0 ? (
+                                room.occupancyDetailsDTOs.map((occ) =>
+                                  room.roomTypeDetailsDTOs.map((rt) => (
+                                    <tr key={`${occ.id}-${rt.roomTypeId}`}>
+                                      <td>{occ.occupanyType}</td>
+                                      <td>{rt.roomTypeName}</td>
+                                      {["rate", "adultRate", "childRate"].map(
+                                        (field) => (
+                                          <td key={field}>
+                                            <Form.Control
+                                              type="number"
+                                              min="0"
+                                              value={
+                                                formData.roomRates.find(
+                                                  (r) =>
+                                                    r.hotelRoomcategoryId ===
+                                                      String(
+                                                        room.hotelRoomcategoryId
+                                                      ) &&
+                                                    r.ocuppancytypeId ===
+                                                      String(occ.id) &&
+                                                    r.hotelRoomtypeId ===
+                                                      String(rt.roomTypeId)
+                                                )?.[field] || ""
+                                              }
+                                              onChange={(e) =>
+                                                handleRateChange(
+                                                  room.hotelRoomcategoryId,
+                                                  occ.id,
+                                                  rt.roomTypeId,
+                                                  rt.roomTypeName,
+                                                  field,
+                                                  e.target.value
+                                                )
+                                              }
+                                              onBlur={(e) =>
+                                                handleBlur(
+                                                  e,
+                                                  room.hotelRoomcategoryId,
+                                                  occ.occupanyType,
+                                                  rt.roomTypeId,
+                                                  rt.roomTypeName,
+                                                  field,
+                                                  e.target.value
+                                                )
+                                              }
+                                            />
+                                          </td>
                                         )
-                                      }
-                                    />
-                                  </td>
-                                  <td>
-                                    <Form.Control
-                                      size="sm"
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={getRoomValue(
-                                        cat.hotelRoomCategoryId,
-                                        occ.id,
-                                        rt.hotelRoomtypeId ||
-                                          rt.hotelRoomTypeId ||
-                                          rt.id,
-                                        "adultRate"
                                       )}
-                                      onChange={(e) =>
-                                        setRoomField(
-                                          cat.hotelRoomCategoryId,
-                                          occ.id,
-                                          rt.hotelRoomtypeId ||
-                                            rt.hotelRoomTypeId ||
-                                            rt.id,
-                                          rt.roomType || rt.name,
-                                          "adultRate",
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td>
-                                    <Form.Control
-                                      size="sm"
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={getRoomValue(
-                                        cat.hotelRoomCategoryId,
-                                        occ.id,
-                                        rt.hotelRoomtypeId ||
-                                          rt.hotelRoomTypeId ||
-                                          rt.id,
-                                        "childRate"
-                                      )}
-                                      onChange={(e) =>
-                                        setRoomField(
-                                          cat.hotelRoomCategoryId,
-                                          occ.id,
-                                          rt.hotelRoomtypeId ||
-                                            rt.hotelRoomTypeId ||
-                                            rt.id,
-                                          rt.roomType || rt.name,
-                                          "childRate",
-                                          e.target.value
-                                        )
-                                      }
-                                    />
+                                    </tr>
+                                  ))
+                                )
+                              ) : (
+                                <tr>
+                                  <td
+                                    colSpan="5"
+                                    className="text-center text-muted py-3"
+                                  >
+                                    No room types or occupancy details
+                                    available
                                   </td>
                                 </tr>
-                              ))
-                            )
-                          )}
-                        </tbody>
-                      </Table>
-                    </div>
-                  )}
+                              )}
+                            </tbody>
+                          </Table>
+                        </div>
+                      ))
+                    )}
+                  </Card>
 
-                  <div className="d-flex gap-2 mt-3">
+                  <div className="d-flex justify-content-between mt-4">
                     <Button
-                      type="submit"
-                      disabled={submitting}
-                      style={{ backgroundColor: "#0d6efd", border: "none" }}
-                    >
-                      {submitting ? "Saving…" : isEdit ? "Update" : "Create"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
+                      variant="outline-danger"
                       onClick={() => navigate(-1)}
                     >
                       Cancel
                     </Button>
+                    <Button
+                      variant="success"
+                      onClick={handleSaveClick}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <Spinner size="sm" animation="border" />
+                      ) : isEdit ? (
+                        "Update"
+                      ) : (
+                        "Save"
+                      )}
+                    </Button>
                   </div>
-                </Form>
-              </Card.Body>
+                </>
+              )}
             </Card>
-          )}
+
+            <Overlay
+              show={showCellConfirm}
+              target={confirmTarget}
+              placement="top"
+              rootClose
+              rootCloseEvent="mousedown"
+              onHide={() => setShowCellConfirm(false)}
+            >
+              <Popover id="popover-confirm-rate">
+                <Popover.Header
+                  as="h6"
+                  className="py-1 bg-warning text-dark"
+                >
+                  Confirm Rate
+                </Popover.Header>
+                <Popover.Body className="p-2">
+                  <div
+                    className="mb-2 text-center text-dark"
+                    style={{ fontSize: "0.9rem" }}
+                  >
+                    Verify{" "}
+                    {confirmData?.field === "rate"
+                      ? "Rate"
+                      : confirmData?.field === "adultRate"
+                      ? "Extra Adult"
+                      : "Extra Child"}{" "}
+                    of <strong>{confirmData?.value}</strong> for{" "}
+                    {confirmData?.occName} with{" "}
+                    <strong>{confirmData?.roomTypeName}</strong>?
+                  </div>
+                  <div className="d-flex justify-content-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="success"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCellConfirm(false);
+                      }}
+                    >
+                      Yes
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const currentRoom = hotelRooms.find(
+                          (r) =>
+                            r.hotelRoomcategoryId === confirmData.roomId
+                        );
+                        const currentOcc =
+                          currentRoom?.occupancyDetailsDTOs.find(
+                            (o) => o.occupanyType === confirmData.occName
+                          );
+                        handleRateChange(
+                          confirmData.roomId,
+                          currentOcc?.id || "",
+                          confirmData.roomTypeId,
+                          confirmData.roomTypeName,
+                          confirmData.field,
+                          ""
+                        );
+                        setShowCellConfirm(false);
+                      }}
+                    >
+                      No
+                    </Button>
+                  </div>
+                </Popover.Body>
+              </Popover>
+            </Overlay>
+          </Container>
         </main>
       </div>
     </div>

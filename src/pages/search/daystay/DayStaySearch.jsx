@@ -45,6 +45,8 @@ export default function DayStaySearch() {
   const [checkOutTime, setCheckOutTime] = useState("");
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
+  // Per-child ages (0-17). Length tracks `children`. Default age 5.
+  const [childAges, setChildAges] = useState([]);
   const [rooms, setRooms] = useState(1);
 
   const [errors, setErrors] = useState({});
@@ -194,6 +196,18 @@ export default function DayStaySearch() {
       cancelled = true;
     };
   }, [agent]);
+
+  // Keep childAges length in lock-step with the children count.
+  useEffect(() => {
+    setChildAges((prev) => {
+      const n = Number(children) || 0;
+      if (prev.length === n) return prev;
+      if (prev.length < n) {
+        return [...prev, ...Array.from({ length: n - prev.length }, () => 5)];
+      }
+      return prev.slice(0, n);
+    });
+  }, [children]);
 
   // Default check-out time to 2 hours after the chosen check-in.
   useEffect(() => {
@@ -500,13 +514,17 @@ export default function DayStaySearch() {
                       <Form.Label className="fw-semibold text-dark">
                         Adults
                       </Form.Label>
-                      <Form.Control
+                      <Form.Select
                         style={{ height: "42px" }}
-                        type="number"
-                        min={1}
                         value={adults}
-                        onChange={(e) => setAdults(e.target.value)}
-                      />
+                        onChange={(e) => setAdults(Number(e.target.value))}
+                      >
+                        {Array.from({ length: 9 }).map((_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1}
+                          </option>
+                        ))}
+                      </Form.Select>
                       {errors.adults && (
                         <div className="text-danger small mt-1">
                           {errors.adults}
@@ -519,13 +537,17 @@ export default function DayStaySearch() {
                       <Form.Label className="fw-semibold text-dark">
                         Children
                       </Form.Label>
-                      <Form.Control
+                      <Form.Select
                         style={{ height: "42px" }}
-                        type="number"
-                        min={0}
                         value={children}
-                        onChange={(e) => setChildren(e.target.value)}
-                      />
+                        onChange={(e) => setChildren(Number(e.target.value))}
+                      >
+                        {Array.from({ length: 10 }).map((_, i) => (
+                          <option key={i} value={i}>
+                            {i}
+                          </option>
+                        ))}
+                      </Form.Select>
                     </Form.Group>
                   </Col>
                   <Col lg={2} md={4}>
@@ -533,16 +555,55 @@ export default function DayStaySearch() {
                       <Form.Label className="fw-semibold text-dark">
                         Rooms
                       </Form.Label>
-                      <Form.Control
+                      <Form.Select
                         style={{ height: "42px" }}
-                        type="number"
-                        min={1}
                         value={rooms}
-                        onChange={(e) => setRooms(e.target.value)}
-                      />
+                        onChange={(e) => setRooms(Number(e.target.value))}
+                      >
+                        {Array.from({ length: 9 }).map((_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1}
+                          </option>
+                        ))}
+                      </Form.Select>
                     </Form.Group>
                   </Col>
                 </Row>
+
+                {/* Child ages — one age-dropdown per child (0-17). */}
+                {Number(children) > 0 && (
+                  <Row className="mt-3 g-2 align-items-end">
+                    <Col md={2}>
+                      <Form.Label className="fw-semibold text-dark mb-0">
+                        Child Ages
+                      </Form.Label>
+                    </Col>
+                    {Array.from({ length: Number(children) }).map((_, idx) => (
+                      <Col md={2} key={idx}>
+                        <Form.Label className="small text-muted mb-1">
+                          Child {idx + 1}
+                        </Form.Label>
+                        <Form.Select
+                          size="sm"
+                          value={childAges[idx] ?? 5}
+                          onChange={(e) =>
+                            setChildAges((prev) => {
+                              const next = [...prev];
+                              next[idx] = Number(e.target.value);
+                              return next;
+                            })
+                          }
+                        >
+                          {Array.from({ length: 18 }).map((__, age) => (
+                            <option key={age} value={age}>
+                              {age} {age === 1 ? "yr" : "yrs"}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    ))}
+                  </Row>
+                )}
 
                 <Row className="mt-3">
                   <Col className="d-flex justify-content-center gap-3">
@@ -603,15 +664,59 @@ export default function DayStaySearch() {
               )}
 
               <Row className="g-4">
-                {results.map((hotel) => {
+                {/* Dedupe: one card per hotel, pick the contract with the
+                    lowest day-stay rate. The full list of matching contract
+                    ids is forwarded to the room list so the user can see
+                    every window the hotel offers. */}
+                {Object.values(
+                  results.reduce((acc, h) => {
+                    const key = h.hotelId;
+                    const rate = Number(h.dayStayRate || 0);
+                    if (
+                      !acc[key] ||
+                      rate < Number(acc[key].dayStayRate || Infinity)
+                    ) {
+                      acc[key] = {
+                        ...h,
+                        allContractIds: [
+                          ...((acc[key] && acc[key].allContractIds) || []),
+                          h.contractId,
+                        ].filter((v, i, a) => a.indexOf(v) === i),
+                      };
+                    } else if (acc[key]) {
+                      acc[key] = {
+                        ...acc[key],
+                        allContractIds: [
+                          ...(acc[key].allContractIds || []),
+                          h.contractId,
+                        ].filter((v, i, a) => a.indexOf(v) === i),
+                      };
+                    }
+                    return acc;
+                  }, {})
+                ).map((hotel) => {
                   const baseRate = Number(hotel.dayStayRate || 0);
                   const pct = Number(hotel.percentage || 0);
-                  const displayRate =
-                    baseRate > 0
-                      ? +(baseRate * (1 + pct / 100)).toFixed(2)
-                      : null;
+                  // Pax-adjusted: base rate per room + extra adults + children.
+                  // First adult is included in base, extras pay adultRate;
+                  // children pay childRate.
+                  const adultsN = Number(adults) || 1;
+                  const childrenN = Number(children) || 0;
+                  const roomsN = Number(rooms) || 1;
+                  const adultPer = Number(hotel.minAdultRate || 0);
+                  const childPer = Number(hotel.minChildRate || 0);
+                  const perRoom =
+                    baseRate +
+                    Math.max(0, adultsN - 1) * adultPer +
+                    childrenN * childPer;
+                  const grossPerRoom = +(perRoom * (1 + pct / 100)).toFixed(2);
+                  const displayRate = baseRate > 0 ? grossPerRoom * roomsN : null;
+                  const cats = Array.isArray(hotel.roomCategories)
+                    ? hotel.roomCategories
+                    : [];
                   return (
                     <Col xs={12} key={hotel.contractId}>
+                      {/* Mirrors HotelSearch.jsx result-card layout */}
                       <div
                         style={{
                           backgroundColor: "white",
@@ -623,7 +728,13 @@ export default function DayStaySearch() {
                       >
                         <Row className="g-0">
                           <Col md={4}>
-                            <div style={{ padding: "15px" }}>
+                            <div
+                              style={{
+                                position: "relative",
+                                height: "100%",
+                                padding: "15px",
+                              }}
+                            >
                               <img
                                 src={
                                   hotel.hotelImage ||
@@ -632,11 +743,40 @@ export default function DayStaySearch() {
                                 alt={hotel.hotelName}
                                 style={{
                                   width: "100%",
-                                  height: "180px",
+                                  height: "100%",
                                   objectFit: "cover",
                                   borderRadius: "9px",
+                                  minHeight: "180px",
                                 }}
                               />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: "25px",
+                                  left: "25px",
+                                  backgroundColor: "rgba(0,0,0,0.7)",
+                                  color: "white",
+                                  padding: "5px 10px",
+                                  borderRadius: "15px",
+                                  fontSize: "12px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "5px",
+                                }}
+                              >
+                                <FaStar className="text-warning" />
+                                {hotel.starRating || 0}
+                                <span
+                                  style={{
+                                    marginLeft: "5px",
+                                    backgroundColor: "#6c757d",
+                                    padding: "2px 6px",
+                                    borderRadius: "10px",
+                                  }}
+                                >
+                                  DAY STAY
+                                </span>
+                              </div>
                             </div>
                           </Col>
                           <Col md={8}>
@@ -646,33 +786,76 @@ export default function DayStaySearch() {
                                   fontSize: "1.0rem",
                                   fontWeight: "600",
                                   marginBottom: "8px",
+                                  color: "#333",
                                 }}
                               >
-                                {hotel.hotelName || "Hotel"}
-                                {hotel.starRating > 0 && (
-                                  <span className="ms-2 text-warning small">
-                                    <FaStar /> {hotel.starRating}
-                                  </span>
-                                )}
+                                {hotel.hotelName || "Hotel Name Not Available"}
                               </h6>
+
                               <p
                                 style={{
                                   fontSize: "0.875rem",
                                   color: "#666",
-                                  marginBottom: "4px",
+                                  marginBottom: "8px",
                                 }}
                               >
-                                📍 {hotel.hotelAddress || hotel.city || "—"}
+                                📍{" "}
+                                {hotel.hotelAddress ||
+                                  hotel.city ||
+                                  "Address Not Available"}
                               </p>
-                              <Badge bg="info" className="me-2">
-                                Day Stay Window: {hotel.checkInStartTime} –{" "}
-                                {hotel.checkInEndTime}
-                              </Badge>
-                              {pct > 0 && (
-                                <Badge bg="warning" text="dark">
-                                  +{pct}% markup
-                                </Badge>
+
+                              {cats.length > 0 && (
+                                <div className="mb-2">
+                                  <small className="text-muted me-2">
+                                    Categories:
+                                  </small>
+                                  {cats.map((c) => (
+                                    <Badge
+                                      key={c}
+                                      bg="light"
+                                      text="dark"
+                                      className="border me-1"
+                                      style={{ fontSize: "0.7rem" }}
+                                    >
+                                      {c}
+                                    </Badge>
+                                  ))}
+                                </div>
                               )}
+
+                              <span
+                                style={{
+                                  backgroundColor: "#28a745",
+                                  color: "white",
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  fontSize: "0.75rem",
+                                  display: "inline-block",
+                                  marginBottom: "12px",
+                                  marginRight: "6px",
+                                }}
+                              >
+                                Day Stay Window:{" "}
+                                {(hotel.checkInStartTime || "").slice(0, 5)} –{" "}
+                                {(hotel.checkInEndTime || "").slice(0, 5)}
+                              </span>
+                              {pct > 0 && (
+                                <span
+                                  style={{
+                                    backgroundColor: "#ffc107",
+                                    color: "#212529",
+                                    padding: "4px 8px",
+                                    borderRadius: "4px",
+                                    fontSize: "0.75rem",
+                                    display: "inline-block",
+                                    marginBottom: "12px",
+                                  }}
+                                >
+                                  +{pct}% markup
+                                </span>
+                              )}
+
                               <div
                                 style={{
                                   display: "flex",
@@ -683,15 +866,29 @@ export default function DayStaySearch() {
                                   borderTop: "1px solid #eee",
                                 }}
                               >
-                                <div
-                                  style={{
-                                    fontSize: "1.1rem",
-                                    fontWeight: "600",
-                                  }}
-                                >
-                                  {displayRate != null
-                                    ? `AED ${displayRate.toLocaleString()}`
-                                    : "Rate on request"}
+                                <div>
+                                  <div
+                                    style={{
+                                      fontSize: "1.1rem",
+                                      fontWeight: "600",
+                                      color: "#333",
+                                    }}
+                                  >
+                                    {displayRate != null
+                                      ? `AED ${displayRate.toLocaleString()}`
+                                      : "Rate on request"}
+                                  </div>
+                                  <small className="text-muted">
+                                    {adultsN} adult
+                                    {adultsN > 1 ? "s" : ""}
+                                    {childrenN
+                                      ? `, ${childrenN} child${
+                                          childrenN > 1 ? "ren" : ""
+                                        }`
+                                      : ""}{" "}
+                                    · {roomsN} room
+                                    {roomsN > 1 ? "s" : ""}
+                                  </small>
                                 </div>
                                 <Button
                                   size="sm"
@@ -705,24 +902,46 @@ export default function DayStaySearch() {
                                       ...prev,
                                       hotel.contractId,
                                     ]);
+                                    // Use the contract's window times as the
+                                    // actual booking check-in / check-out
+                                    // (the user's typed time is only used
+                                    // to filter which contracts match).
+                                    const cStart = (hotel.checkInStartTime || checkInTime || "")
+                                      .slice(0, 5);
+                                    const cEnd = (hotel.checkInEndTime || checkOutTime || "")
+                                      .slice(0, 5);
                                     const payload = {
                                       hotelId: hotel.hotelId,
                                       hotelName: hotel.hotelName,
                                       hotelAddress: hotel.hotelAddress,
                                       hotelImage: hotel.hotelImage,
                                       contractId: hotel.contractId,
-                                      dayStayRate: displayRate,
+                                      // All matching contract ids — room
+                                      // list shows each as its own window.
+                                      allContractIds:
+                                        hotel.allContractIds &&
+                                        hotel.allContractIds.length > 0
+                                          ? hotel.allContractIds
+                                          : [hotel.contractId],
+                                      dayStayRate: baseRate,
                                       basePctRate: pct,
+                                      minAdultRate: hotel.minAdultRate || 0,
+                                      minChildRate: hotel.minChildRate || 0,
                                       checkInDate,
-                                      checkInTime,
-                                      checkOutTime,
-                                      windowStart: hotel.checkInStartTime,
-                                      windowEnd: hotel.checkInEndTime,
+                                      // Contract window is the actual stay
+                                      // span — booking saves these times.
+                                      checkInTime: cStart,
+                                      checkOutTime: cEnd,
+                                      windowStart: cStart,
+                                      windowEnd: cEnd,
                                       agentId: agent,
                                       nationality:
                                         selectedNationality?.code || "",
+                                      nationalityLabel:
+                                        selectedNationality?.label || "",
                                       adults: Number(adults),
                                       children: Number(children),
+                                      childAges: childAges,
                                       rooms: Number(rooms),
                                     };
                                     sessionStorage.setItem(

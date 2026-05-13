@@ -97,6 +97,7 @@ import DayStayContractForm from "./pages/HotelActions/DayStay/DayStayContractFor
 import DayStaySearch from "./pages/search/daystay/DayStaySearch";
 import DayStayRoomList from "./pages/roomlist/DayStayRoomList";
 import DayStayBookingPage from "./pages/booking/daystay/DayStayBookingPage";
+import DayStayBookingList from "./pages/list/DayStayBookingList";
 import OfferZone from "./pages/OfferZone";
 import OfferImageUpload from "./pages/OfferImageUpload";
 import AgentAccounts from "./pages/inhouseAccounts/AgentAccounts";
@@ -454,6 +455,7 @@ export default function App() {
         <Route path="/new-booking/day-stay" element={<PrivateRoute><DayStaySearch /></PrivateRoute>} />
         <Route path="/day-stay-room-list" element={<PrivateRoute><DayStayRoomList /></PrivateRoute>} />
         <Route path="/day-stay-booking-page" element={<PrivateRoute><DayStayBookingPage /></PrivateRoute>} />
+        <Route path="/booking-details/day-stay-booking-list" element={<PrivateRoute><DayStayBookingList /></PrivateRoute>} />
 
         {/* promotion */}
         <Route path="/hotel-actions/:id/promotions" element={<PrivateRoute><Promotion /></PrivateRoute>} />
