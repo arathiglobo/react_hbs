@@ -249,12 +249,23 @@ const HoneymoonList = () => {
                                 </Badge>
                               )}
                             </div>
-                            <h6 className="text-success mb-3">
+                            {/* <h6 className="text-success mb-3">
                               <FaRupeeSign className="me-1" />
                               {Number(p.perPaxRate || 0).toLocaleString()}
                               <small className="text-muted"> / pax</small>
-                            </h6>
-                            <div className="mt-auto d-flex gap-2">
+                            </h6> */}
+                            <div className="mt-auto d-flex gap-2 flex-wrap">
+                              <Button
+                                variant="outline-success"
+                                size="sm"
+                                className="flex-fill rounded-pill"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/honeymoon/package-rates/${p.id}`);
+                                }}
+                              >
+                                <FaPlus className="me-1" /> Add Rates
+                              </Button>
                               <Button
                                 variant="outline-primary"
                                 size="sm"

@@ -91,6 +91,12 @@ import LastMinuteRoomList from "./pages/LastMinuteRoomList";
 import LongStayContract from "./pages/HotelActions/LongStayContract/LongStayContract";
 import CreateLongStayContract from "./pages/HotelActions/LongStayContract/CreateLongStayContract";
 import EditLongStayContract from "./pages/HotelActions/LongStayContract/EditLongStayContract";
+// Day Stay configuration & flow
+import DayStayContract from "./pages/HotelActions/DayStay/DayStayContract";
+import DayStayContractForm from "./pages/HotelActions/DayStay/DayStayContractForm";
+import DayStaySearch from "./pages/search/daystay/DayStaySearch";
+import DayStayRoomList from "./pages/roomlist/DayStayRoomList";
+import DayStayBookingPage from "./pages/booking/daystay/DayStayBookingPage";
 import OfferZone from "./pages/OfferZone";
 import OfferImageUpload from "./pages/OfferImageUpload";
 import AgentAccounts from "./pages/inhouseAccounts/AgentAccounts";
@@ -199,6 +205,7 @@ import HoneymoonSearch from "./pages/honeymoon/HoneymoonSearch";
 import HoneymoonViewPage from "./pages/honeymoon/HoneymoonViewPage";
 import HoneymoonBooking from "./pages/honeymoon/HoneymoonBooking";
 import HoneymoonBookingList from "./pages/honeymoon/HoneymoonBookingList";
+import HoneyMoonPackageRates from "./pages/honeymoon/HoneyMoonPackageRates";
 
 
 export default function App() {
@@ -408,6 +415,7 @@ export default function App() {
         <Route path="/honeymoon/list" element={<PrivateRoute><HoneymoonList /></PrivateRoute>} />
         <Route path="/honeymoon/view/:id" element={<PrivateRoute><HoneymoonViewPage /></PrivateRoute>} />
         <Route path="/honeymoon/book" element={<PrivateRoute><HoneymoonBooking /></PrivateRoute>} />
+        <Route path="/honeymoon/package-rates/:id" element={<PrivateRoute><HoneyMoonPackageRates /></PrivateRoute>} />
         <Route path="/new-booking/honeymoon" element={<PrivateRoute><HoneymoonSearch /></PrivateRoute>} />
         <Route path="/booking-details/honeymoon-booking-list" element={<PrivateRoute><HoneymoonBookingList /></PrivateRoute>} />
 
@@ -438,6 +446,15 @@ export default function App() {
         <Route path="/hotel-actions/:id/24-hour-checkin" element={<PrivateRoute><Hotel24HourCheckin /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/24-hour-checkin/create" element={<PrivateRoute><Hotel24HourCheckinForm mode="create" /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/24-hour-checkin/:configId/edit" element={<PrivateRoute><Hotel24HourCheckinForm mode="edit" /></PrivateRoute>} />
+
+        {/* Day Stay — contract + booking flow */}
+        <Route path="/hotel-actions/:id/day-stay-contract" element={<PrivateRoute><DayStayContract /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/day-stay-contract/create" element={<PrivateRoute><DayStayContractForm mode="create" /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/day-stay-contract/:contractId/edit" element={<PrivateRoute><DayStayContractForm mode="edit" /></PrivateRoute>} />
+        <Route path="/new-booking/day-stay" element={<PrivateRoute><DayStaySearch /></PrivateRoute>} />
+        <Route path="/day-stay-room-list" element={<PrivateRoute><DayStayRoomList /></PrivateRoute>} />
+        <Route path="/day-stay-booking-page" element={<PrivateRoute><DayStayBookingPage /></PrivateRoute>} />
+
         {/* promotion */}
         <Route path="/hotel-actions/:id/promotions" element={<PrivateRoute><Promotion /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/promotion/special-rate/save" element={<PrivateRoute><SpecialRates /></PrivateRoute>} />

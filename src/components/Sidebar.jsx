@@ -235,6 +235,7 @@ export default function Sidebar() {
         // Last Minute Booking — Phase 2 entry (separate flow & APIs)
         { label: "Last Minute Booking", to: "/new-booking/last-minute-booking" },
         { label: "Long Stay Booking", to: "/new-booking/long-stay" },
+        { label: "Day Stay Check-In", to: "/new-booking/day-stay" },
         {
           label: "Make Your Own Package",
           to: "/new-booking/make-your-own-package",

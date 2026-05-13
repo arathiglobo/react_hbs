@@ -208,7 +208,61 @@ const HoneymoonSearch = () => {
         };
         const res = await axiosInstance.post("/api/honeymoon/search", payload);
         const data = Array.isArray(res.data) ? res.data : res.data?.content || [];
-        setResults(data);
+
+        // Enrich each package with its honeymoon-package-rate rows and a
+        // derived per-pax rate based on the requested adults/children. The
+        // legacy perPaxRate on the package row is now usually empty —
+        // displayed rate must come from the rate rows.
+        const adults = Number(form.adults) || 0;
+        const childCount = Number(form.children) || 0;
+        const enriched = await Promise.all(
+          data.map(async (pkg) => {
+            try {
+              const rr = await axiosInstance.get(
+                `/api/honeymoon-package-rate?packageId=${pkg.id}`
+              );
+              const rates = Array.isArray(rr.data) ? rr.data : [];
+              // Prefer a rate row whose noOfNights matches the package's
+              // declared nights; otherwise fall back to the first row.
+              const match =
+                rates.find(
+                  (r) =>
+                    pkg.noOfNights &&
+                    Number(r.noOfNights) === Number(pkg.noOfNights)
+                ) || rates[0];
+              if (!match) {
+                return {
+                  ...pkg,
+                  packageRates: rates,
+                  selectedRate: null,
+                  baseRate: 0,
+                  markedUpRate: 0,
+                  derivedTotal: 0,
+                };
+              }
+              const perAdult = Number(match.perAdultRate || 0);
+              const perChild = Number(match.perChildWithBed || 0);
+              const total = perAdult * adults + perChild * childCount;
+              const pax = Math.max(1, adults + childCount);
+              const perPax = pax > 0 ? total / pax : perAdult;
+              const mp = Number(payload.markupPercent || 0);
+              const marked = +(perPax * (1 + mp / 100)).toFixed(2);
+              return {
+                ...pkg,
+                packageRates: rates,
+                selectedRate: match,
+                baseRate: perPax,
+                markedUpRate: marked,
+                derivedTotal: total,
+                perPaxRate: perPax,
+                markupPercent: mp,
+              };
+            } catch {
+              return { ...pkg, packageRates: [], selectedRate: null };
+            }
+          })
+        );
+        setResults(enriched);
       } catch (err) {
         console.error(err);
         toast.error("Search failed");

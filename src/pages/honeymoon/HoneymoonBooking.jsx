@@ -39,21 +39,96 @@ const HoneymoonBooking = () => {
     rooms: sf.rooms || 1,
     adults: sf.adults || 2,
     children: sf.children || 0,
+    salutation: "Mr",
     customerName: "",
     mobile: "",
     email: "",
     specialRequest: "",
     paymentMode: "Online",
+    // Tourism Dirham — typed amount added on top of the package total. We
+    // keep it as a string so the input behaves naturally.
+    tourismDirham: "",
   });
   const [errors, setErrors] = useState({});
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Predefined add-on services for a honeymoon — agent ticks any that apply.
+  const DEFAULT_ADDONS = [
+    { key: "candleLightDinner", label: "Candle Light Dinner", price: 0 },
+    { key: "sunsetCruise", label: "Sunset Cruise", price: 0 },
+    { key: "couplesSpa", label: "Couples Spa", price: 0 },
+    { key: "privatePoolVilla", label: "Private Pool Villa Upgrade", price: 0 },
+    { key: "honeymoonCake", label: "Honeymoon Cake & Decoration", price: 0 },
+    { key: "airportTransfer", label: "Private Airport Transfer", price: 0 },
+  ];
+  const [addons, setAddons] = useState(
+    DEFAULT_ADDONS.map((a) => ({ ...a, checked: false }))
+  );
+  // Free-form custom addons — agent can add any extra item with a label
+  // and (optional) price; both are added on top of the package total.
+  const [extraServices, setExtraServices] = useState([
+    { label: "", price: "" },
+  ]);
+
+  // Rates + the hotels included in the selected package. Mirrors the
+  // /new-booking/package-booking Hotels section: hotels added in
+  // HoneyMoonPackageRates show up here, get displayed during booking, and
+  // are sent on the save payload so the booking detail view can list them.
+  const [rates, setRates] = useState([]);
+  const [includedHotels, setIncludedHotels] = useState([]);
+  const [selectedRate, setSelectedRate] = useState(pkg?.selectedRate || null);
+
   useEffect(() => {
     if (!pkg) {
       toast.error("Please select a package first.");
       navigate("/new-booking/honeymoon");
+      return;
     }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await axiosInstance.get(
+          `/api/honeymoon-package-rate?packageId=${pkg.id}`
+        );
+        const rows = Array.isArray(r.data) ? r.data : [];
+        if (cancelled) return;
+        setRates(rows);
+        if (!selectedRate) {
+          const match =
+            rows.find(
+              (rt) =>
+                pkg?.noOfNights &&
+                Number(rt.noOfNights) === Number(pkg.noOfNights)
+            ) || rows[0] || null;
+          setSelectedRate(match);
+        }
+        // Dedup hotels by hotelId — package-level inclusion list.
+        const seen = new Map();
+        rows.forEach((row) => {
+          (row.hotels || []).forEach((h) => {
+            if (!seen.has(h.hotelId)) {
+              seen.set(h.hotelId, {
+                hotelId: h.hotelId,
+                hotelName: h.hotelName || `Hotel #${h.hotelId}`,
+                placeName: row.placeName || "",
+                countryName: row.countryName || "",
+                noOfNights: row.noOfNights || null,
+              });
+            }
+          });
+        });
+        setIncludedHotels(Array.from(seen.values()));
+      } catch {
+        if (!cancelled) {
+          setRates([]);
+          setIncludedHotels([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [pkg, navigate]);
 
   if (!pkg) return null;
@@ -71,6 +146,7 @@ const HoneymoonBooking = () => {
       e.startingDate = "Date cannot be in the past";
     if (!form.rooms || Number(form.rooms) < 1) e.rooms = "At least 1 room";
     if (!form.adults || Number(form.adults) < 1) e.adults = "At least 1 adult";
+    if (!form.salutation) e.salutation = "Salutation is required";
     if (!form.customerName.trim()) e.customerName = "Customer name is required";
     if (!form.mobile.trim()) e.mobile = "Mobile is required";
     else if (!/^[0-9+\-\s]{7,15}$/.test(form.mobile)) e.mobile = "Invalid mobile";
@@ -79,16 +155,56 @@ const HoneymoonBooking = () => {
   };
 
   const computeTotals = () => {
-    const perPax = Number(pkg.baseRate ?? pkg.perPaxRate ?? 0);
-    const pax = Number(form.adults) + Number(form.children);
-    const baseTotal = perPax * pax;
+    const adults = Number(form.adults) || 0;
+    const childCount = Number(form.children) || 0;
+    const pax = Math.max(1, adults + childCount);
+
+    // Pricing now comes from the package rate row (HoneymoonPackageRate).
+    // Fall back to the legacy perPaxRate if no rate row is available.
+    let baseTotal;
+    let perPax;
+    if (selectedRate) {
+      const perAdult = Number(selectedRate.perAdultRate || 0);
+      const perChild = Number(selectedRate.perChildWithBed || 0);
+      baseTotal = perAdult * adults + perChild * childCount;
+      perPax = pax > 0 ? baseTotal / pax : perAdult;
+    } else {
+      perPax = Number(pkg.baseRate ?? pkg.perPaxRate ?? 0);
+      baseTotal = perPax * pax;
+    }
+
     const markupPct = Number(pkg.markupPercent ?? 0);
     const markupAmount = (baseTotal * markupPct) / 100;
     const taxPct = 5;
     const taxable = baseTotal + markupAmount;
     const taxAmount = (taxable * taxPct) / 100;
-    const grandTotal = taxable + taxAmount;
-    return { perPax, pax, baseTotal, markupPct, markupAmount, taxPct, taxAmount, grandTotal };
+
+    // Add-on services
+    const addonsTotal = addons
+      .filter((a) => a.checked)
+      .reduce((s, a) => s + (Number(a.price) || 0), 0);
+    const extrasTotal = extraServices.reduce(
+      (s, e) => s + (Number(e.price) || 0),
+      0
+    );
+    const tourismDirham = Number(form.tourismDirham) || 0;
+    const addonsGrand = addonsTotal + extrasTotal + tourismDirham;
+
+    const grandTotal = taxable + taxAmount + addonsGrand;
+    return {
+      perPax,
+      pax,
+      baseTotal,
+      markupPct,
+      markupAmount,
+      taxPct,
+      taxAmount,
+      addonsTotal,
+      extrasTotal,
+      tourismDirham,
+      addonsGrand,
+      grandTotal,
+    };
   };
 
   const handleSubmit = (e) => {
@@ -113,6 +229,7 @@ const HoneymoonBooking = () => {
         rooms: Number(form.rooms),
         adults: Number(form.adults),
         children: Number(form.children),
+        salutation: form.salutation,
         customerName: form.customerName,
         mobile: form.mobile,
         email: form.email,
@@ -123,6 +240,18 @@ const HoneymoonBooking = () => {
         markupPercent: markupPct,
         taxPercent: taxPct,
         paymentMode: form.paymentMode,
+        // Persisted on the booking so the detail view shows which hotels
+        // were part of the package the agent booked.
+        selectedHotels: includedHotels,
+        // Add-on services + tourism dirham — added on top of the package
+        // total on the server side too (see HoneymoonBookingServiceImpl).
+        addons: addons
+          .filter((a) => a.checked)
+          .map((a) => ({ label: a.label, price: Number(a.price) || 0 })),
+        extraServices: extraServices
+          .filter((e) => (e.label || "").trim())
+          .map((e) => ({ label: e.label.trim(), price: Number(e.price) || 0 })),
+        tourismDirham: Number(form.tourismDirham) || 0,
       };
       const res = await axiosInstance.post("/api/honeymoon/booking/save", payload);
       setSummaryOpen(false);
@@ -196,55 +325,74 @@ const HoneymoonBooking = () => {
                     </Card.Body>
                   </Card>
 
+                  {/* Included hotels — mirror of /new-booking/package-booking Hotels section */}
+                  <Card className="mb-3 shadow-sm">
+                    <Card.Header className="bg-white fw-semibold">
+                      Hotels Included in this Package
+                    </Card.Header>
+                    <Card.Body>
+                      {includedHotels.length === 0 ? (
+                        <div className="text-muted small">
+                          No hotels have been added to this honeymoon package yet.
+                          Configure them under Honeymoon → Add Rates.
+                        </div>
+                      ) : (
+                        <Row className="g-3">
+                          {includedHotels.map((h) => (
+                            <Col key={h.hotelId} md={6}>
+                              <div
+                                style={{
+                                  border: "1px solid #e9ecef",
+                                  borderRadius: 8,
+                                  padding: 12,
+                                  background: "#fafbfd",
+                                }}
+                              >
+                                <div className="d-flex justify-content-between align-items-start">
+                                  <h6 className="mb-1">{h.hotelName}</h6>
+                                  <Badge bg="success" style={{ fontSize: "0.65rem" }}>
+                                    Included
+                                  </Badge>
+                                </div>
+                                <div className="text-muted small">
+                                  {[h.placeName, h.countryName]
+                                    .filter(Boolean)
+                                    .join(", ") || "—"}
+                                </div>
+                                {h.noOfNights ? (
+                                  <Badge bg="light" text="dark" className="mt-2 border">
+                                    {h.noOfNights} Night(s)
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            </Col>
+                          ))}
+                        </Row>
+                      )}
+                    </Card.Body>
+                  </Card>
+
                   <Card className="mb-3 shadow-sm">
                     <Card.Header className="bg-white fw-semibold">Travel Details</Card.Header>
                     <Card.Body>
                       <Row className="g-3">
                         <Col md={4}>
-                          <Form.Label>Starting Date *</Form.Label>
-                          <Form.Control
-                            type="date"
-                            name="startingDate"
-                            value={form.startingDate}
-                            onChange={handleChange}
-                            min={new Date().toISOString().slice(0, 10)}
-                            isInvalid={!!errors.startingDate}
-                          />
-                          <Form.Control.Feedback type="invalid">{errors.startingDate}</Form.Control.Feedback>
+                          <div className="text-muted small mb-1">Starting Date</div>
+                          <div className="fw-semibold">
+                            {form.startingDate || "—"}
+                          </div>
                         </Col>
                         <Col md={2}>
-                          <Form.Label>Rooms *</Form.Label>
-                          <Form.Control
-                            type="number"
-                            min={1}
-                            name="rooms"
-                            value={form.rooms}
-                            onChange={handleChange}
-                            isInvalid={!!errors.rooms}
-                          />
-                          <Form.Control.Feedback type="invalid">{errors.rooms}</Form.Control.Feedback>
+                          <div className="text-muted small mb-1">Rooms</div>
+                          <div className="fw-semibold">{form.rooms}</div>
                         </Col>
                         <Col md={3}>
-                          <Form.Label>Adults *</Form.Label>
-                          <Form.Control
-                            type="number"
-                            min={1}
-                            name="adults"
-                            value={form.adults}
-                            onChange={handleChange}
-                            isInvalid={!!errors.adults}
-                          />
-                          <Form.Control.Feedback type="invalid">{errors.adults}</Form.Control.Feedback>
+                          <div className="text-muted small mb-1">Adults</div>
+                          <div className="fw-semibold">{form.adults}</div>
                         </Col>
                         <Col md={3}>
-                          <Form.Label>Children</Form.Label>
-                          <Form.Control
-                            type="number"
-                            min={0}
-                            name="children"
-                            value={form.children}
-                            onChange={handleChange}
-                          />
+                          <div className="text-muted small mb-1">Children</div>
+                          <div className="fw-semibold">{form.children}</div>
                         </Col>
                       </Row>
                     </Card.Body>
@@ -254,6 +402,23 @@ const HoneymoonBooking = () => {
                     <Card.Header className="bg-white fw-semibold">Customer Details</Card.Header>
                     <Card.Body>
                       <Row className="g-3">
+                        <Col md={2}>
+                          <Form.Label>Salutation *</Form.Label>
+                          <Form.Select
+                            name="salutation"
+                            value={form.salutation}
+                            onChange={handleChange}
+                            isInvalid={!!errors.salutation}
+                          >
+                            <option value="Mr">Mr</option>
+                            <option value="Mrs">Mrs</option>
+                            <option value="Ms">Ms</option>
+                            <option value="Miss">Miss</option>
+                            <option value="Dr">Dr</option>
+                            <option value="Mr & Mrs">Mr &amp; Mrs</option>
+                          </Form.Select>
+                          <Form.Control.Feedback type="invalid">{errors.salutation}</Form.Control.Feedback>
+                        </Col>
                         <Col md={4}>
                           <Form.Label>Customer Name *</Form.Label>
                           <Form.Control
@@ -264,7 +429,7 @@ const HoneymoonBooking = () => {
                           />
                           <Form.Control.Feedback type="invalid">{errors.customerName}</Form.Control.Feedback>
                         </Col>
-                        <Col md={4}>
+                        <Col md={3}>
                           <Form.Label>Mobile *</Form.Label>
                           <Form.Control
                             name="mobile"
@@ -274,7 +439,7 @@ const HoneymoonBooking = () => {
                           />
                           <Form.Control.Feedback type="invalid">{errors.mobile}</Form.Control.Feedback>
                         </Col>
-                        <Col md={4}>
+                        <Col md={3}>
                           <Form.Label>Email</Form.Label>
                           <Form.Control
                             type="email"
@@ -308,49 +473,219 @@ const HoneymoonBooking = () => {
                       </Row>
                     </Card.Body>
                   </Card>
+
+                  {/* Add-on Services card — checkboxes for common honeymoon
+                      addons, free-form rows for custom items, and Tourism
+                      Dirham. All three contribute to the grand total. */}
+                  <Card className="mb-3 shadow-sm">
+                    <Card.Header className="bg-white fw-semibold">
+                      Add-on Services
+                    </Card.Header>
+                    <Card.Body>
+                      <Row className="g-3">
+                        {addons.map((a, idx) => (
+                          <Col md={6} key={a.key}>
+                            <div className="d-flex align-items-center gap-2">
+                              <Form.Check
+                                type="checkbox"
+                                id={`hm-addon-${a.key}`}
+                                label={a.label}
+                                checked={a.checked}
+                                onChange={(e) =>
+                                  setAddons((prev) =>
+                                    prev.map((x, i) =>
+                                      i === idx
+                                        ? { ...x, checked: e.target.checked }
+                                        : x
+                                    )
+                                  )
+                                }
+                              />
+                              <Form.Control
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                placeholder="Price"
+                                value={a.price}
+                                disabled={!a.checked}
+                                onChange={(e) =>
+                                  setAddons((prev) =>
+                                    prev.map((x, i) =>
+                                      i === idx
+                                        ? { ...x, price: e.target.value }
+                                        : x
+                                    )
+                                  )
+                                }
+                                style={{ maxWidth: 140 }}
+                              />
+                            </div>
+                          </Col>
+                        ))}
+                      </Row>
+
+                      <hr />
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <strong>Additional Services</strong>
+                        <Button
+                          size="sm"
+                          variant="outline-success"
+                          onClick={() =>
+                            setExtraServices((p) => [...p, { label: "", price: "" }])
+                          }
+                        >
+                          + Add Service
+                        </Button>
+                      </div>
+                      {extraServices.map((row, i) => (
+                        <Row className="g-2 mb-2 align-items-center" key={i}>
+                          <Col md={7}>
+                            <Form.Control
+                              placeholder="Service name (e.g. Champagne welcome)"
+                              value={row.label}
+                              onChange={(e) =>
+                                setExtraServices((p) =>
+                                  p.map((x, idx) =>
+                                    idx === i ? { ...x, label: e.target.value } : x
+                                  )
+                                )
+                              }
+                            />
+                          </Col>
+                          <Col md={4}>
+                            <Form.Control
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              placeholder="Price"
+                              value={row.price}
+                              onChange={(e) =>
+                                setExtraServices((p) =>
+                                  p.map((x, idx) =>
+                                    idx === i ? { ...x, price: e.target.value } : x
+                                  )
+                                )
+                              }
+                            />
+                          </Col>
+                          <Col md={1} className="text-end">
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              disabled={extraServices.length === 1}
+                              onClick={() =>
+                                setExtraServices((p) =>
+                                  p.length === 1
+                                    ? p
+                                    : p.filter((_, idx) => idx !== i)
+                                )
+                              }
+                            >
+                              ×
+                            </Button>
+                          </Col>
+                        </Row>
+                      ))}
+
+                      <hr />
+                      <Row className="g-2 align-items-center">
+                        <Col md={6}>
+                          <Form.Label className="mb-0 fw-semibold">
+                            Tourism Dirham
+                          </Form.Label>
+                          <div className="text-muted small">
+                            Government tourism fee — added to the package total.
+                          </div>
+                        </Col>
+                        <Col md={6}>
+                          <Form.Control
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            name="tourismDirham"
+                            placeholder="0.00"
+                            value={form.tourismDirham}
+                            onChange={handleChange}
+                          />
+                        </Col>
+                      </Row>
+                    </Card.Body>
+                  </Card>
                 </Col>
 
                 <Col lg={4}>
-                  <Card className="shadow-sm sticky-top" style={{ top: 80 }}>
-                    <Card.Header className="bg-danger text-white fw-semibold">
-                      <FaSuitcaseRolling className="me-2" /> Price Summary
-                    </Card.Header>
-                    <Card.Body>
-                      <h6 className="mb-2">{pkg.packageName}</h6>
-                      <div className="small text-muted mb-3">{pkg.destination}</div>
-                      <div className="d-flex justify-content-between small">
-                        <span>Per pax</span>
-                        <span>₹ {totals.perPax.toLocaleString()}</span>
-                      </div>
-                      <div className="d-flex justify-content-between small">
-                        <span>Pax</span>
-                        <span>{totals.pax}</span>
-                      </div>
-                      <hr />
-                      <div className="d-flex justify-content-between">
-                        <span>Base Total</span>
-                        <span>₹ {totals.baseTotal.toLocaleString()}</span>
-                      </div>
-                      {totals.markupPct > 0 && (
-                        <div className="d-flex justify-content-between text-info small">
-                          <span>Markup ({totals.markupPct}%)</span>
-                          <span>+ ₹ {totals.markupAmount.toFixed(2)}</span>
+                  <div className="sticky-top" style={{ top: 80 }}>
+                    <Card className="shadow-sm">
+                      <Card.Header className="bg-danger text-white fw-semibold">
+                        <FaSuitcaseRolling className="me-2" /> Price Summary
+                      </Card.Header>
+                      <Card.Body>
+                        <h6 className="mb-2">{pkg.packageName}</h6>
+                        <div className="small text-muted mb-3">{pkg.destination}</div>
+                        <div className="d-flex justify-content-between small">
+                          <span>Per pax</span>
+                          <span>₹ {totals.perPax.toLocaleString()}</span>
                         </div>
-                      )}
-                      <div className="d-flex justify-content-between text-muted small">
-                        <span>Tax ({totals.taxPct}%)</span>
-                        <span>₹ {totals.taxAmount.toFixed(2)}</span>
-                      </div>
-                      <hr />
-                      <div className="d-flex justify-content-between fs-5 fw-bold">
-                        <span>Total</span>
-                        <span className="text-success">₹ {totals.grandTotal.toFixed(2)}</span>
-                      </div>
-                    </Card.Body>
-                  </Card>
-                  <Button type="submit" variant="primary" size="lg" className="w-100 mt-3 rounded-pill" disabled={saving}>
-                    <FaCheck className="me-2" /> Review &amp; Submit
-                  </Button>
+                        <div className="d-flex justify-content-between small">
+                          <span>Pax</span>
+                          <span>{totals.pax}</span>
+                        </div>
+                        <hr />
+                        <div className="d-flex justify-content-between">
+                          <span>Base Total</span>
+                          <span>₹ {totals.baseTotal.toLocaleString()}</span>
+                        </div>
+                        {totals.markupPct > 0 && (
+                          <div className="d-flex justify-content-between text-info small">
+                            <span>Markup ({totals.markupPct}%)</span>
+                            <span>+ ₹ {totals.markupAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="d-flex justify-content-between text-muted small">
+                          <span>Tax ({totals.taxPct}%)</span>
+                          <span>₹ {totals.taxAmount.toFixed(2)}</span>
+                        </div>
+                        {(totals.addonsTotal > 0 ||
+                          totals.extrasTotal > 0 ||
+                          totals.tourismDirham > 0) && (
+                          <>
+                            {totals.addonsTotal > 0 && (
+                              <div className="d-flex justify-content-between small text-primary">
+                                <span>Add-ons</span>
+                                <span>+ ₹ {totals.addonsTotal.toFixed(2)}</span>
+                              </div>
+                            )}
+                            {totals.extrasTotal > 0 && (
+                              <div className="d-flex justify-content-between small text-primary">
+                                <span>Extra Services</span>
+                                <span>+ ₹ {totals.extrasTotal.toFixed(2)}</span>
+                              </div>
+                            )}
+                            {totals.tourismDirham > 0 && (
+                              <div className="d-flex justify-content-between small text-primary">
+                                <span>Tourism Dirham</span>
+                                <span>+ ₹ {totals.tourismDirham.toFixed(2)}</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        <hr />
+                        <div className="d-flex justify-content-between fs-5 fw-bold">
+                          <span>Total</span>
+                          <span className="text-success">₹ {totals.grandTotal.toFixed(2)}</span>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="lg"
+                      className="w-100 mt-3 rounded-pill"
+                      disabled={saving}
+                    >
+                      <FaCheck className="me-2" /> Review &amp; Submit
+                    </Button>
+                  </div>
                 </Col>
               </Row>
             </Form>

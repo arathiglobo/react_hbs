@@ -62,13 +62,20 @@ const parseList = (raw) => {
 const initialState = {
   packageName: "",
   packageCode: "",
-  startingFrom: null, // react-select option from /api/province
-  destination: null,  // react-select option
-  country: null,       // react-select option
+  // NOTE: legacy fields (startingFrom, destination, country, totalRate,
+  // perPaxRate) removed per spec — Honeymoon now uses arriveCountry +
+  // arrivePlace and the per-package rate rows from HoneyMoonPackageRates.
+  // We keep `country` so the day-wise itinerary place lookup still works.
+  country: null, // react-select option (used only by day place lookup)
+  // Arriving country + place (replaces the old startingFrom/destination).
+  arriveCountry: null,
+  arrivePlace: null,
+  // Inclusion checkboxes — what the package contains.
+  includeHotel: false,
+  includeCab: false,
+  includeActivity: false,
   noOfNights: 5,
   noOfDays: 6,
-  totalRate: "",
-  perPaxRate: "",
   currencyId: "",
   currencyCode: "INR",
   overview: "",
@@ -119,6 +126,11 @@ const HoneymoonRegistration = () => {
   const [currencies, setCurrencies] = useState([]);
   const [hotelCategories, setHotelCategories] = useState([]);
   const [mealPlans, setMealPlans] = useState([]);
+  // Arrive-place options loaded from /api/province?countryId=… once an
+  // Arrive Country is picked. Mirrors PackageReg behaviour.
+  const [arrivePlaceOptions, setArrivePlaceOptions] = useState([]);
+  const [arrivePlaceLoading, setArrivePlaceLoading] = useState(false);
+  const arrivePlaceDebounceRef = useRef(null);
 
   // Load reference data on mount.
   useEffect(() => {
@@ -218,17 +230,24 @@ const HoneymoonRegistration = () => {
           ...p,
           packageName: d.packageName || "",
           packageCode: d.packageCode || "",
-          startingFrom: d.startingFrom
-            ? { value: 0, label: d.startingFrom, stateName: d.startingFrom }
+          // legacy `country` field still used by the day-wise itinerary
+          // place lookup — fall back to arriveCountryName.
+          country: d.country
+            ? { value: 0, label: d.country, code: "" }
+            : d.arriveCountryName
+            ? { value: d.arriveCountryId || 0, label: d.arriveCountryName, code: "" }
             : null,
-          destination: d.destination
-            ? { value: 0, label: d.destination, stateName: d.destination, country: d.country }
+          arriveCountry: d.arriveCountryId
+            ? { value: d.arriveCountryId, label: d.arriveCountryName || "" }
             : null,
-          country: d.country ? { value: 0, label: d.country, code: "" } : null,
+          arrivePlace: d.arrivePlaceId
+            ? { value: d.arrivePlaceId, label: d.arrivePlaceName || "" }
+            : null,
+          includeHotel: !!d.containHotel,
+          includeCab: !!d.containCab,
+          includeActivity: !!d.containActivity,
           noOfNights: d.noOfNights || 5,
           noOfDays: d.noOfDays || 6,
-          totalRate: d.totalRate || "",
-          perPaxRate: d.perPaxRate || "",
           currencyCode: d.currency || "INR",
           overview: d.overview || "",
           highlights: d.highlights || "",
@@ -361,14 +380,48 @@ const HoneymoonRegistration = () => {
   const updateRow = (setter, i, val) =>
     setter((p) => p.map((row, idx) => (idx === i ? val : row)));
 
+  // Load places for the selected Arrive Country (used by the new Arrive
+  // Place dropdown — same /api/province?countryId=… endpoint PackageReg uses).
+  const loadArrivePlaces = async (countryId, search = "") => {
+    if (!countryId) {
+      setArrivePlaceOptions([]);
+      return;
+    }
+    setArrivePlaceLoading(true);
+    try {
+      const r = await axiosInstance.get(
+        `/api/province?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(
+          search
+        )}`
+      );
+      const rows = Array.isArray(r.data) ? r.data : [];
+      setArrivePlaceOptions(
+        rows.map((p) => ({
+          value: p.id,
+          label: p.name || p.stateName,
+        }))
+      );
+    } catch {
+      setArrivePlaceOptions([]);
+    } finally {
+      setArrivePlaceLoading(false);
+    }
+  };
+
+  const handleArriveCountryChange = (opt) => {
+    setField("arriveCountry", opt);
+    setField("arrivePlace", null);
+    // Keep `country` mirrored so day-wise place lookup keeps working.
+    setField("country", opt ? { value: opt.value, label: opt.label, code: "" } : null);
+    setArrivePlaceOptions([]);
+    if (opt?.value) loadArrivePlaces(opt.value);
+  };
+
   const validate = () => {
     const err = {};
     if (!formData.packageName.trim()) err.packageName = "Package name is required";
-    if (!formData.destination) err.destination = "Destination is required";
-    if (!formData.startingFrom) err.startingFrom = "Starting from is required";
-    if (!formData.country) err.country = "Country is required";
-    if (!formData.totalRate && !formData.perPaxRate)
-      err.perPaxRate = "Either total or per-pax rate required";
+    if (!formData.arriveCountry) err.arriveCountry = "Arrive Country is required";
+    if (!formData.arrivePlace) err.arrivePlace = "Arrive Place is required";
     if (!formData.noOfNights || Number(formData.noOfNights) < 1)
       err.noOfNights = "At least 1 night";
     if (!isEdit && !images.length) err.images = "Upload at least 1 image";
@@ -395,13 +448,20 @@ const HoneymoonRegistration = () => {
       const data = {
         packageName: formData.packageName,
         packageCode: formData.packageCode,
-        startingFrom: formData.startingFrom?.stateName || formData.startingFrom?.label || "",
-        destination: formData.destination?.stateName || formData.destination?.label || "",
-        country: formData.country?.label || "",
+        // legacy text fields removed from the form — leave blank.
+        startingFrom: "",
+        destination: "",
+        country: formData.country?.label || formData.arriveCountry?.label || "",
+        // New: arriveCountry + arrivePlace + include flags.
+        arriveCountryId: formData.arriveCountry?.value || null,
+        arriveCountryName: formData.arriveCountry?.label || null,
+        arrivePlaceId: formData.arrivePlace?.value || null,
+        arrivePlaceName: formData.arrivePlace?.label || null,
+        containHotel: !!formData.includeHotel,
+        containCab: !!formData.includeCab,
+        containActivity: !!formData.includeActivity,
         noOfNights: Number(formData.noOfNights) || null,
         noOfDays: Number(formData.noOfDays) || null,
-        totalRate: formData.totalRate || null,
-        perPaxRate: formData.perPaxRate || null,
         currency: formData.currencyCode || "INR",
         overview: formData.overview,
         highlights: formData.highlights,
@@ -530,69 +590,74 @@ const HoneymoonRegistration = () => {
                     </Col>
 
                     <Col md={4}>
-                      <Form.Label>Starting From *</Form.Label>
-                      <Select
-                        options={fromOptions}
-                        value={formData.startingFrom}
-                        onChange={(opt) => setField("startingFrom", opt)}
-                        onInputChange={(input, meta) => {
-                          if (meta.action === "input-change") searchStartingFrom(input);
-                        }}
-                        isLoading={fromLoading}
-                        isClearable
-                        placeholder="Search origin city..."
-                        noOptionsMessage={({ inputValue }) =>
-                          inputValue && inputValue.length < 2
-                            ? "Type at least 2 characters"
-                            : fromLoading
-                            ? "Searching..."
-                            : "No matches"
-                        }
-                        styles={rsStyles(!!errors.startingFrom)}
-                      />
-                      {errors.startingFrom && (
-                        <div className="text-danger small mt-1">{errors.startingFrom}</div>
-                      )}
-                    </Col>
-                    <Col md={4}>
-                      <Form.Label>Destination *</Form.Label>
-                      <Select
-                        options={destOptions}
-                        value={formData.destination}
-                        onChange={(opt) => setField("destination", opt)}
-                        onInputChange={(input, meta) => {
-                          if (meta.action === "input-change") searchDestinations(input);
-                        }}
-                        isLoading={destLoading}
-                        isClearable
-                        placeholder="Search destination..."
-                        noOptionsMessage={({ inputValue }) =>
-                          inputValue && inputValue.length < 2
-                            ? "Type at least 2 characters"
-                            : destLoading
-                            ? "Searching..."
-                            : "No matches"
-                        }
-                        styles={rsStyles(!!errors.destination)}
-                      />
-                      {errors.destination && (
-                        <div className="text-danger small mt-1">{errors.destination}</div>
-                      )}
-                    </Col>
-                    <Col md={4}>
-                      <Form.Label>Country *</Form.Label>
+                      <Form.Label>Arrive Country *</Form.Label>
                       <Select
                         options={countries}
-                        value={formData.country}
-                        onChange={(opt) => setField("country", opt)}
+                        value={formData.arriveCountry}
+                        onChange={handleArriveCountryChange}
                         isLoading={countriesLoading}
                         isClearable
-                        placeholder="Select country"
-                        styles={rsStyles(!!errors.country)}
+                        placeholder="Select arriving country"
+                        styles={rsStyles(!!errors.arriveCountry)}
                       />
-                      {errors.country && (
-                        <div className="text-danger small mt-1">{errors.country}</div>
+                      {errors.arriveCountry && (
+                        <div className="text-danger small mt-1">{errors.arriveCountry}</div>
                       )}
+                    </Col>
+                    <Col md={4}>
+                      <Form.Label>Arrive Place *</Form.Label>
+                      <Select
+                        options={arrivePlaceOptions}
+                        value={formData.arrivePlace}
+                        onChange={(opt) => setField("arrivePlace", opt)}
+                        onInputChange={(input, meta) => {
+                          if (meta.action !== "input-change") return;
+                          if (arrivePlaceDebounceRef.current)
+                            clearTimeout(arrivePlaceDebounceRef.current);
+                          arrivePlaceDebounceRef.current = setTimeout(() => {
+                            if (formData.arriveCountry?.value)
+                              loadArrivePlaces(formData.arriveCountry.value, input);
+                          }, 400);
+                        }}
+                        isLoading={arrivePlaceLoading}
+                        isClearable
+                        isDisabled={!formData.arriveCountry}
+                        placeholder={
+                          !formData.arriveCountry
+                            ? "Select arrive country first"
+                            : "Search and select place"
+                        }
+                        styles={rsStyles(!!errors.arrivePlace)}
+                      />
+                      {errors.arrivePlace && (
+                        <div className="text-danger small mt-1">{errors.arrivePlace}</div>
+                      )}
+                    </Col>
+                    <Col md={4}>
+                      <Form.Label>Include</Form.Label>
+                      <div className="d-flex gap-3 align-items-center pt-2">
+                        <Form.Check
+                          type="checkbox"
+                          id="hm-incl-hotel"
+                          label="Hotel"
+                          checked={!!formData.includeHotel}
+                          onChange={(e) => setField("includeHotel", e.target.checked)}
+                        />
+                        <Form.Check
+                          type="checkbox"
+                          id="hm-incl-cab"
+                          label="Cab"
+                          checked={!!formData.includeCab}
+                          onChange={(e) => setField("includeCab", e.target.checked)}
+                        />
+                        <Form.Check
+                          type="checkbox"
+                          id="hm-incl-activity"
+                          label="Activity"
+                          checked={!!formData.includeActivity}
+                          onChange={(e) => setField("includeActivity", e.target.checked)}
+                        />
+                      </div>
                     </Col>
 
                     <Col md={3}>
@@ -616,26 +681,6 @@ const HoneymoonRegistration = () => {
                         value={formData.noOfDays}
                         onChange={handleChange}
                       />
-                    </Col>
-                    <Col md={3}>
-                      <Form.Label>Total Rate</Form.Label>
-                      <Form.Control
-                        type="number"
-                        name="totalRate"
-                        value={formData.totalRate}
-                        onChange={handleChange}
-                      />
-                    </Col>
-                    <Col md={3}>
-                      <Form.Label>Per Pax Rate *</Form.Label>
-                      <Form.Control
-                        type="number"
-                        name="perPaxRate"
-                        value={formData.perPaxRate}
-                        onChange={handleChange}
-                        isInvalid={!!errors.perPaxRate}
-                      />
-                      <Form.Control.Feedback type="invalid">{errors.perPaxRate}</Form.Control.Feedback>
                     </Col>
 
                     <Col md={3}>
