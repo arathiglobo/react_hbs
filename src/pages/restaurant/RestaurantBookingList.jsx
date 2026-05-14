@@ -12,22 +12,55 @@ import {
   Button,
   Modal,
 } from "react-bootstrap";
-import { FaSearch, FaCalendarAlt, FaUtensils, FaEye, FaTimes } from "react-icons/fa";
+import {
+  FaSearch,
+  FaCalendarAlt,
+  FaUtensils,
+  FaEye,
+  FaTimes,
+  FaEdit,
+  FaFileInvoice,
+  FaSyncAlt,
+} from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 
+/** Status options surfaced in the update-status modal. */
+const BOOKING_STATUS_OPTIONS = [
+  "Pending Approval",
+  "Confirmed",
+  "Completed",
+  "Cancelled",
+];
+const PAYMENT_STATUS_OPTIONS = [
+  "Not Paid",
+  "Partially Paid",
+  "Paid",
+  "Refunded",
+];
+
 const PER_PAGE = 10;
 
 const RestaurantBookingList = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
+  // The booking that's having its status edited via the modal.
+  const [statusEditing, setStatusEditing] = useState(null);
+  const [statusForm, setStatusForm] = useState({
+    bookingStatus: "",
+    paymentStatus: "",
+    note: "",
+  });
+  const [statusSaving, setStatusSaving] = useState(false);
 
   const fetchList = async () => {
     setLoading(true);
@@ -62,6 +95,89 @@ const RestaurantBookingList = () => {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const pageData = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  /** Edit → reopen the booking page with the saved fields pre-loaded.
+   *  Useful for fixing customer details / menu before approval. */
+  const handleEdit = (b) => {
+    // The booking page already restores from `incoming.restaurant` + the
+    // bookingDate/time/members it gets via location.state — pass the same
+    // shape so the UI rehydrates correctly.
+    navigate("/new-booking/restaurant/booking", {
+      state: {
+        restaurant: {
+          id: b.restaurantId,
+          restaurantName: b.restaurantName,
+          taxPercent: b.taxPercent,
+          bookingModes: "Both",
+          advanceBookingMinHours: 0,
+          images: [],
+        },
+        bookingDate: b.bookingDate,
+        bookingTime: b.bookingTime,
+        memberCount: b.memberCount,
+        agentId: b.agentId,
+        agentName: b.agentName,
+        editingBookingId: b.id,
+      },
+    });
+  };
+
+  /** Voucher → backend stub returns metadata for now. We just hit the
+   *  endpoint and show a toast / preview blob. When the PDF endpoint
+   *  lands, swap the toast for a window.open of the returned URL. */
+  const handleVoucher = async (b) => {
+    try {
+      const res = await axiosInstance.get(
+        `/api/restaurant/booking/${b.id}/voucher`
+      );
+      // If/when the backend starts returning a binary PDF, swap to a
+      // window.open(res.data.url) here.
+      Swal.fire({
+        icon: "info",
+        title: `Voucher — ${b.bookingNumber}`,
+        html:
+          `<div class="text-start">` +
+          `Booking: <strong>${res.data?.bookingNumber || b.bookingNumber}</strong><br/>` +
+          `Restaurant: ${res.data?.restaurantName || b.restaurantName}<br/>` +
+          `Customer: ${res.data?.customerName || b.customerName}<br/>` +
+          `Total: ₹ ${Number(res.data?.totalAmount || b.totalAmount || 0).toFixed(2)}<br/><br/>` +
+          `<em>${res.data?.message || "Voucher PDF is being generated…"}</em>` +
+          `</div>`,
+        confirmButtonText: "OK",
+      });
+    } catch (e) {
+      toast.error("Failed to fetch voucher details");
+    }
+  };
+
+  /** Open the status edit modal with the booking's current values. */
+  const openStatusEdit = (b) => {
+    setStatusEditing(b);
+    setStatusForm({
+      bookingStatus: b.bookingStatus || "Pending Approval",
+      paymentStatus: b.paymentStatus || "Not Paid",
+      note: "",
+    });
+  };
+
+  /** PUT /api/restaurant/booking/{id}/status with the new values. */
+  const submitStatus = async () => {
+    if (!statusEditing) return;
+    setStatusSaving(true);
+    try {
+      await axiosInstance.put(
+        `/api/restaurant/booking/${statusEditing.id}/status`,
+        statusForm
+      );
+      toast.success("Status updated");
+      setStatusEditing(null);
+      fetchList();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Failed to update status");
+    } finally {
+      setStatusSaving(false);
+    }
+  };
 
   const handleCancel = async (b) => {
     const conf = await Swal.fire({
@@ -120,8 +236,8 @@ const RestaurantBookingList = () => {
                     }}
                   >
                     <option value="all">All Statuses</option>
+                    <option value="Pending Approval">Pending Approval</option>
                     <option value="Confirmed">Confirmed</option>
-                    <option value="Pending">Pending</option>
                     <option value="Completed">Completed</option>
                     <option value="Cancelled">Cancelled</option>
                   </Form.Select>
@@ -150,7 +266,8 @@ const RestaurantBookingList = () => {
                       <th>Mobile</th>
                       <th>Total</th>
                       <th>Status</th>
-                      <th style={{ width: 130 }}>Actions</th>
+                      <th>Payment</th>
+                      <th style={{ width: 200 }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -168,19 +285,76 @@ const RestaurantBookingList = () => {
                         <td>{b.mobile}</td>
                         <td>₹ {Number(b.totalAmount || 0).toFixed(2)}</td>
                         <td>
-                          <Badge bg={statusVariant(b.bookingStatus)}>{b.bookingStatus}</Badge>
+                          {/* Status badge doubles as a "click-to-edit" button
+                              — operators commonly need to flip Pending →
+                              Confirmed after the restaurant approves. */}
+                          <Badge
+                            bg={statusVariant(b.bookingStatus)}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => openStatusEdit(b)}
+                            title="Click to update status"
+                          >
+                            {b.bookingStatus}
+                          </Badge>
                         </td>
                         <td>
+                          <Badge bg={paymentVariant(b.paymentStatus)}>
+                            {b.paymentStatus || "Not Paid"}
+                          </Badge>
+                        </td>
+                        <td>
+                          {/* View */}
                           <Button
                             size="sm"
                             variant="outline-info"
                             className="me-1"
                             onClick={() => setSelected(b)}
+                            title="View"
                           >
                             <FaEye />
                           </Button>
+                          {/* Edit — only sensible before the restaurant
+                              confirms / completes. */}
                           {b.bookingStatus !== "Cancelled" && b.bookingStatus !== "Completed" && (
-                            <Button size="sm" variant="outline-danger" onClick={() => handleCancel(b)}>
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="me-1"
+                              onClick={() => handleEdit(b)}
+                              title="Edit"
+                            >
+                              <FaEdit />
+                            </Button>
+                          )}
+                          {/* Status update — quick way to flip approval /
+                              payment state without a full edit. */}
+                          <Button
+                            size="sm"
+                            variant="outline-warning"
+                            className="me-1"
+                            onClick={() => openStatusEdit(b)}
+                            title="Update Status"
+                          >
+                            <FaSyncAlt />
+                          </Button>
+                          {/* Voucher */}
+                          <Button
+                            size="sm"
+                            variant="outline-success"
+                            className="me-1"
+                            onClick={() => handleVoucher(b)}
+                            title="Voucher"
+                          >
+                            <FaFileInvoice />
+                          </Button>
+                          {/* Cancel */}
+                          {b.bookingStatus !== "Cancelled" && b.bookingStatus !== "Completed" && (
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              onClick={() => handleCancel(b)}
+                              title="Cancel"
+                            >
                               <FaTimes />
                             </Button>
                           )}
@@ -272,6 +446,74 @@ const RestaurantBookingList = () => {
           )}
         </Modal.Body>
       </Modal>
+
+      {/* Status update modal — booking + payment status with a free-form note */}
+      <Modal
+        show={!!statusEditing}
+        onHide={() => setStatusEditing(null)}
+        centered
+        backdrop="static"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            Update Status — {statusEditing?.bookingNumber}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Row className="g-3">
+            <Col md={6}>
+              <Form.Label>Booking Status</Form.Label>
+              <Form.Select
+                value={statusForm.bookingStatus}
+                onChange={(e) =>
+                  setStatusForm((p) => ({ ...p, bookingStatus: e.target.value }))
+                }
+              >
+                {BOOKING_STATUS_OPTIONS.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col md={6}>
+              <Form.Label>Payment Status</Form.Label>
+              <Form.Select
+                value={statusForm.paymentStatus}
+                onChange={(e) =>
+                  setStatusForm((p) => ({ ...p, paymentStatus: e.target.value }))
+                }
+              >
+                {PAYMENT_STATUS_OPTIONS.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col md={12}>
+              <Form.Label>Note (optional)</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={2}
+                value={statusForm.note}
+                onChange={(e) =>
+                  setStatusForm((p) => ({ ...p, note: e.target.value }))
+                }
+                placeholder="e.g. Restaurant confirmed slot at 8 PM"
+              />
+            </Col>
+          </Row>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setStatusEditing(null)}
+            disabled={statusSaving}
+          >
+            Close
+          </Button>
+          <Button variant="primary" onClick={submitStatus} disabled={statusSaving}>
+            {statusSaving ? "Saving..." : "Save Status"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };
@@ -281,11 +523,27 @@ const statusVariant = (s) => {
     case "Confirmed":
       return "success";
     case "Pending":
+    case "Pending Approval":
       return "warning";
     case "Completed":
       return "primary";
     case "Cancelled":
       return "danger";
+    default:
+      return "secondary";
+  }
+};
+
+/** Colour code for the payment-status badge in the new Payment column. */
+const paymentVariant = (s) => {
+  switch (s) {
+    case "Paid":
+      return "success";
+    case "Partially Paid":
+      return "warning";
+    case "Refunded":
+      return "info";
+    case "Not Paid":
     default:
       return "secondary";
   }

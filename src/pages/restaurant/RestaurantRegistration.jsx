@@ -26,6 +26,7 @@ import Swal from "sweetalert2";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import Select from "react-select";
 
 /**
  * Restaurant Registration Form.
@@ -92,8 +93,18 @@ const initialState = {
   seatingCapacity: "",
   numberOfTables: "",
   dressCode: "Casual",
+  // Legacy single-text fields — kept so older flows don't break. The new
+  // UI writes into reservationPolicies / cancellationPolicies (lists)
+  // below; the single fields are populated with the first row on save
+  // for backwards compatibility.
   reservationPolicy: "",
   cancellationPolicy: "",
+  // Multi-row reservation policies — persisted as RestaurantReservationPolicy
+  // rows on the backend (restaurant_book_reservation_policy table).
+  reservationPolicies: [],
+  // Multi-row cancellation policies — persisted as RestaurantCancellationPolicy
+  // rows (restaurant_book_cancellation_policy table).
+  cancellationPolicies: [],
 
   // Amenities (boolean toggles)
   hasParking: false,
@@ -121,7 +132,33 @@ const initialState = {
   // Tax
   gstNumber: "",
   taxPercent: "",
+
+  // Destination / Province FK (from /api/destination + /api/province) —
+  // drives the Place dropdown. placeSource indicates which master table
+  // destinationId points at. The denormalised destinationName is also
+  // kept in sync so the list / search pages can render the city without
+  // an extra join.
+  destinationId: null,
+  destinationName: "",
+  placeSource: "",
+  // Currency (from /api/currency) — persisted as currencyId on the entity.
+  // We also store the human-readable currencyCode for fast list rendering.
+  currencyId: null,
+  currencyCode: "",
+  // Star rating from /api/hotelCategory — same scale that hotels use.
+  // Drives the restaurant list & search rating filter.
+  hotelCategoryId: null,
+  starRating: null,
+
+  // Weekday Offers + Special Promotions — repeater rows. Persisted as
+  // RestaurantPromotion rows on save (one row per item).
+  promotions: [], // each item: { promotionType, name, description,
+                   //              discountPercent, validFrom, validTo,
+                   //              dayMask, appliesAllDays, isActive }
 };
+
+/** Days of the week used by the WEEKDAY promotion picker. */
+const WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 const emptyMenuRow = () => ({
   menuName: "",
@@ -151,6 +188,114 @@ const RestaurantRegistration = () => {
   const [saving, setSaving] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(isEdit);
   const [previewImage, setPreviewImage] = useState(null);
+
+  // ── Currency + star-rating + destination dropdown data ────────────────
+  // Loaded once on mount. Currency from /api/currency, star ratings from
+  // /api/hotelcategory, destinations from /api/destination.
+  const [currencyOptions, setCurrencyOptions] = useState([]);
+  const [starOptions, setStarOptions] = useState([]);
+  const [destinationOptions, setDestinationOptions] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // /api/currency returns { currencyId, name, currencyCode, isDeleted }
+      try {
+        const res = await axiosInstance.get("/api/currency?page=0&limit=50");
+        const list = Array.isArray(res.data) ? res.data : res.data?.content || [];
+        if (!cancelled) {
+          setCurrencyOptions(
+            list
+              .filter((c) => !c.isDeleted)
+              .map((c) => ({
+                value: c.currencyId,
+                label: `${c.currencyCode} — ${(c.name || "").trim()}`,
+                currencyCode: c.currencyCode,
+              }))
+          );
+        }
+      } catch {
+        if (!cancelled) setCurrencyOptions([]);
+      }
+      // /api/hotelcategory shape (per spec):
+      //   [{ hotelCategoryId, hotelCategory: "3", tagLine: "3 Star", isDeleted }]
+      // The dropdown displays `tagLine`; the save payload carries
+      // `hotelCategoryId` (DB FK). `starRating` is parsed from the
+      // numeric `hotelCategory` field so the search filter can still
+      // match by numeric stars.
+      try {
+        const res = await axiosInstance.get("/api/hotelcategory?page=0&limit=10");
+        const list = Array.isArray(res.data) ? res.data : res.data?.content || [];
+        if (!cancelled) {
+          setStarOptions(
+            list
+              // Skip soft-deleted categories so the dropdown stays clean.
+              .filter((c) => !c.isDeleted)
+              .map((c) => {
+                // hotelCategory is the raw star count as a string ("3"),
+                // tagLine is the user-facing label ("3 Star"). Fall back to
+                // tagLine parsing if the API ever returns a non-numeric
+                // value in hotelCategory.
+                const parsedStars = parseInt(c.hotelCategory, 10);
+                return {
+                  value: c.hotelCategoryId,
+                  label: c.tagLine || `${c.hotelCategory} Star`,
+                  starRating: Number.isFinite(parsedStars) ? parsedStars : null,
+                };
+              })
+          );
+        }
+      } catch {
+        if (!cancelled) setStarOptions([]);
+      }
+      // Populate the Place / City dropdown from BOTH the destination
+      // master and the province master. Each option carries a
+      // `placeSource` discriminator ("DESTINATION" | "PROVINCE") so the
+      // save / search payloads can tell the two ID spaces apart.
+      try {
+        const [destRes, provRes] = await Promise.all([
+          axiosInstance.get("/api/destination?page=0&limit=10").catch(() => ({ data: [] })),
+          axiosInstance.get("/api/province?page=0&limit=10").catch(() => ({ data: [] })),
+        ]);
+        const destList = Array.isArray(destRes.data) ? destRes.data : destRes.data?.content || [];
+        const provList = Array.isArray(provRes.data) ? provRes.data : provRes.data?.content || [];
+        if (!cancelled) {
+          const destOpts = destList
+            .filter((d) => !d.isDeleted)
+            .map((d) => ({
+              value: `DESTINATION:${d.id}`,
+              id: d.id,
+              source: "DESTINATION",
+              label:
+                d.name ||
+                d.destinationName ||
+                `Destination #${d.id}`,
+            }));
+          const provOpts = provList
+            .filter((p) => !p.isDeleted)
+            .map((p) => ({
+              value: `PROVINCE:${p.id}`,
+              id: p.id,
+              source: "PROVINCE",
+              label:
+                (p.stateName || p.name || `Province #${p.id}`) +
+                (p.country ? `, ${p.country}` : ""),
+            }));
+          // Render as react-select option groups so the user sees both
+          // sources clearly when scanning the dropdown.
+          setDestinationOptions([
+            { label: "Destinations", options: destOpts },
+            { label: "Provinces", options: provOpts },
+          ]);
+        }
+      } catch {
+        if (!cancelled) setDestinationOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Prefill form when in edit mode.
   useEffect(() => {
@@ -184,6 +329,25 @@ const RestaurantRegistration = () => {
           dressCode: d.dressCode || "Casual",
           reservationPolicy: d.reservationPolicy || "",
           cancellationPolicy: d.cancellationPolicy || "",
+          // New multi-row lists. Backend returns them as
+          // d.reservationPolicies + d.cancellationPoliciesList; if a row
+          // has only the legacy single text we seed one row from it.
+          reservationPolicies: Array.isArray(d.reservationPolicies) && d.reservationPolicies.length
+            ? d.reservationPolicies.map((p) => ({
+                title: p.title || "",
+                policyText: p.policyText || "",
+                isActive: p.isActive !== false,
+              }))
+            : (d.reservationPolicy ? [{ title: "", policyText: d.reservationPolicy, isActive: true }] : []),
+          cancellationPolicies: Array.isArray(d.cancellationPoliciesList) && d.cancellationPoliciesList.length
+            ? d.cancellationPoliciesList.map((p) => ({
+                title: p.title || "",
+                policyText: p.policyText || "",
+                daysBeforeBooking: p.daysBeforeBooking ?? "",
+                chargePercent: p.chargePercent ?? "",
+                isActive: p.isActive !== false,
+              }))
+            : (d.cancellationPolicy ? [{ title: "", policyText: d.cancellationPolicy, daysBeforeBooking: "", chargePercent: "", isActive: true }] : []),
           hasParking: !!d.hasParking,
           hasWifi: !!d.hasWifi,
           hasAc: d.hasAc ?? true,
@@ -201,6 +365,32 @@ const RestaurantRegistration = () => {
           instagramUrl: d.instagramUrl || "",
           gstNumber: d.gstNumber || "",
           taxPercent: d.taxPercent ?? "",
+          // Destination / Province + currency + star rating restoration
+          destinationId: d.destinationId || null,
+          destinationName: d.destinationName || d.place || "",
+          placeSource: d.placeSource || "",
+          currencyId: d.currencyId || null,
+          currencyCode: d.currencyCode || "",
+          hotelCategoryId: d.hotelCategoryId || null,
+          starRating: d.starRating ?? null,
+          // Promotions — saved as RestaurantPromotion rows. Normalise the
+          // dayMask back into an array for the multi-select UI; the save
+          // path re-joins it before sending.
+          promotions: Array.isArray(d.promotions)
+            ? d.promotions.map((p) => ({
+                promotionType: p.promotionType || "SPECIAL",
+                name: p.name || "",
+                description: p.description || "",
+                discountPercent: p.discountPercent ?? "",
+                validFrom: p.validFrom || "",
+                validTo: p.validTo || "",
+                dayMaskList: p.dayMask
+                  ? p.dayMask.split(",").filter(Boolean)
+                  : [],
+                appliesAllDays: !!p.appliesAllDays,
+                isActive: p.isActive !== false,
+              }))
+            : [],
         });
         setExistingImages(Array.isArray(d.images) ? d.images : []);
         const menus = Array.isArray(d.menuList) && d.menuList.length
@@ -280,11 +470,117 @@ const RestaurantRegistration = () => {
     updateMenuRow(idx, "imagePreview", URL.createObjectURL(file));
   };
 
+  /* ---------- promotion rows (weekday offers + special promotions) ----- */
+  /** Append a new promotion row. `type` distinguishes WEEKDAY from SPECIAL —
+   *  the UI is largely the same but WEEKDAY surfaces day-of-week checkboxes
+   *  while SPECIAL surfaces a date range + "applies all days" toggle. */
+  const addPromotion = (type) =>
+    setFormData((prev) => ({
+      ...prev,
+      promotions: [
+        ...prev.promotions,
+        {
+          promotionType: type,
+          name: "",
+          description: "",
+          discountPercent: "",
+          validFrom: "",
+          validTo: "",
+          dayMaskList: type === "WEEKDAY" ? [] : [],
+          appliesAllDays: type === "SPECIAL",
+          isActive: true,
+        },
+      ],
+    }));
+
+  const removePromotion = (idx) =>
+    setFormData((prev) => ({
+      ...prev,
+      promotions: prev.promotions.filter((_, i) => i !== idx),
+    }));
+
+  const updatePromotion = (idx, field, value) =>
+    setFormData((prev) => ({
+      ...prev,
+      promotions: prev.promotions.map((p, i) =>
+        i === idx ? { ...p, [field]: value } : p
+      ),
+    }));
+
+  const toggleWeekdayInPromotion = (idx, day) =>
+    setFormData((prev) => ({
+      ...prev,
+      promotions: prev.promotions.map((p, i) => {
+        if (i !== idx) return p;
+        const has = p.dayMaskList.includes(day);
+        return {
+          ...p,
+          dayMaskList: has
+            ? p.dayMaskList.filter((d) => d !== day)
+            : [...p.dayMaskList, day],
+        };
+      }),
+    }));
+
+  /* ---------- reservation + cancellation policy repeaters --------------
+   * Each clause becomes a row on the backend (restaurant_book_*_policy).
+   * Helpers below are mirrors of the promotion repeater pattern. */
+  const addReservationPolicy = () =>
+    setFormData((prev) => ({
+      ...prev,
+      reservationPolicies: [
+        ...prev.reservationPolicies,
+        { title: "", policyText: "", isActive: true },
+      ],
+    }));
+  const removeReservationPolicy = (idx) =>
+    setFormData((prev) => ({
+      ...prev,
+      reservationPolicies: prev.reservationPolicies.filter((_, i) => i !== idx),
+    }));
+  const updateReservationPolicy = (idx, field, value) =>
+    setFormData((prev) => ({
+      ...prev,
+      reservationPolicies: prev.reservationPolicies.map((p, i) =>
+        i === idx ? { ...p, [field]: value } : p
+      ),
+    }));
+
+  const addCancellationPolicy = () =>
+    setFormData((prev) => ({
+      ...prev,
+      cancellationPolicies: [
+        ...prev.cancellationPolicies,
+        {
+          title: "",
+          policyText: "",
+          daysBeforeBooking: "",
+          chargePercent: "",
+          isActive: true,
+        },
+      ],
+    }));
+  const removeCancellationPolicy = (idx) =>
+    setFormData((prev) => ({
+      ...prev,
+      cancellationPolicies: prev.cancellationPolicies.filter((_, i) => i !== idx),
+    }));
+  const updateCancellationPolicy = (idx, field, value) =>
+    setFormData((prev) => ({
+      ...prev,
+      cancellationPolicies: prev.cancellationPolicies.map((p, i) =>
+        i === idx ? { ...p, [field]: value } : p
+      ),
+    }));
+
   /* ---------- validation ---------- */
   const validate = () => {
     const err = {};
     if (!formData.restaurantName.trim()) err.restaurantName = "Restaurant name is required";
-    if (!formData.place.trim()) err.place = "Place is required";
+    // Place now lives in the destination dropdown — accept either the
+    // FK (destinationId) or the legacy free-text place for older flows.
+    if (!formData.destinationId && !formData.place.trim())
+      err.place = "Place is required";
     if (!formData.address.trim()) err.address = "Address is required";
     if (!formData.contactNumber.trim()) err.contactNumber = "Contact number is required";
     else if (!/^[0-9+\-\s]{7,15}$/.test(formData.contactNumber))
@@ -334,6 +630,61 @@ const RestaurantRegistration = () => {
             // Keep the existing menu image URL when no new file was attached.
             image: undefined,
           })),
+        // Promotions — flatten the dayMaskList back into the comma string the
+        // RestaurantPromotion entity stores. Skip blank rows.
+        promotions: (formData.promotions || [])
+          .filter((p) => p.name && p.name.trim())
+          .map((p, idx) => ({
+            promotionType: p.promotionType || "SPECIAL",
+            name: p.name,
+            description: p.description || "",
+            discountPercent: p.discountPercent
+              ? Number(p.discountPercent)
+              : null,
+            validFrom: p.validFrom || null,
+            validTo: p.validTo || null,
+            dayMask: Array.isArray(p.dayMaskList) ? p.dayMaskList.join(",") : "",
+            appliesAllDays: !!p.appliesAllDays,
+            isActive: p.isActive !== false,
+            displayOrder: idx,
+          })),
+        // Multi-row policies → restaurant_book_reservation_policy /
+        // restaurant_book_cancellation_policy. Skip blank rows.
+        reservationPolicies: (formData.reservationPolicies || [])
+          .filter((p) => p.policyText && p.policyText.trim())
+          .map((p, idx) => ({
+            title: p.title || "",
+            policyText: p.policyText,
+            isActive: p.isActive !== false,
+            displayOrder: idx,
+          })),
+        cancellationPoliciesList: (formData.cancellationPolicies || [])
+          .filter((p) => p.policyText && p.policyText.trim())
+          .map((p, idx) => ({
+            title: p.title || "",
+            policyText: p.policyText,
+            daysBeforeBooking: p.daysBeforeBooking
+              ? Number(p.daysBeforeBooking)
+              : null,
+            chargePercent: p.chargePercent ? Number(p.chargePercent) : null,
+            isActive: p.isActive !== false,
+            displayOrder: idx,
+          })),
+        // Legacy mirror — first row goes into the single text fields so
+        // older code paths that read `reservationPolicy` / `cancellationPolicy`
+        // (search summaries, etc.) keep working.
+        reservationPolicy:
+          (formData.reservationPolicies || [])
+            .map((p) => p.policyText)
+            .filter((t) => t && t.trim())[0] ||
+          formData.reservationPolicy ||
+          "",
+        cancellationPolicy:
+          (formData.cancellationPolicies || [])
+            .map((p) => p.policyText)
+            .filter((t) => t && t.trim())[0] ||
+          formData.cancellationPolicy ||
+          "",
       };
       // Send as a plain string field — wrapping in Blob would make Spring
       // bind this part as a MultipartFile instead of a String.
@@ -416,16 +767,76 @@ const RestaurantRegistration = () => {
                     />
                     <Form.Control.Feedback type="invalid">{errors.restaurantName}</Form.Control.Feedback>
                   </Col>
+                  {/* Place / City — search-and-select dropdown that pulls
+                      from BOTH /api/destination and /api/province. The
+                      picked option carries an explicit `source`
+                      ("DESTINATION" or "PROVINCE") which is saved as
+                      placeSource so the backend can resolve the FK against
+                      the correct master table. The same label is mirrored
+                      into the legacy `place` text column. */}
                   <Col md={4}>
                     <Form.Label>Place / City *</Form.Label>
-                    <Form.Control
-                      name="place"
-                      value={formData.place}
-                      onChange={handleChange}
-                      isInvalid={!!errors.place}
-                      placeholder="e.g. Kochi"
+                    <Select
+                      placeholder="Search destination or province..."
+                      isClearable
+                      isSearchable
+                      options={destinationOptions}
+                      // Resolve the saved (destinationId, placeSource) back
+                      // to its option so the field shows the picked label
+                      // on edit. Falls back to a synthetic option if the
+                      // dropdown hasn't loaded yet.
+                      value={(() => {
+                        if (!formData.destinationId || !formData.placeSource) {
+                          return formData.destinationName
+                            ? {
+                                value: `legacy:${formData.destinationName}`,
+                                label: formData.destinationName,
+                              }
+                            : null;
+                        }
+                        const wantedValue = `${formData.placeSource}:${formData.destinationId}`;
+                        for (const group of destinationOptions) {
+                          const hit = (group.options || []).find(
+                            (o) => o.value === wantedValue
+                          );
+                          if (hit) return hit;
+                        }
+                        return {
+                          value: wantedValue,
+                          label: formData.destinationName,
+                          source: formData.placeSource,
+                          id: formData.destinationId,
+                        };
+                      })()}
+                      onChange={(opt) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          destinationId: opt?.id || null,
+                          destinationName: opt?.label || "",
+                          placeSource: opt?.source || "",
+                          // Mirror the picked label into `place` so legacy
+                          // text-matching keeps working.
+                          place: opt?.label || "",
+                        }));
+                        if (errors.place)
+                          setErrors((prev) => ({ ...prev, place: "" }));
+                      }}
+                      menuPortalTarget={document.body}
+                      styles={{
+                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                        control: (b) => ({
+                          ...b,
+                          borderColor: errors.place ? "#dc3545" : b.borderColor,
+                        }),
+                      }}
                     />
-                    <Form.Control.Feedback type="invalid">{errors.place}</Form.Control.Feedback>
+                    {errors.place && (
+                      <div className="invalid-feedback d-block">{errors.place}</div>
+                    )}
+                    <Form.Text muted>
+                      Combined list from /api/destination + /api/province.
+                      Saves destinationId + placeSource on the restaurant.
+                    </Form.Text>
                   </Col>
                   <Col md={4}>
                     <Form.Label>Status</Form.Label>
@@ -663,25 +1074,164 @@ const RestaurantRegistration = () => {
                     <Form.Text muted>Minimum hours notice for advance bookings.</Form.Text>
                   </Col>
 
+                  {/* ── Reservation Policies (multi-row repeater) ─────
+                      Each row becomes a restaurant_book_reservation_policy
+                      record. Use the "+ Add" button to capture deposit
+                      rules, lead time, group size policies, etc. */}
                   <Col md={6}>
-                    <Form.Label>Reservation Policy</Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      rows={2}
-                      name="reservationPolicy"
-                      value={formData.reservationPolicy}
-                      onChange={handleChange}
-                    />
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <Form.Label className="mb-0">
+                        Reservation Policies
+                      </Form.Label>
+                      <Button
+                        size="sm"
+                        variant="outline-info"
+                        onClick={addReservationPolicy}
+                      >
+                        + Add Reservation Policy
+                      </Button>
+                    </div>
+                    {formData.reservationPolicies.length === 0 ? (
+                      <div className="text-muted small mb-2">
+                        No reservation policies yet. Click "+ Add" to capture
+                        deposit rules, lead time, group size etc.
+                      </div>
+                    ) : (
+                      formData.reservationPolicies.map((p, idx) => (
+                        <Card key={idx} className="mb-2 border-info">
+                          <Card.Body className="p-2">
+                            <Row className="g-2 align-items-end">
+                              <Col md={5}>
+                                <Form.Label className="small mb-1">Title</Form.Label>
+                                <Form.Control
+                                  size="sm"
+                                  value={p.title}
+                                  onChange={(e) =>
+                                    updateReservationPolicy(idx, "title", e.target.value)
+                                  }
+                                  placeholder="e.g. Deposit"
+                                />
+                              </Col>
+                              <Col md={5}>
+                                <Form.Label className="small mb-1">Policy *</Form.Label>
+                                <Form.Control
+                                  size="sm"
+                                  as="textarea"
+                                  rows={2}
+                                  value={p.policyText}
+                                  onChange={(e) =>
+                                    updateReservationPolicy(idx, "policyText", e.target.value)
+                                  }
+                                  placeholder="Free-form clause text..."
+                                />
+                              </Col>
+                              <Col md={2} className="text-end">
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  onClick={() => removeReservationPolicy(idx)}
+                                  className="w-100"
+                                >
+                                  <FaTrash /> Remove
+                                </Button>
+                              </Col>
+                            </Row>
+                          </Card.Body>
+                        </Card>
+                      ))
+                    )}
                   </Col>
+
+                  {/* ── Cancellation Policies (multi-row repeater) ────
+                      Each row becomes a restaurant_book_cancellation_policy
+                      record. Includes optional days-before-booking + charge%
+                      slabs so refund rules can be structured. */}
                   <Col md={6}>
-                    <Form.Label>Cancellation Policy</Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      rows={2}
-                      name="cancellationPolicy"
-                      value={formData.cancellationPolicy}
-                      onChange={handleChange}
-                    />
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <Form.Label className="mb-0">
+                        Cancellation Policies
+                      </Form.Label>
+                      <Button
+                        size="sm"
+                        variant="outline-danger"
+                        onClick={addCancellationPolicy}
+                      >
+                        + Add Cancellation Policy
+                      </Button>
+                    </div>
+                    {formData.cancellationPolicies.length === 0 ? (
+                      <div className="text-muted small mb-2">
+                        No cancellation policies yet. Click "+ Add" to
+                        define refund slabs by lead time.
+                      </div>
+                    ) : (
+                      formData.cancellationPolicies.map((p, idx) => (
+                        <Card key={idx} className="mb-2 border-danger">
+                          <Card.Body className="p-2">
+                            <Row className="g-2 align-items-end">
+                              <Col md={4}>
+                                <Form.Label className="small mb-1">Title</Form.Label>
+                                <Form.Control
+                                  size="sm"
+                                  value={p.title}
+                                  onChange={(e) =>
+                                    updateCancellationPolicy(idx, "title", e.target.value)
+                                  }
+                                  placeholder="e.g. Within 24 hours"
+                                />
+                              </Col>
+                              <Col md={2}>
+                                <Form.Label className="small mb-1">
+                                  Days Before
+                                </Form.Label>
+                                <Form.Control
+                                  size="sm"
+                                  type="number"
+                                  value={p.daysBeforeBooking}
+                                  onChange={(e) =>
+                                    updateCancellationPolicy(idx, "daysBeforeBooking", e.target.value)
+                                  }
+                                />
+                              </Col>
+                              <Col md={2}>
+                                <Form.Label className="small mb-1">Charge %</Form.Label>
+                                <Form.Control
+                                  size="sm"
+                                  type="number"
+                                  value={p.chargePercent}
+                                  onChange={(e) =>
+                                    updateCancellationPolicy(idx, "chargePercent", e.target.value)
+                                  }
+                                />
+                              </Col>
+                              <Col md={2} className="text-end">
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  onClick={() => removeCancellationPolicy(idx)}
+                                  className="w-100"
+                                >
+                                  <FaTrash /> Remove
+                                </Button>
+                              </Col>
+                              <Col md={12}>
+                                <Form.Label className="small mb-1">Policy *</Form.Label>
+                                <Form.Control
+                                  size="sm"
+                                  as="textarea"
+                                  rows={2}
+                                  value={p.policyText}
+                                  onChange={(e) =>
+                                    updateCancellationPolicy(idx, "policyText", e.target.value)
+                                  }
+                                  placeholder="e.g. 100% charge for cancellations within 24 hours"
+                                />
+                              </Col>
+                            </Row>
+                          </Card.Body>
+                        </Card>
+                      ))
+                    )}
                   </Col>
 
                   <Col md={12}>
@@ -726,7 +1276,257 @@ const RestaurantRegistration = () => {
                     <Form.Label>GST Number</Form.Label>
                     <Form.Control name="gstNumber" value={formData.gstNumber} onChange={handleChange} />
                   </Col>
+
+                  {/* ── Currency dropdown (new) ─────────────────────────
+                      Pulled from /api/currency. The chosen currencyId is
+                      persisted on RestaurantMaster.currency_id; the
+                      currencyCode is also stored for fast rendering on the
+                      restaurant list / search pages. */}
+                  <Col md={4}>
+                    <Form.Label>Currency</Form.Label>
+                    <Form.Select
+                      value={formData.currencyId || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const picked = currencyOptions.find(
+                          (o) => String(o.value) === String(val)
+                        );
+                        setFormData((prev) => ({
+                          ...prev,
+                          currencyId: val ? Number(val) : null,
+                          currencyCode: picked?.currencyCode || "",
+                        }));
+                      }}
+                    >
+                      <option value="">Select currency</option>
+                      {currencyOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+
+                  {/* ── Star rating (new) ─────────────────────────────
+                      Sourced from /api/hotelCategory so restaurants share
+                      the same scale as hotels. The dropdown stores both
+                      hotelCategoryId and a numeric starRating (when the
+                      category record carries one) for the search filter. */}
+                  {/* Star Rating dropdown — sourced from /api/hotelcategory.
+                      Each option carries hotelCategoryId (FK saved on the
+                      restaurant) + the parsed numeric starRating used by
+                      the list / search filters. */}
+                  <Col md={4}>
+                    <Form.Label>Star Rating</Form.Label>
+                    <Form.Select
+                      value={formData.hotelCategoryId || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const picked = starOptions.find(
+                          (o) => String(o.value) === String(val)
+                        );
+                        setFormData((prev) => ({
+                          ...prev,
+                          hotelCategoryId: val ? Number(val) : null,
+                          starRating: picked?.starRating ?? null,
+                        }));
+                      }}
+                    >
+                      <option value="">Select rating</option>
+                      {starOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <Form.Text muted>
+                      Surfaced on the restaurant search & list as the star
+                      filter. Saved as hotelCategoryId on the restaurant.
+                    </Form.Text>
+                  </Col>
                 </Row>
+              </Card.Body>
+            </Card>
+
+            {/* ── Weekday Offers + Special Promotions ──────────────────
+                Repeater rows persisted as RestaurantPromotion entries.
+                Two flavours:
+                  WEEKDAY → reusable day-of-week offer (Mon..Sun mask)
+                  SPECIAL → date-range promotion, optionally every day
+                            ("appliesAllDays" toggle). */}
+            <Card className="mb-3 shadow-sm">
+              <Card.Header className="bg-white fw-semibold d-flex justify-content-between align-items-center">
+                <span>Weekday Offers &amp; Special Promotions</span>
+                <div>
+                  <Button
+                    size="sm"
+                    variant="outline-info"
+                    className="me-2"
+                    onClick={() => addPromotion("WEEKDAY")}
+                  >
+                    + Weekday Offer
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline-success"
+                    onClick={() => addPromotion("SPECIAL")}
+                  >
+                    + Special Promotion
+                  </Button>
+                </div>
+              </Card.Header>
+              <Card.Body>
+                {formData.promotions.length === 0 ? (
+                  <div className="text-muted small">
+                    No offers yet. Click "+ Weekday Offer" for recurring
+                    weekday deals or "+ Special Promotion" for date-bounded
+                    campaigns.
+                  </div>
+                ) : (
+                  formData.promotions.map((p, idx) => (
+                    <Card
+                      key={idx}
+                      className={`mb-2 border-${
+                        p.promotionType === "WEEKDAY" ? "info" : "success"
+                      }`}
+                    >
+                      <Card.Body>
+                        <Row className="g-2 align-items-end">
+                          <Col md={2}>
+                            <Form.Label className="small mb-1">Type</Form.Label>
+                            <Form.Select
+                              value={p.promotionType}
+                              onChange={(e) =>
+                                updatePromotion(idx, "promotionType", e.target.value)
+                              }
+                            >
+                              <option value="WEEKDAY">Weekday Offer</option>
+                              <option value="SPECIAL">Special Promotion</option>
+                            </Form.Select>
+                          </Col>
+                          <Col md={3}>
+                            <Form.Label className="small mb-1">Name *</Form.Label>
+                            <Form.Control
+                              value={p.name}
+                              onChange={(e) =>
+                                updatePromotion(idx, "name", e.target.value)
+                              }
+                              placeholder="e.g. Happy Hour"
+                            />
+                          </Col>
+                          <Col md={2}>
+                            <Form.Label className="small mb-1">Discount %</Form.Label>
+                            <Form.Control
+                              type="number"
+                              value={p.discountPercent}
+                              onChange={(e) =>
+                                updatePromotion(idx, "discountPercent", e.target.value)
+                              }
+                              placeholder="10"
+                            />
+                          </Col>
+                          <Col md={2}>
+                            <Form.Label className="small mb-1">Valid From</Form.Label>
+                            <Form.Control
+                              type="date"
+                              value={p.validFrom}
+                              onChange={(e) =>
+                                updatePromotion(idx, "validFrom", e.target.value)
+                              }
+                            />
+                          </Col>
+                          <Col md={2}>
+                            <Form.Label className="small mb-1">Valid To</Form.Label>
+                            <Form.Control
+                              type="date"
+                              value={p.validTo}
+                              onChange={(e) =>
+                                updatePromotion(idx, "validTo", e.target.value)
+                              }
+                            />
+                          </Col>
+                          <Col md={1} className="text-end">
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              onClick={() => removePromotion(idx)}
+                              title="Remove"
+                            >
+                              <FaTrash />
+                            </Button>
+                          </Col>
+
+                          {/* Weekday checkboxes — only shown for WEEKDAY rows. */}
+                          {p.promotionType === "WEEKDAY" && (
+                            <Col md={12}>
+                              <Form.Label className="small mb-1">
+                                Active Days
+                              </Form.Label>
+                              <div className="d-flex flex-wrap gap-3">
+                                {WEEKDAYS.map((d) => (
+                                  <Form.Check
+                                    key={d}
+                                    type="checkbox"
+                                    inline
+                                    label={d}
+                                    id={`promo-${idx}-${d}`}
+                                    checked={(p.dayMaskList || []).includes(d)}
+                                    onChange={() =>
+                                      toggleWeekdayInPromotion(idx, d)
+                                    }
+                                  />
+                                ))}
+                              </div>
+                            </Col>
+                          )}
+
+                          {/* Special-only: "applies every day" toggle. */}
+                          {p.promotionType === "SPECIAL" && (
+                            <Col md={4}>
+                              <Form.Check
+                                type="switch"
+                                id={`promo-${idx}-all`}
+                                checked={!!p.appliesAllDays}
+                                onChange={(e) =>
+                                  updatePromotion(
+                                    idx,
+                                    "appliesAllDays",
+                                    e.target.checked
+                                  )
+                                }
+                                label="Applies every day in range"
+                              />
+                            </Col>
+                          )}
+
+                          <Col md={p.promotionType === "SPECIAL" ? 7 : 11}>
+                            <Form.Label className="small mb-1">
+                              Description
+                            </Form.Label>
+                            <Form.Control
+                              value={p.description}
+                              onChange={(e) =>
+                                updatePromotion(idx, "description", e.target.value)
+                              }
+                              placeholder="What's the offer?"
+                            />
+                          </Col>
+                          <Col md={1} className="text-end">
+                            <Form.Check
+                              type="switch"
+                              id={`promo-${idx}-active`}
+                              checked={p.isActive !== false}
+                              onChange={(e) =>
+                                updatePromotion(idx, "isActive", e.target.checked)
+                              }
+                              label="Active"
+                            />
+                          </Col>
+                        </Row>
+                      </Card.Body>
+                    </Card>
+                  ))
+                )}
               </Card.Body>
             </Card>
 

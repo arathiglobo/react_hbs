@@ -24,7 +24,11 @@ import RestaurantSummary from "./RestaurantSummary";
 const SEATING_PREFERENCES = ["Indoor", "Outdoor", "AC", "Non-AC", "Smoking", "Non-Smoking"];
 const MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Brunch", "High Tea"];
 const OCCASIONS = ["None", "Birthday", "Anniversary", "Business Meeting", "Family Gathering", "Date"];
-const PAYMENT_MODES = ["Cash", "Card", "UPI", "Online", "Pay at Restaurant"];
+// Only two payment paths are supported:
+//   Cash → settles against the agent's credit limit (backend deducts on save)
+//   Card → triggers the online-payment modal; backend keeps the booking
+//          in "Not Paid" until the gateway confirms.
+const PAYMENT_MODES = ["Cash", "Card"];
 
 const RestaurantBooking = () => {
   const navigate = useNavigate();
@@ -37,6 +41,15 @@ const RestaurantBooking = () => {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const [summaryOpen, setSummaryOpen] = useState(false);
+  // Modal shown when paymentMode === "Card" is picked — informs the user
+  // they'll be redirected to the online payment gateway.
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  // Live agent balance forwarded from the search page. Used to pop up the
+  // "Not enough credit limit" warning client-side before hitting the API.
+  const agentBalance =
+    typeof incoming.agentBalance === "number"
+      ? incoming.agentBalance
+      : null;
 
   // What modes does this restaurant offer? Defaults to "Both" when missing.
   const offeredModes = restaurant?.bookingModes || "Both";
@@ -44,6 +57,9 @@ const RestaurantBooking = () => {
 
   const [form, setForm] = useState({
     bookingMode: initialMode,
+    // These three are pre-filled from the search criteria and rendered as
+    // read-only fields below (the user already picked them upstream — no
+    // reason to let them drift on the booking page).
     bookingDate: incoming.bookingDate || incoming.checkIn || "",
     bookingTime: incoming.bookingTime || "",
     memberCount: incoming.memberCount || 2,
@@ -54,10 +70,12 @@ const RestaurantBooking = () => {
     agentId: incoming.agentId || "",
     agentName: incoming.agentName || "",
     seatingPreference: "Indoor",
-    mealType: "Dinner",
+    mealType: incoming.mealType && incoming.mealType !== "Any" ? incoming.mealType : "Dinner",
     occasion: "None",
     dietaryNotes: "",
-    paymentMode: "Pay at Restaurant",
+    // Defaulted to Cash (agent credit) per spec — the user must explicitly
+    // switch to Card to go through the online-payment modal.
+    paymentMode: "Cash",
     advancePayment: "",
   });
 
@@ -75,6 +93,12 @@ const RestaurantBooking = () => {
     const { name, value } = e.target;
     setForm((p) => ({ ...p, [name]: value }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
+    // Card flow → inform the user we're going to an online payment screen.
+    // We just show a modal for now; the actual gateway redirect is wired in
+    // when the payment integration lands.
+    if (name === "paymentMode" && value === "Card") {
+      setCardModalOpen(true);
+    }
   };
 
   const handleConfirmMenuSelection = (items) => {
@@ -110,7 +134,14 @@ const RestaurantBooking = () => {
 
   /** Submit handler — validates then opens the order summary modal.
    *  The actual API call happens only when the user clicks "Confirm Booking"
-   *  inside the modal. */
+   *  inside the modal.
+   *
+   *  When paymentMode === "Cash" we also pre-check the agent's credit
+   *  limit against the computed grand total and, if it's insufficient,
+   *  pop up a SweetAlert instead of opening the summary. This keeps
+   *  the same UX the backend enforces (which throws 400 when credit is
+   *  short).
+   */
   const handleSubmit = (e) => {
     e.preventDefault();
     const err = validate();
@@ -118,6 +149,28 @@ const RestaurantBooking = () => {
     if (Object.keys(err).length) {
       toast.error("Please fix the highlighted fields");
       return;
+    }
+    // Credit-limit guard — only for the Cash flow.
+    if (form.paymentMode === "Cash" && agentBalance != null) {
+      const { grandTotal } = computeTotals();
+      if (Number(grandTotal) > Number(agentBalance)) {
+        Swal.fire({
+          icon: "warning",
+          title: "Not enough credit limit",
+          html:
+            `<div class="text-start">` +
+            `Agent <strong>${form.agentName || ""}</strong> has only ` +
+            `<strong>₹ ${Number(agentBalance).toFixed(2)}</strong> credit ` +
+            `available, but this booking costs ` +
+            `<strong>₹ ${Number(grandTotal).toFixed(2)}</strong>.` +
+            `<br/><br/>` +
+            `Reduce the order, top up the agent's credit, or switch to ` +
+            `<strong>Card</strong> for an online payment.` +
+            `</div>`,
+          confirmButtonText: "OK",
+        });
+        return;
+      }
     }
     setSummaryOpen(true);
   };
@@ -182,7 +235,15 @@ const RestaurantBooking = () => {
               <FaUtensils className="me-2 text-warning" />
               Book a Table
             </h4>
-            <Button variant="outline-secondary" size="sm" onClick={() => navigate(-1)}>
+            {/* Back to search — uses an explicit route + replace so the
+                search page reads the persisted sessionStorage criteria. */}
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() =>
+                navigate("/new-booking/restaurant", { replace: true })
+              }
+            >
               <FaArrowLeft className="me-1" /> Back
             </Button>
           </div>
@@ -279,17 +340,20 @@ const RestaurantBooking = () => {
                     </Row>
 
                     <Row className="g-3">
+                      {/* These three fields are read-only — already captured on
+                          the search page. The "Back" button lets the user go
+                          edit them upstream. */}
                       <Col md={4}>
                         <Form.Label>Booking Date *</Form.Label>
                         <Form.Control
                           type="date"
                           name="bookingDate"
                           value={form.bookingDate}
-                          onChange={handleChange}
-                          min={new Date().toISOString().slice(0, 10)}
-                          isInvalid={!!errors.bookingDate}
+                          readOnly
+                          plaintext={false}
+                          className="bg-light"
                         />
-                        <Form.Control.Feedback type="invalid">{errors.bookingDate}</Form.Control.Feedback>
+                        <Form.Text muted>From search — go back to change.</Form.Text>
                       </Col>
                       <Col md={4}>
                         <Form.Label>
@@ -299,14 +363,13 @@ const RestaurantBooking = () => {
                           type="time"
                           name="bookingTime"
                           value={form.bookingTime}
-                          onChange={handleChange}
-                          isInvalid={!!errors.bookingTime}
-                          disabled={form.bookingMode === "Walk-in"}
+                          readOnly
+                          plaintext={false}
+                          className="bg-light"
                           placeholder={
                             form.bookingMode === "Walk-in" ? "Anytime during open hours" : ""
                           }
                         />
-                        <Form.Control.Feedback type="invalid">{errors.bookingTime}</Form.Control.Feedback>
                         {form.bookingMode === "Walk-in" && (
                           <Form.Text muted>
                             Walk-in — guest can arrive any time during open hours.
@@ -320,10 +383,11 @@ const RestaurantBooking = () => {
                           min={1}
                           name="memberCount"
                           value={form.memberCount}
-                          onChange={handleChange}
-                          isInvalid={!!errors.memberCount}
+                          readOnly
+                          plaintext={false}
+                          className="bg-light"
                         />
-                        <Form.Control.Feedback type="invalid">{errors.memberCount}</Form.Control.Feedback>
+                        <Form.Text muted>From search — go back to change.</Form.Text>
                       </Col>
                       <Col md={4}>
                         <Form.Label>Meal Type</Form.Label>
@@ -392,16 +456,9 @@ const RestaurantBooking = () => {
                         />
                         <Form.Control.Feedback type="invalid">{errors.customerEmail}</Form.Control.Feedback>
                       </Col>
-                      <Col md={6}>
-                        <Form.Label>Agent</Form.Label>
-                        <Form.Control
-                          name="agentName"
-                          value={form.agentName}
-                          onChange={handleChange}
-                          placeholder="Agent name"
-                        />
-                      </Col>
-                      <Col md={6}>
+                      {/* Agent input removed — already shown in the order summary
+                          on the right side. */}
+                      <Col md={12}>
                         <Form.Label>Payment Mode</Form.Label>
                         <Form.Select
                           name="paymentMode"
@@ -409,9 +466,17 @@ const RestaurantBooking = () => {
                           onChange={handleChange}
                         >
                           {PAYMENT_MODES.map((p) => (
-                            <option key={p}>{p}</option>
+                            <option key={p} value={p}>
+                              {p === "Cash"
+                                ? "Cash — settle against agent credit limit"
+                                : "Card — online payment"}
+                            </option>
                           ))}
                         </Form.Select>
+                        <Form.Text muted>
+                          Cash debits the agent's available balance; Card opens
+                          the online-payment screen.
+                        </Form.Text>
                       </Col>
                       <Col md={12}>
                         <Form.Label>Dietary Notes / Allergies</Form.Label>
@@ -468,26 +533,44 @@ const RestaurantBooking = () => {
                 </Card>
               </Col>
 
+              {/* Sticky right column — RestaurantSummary and Review & Submit
+                  stay visible as the user scrolls the long form. The 80px
+                  top offset clears the topbar. */}
               <Col lg={4}>
-                <RestaurantSummary
-                  restaurant={restaurant}
-                  bookingDate={form.bookingDate}
-                  bookingTime={form.bookingTime}
-                  memberCount={form.memberCount}
-                  customerName={form.customerName}
-                  agentName={form.agentName}
-                  items={selectedItems}
-                  taxPercent={restaurant.taxPercent}
-                />
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  className="w-100 mt-3"
-                  disabled={saving}
+                <div
+                  className="restaurant-booking-summary-sticky"
+                  style={{ position: "sticky", top: 80, zIndex: 2 }}
                 >
-                  <FaCheck className="me-2" /> Review &amp; Submit
-                </Button>
+                  <RestaurantSummary
+                    restaurant={restaurant}
+                    bookingDate={form.bookingDate}
+                    bookingTime={form.bookingTime}
+                    memberCount={form.memberCount}
+                    customerName={form.customerName}
+                    agentName={form.agentName}
+                    items={selectedItems}
+                    taxPercent={restaurant.taxPercent}
+                  />
+                  {/* Show available agent balance just above the submit so the
+                      user always sees it without scrolling back up. */}
+                  {form.agentId && agentBalance != null && (
+                    <div className="mt-2 small text-end">
+                      Agent balance:{" "}
+                      <span className="fw-semibold text-danger">
+                        ₹ {Number(agentBalance).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    className="w-100 mt-3"
+                    disabled={saving}
+                  >
+                    <FaCheck className="me-2" /> Review &amp; Submit
+                  </Button>
+                </div>
               </Col>
             </Row>
           </Form>
@@ -502,6 +585,34 @@ const RestaurantBooking = () => {
         initialSelected={selectedItems}
         onConfirm={handleConfirmMenuSelection}
       />
+
+      {/* Online-payment modal — Card mode informs the user that an online
+          gateway redirect will happen on Confirm. (Gateway redirect is
+          wired in when the payment integration lands.) */}
+      <Modal
+        show={cardModalOpen}
+        onHide={() => setCardModalOpen(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Online Payment</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            You've selected <strong>Card</strong> as the payment mode.
+          </p>
+          <p>
+            On confirm, you'll be redirected to our secure online payment
+            gateway to complete the booking. The booking will remain in
+            <em> Not Paid </em> until the gateway confirms the transaction.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setCardModalOpen(false)}>
+            Continue
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* Order summary confirm modal — final commit happens here.
        *  Validation has already passed by the time this opens. */}

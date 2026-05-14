@@ -68,18 +68,34 @@ const formatSlot = (hhmm) => {
 const RestaurantSearch = () => {
   const navigate = useNavigate();
 
+  // Re-hydrate the form from sessionStorage when present — happens when
+  // the user pressed "Back" on the booking page. Falls back to sensible
+  // defaults on a fresh visit.
+  const restoredCriteria = (() => {
+    try {
+      const raw = sessionStorage.getItem("restaurantSearchCriteria");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
   const [form, setForm] = useState({
-    bookingDate: today(),
-    bookingTime: "19:00",
-    destination: null, // { value, label }
-    agentId: "",
-    agentName: "",
-    memberCount: 2,
-    mealType: "Any",
+    bookingDate: restoredCriteria?.bookingDate || today(),
+    bookingTime: restoredCriteria?.bookingTime || "19:00",
+    destination: restoredCriteria?.destination || null, // { value, label }
+    agentId: restoredCriteria?.agentId || "",
+    agentName: restoredCriteria?.agentName || "",
+    memberCount: restoredCriteria?.memberCount || 2,
+    mealType: restoredCriteria?.mealType || "Any",
   });
 
   const [agents, setAgents] = useState([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+  // Available credit limit for the picked agent — surfaced below the dropdown
+  // (matches HotelSearch.jsx pattern) and forwarded to the booking page so
+  // the credit-check popup can render the up-to-date number.
+  const [agentBalance, setAgentBalance] = useState(null);
+  const [agentBalanceLoading, setAgentBalanceLoading] = useState(false);
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [destinationLoading, setDestinationLoading] = useState(false);
 
@@ -110,27 +126,86 @@ const RestaurantSearch = () => {
     };
   }, []);
 
-  /** Debounced destination lookup against /api/province?search=. */
+  // Fetch the picked agent's available credit limit. Hits the same
+  // /api/agent-credit-limit/agent/{id} endpoint HotelSearch uses so the
+  // number is always consistent across booking flows.
+  useEffect(() => {
+    if (!form.agentId) {
+      setAgentBalance(null);
+      return;
+    }
+    let cancelled = false;
+    setAgentBalanceLoading(true);
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${form.agentId}`)
+      .then((res) => {
+        if (!cancelled)
+          setAgentBalance(res?.data?.availableCreditLimit ?? null);
+      })
+      .catch(() => !cancelled && setAgentBalance(null))
+      .finally(() => !cancelled && setAgentBalanceLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [form.agentId]);
+
+  /**
+   * Debounced destination lookup. The Place / City dropdown on
+   * registration combines /api/destination + /api/province, so the search
+   * page does the same and tags each option with its `source`
+   * ("DESTINATION" or "PROVINCE"). The picked option's source + id are
+   * sent to the backend, which uses them to match against the
+   * restaurant's destinationId + placeSource columns.
+   */
   const debounceRef = useRef(null);
   const searchDestinations = (input) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!input || input.length < 2) {
-      setDestinationOptions([]);
-      return;
-    }
     debounceRef.current = setTimeout(async () => {
       setDestinationLoading(true);
       try {
-        const res = await axiosInstance.get(`/api/province?search=${encodeURIComponent(input)}`);
-        const rows = Array.isArray(res.data) ? res.data : [];
-        setDestinationOptions(
-          rows.slice(0, 50).map((c) => ({
-            value: c.id,
-            label: `${c.stateName}${c.country ? ", " + c.country : ""}`,
-            stateName: c.stateName,
-            countryId: c.countryId,
-          }))
-        );
+        const q = input ? `&search=${encodeURIComponent(input)}` : "";
+        const [destRes, provRes] = await Promise.all([
+          axiosInstance
+            .get(`/api/destination?page=0&limit=10${q}`)
+            .catch(() => ({ data: [] })),
+          axiosInstance
+            .get(`/api/province?page=0&limit=10${q}`)
+            .catch(() => ({ data: [] })),
+        ]);
+        const destRows = Array.isArray(destRes.data) ? destRes.data : destRes.data?.content || [];
+        const provRows = Array.isArray(provRes.data) ? provRes.data : provRes.data?.content || [];
+        const destOpts = destRows
+          .filter((d) => !d.isDeleted)
+          .slice(0, 25)
+          .map((d) => {
+            const label = d.name || d.destinationName || `Destination #${d.id}`;
+            return {
+              value: `DESTINATION:${d.id}`,
+              id: d.id,
+              source: "DESTINATION",
+              label,
+              stateName: label,
+            };
+          });
+        const provOpts = provRows
+          .filter((p) => !p.isDeleted)
+          .slice(0, 25)
+          .map((p) => {
+            const label =
+              (p.stateName || p.name || `Province #${p.id}`) +
+              (p.country ? `, ${p.country}` : "");
+            return {
+              value: `PROVINCE:${p.id}`,
+              id: p.id,
+              source: "PROVINCE",
+              label,
+              stateName: p.stateName || p.name || label,
+            };
+          });
+        setDestinationOptions([
+          { label: "Destinations", options: destOpts },
+          { label: "Provinces", options: provOpts },
+        ]);
       } catch {
         setDestinationOptions([]);
       } finally {
@@ -175,6 +250,14 @@ const RestaurantSearch = () => {
       toast.error("Please fix the highlighted fields");
       return;
     }
+    // Persist the current criteria so the Back button on the booking page
+    // can re-hydrate this screen with the same inputs.
+    try {
+      sessionStorage.setItem(
+        "restaurantSearchCriteria",
+        JSON.stringify(form)
+      );
+    } catch (_) {}
     setLoading(true);
     setHasSearched(true);
     setResults([]);
@@ -191,7 +274,14 @@ const RestaurantSearch = () => {
         const payload = {
           bookingDate: form.bookingDate,
           bookingTime: form.bookingTime,
+          // Legacy free-text destination — kept so older rows that only
+          // have the `place` column still match.
           destination: form.destination?.stateName || form.destination?.label,
+          // Preferred filter — the picked option carries both the FK and
+          // the source ("DESTINATION" | "PROVINCE") so the backend can
+          // match against the right master table.
+          destinationId: form.destination?.id || null,
+          placeSource: form.destination?.source || null,
           agentId: Number(form.agentId) || null,
           memberCount: Number(form.memberCount),
           mealType: form.mealType === "Any" ? null : form.mealType,
@@ -218,8 +308,12 @@ const RestaurantSearch = () => {
         bookingDate: form.bookingDate,
         bookingTime: form.bookingTime,
         memberCount: form.memberCount,
+        mealType: form.mealType,
         agentId: form.agentId,
         agentName: form.agentName,
+        // Pass through the live balance so the booking page can render the
+        // credit warning popup without re-fetching it.
+        agentBalance,
       },
     });
   };
@@ -321,18 +415,19 @@ const RestaurantSearch = () => {
                         options={destinationOptions}
                         value={form.destination}
                         onChange={(opt) => setField("destination", opt)}
+                        onMenuOpen={() => {
+                          // Pre-populate the dropdown on focus so users
+                          // see options without typing.
+                          if (destinationOptions.length === 0) searchDestinations("");
+                        }}
                         onInputChange={(input, meta) => {
                           if (meta.action === "input-change") searchDestinations(input);
                         }}
                         isLoading={destinationLoading}
                         isClearable
-                        placeholder="Type a city or state..."
-                        noOptionsMessage={({ inputValue }) =>
-                          inputValue && inputValue.length < 2
-                            ? "Type at least 2 characters"
-                            : destinationLoading
-                            ? "Searching..."
-                            : "No matches"
+                        placeholder="Pick a destination..."
+                        noOptionsMessage={() =>
+                          destinationLoading ? "Searching..." : "No matches"
                         }
                         styles={rsStyles(!!errors.destination)}
                       />
@@ -362,6 +457,21 @@ const RestaurantSearch = () => {
                         ))}
                       </Form.Select>
                       <Form.Control.Feedback type="invalid">{errors.agentId}</Form.Control.Feedback>
+                      {/* Available credit-limit indicator — appears as soon as
+                          an agent is picked. Mirrors HotelSearch.jsx. */}
+                      {form.agentId && (
+                        <div className="mt-1 small">
+                          {agentBalanceLoading ? (
+                            <span className="text-muted">Loading available balance…</span>
+                          ) : agentBalance != null ? (
+                            <span className="fw-semibold" style={{ color: "#dc3545" }}>
+                              Available Balance: {Number(agentBalance).toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-muted">Available balance unavailable</span>
+                          )}
+                        </div>
+                      )}
                     </Col>
 
                     <Col lg={3} md={6}>
