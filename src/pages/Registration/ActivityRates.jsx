@@ -247,6 +247,11 @@ const ActivityRates = () => {
     activityRate: "", maxPax: "", adultRate: "", childRate: "", minPax: "",
     activityType: "", countryId: "", placeId: "",
     durationHr: "", durationMin: "", reportingPoint: "", rating: "", marketType: "",
+    // ── Pickup / Drop-off fields ──
+    // The picker uses /api/activity/lookup and stores the chosen item as
+    // { source, id, name } plus a "HH:mm" time.
+    pickupSource: "", pickupId: "", pickupName: "", pickupTime: "",
+    dropOffSource: "", dropOffId: "", dropOffName: "", dropOffTime: "",
     activityImage: null, activityImagePreview: null,
     // Multi-image gallery state.
     //   activityImages       : File[] – new uploads from the form
@@ -257,6 +262,87 @@ const ActivityRates = () => {
     activityImages: [], activityImagesPreview: [],
     existingImagePaths: [],
   });
+
+  // Lookup options shared by both pickers — loaded on modal open. We
+  // flatten the grouped response into a single array of {value, label,
+  // source, raw} so react-select can search across all groups, then
+  // render them as optgroups visually.
+  const [lookupOptions, setLookupOptions] = useState({
+    zones: [], hotels: [], airports: [],
+  });
+  const [lookupLoading, setLookupLoading] = useState(false);
+
+  // Build the react-select option groups from the raw lookup payload.
+  const lookupGroupedOptions = React.useMemo(() => {
+    const toOpts = (items, label) => ({
+      label,
+      options: items.map((i) => ({
+        value: `${i.source}:${i.id}`,
+        label: i.subtitle ? `${i.name} — ${i.subtitle}` : i.name,
+        rawName: i.name,
+        source: i.source,
+        id: i.id,
+      })),
+    });
+    return [
+      toOpts(lookupOptions.zones || [], "Zones"),
+      toOpts(lookupOptions.hotels || [], "Hotels"),
+      toOpts(lookupOptions.airports || [], "Airports"),
+    ].filter((g) => g.options.length);
+  }, [lookupOptions]);
+
+  // Loads /api/activity/lookup — duplicate of /api/cab-search/lookup
+  // dedicated to this form. Called once when the modal opens, plus on
+  // every keystroke (debounced) inside the pickup/dropoff dropdowns.
+  const fetchLookup = async (search = "") => {
+    try {
+      setLookupLoading(true);
+      const res = await axiosInstance.get(
+        `/api/activity/lookup?search=${encodeURIComponent(search)}&limit=20`
+      );
+      setLookupOptions({
+        zones: Array.isArray(res.data?.zones) ? res.data.zones : [],
+        hotels: Array.isArray(res.data?.hotels) ? res.data.hotels : [],
+        airports: Array.isArray(res.data?.airports) ? res.data.airports : [],
+      });
+    } catch (err) {
+      console.warn("Activity lookup failed:", err);
+      setLookupOptions({ zones: [], hotels: [], airports: [] });
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  // Resolve the currently-saved pickup/dropoff back into a react-select
+  // option value. Falls back to a synthetic option if the lookup hasn't
+  // loaded yet so the field still displays its label on edit/view.
+  const findLookupOption = (source, id, name) => {
+    if (!source || !id) return null;
+    const all = [
+      ...(lookupOptions.zones || []),
+      ...(lookupOptions.hotels || []),
+      ...(lookupOptions.airports || []),
+    ];
+    const hit = all.find(
+      (i) => i.source === source && String(i.id) === String(id)
+    );
+    if (hit) {
+      return {
+        value: `${hit.source}:${hit.id}`,
+        label: hit.subtitle ? `${hit.name} — ${hit.subtitle}` : hit.name,
+        source: hit.source,
+        id: hit.id,
+        rawName: hit.name,
+      };
+    }
+    return {
+      value: `${source}:${id}`,
+      label: name || `${source} #${id}`,
+      source,
+      id,
+      rawName: name,
+    };
+  };
 
   const [validityDates, setValidityDates] = useState([{ id: 1, validityFrom: "", validityTo: "" }]);
 
@@ -380,6 +466,8 @@ const ActivityRates = () => {
     activityRate:"", maxPax:"", adultRate:"", childRate:"", minPax:"",
     activityType:"", countryId:"", placeId:"",
     durationHr:"", durationMin:"", reportingPoint:"", rating:"", marketType:"",
+    pickupSource:"", pickupId:"", pickupName:"", pickupTime:"",
+    dropOffSource:"", dropOffId:"", dropOffName:"", dropOffTime:"",
     activityImage:null, activityImagePreview:null,
     activityImages: [], activityImagesPreview: [],
     existingImagePaths: [],
@@ -389,6 +477,7 @@ const ActivityRates = () => {
     setEditing(null); setIsViewMode(false); setValidationErrors({});
     setFormData(emptyForm()); setSelectedCountryOption(null);
     fetchCountries("");
+    fetchLookup("");
     setValidityDates([{ id:1, validityFrom:"", validityTo:"" }]);
     setShowModal(true);
   };
@@ -512,6 +601,17 @@ const ActivityRates = () => {
     fd.append("reportingPoint",  formData.reportingPoint);
     fd.append("rating",          formData.rating);
     fd.append("marketType",      formData.marketType);
+    // Pickup / Drop-off — only include the field if a value was picked,
+    // otherwise the backend would persist an empty string and the
+    // numeric `*Id` columns would fail on parse.
+    if (formData.pickupSource) fd.append("pickupSource", formData.pickupSource);
+    if (formData.pickupId)     fd.append("pickupId",     String(formData.pickupId));
+    if (formData.pickupName)   fd.append("pickupName",   formData.pickupName);
+    if (formData.pickupTime)   fd.append("pickupTime",   formData.pickupTime);
+    if (formData.dropOffSource) fd.append("dropOffSource", formData.dropOffSource);
+    if (formData.dropOffId)     fd.append("dropOffId",     String(formData.dropOffId));
+    if (formData.dropOffName)   fd.append("dropOffName",   formData.dropOffName);
+    if (formData.dropOffTime)   fd.append("dropOffTime",   formData.dropOffTime);
     if (formData.activityImage)  fd.append("activityImage", formData.activityImage);
     // Multi-image gallery — every file under the same param name. Spring
     // binds them into ActivityRateDTO.activityImages (List<MultipartFile>).
@@ -589,7 +689,20 @@ const ActivityRates = () => {
       // as the "existing" thumbnails the operator can remove.
       existingImagePaths: Array.isArray(data.imagePaths) ? data.imagePaths : [],
       // (includedHotelIds removed — picker no longer rendered.)
+      // Pickup / Drop-off — restore the previously-saved selections.
+      pickupSource: data.pickupSource || "",
+      pickupId: data.pickupId || "",
+      pickupName: data.pickupName || "",
+      pickupTime: data.pickupTime || "",
+      dropOffSource: data.dropOffSource || "",
+      dropOffId: data.dropOffId || "",
+      dropOffName: data.dropOffName || "",
+      dropOffTime: data.dropOffTime || "",
     });
+    // Make sure the pickup/dropoff dropdowns have options to resolve the
+    // saved IDs against. fetchLookup populates lookupOptions, then
+    // findLookupOption hits a synthetic option in the meantime.
+    fetchLookup("");
     const vd = data.validity || [];
     setValidityDates(
       vd.length > 0
@@ -1058,6 +1171,91 @@ const ActivityRates = () => {
                         isInvalid={!!validationErrors.reportingPoint}
                         onChange={e=>handleFieldChange("reportingPoint",e.target.value)}/>
                       <Form.Control.Feedback type="invalid">{validationErrors.reportingPoint}</Form.Control.Feedback>
+                    </Form.Group>
+
+                    {/* ── Pick-up Location + Time ─────────────────────────
+                        Both fields are optional. The dropdown sources from
+                        /api/activity/lookup (duplicate of /api/cab-search/
+                        lookup) and stores source+id+name onto formData. */}
+                    <Form.Group className="mb-3">
+                      <Form.Label>Pick-up Location</Form.Label>
+                      <Select
+                        isDisabled={isViewMode}
+                        options={lookupGroupedOptions}
+                        isLoading={lookupLoading}
+                        isClearable
+                        placeholder="Search hotel / zone / airport..."
+                        onInputChange={(input, { action }) => {
+                          if (action === "input-change") fetchLookup(input);
+                        }}
+                        value={findLookupOption(
+                          formData.pickupSource,
+                          formData.pickupId,
+                          formData.pickupName
+                        )}
+                        onChange={(opt) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            pickupSource: opt?.source || "",
+                            pickupId: opt?.id || "",
+                            pickupName: opt?.rawName || opt?.label || "",
+                          }))
+                        }
+                        menuPortalTarget={document.body}
+                        styles={{ menuPortal: (b) => ({ ...b, zIndex: 9999 }) }}
+                      />
+                    </Form.Group>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Pick-up Time</Form.Label>
+                      <Form.Control
+                        type="time"
+                        value={formData.pickupTime}
+                        disabled={isViewMode}
+                        onChange={(e) =>
+                          handleFieldChange("pickupTime", e.target.value)
+                        }
+                      />
+                    </Form.Group>
+
+                    {/* ── Drop-off Location + Time ───────────────────────── */}
+                    <Form.Group className="mb-3">
+                      <Form.Label>Drop-off Location</Form.Label>
+                      <Select
+                        isDisabled={isViewMode}
+                        options={lookupGroupedOptions}
+                        isLoading={lookupLoading}
+                        isClearable
+                        placeholder="Search hotel / zone / airport..."
+                        onInputChange={(input, { action }) => {
+                          if (action === "input-change") fetchLookup(input);
+                        }}
+                        value={findLookupOption(
+                          formData.dropOffSource,
+                          formData.dropOffId,
+                          formData.dropOffName
+                        )}
+                        onChange={(opt) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            dropOffSource: opt?.source || "",
+                            dropOffId: opt?.id || "",
+                            dropOffName: opt?.rawName || opt?.label || "",
+                          }))
+                        }
+                        menuPortalTarget={document.body}
+                        styles={{ menuPortal: (b) => ({ ...b, zIndex: 9999 }) }}
+                      />
+                    </Form.Group>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Drop-off Time</Form.Label>
+                      <Form.Control
+                        type="time"
+                        value={formData.dropOffTime}
+                        disabled={isViewMode}
+                        onChange={(e) =>
+                          handleFieldChange("dropOffTime", e.target.value)
+                        }
+                      />
                     </Form.Group>
 
                     <Form.Group className="mb-3">
