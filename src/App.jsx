@@ -191,6 +191,12 @@ import OfflineBookingList from "./pages/list/OfflineBookingList";
 import SubUser from "./pages/Registration/agent/SubUser";
 import SubAgent from "./pages/Registration/agent/SubAgent";
 
+// Meet & Space — new feature (CRUD on hotel details + booking flow)
+import MeetingSpaceManage from "./pages/HotelActions/MeetingSpace/MeetingSpaceManage";
+import MeetAndSpaceSearch from "./pages/search/meetspace/MeetAndSpaceSearch";
+import MeetAndSpaceBookingPage from "./pages/booking/meetspace/MeetAndSpaceBookingPage";
+import MeetAndSpaceBookingList from "./pages/list/MeetAndSpaceBookingList";
+
 // Restaurant Module
 import RestaurantRegistration from "./pages/restaurant/RestaurantRegistration";
 import RestaurantList from "./pages/restaurant/RestaurantList";
@@ -441,6 +447,12 @@ export default function App() {
         <Route path="/hotel-actions/hotel/:id/last-minute-contract-rate/create" element={<PrivateRoute><LastMinuteContractRateForm mode="create" /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/last-minute-contract-rate/:rateId/edit" element={<PrivateRoute><LastMinuteContractRateForm mode="edit" /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/long-stay-contract" element={<PrivateRoute><LongStayContract /></PrivateRoute>} />
+        {/* Meet & Space — manage meeting / event spaces for a hotel (new feature) */}
+        <Route path="/hotel-actions/:id/meeting-space" element={<PrivateRoute><MeetingSpaceManage /></PrivateRoute>} />
+        {/* Meet & Space — new booking flow (search → book → list/view/cancel) */}
+        <Route path="/new-booking/meet-and-space" element={<PrivateRoute><MeetAndSpaceSearch /></PrivateRoute>} />
+        <Route path="/new-booking/meet-and-space/book" element={<PrivateRoute><MeetAndSpaceBookingPage /></PrivateRoute>} />
+        <Route path="/booking-details/meet-and-space-booking-list" element={<PrivateRoute><MeetAndSpaceBookingList /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/create" element={<PrivateRoute><CreateLongStayContract /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/:contractId/edit" element={<PrivateRoute><EditLongStayContract /></PrivateRoute>} />
         {/* 24 Hour Check-In configuration pages — list / create / edit. */}

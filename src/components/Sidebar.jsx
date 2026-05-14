@@ -258,6 +258,11 @@ export default function Sidebar() {
           label: "Honeymoon Package",
           to: "/new-booking/honeymoon",
         },
+        // Meet & Space — new booking flow added as a sibling entry under New Booking
+        {
+          label: "Meet & Space",
+          to: "/new-booking/meet-and-space",
+        },
       ],
     },
     {
@@ -332,6 +337,11 @@ export default function Sidebar() {
         {
           label: "Honeymoon Package",
           to: "/booking-details/honeymoon-booking-list",
+        },
+        // Meet & Space booking list — view + cancel from this page
+        {
+          label: "Meet & Space Booking",
+          to: "/booking-details/meet-and-space-booking-list",
         },
       ],
     },

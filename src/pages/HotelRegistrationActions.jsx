@@ -219,6 +219,8 @@ const HotelRegistrationActions = () => {
     // Day Stay Check-In configuration entry point
     { label: "Day Stay", icon: FaCalendarAlt, status: "count", count: 0 },
     { label: "Long Stay Contract", icon: FaCalendarAlt, status: "count", count: 0 },
+    // Meet & Space — entry point for the new Meeting & Space feature (manage spaces + rates)
+    { label: "Meeting & Space", icon: FaUsers, status: "count", count: 0 },
     { label: "Promotion", icon: FaGift, status: "count", count: 0 },
     { label: "Policy", icon: FaFileAlt, status: "count", count: 0 },
     {
@@ -744,6 +746,9 @@ const HotelRegistrationActions = () => {
       navigate(`/hotel-actions/${id}/day-stay-contract`);
     } else if (actionLabel === "Long Stay Contract") {
       navigate(`/hotel-actions/${id}/long-stay-contract`);
+    } else if (actionLabel === "Meeting & Space") {
+      // Meet & Space master CRUD (new feature) — separate page, separate APIs
+      navigate(`/hotel-actions/${id}/meeting-space`);
     } else if (actionLabel === "Promotion") {
       navigate(`/hotel-actions/${id}/promotions`);
     } else if (actionLabel === "Policy") {
