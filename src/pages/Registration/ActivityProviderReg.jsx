@@ -19,108 +19,36 @@ import {
   FaEdit,
   FaTrash,
   FaEye,
-  FaPlus,
   FaDollarSign,
-  FaBackward,
 } from "react-icons/fa";
-
-// Enhanced SearchableSelect Component
-const SearchableSelect = ({
-  options,
-  value,
-  onChange,
-  placeholder,
-  className,
-  isInvalid,
-  name,
-  disabled = false,
-  isLoading = false,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filteredOptions, setFilteredOptions] = useState(options || []);
-
-  useEffect(() => {
-    if (!options || !Array.isArray(options)) {
-      setFilteredOptions([]);
-      return;
-    }
-
-    if (searchTerm) {
-      const filtered = options.filter((option) => {
-        const searchLower = searchTerm.toLowerCase();
-        return (
-          option.name?.toLowerCase().includes(searchLower) ||
-          option.id?.toString().includes(searchTerm)
-        );
-      });
-      setFilteredOptions(filtered);
-    } else {
-      setFilteredOptions(options);
-    }
-  }, [searchTerm, options]);
-
-  const handleSelect = (option) => {
-    onChange(option);
-      setIsOpen(false);
-      setSearchTerm("");
-  };
-
-  const selectedOption = options?.find((opt) => String(opt.id) === String(value));
-
-  return (
-    <div className="position-relative">
-      <Form.Control
-        type="text"
-        placeholder={placeholder}
-        value={isOpen ? searchTerm : selectedOption?.name || ""}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        onFocus={() => setIsOpen(true)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        className={`${className} ${isInvalid ? "is-invalid" : ""}`}
-        disabled={disabled}
-        readOnly={!isOpen}
-      />
-      {isOpen && (
-        <div
-          className="position-absolute w-100 bg-white border rounded shadow-lg"
-          style={{ zIndex: 1000, maxHeight: "200px", overflowY: "auto" }}
-        >
-          {isLoading ? (
-            <div className="p-2 text-center">
-              <div className="spinner-border spinner-border-sm" role="status">
-                <span className="visually-hidden">Loading...</span>
-              </div>
-            </div>
-          ) : filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => (
-              <div
-                key={option.id}
-                className="p-2 cursor-pointer hover-bg-light"
-                onClick={() => handleSelect(option)}
-                style={{ cursor: "pointer" }}
-              >
-                {option.name}
-              </div>
-            ))
-          ) : (
-            <div className="p-2 text-muted">No options found</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
+import Select from "react-select";
 
 const ActivityProviderReg = () => {
   const navigate = useNavigate();
+
+  // ── list state ─────────────────────────────────────────────────────
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [search, setSearch] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // List-page filter dropdowns — let the operator narrow the providers
+  // table by country and/or city without having to type anything.
+  const [filterCountry, setFilterCountry] = useState(null);
+  const [filterCity, setFilterCity] = useState(null);
+  const [filterCityOptions, setFilterCityOptions] = useState([]);
+
+  // Shared country list (used by both the list filter and the create
+  // form). Loaded once on mount via /api/country.
+  const [countryOptions, setCountryOptions] = useState([]);
+
+  // ── form state ─────────────────────────────────────────────────────
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [isViewMode, setIsViewMode] = useState(false);
-  // Removed unused state variables for dropdowns and complex form fields
   const [formData, setFormData] = useState({
     providerName: "",
     providerCode: "",
@@ -129,45 +57,129 @@ const ActivityProviderReg = () => {
     mobileNo: "",
     emailId: "",
     address: "",
+    countryId: null,
+    countryName: "",
+    cityId: null,
+    cityName: "",
   });
+  const [formCityOptions, setFormCityOptions] = useState([]);
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
-  const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [search, setSearch] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
 
-  // Fetch activity providers list
-  const fetchActivityList = async (pageNum = 0, searchTerm = "") => {
+  // ── helpers ────────────────────────────────────────────────────────
+  // Picks city/province list for a given country. We treat /api/province
+  // as the city source per the requirements ("city dropdown uses
+  // /api/province?countryId=..."). Returns an array of {value, label}.
+  const loadCitiesForCountry = async (countryId) => {
+    if (!countryId) return [];
+    try {
+      const res = await axiosInstance.get(
+        `/api/province?countryId=${countryId}&page=0&limit=50&search=`
+      );
+      const list = Array.isArray(res.data) ? res.data : res.data?.content || [];
+      return list.map((p) => ({
+        value: p.id,
+        label: p.stateName || p.name,
+      }));
+    } catch (err) {
+      console.error("Load cities failed", err);
+      return [];
+    }
+  };
+
+  // Loads the master country list — /api/country?page=0&limit=250
+  const loadCountries = async () => {
+    try {
+      const res = await axiosInstance.get(
+        "/api/country?page=0&limit=250&search="
+      );
+      const list = Array.isArray(res.data) ? res.data : res.data?.content || [];
+      setCountryOptions(
+        list.map((c) => ({
+          value: c.id,
+          label: c.name,
+          code: c.countryCode,
+        }))
+      );
+    } catch (err) {
+      console.error("Load countries failed", err);
+      setCountryOptions([]);
+    }
+  };
+
+  // ── fetch list ─────────────────────────────────────────────────────
+  // Wraps the new combined endpoint:
+  //   /api/activityProvider?page=...&limit=...&search=...
+  //                       [&countryId=...&cityId=...]
+  const fetchActivityList = async (
+    pageNum = 0,
+    searchValue = search,
+    countryIdValue = filterCountry?.value || null,
+    cityIdValue = filterCity?.value || null
+  ) => {
     try {
       setLoading(true);
+      const params = new URLSearchParams({
+        page: String(pageNum),
+        limit: "10",
+      });
+      if (searchValue && searchValue.trim())
+        params.append("search", searchValue.trim());
+      if (countryIdValue) params.append("countryId", String(countryIdValue));
+      if (cityIdValue) params.append("cityId", String(cityIdValue));
+
       const response = await axiosInstance.get(
-        `/api/activityProvider?page=${pageNum}&size=10&search=${searchTerm}`
+        `/api/activityProvider?${params.toString()}`
       );
-      setItems(response.data.content || response.data || []);
-      setTotalPages(response.data.totalPages || 0);
-    } catch (error) {
-      console.error("Error fetching activity providers:", error);
+      const data = response.data;
+      const list = data?.content || data || [];
+      setItems(Array.isArray(list) ? list : []);
+      setTotalPages(data?.totalPages || (list.length < 10 ? pageNum + 1 : pageNum + 2));
+    } catch (err) {
+      console.error("Error fetching activity providers:", err);
       toast.error("Failed to fetch activity providers");
     } finally {
       setLoading(false);
     }
   };
 
-  // Note: Dropdown data fetching removed as we're using simple form fields
-
   useEffect(() => {
+    loadCountries();
     fetchActivityList();
+    // eslint-disable-next-line
   }, []);
 
-  // Handle search with debounce
+  // Debounced re-fetch whenever the search keyword changes.
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      fetchActivityList(page, search);
-    }, 500);
-    return () => clearTimeout(timeoutId);
-  }, [search, page]);
+    const t = setTimeout(() => fetchActivityList(0, search), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line
+  }, [search]);
 
+  // Refetch when country/city filters change. Also resets city options
+  // when the country filter changes.
+  useEffect(() => {
+    (async () => {
+      if (filterCountry?.value) {
+        const cities = await loadCitiesForCountry(filterCountry.value);
+        setFilterCityOptions(cities);
+        if (filterCity && !cities.find((c) => c.value === filterCity.value)) {
+          setFilterCity(null); // city no longer valid for new country
+        }
+      } else {
+        setFilterCityOptions([]);
+        setFilterCity(null);
+      }
+    })();
+    // eslint-disable-next-line
+  }, [filterCountry]);
+
+  useEffect(() => {
+    fetchActivityList(0, search, filterCountry?.value || null, filterCity?.value || null);
+    // eslint-disable-next-line
+  }, [filterCountry, filterCity]);
+
+  // ── modal open / close ─────────────────────────────────────────────
   const openCreate = () => {
     setEditing(null);
     setIsViewMode(false);
@@ -180,7 +192,12 @@ const ActivityProviderReg = () => {
       mobileNo: "",
       emailId: "",
       address: "",
+      countryId: null,
+      countryName: "",
+      cityId: null,
+      cityName: "",
     });
+    setFormCityOptions([]);
     setError("");
     setShowModal(true);
   };
@@ -198,24 +215,30 @@ const ActivityProviderReg = () => {
       mobileNo: "",
       emailId: "",
       address: "",
+      countryId: null,
+      countryName: "",
+      cityId: null,
+      cityName: "",
     });
+    setFormCityOptions([]);
     setError("");
   };
 
-  const openEdit = async (item) => {
+  // Shared by openEdit + handleView — fetches a single provider and
+  // populates the modal form. The view flag toggles read-only inputs.
+  const openProviderModal = async (item, viewOnly) => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/api/activityProvider/${item.providerId}`);
+      const response = await axiosInstance.get(
+        `/api/activityProvider/${item.providerId}`
+      );
       const data = response.data;
-      
       if (!data) {
         toast.error("Failed to fetch provider details");
         return;
       }
-
       setEditing(data);
-      setIsViewMode(false);
-      
+      setIsViewMode(viewOnly);
       setFormData({
         providerName: data.providerName || "",
         providerCode: data.providerCode || "",
@@ -224,51 +247,28 @@ const ActivityProviderReg = () => {
         mobileNo: data.mobileNo || "",
         emailId: data.emailId || "",
         address: data.address || "",
+        countryId: data.countryId || null,
+        countryName: data.countryName || "",
+        cityId: data.cityId || null,
+        cityName: data.cityName || "",
       });
-
-      setValidationErrors({});
-      setShowModal(true);
-    } catch (error) {
-      console.error("Error fetching provider details:", error);
-      toast.error("Failed to fetch provider details");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleView = async (item) => {
-    setIsLoading(true);
-    try {
-      const response = await axiosInstance.get(`/api/activityProvider/${item.providerId}`);
-      const data = response.data;
-
-      if (!data) {
-        toast.error("Failed to fetch provider details");
-        return;
+      // Pre-load the city dropdown for the saved country.
+      if (data.countryId) {
+        const cities = await loadCitiesForCountry(data.countryId);
+        setFormCityOptions(cities);
       }
-
-      setEditing(data);
-      setIsViewMode(true);
-      
-      setFormData({
-        providerName: data.providerName || "",
-        providerCode: data.providerCode || "",
-        firstName: data.firstName || "",
-        lastName: data.lastName || "",
-        mobileNo: data.mobileNo || "",
-        emailId: data.emailId || "",
-        address: data.address || "",
-      });
-
       setValidationErrors({});
       setShowModal(true);
-    } catch (error) {
-      console.error("Error fetching provider details:", error);
+    } catch (err) {
+      console.error("Error fetching provider details:", err);
       toast.error("Failed to fetch provider details");
     } finally {
       setIsLoading(false);
     }
   };
+
+  const openEdit = (item) => openProviderModal(item, false);
+  const handleView = (item) => openProviderModal(item, true);
 
   const handleDelete = (item) => {
     Swal.fire({
@@ -291,32 +291,49 @@ const ActivityProviderReg = () => {
             toast.success("Activity Provider deleted successfully");
             fetchActivityList(page, search);
           })
-          .catch((error) => {
-            console.error("Delete error:", error);
-            toast.error(`Failed to delete activity provider: ${error.response?.data?.message || error.message}`);
+          .catch((err) => {
+            console.error("Delete error:", err);
+            toast.error(
+              `Failed to delete activity provider: ${err.response?.data?.message || err.message}`
+            );
           });
       }
     });
   };
 
   const handleActivityRates = (item) => {
-    console.log("activity rates click with item::" , item)
-     navigate('/activity-rates', {
+    navigate("/activity-rates", {
       state: {
         activityProvider: item,
         activityProviderId: item.providerId,
-        activityProviderName: item.providerName
-      }
+        activityProviderName: item.providerName,
+      },
     });
   };
 
+  // ── validation ─────────────────────────────────────────────────────
   const validateForm = (data) => {
     const errors = {};
-    
-    if (!data.providerName?.trim()) errors.providerName = "Provider Name is required";
-    
+    if (!data.providerName?.trim())
+      errors.providerName = "Provider Name is required";
     return errors;
   };
+
+  // Build the payload — sends countryId/cityId + their denormalised names
+  // so the backend can persist both for fast listing.
+  const buildPayload = () => ({
+    providerName: formData.providerName,
+    providerCode: formData.providerCode,
+    firstName: formData.firstName,
+    lastName: formData.lastName,
+    mobileNo: formData.mobileNo,
+    emailId: formData.emailId,
+    address: formData.address,
+    countryId: formData.countryId,
+    countryName: formData.countryName,
+    cityId: formData.cityId,
+    cityName: formData.cityName,
+  });
 
   const saveActivity = async (e) => {
     e.preventDefault();
@@ -325,41 +342,25 @@ const ActivityProviderReg = () => {
       setValidationErrors(errors);
       return;
     }
-
     try {
       setIsLoading(true);
-      
-      const payload = {
-        providerName: formData.providerName,
-        providerCode: formData.providerCode,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        mobileNo: formData.mobileNo,
-        emailId: formData.emailId,
-        address: formData.address,
-      };
-
       const response = await axiosInstance.post(
         "/api/activityProvider/register",
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        buildPayload(),
+        { headers: { "Content-Type": "application/json" } }
       );
-
-      console.log("activity provider save success::" , response)
       if (response.data) {
         toast.success("Activity Provider added successfully!");
         setValidationErrors({});
         await fetchActivityList(page, search);
         closeModal();
       }
-    } catch (error) {
-      console.error("Save activity error:", error);
+    } catch (err) {
+      console.error("Save activity error:", err);
       setError("Failed to save activity provider");
-      toast.error(`Failed to save activity: ${error.response?.data?.message || error.message}`);
+      toast.error(
+        `Failed to save activity: ${err.response?.data?.message || err.message}`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -372,42 +373,26 @@ const ActivityProviderReg = () => {
       setValidationErrors(errors);
       return;
     }
-
     if (!editing) return;
-
     try {
       setIsLoading(true);
-      
-      const payload = {
-        providerName: formData.providerName,
-        providerCode: formData.providerCode,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        mobileNo: formData.mobileNo,
-        emailId: formData.emailId,
-        address: formData.address,
-      };
-
       const response = await axiosInstance.put(
         `/api/activityProvider/${editing.providerId}`,
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        buildPayload(),
+        { headers: { "Content-Type": "application/json" } }
       );
-
       if (response.data) {
         toast.success("Activity Provider updated successfully!");
         setValidationErrors({});
         await fetchActivityList(page, search);
         closeModal();
       }
-    } catch (error) {
-      console.error("Update activity error:", error);
+    } catch (err) {
+      console.error("Update activity error:", err);
       setError("Failed to update activity provider");
-      toast.error(`Failed to update activity: ${error.response?.data?.message || error.message}`);
+      toast.error(
+        `Failed to update activity: ${err.response?.data?.message || err.message}`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -420,65 +405,117 @@ const ActivityProviderReg = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex justify-content-between align-items-center">
+            <Card.Header className="d-flex flex-wrap justify-content-between align-items-center gap-2">
               <span className="fw-semibold">Activity Providers</span>
-              <Form.Group className="hotel-search-bar position-relative">
-                <Form.Control
-                  type="text"
-                  placeholder="Search activity provider by name..."
-                  className="form-control-modern-sm"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSearchTerm(value);
-                    setSearch(value);
-                    setPage(0);
-                  }}
-                />
-                {searchTerm && (
-                  <button
-                    type="button"
-                    className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
-                    style={{
-                      border: "none",
-                      background: "none",
-                      color: "#6c757d",
-                      padding: "0 12px",
-                      zIndex: 10,
-                    }}
-                    onClick={() => {
-                      setSearchTerm("");
-                      setSearch("");
+              <div className="d-flex flex-wrap gap-2 align-items-center">
+                {/* Country filter — narrows providers to the picked country */}
+                <div style={{ minWidth: 180 }}>
+                  <Select
+                    placeholder="Filter by country"
+                    options={countryOptions}
+                    value={filterCountry}
+                    onChange={(opt) => {
+                      setFilterCountry(opt);
                       setPage(0);
                     }}
-                    title="Clear search"
-                  >
-                    <i className="fas fa-times"></i>
-                  </button>
-                )}
-              </Form.Group>
-              <Button className="btn-green" onClick={openCreate}>
-                + Create
-              </Button>
+                    isClearable
+                    isSearchable
+                    menuPortalTarget={document.body}
+                    styles={{
+                      menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                      control: (b) => ({ ...b, minHeight: 36 }),
+                    }}
+                  />
+                </div>
+                {/* City filter — only enabled once a country is picked */}
+                <div style={{ minWidth: 180 }}>
+                  <Select
+                    placeholder={
+                      filterCountry
+                        ? "Filter by city"
+                        : "Pick country first"
+                    }
+                    options={filterCityOptions}
+                    value={filterCity}
+                    onChange={(opt) => {
+                      setFilterCity(opt);
+                      setPage(0);
+                    }}
+                    isClearable
+                    isSearchable
+                    isDisabled={!filterCountry}
+                    menuPortalTarget={document.body}
+                    styles={{
+                      menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                      control: (b) => ({ ...b, minHeight: 36 }),
+                    }}
+                  />
+                </div>
+                <Form.Group
+                  className="hotel-search-bar position-relative"
+                  style={{ minWidth: 220 }}
+                >
+                  <Form.Control
+                    type="text"
+                    placeholder="Search by name, city or country..."
+                    className="form-control-modern-sm"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearchTerm(value);
+                      setSearch(value);
+                      setPage(0);
+                    }}
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#6c757d",
+                        padding: "0 12px",
+                        zIndex: 10,
+                      }}
+                      onClick={() => {
+                        setSearchTerm("");
+                        setSearch("");
+                        setPage(0);
+                      }}
+                      title="Clear search"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  )}
+                </Form.Group>
+                <Button className="btn-green" onClick={openCreate}>
+                  + Create
+                </Button>
+              </div>
             </Card.Header>
             <Card.Body className="p-0">
               <Table responsive hover striped className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th style={{ width: 100 }}>S/N</th>
+                    <th style={{ width: 80 }}>S/N</th>
                     <th>Provider Name</th>
                     <th>First Name</th>
                     <th>Last Name</th>
+                    <th>Country</th>
+                    <th>City</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
-                    <tr key={item.id}>
+                    <tr key={item.providerId || item.id}>
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.providerName}</td>
                       <td>{item.firstName}</td>
                       <td>{item.lastName}</td>
+                      <td>{item.countryName || "-"}</td>
+                      <td>{item.cityName || "-"}</td>
                       <td>
                         <div className="d-flex gap-2">
                           <FaEdit
@@ -511,7 +548,7 @@ const ActivityProviderReg = () => {
                   ))}
                   {loading && (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
+                      <td colSpan={7} className="text-center text-muted py-4">
                         <div
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -524,7 +561,7 @@ const ActivityProviderReg = () => {
                   )}
                   {items.length === 0 && !loading && (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
+                      <td colSpan={7} className="text-center text-muted py-4">
                         No activity providers found.
                       </td>
                     </tr>
@@ -536,27 +573,37 @@ const ActivityProviderReg = () => {
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
                   <div>
                     <small className="text-muted">
-                      Showing {items.length} of {totalPages * 10} activity providers
+                      Showing {items.length} of {totalPages * 10} activity
+                      providers
                     </small>
                   </div>
                   <div>
                     <Pagination className="mb-0">
                       <Pagination.Prev
                         disabled={page === 0}
-                        onClick={() => fetchActivityList(page - 1, search)}
+                        onClick={() => {
+                          setPage(page - 1);
+                          fetchActivityList(page - 1, search);
+                        }}
                       />
                       {[...Array(totalPages).keys()].map((num) => (
                         <Pagination.Item
                           key={num}
                           active={num === page}
-                          onClick={() => fetchActivityList(num, search)}
+                          onClick={() => {
+                            setPage(num);
+                            fetchActivityList(num, search);
+                          }}
                         >
                           {num + 1}
                         </Pagination.Item>
                       ))}
                       <Pagination.Next
                         disabled={page === totalPages - 1}
-                        onClick={() => fetchActivityList(page + 1, search)}
+                        onClick={() => {
+                          setPage(page + 1);
+                          fetchActivityList(page + 1, search);
+                        }}
                       />
                     </Pagination>
                   </div>
@@ -565,16 +612,19 @@ const ActivityProviderReg = () => {
             </Card.Body>
           </Card>
 
-          {/* Modal */}
-          <Modal 
-            show={showModal} 
-            onHide={closeModal} 
-            centered 
+          {/* ── Modal ───────────────────────────────────────────────── */}
+          <Modal
+            show={showModal}
+            onHide={closeModal}
+            centered
             size="lg"
             backdrop="static"
             keyboard={false}
           >
-            <Modal.Header closeButton={!isLoading} style={{ backgroundColor: '#1e3a8a', color: 'white' }}>
+            <Modal.Header
+              closeButton={!isLoading}
+              style={{ backgroundColor: "#1e3a8a", color: "white" }}
+            >
               <Modal.Title>
                 {isViewMode
                   ? "View Provider"
@@ -585,20 +635,25 @@ const ActivityProviderReg = () => {
             </Modal.Header>
             <Modal.Body>
               <div className="mb-2">
-                <small style={{ color: 'red' }}>* mandatory fields</small>
+                <small style={{ color: "red" }}>* mandatory fields</small>
               </div>
               <Form>
                 <Row>
-                  {/* Left Column */}
+                  {/* Left column */}
                   <Col md={6}>
                     <Form.Group className="mb-3">
                       <Form.Label>
-                        <span style={{ color: 'red' }}>*</span> Provider Name
+                        <span style={{ color: "red" }}>*</span> Provider Name
                       </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.providerName}
-                        onChange={(e) => setFormData(prev => ({ ...prev, providerName: e.target.value }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            providerName: e.target.value,
+                          }))
+                        }
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.providerName}
                       />
@@ -614,7 +669,12 @@ const ActivityProviderReg = () => {
                       <Form.Control
                         type="text"
                         value={formData.firstName}
-                        onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            firstName: e.target.value,
+                          }))
+                        }
                         disabled={isViewMode}
                       />
                     </Form.Group>
@@ -624,8 +684,48 @@ const ActivityProviderReg = () => {
                       <Form.Control
                         type="text"
                         value={formData.mobileNo}
-                        onChange={(e) => setFormData(prev => ({ ...prev, mobileNo: e.target.value }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            mobileNo: e.target.value,
+                          }))
+                        }
                         disabled={isViewMode}
+                      />
+                    </Form.Group>
+
+                    {/* Country dropdown — drives the city list below */}
+                    <Form.Group className="mb-3">
+                      <Form.Label>Country</Form.Label>
+                      <Select
+                        options={countryOptions}
+                        value={
+                          countryOptions.find(
+                            (o) => o.value === formData.countryId
+                          ) || null
+                        }
+                        onChange={async (opt) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            countryId: opt?.value || null,
+                            countryName: opt?.label || "",
+                            cityId: null,
+                            cityName: "",
+                          }));
+                          // Refresh dependent city list.
+                          const cities = opt
+                            ? await loadCitiesForCountry(opt.value)
+                            : [];
+                          setFormCityOptions(cities);
+                        }}
+                        isDisabled={isViewMode}
+                        isSearchable
+                        isClearable
+                        placeholder="Select country"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                        }}
                       />
                     </Form.Group>
 
@@ -635,20 +735,30 @@ const ActivityProviderReg = () => {
                         as="textarea"
                         rows={3}
                         value={formData.address}
-                        onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            address: e.target.value,
+                          }))
+                        }
                         disabled={isViewMode}
                       />
                     </Form.Group>
                   </Col>
 
-                  {/* Right Column */}
+                  {/* Right column */}
                   <Col md={6}>
                     <Form.Group className="mb-3">
                       <Form.Label>Provider Code</Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.providerCode}
-                        onChange={(e) => setFormData(prev => ({ ...prev, providerCode: e.target.value }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            providerCode: e.target.value,
+                          }))
+                        }
                         disabled={isViewMode}
                       />
                     </Form.Group>
@@ -658,7 +768,12 @@ const ActivityProviderReg = () => {
                       <Form.Control
                         type="text"
                         value={formData.lastName}
-                        onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            lastName: e.target.value,
+                          }))
+                        }
                         disabled={isViewMode}
                       />
                     </Form.Group>
@@ -668,8 +783,45 @@ const ActivityProviderReg = () => {
                       <Form.Control
                         type="email"
                         value={formData.emailId}
-                        onChange={(e) => setFormData(prev => ({ ...prev, emailId: e.target.value }))}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            emailId: e.target.value,
+                          }))
+                        }
                         disabled={isViewMode}
+                      />
+                    </Form.Group>
+
+                    {/* City dropdown — depends on selected country */}
+                    <Form.Group className="mb-3">
+                      <Form.Label>City</Form.Label>
+                      <Select
+                        options={formCityOptions}
+                        value={
+                          formCityOptions.find(
+                            (o) => o.value === formData.cityId
+                          ) || null
+                        }
+                        onChange={(opt) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            cityId: opt?.value || null,
+                            cityName: opt?.label || "",
+                          }))
+                        }
+                        isDisabled={isViewMode || !formData.countryId}
+                        isSearchable
+                        isClearable
+                        placeholder={
+                          formData.countryId
+                            ? "Select city"
+                            : "Pick country first"
+                        }
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                        }}
                       />
                     </Form.Group>
                   </Col>
@@ -720,7 +872,12 @@ const ActivityProviderReg = () => {
                         mobileNo: "",
                         emailId: "",
                         address: "",
+                        countryId: null,
+                        countryName: "",
+                        cityId: null,
+                        cityName: "",
                       });
+                      setFormCityOptions([]);
                     }}
                     disabled={isLoading}
                     className="d-flex align-items-center gap-2"

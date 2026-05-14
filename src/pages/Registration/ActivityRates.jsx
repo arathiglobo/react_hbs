@@ -248,18 +248,15 @@ const ActivityRates = () => {
     activityType: "", countryId: "", placeId: "",
     durationHr: "", durationMin: "", reportingPoint: "", rating: "", marketType: "",
     activityImage: null, activityImagePreview: null,
-    // Multi-image gallery + linked hotels (new).
+    // Multi-image gallery state.
     //   activityImages       : File[] – new uploads from the form
     //   activityImagesPreview: string[] – data: URLs for new uploads
     //   existingImagePaths   : string[] – URLs already saved on backend
-    //   includedHotelIds     : Long[] – hotel IDs to link to this activity
+    // (Included Hotels picker removed — activity-to-hotel linkage is
+    //  now managed elsewhere.)
     activityImages: [], activityImagesPreview: [],
     existingImagePaths: [],
-    includedHotelIds: [],
   });
-  // Hotel options loaded once for the included-hotels multi-select.
-  const [hotelOptions, setHotelOptions] = useState([]);
-  const [hotelsLoading, setHotelsLoading] = useState(false);
 
   const [validityDates, setValidityDates] = useState([{ id: 1, validityFrom: "", validityTo: "" }]);
 
@@ -313,28 +310,8 @@ const ActivityRates = () => {
   useEffect(() => { fetchActivityRatesList(); }, [providerId]);
   useEffect(() => { fetchCountries(""); loadMarketTypes(); }, []);
 
-  // Hotel lookup for the "Included Hotels" picker. Uses the existing
-  // lightweight /api/hotels/lookup endpoint (no country filter — operator
-  // can pick across regions). Loaded once when the modal opens.
-  const fetchHotelOptions = async () => {
-    if (hotelOptions.length > 0) return;
-    try {
-      setHotelsLoading(true);
-      const res = await axiosInstance.get("/api/hotels/lookup");
-      const opts = Array.isArray(res.data)
-        ? res.data.map((h) => ({
-            value: h.hotelId,
-            label: h.hotelName || `Hotel #${h.hotelId}`,
-          }))
-        : [];
-      setHotelOptions(opts);
-    } catch (err) {
-      console.warn("Hotel lookup failed:", err);
-      setHotelOptions([]);
-    } finally {
-      setHotelsLoading(false);
-    }
-  };
+  // (Included-Hotels lookup removed — that picker is no longer rendered
+  //  and the field is no longer sent on save.)
 
   // Multi-image handlers — appends to the staged list, dedupes by name.
   const handleImagesChange = (e) => {
@@ -406,13 +383,12 @@ const ActivityRates = () => {
     activityImage:null, activityImagePreview:null,
     activityImages: [], activityImagesPreview: [],
     existingImagePaths: [],
-    includedHotelIds: [],
   });
 
   const openCreate = () => {
     setEditing(null); setIsViewMode(false); setValidationErrors({});
     setFormData(emptyForm()); setSelectedCountryOption(null);
-    fetchCountries(""); fetchHotelOptions();
+    fetchCountries("");
     setValidityDates([{ id:1, validityFrom:"", validityTo:"" }]);
     setShowModal(true);
   };
@@ -549,10 +525,7 @@ const ActivityRates = () => {
     (formData.existingImagePaths || []).forEach((p) => {
       if (p) fd.append("imagePaths", p);
     });
-    // Linked hotels — repeat param so Spring binds List<Long>.
-    (formData.includedHotelIds || []).forEach((id) => {
-      fd.append("includedHotelIds", String(id));
-    });
+    // (Linked hotels removed — `includedHotelIds` is no longer sent.)
     validityDates.forEach((v, i) => {
       fd.append(`validity[${i}].validityFrom`, formatDateForAPI(v.validityFrom));
       fd.append(`validity[${i}].validityTo`,   formatDateForAPI(v.validityTo));
@@ -615,16 +588,8 @@ const ActivityRates = () => {
       // imagePaths is the persisted gallery returned by GET — render it
       // as the "existing" thumbnails the operator can remove.
       existingImagePaths: Array.isArray(data.imagePaths) ? data.imagePaths : [],
-      // Hotel inclusion — backend returns includedHotelIds (Long[]) and
-      // optionally includedHotels (id+name). Use whichever arrived.
-      includedHotelIds: Array.isArray(data.includedHotelIds)
-        ? data.includedHotelIds
-        : Array.isArray(data.includedHotels)
-          ? data.includedHotels.map((h) => h.hotelId).filter(Boolean)
-          : [],
+      // (includedHotelIds removed — picker no longer rendered.)
     });
-    // Ensure the hotel picker has options when entering edit/view.
-    fetchHotelOptions();
     const vd = data.validity || [];
     setValidityDates(
       vd.length > 0
@@ -1083,39 +1048,9 @@ const ActivityRates = () => {
                       )}
                     </Form.Group>
 
-                    {/* ── Included Hotels (multi-select) ───────────────
-                        Persisted as comma-separated IDs on
-                        activity_rates.linked_hotel_ids — surfaced on the
-                        search info modal so the operator knows which
-                        hotels this activity is offered with. */}
-                    <Form.Group className="mb-3">
-                      <Form.Label>Included Hotels (optional)</Form.Label>
-                      <Select
-                        isMulti
-                        isDisabled={isViewMode}
-                        options={hotelOptions}
-                        isLoading={hotelsLoading}
-                        placeholder={
-                          hotelsLoading
-                            ? "Loading hotels…"
-                            : "Select hotels offered with this activity"
-                        }
-                        value={hotelOptions.filter((o) =>
-                          (formData.includedHotelIds || []).includes(o.value)
-                        )}
-                        onChange={(opts) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            includedHotelIds: (opts || []).map((o) => o.value),
-                          }))
-                        }
-                        menuPortalTarget={document.body}
-                        styles={{ menuPortal: (b) => ({ ...b, zIndex: 9999 }) }}
-                      />
-                      <small className="text-muted">
-                        Shown to agents on the Tours & Activities info popup.
-                      </small>
-                    </Form.Group>
+                    {/* (Included Hotels picker removed by request — linkage is
+                        handled elsewhere; payload no longer sends
+                        includedHotelIds.) */}
 
                     <Form.Group className="mb-3">
                       <Form.Label>Reporting Point <span className="text-danger">*</span></Form.Label>
