@@ -29,13 +29,18 @@ import {
   FaSyncAlt,
   FaUsers,
   FaCalendarAlt,
+  FaEdit,
+  FaEnvelope,
+  FaDownload,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 
 export default function MeetAndSpaceBookingList() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
@@ -43,6 +48,59 @@ export default function MeetAndSpaceBookingList() {
   const [showCancel, setShowCancel] = useState(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelSaving, setCancelSaving] = useState(false);
+
+  // ── Voucher modal state ───────────────────────────────────────────
+  // Single document type (Voucher). The endpoint returns the same JSON
+  // envelope used by the hotel-booking voucher flow:
+  //   { status: "SUCCESS", pdfUrl: "<absolute-or-relative-url-to-pdf>" }
+  // The pdfUrl is then loaded into the iframe inside the modal.
+  //
+  // Backend endpoint required:
+  //   GET /api/meet-and-space/booking/{id}/voucher
+  //   Response: { status: "SUCCESS", pdfUrl: "..." }
+  // (Path uses `/voucher` rather than `/pdf` to avoid Spring's static-
+  //  resource handler picking up the `.pdf` suffix when no controller
+  //  is mapped — that was the cause of the original 404.)
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [selectedVoucherBooking, setSelectedVoucherBooking] = useState(null);
+  const [voucherPdfUrl, setVoucherPdfUrl] = useState("");
+  const [voucherLoading, setVoucherLoading] = useState(false);
+
+  const fetchVoucherPdf = async (bookingId) => {
+    setVoucherLoading(true);
+    setVoucherPdfUrl("");
+    try {
+      const res = await axiosInstance.get(
+        `/api/meet-and-space/booking/${bookingId}/voucher`
+      );
+      if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
+        setVoucherPdfUrl(res.data.pdfUrl);
+      } else {
+        toast.error(
+          res.data?.message || "Failed to generate voucher PDF"
+        );
+      }
+    } catch (e) {
+      console.error("Voucher fetch failed", e);
+      toast.error(
+        e?.response?.data?.message || "Failed to load voucher PDF"
+      );
+    } finally {
+      setVoucherLoading(false);
+    }
+  };
+
+  const openVoucher = (row) => {
+    setSelectedVoucherBooking(row);
+    setShowVoucherModal(true);
+    fetchVoucherPdf(row.id);
+  };
+
+  const closeVoucher = () => {
+    setShowVoucherModal(false);
+    setSelectedVoucherBooking(null);
+    setVoucherPdfUrl("");
+  };
 
   const fetchList = async () => {
     setLoading(true);
@@ -198,26 +256,68 @@ export default function MeetAndSpaceBookingList() {
                         </td>
                         <td>{statusBadge(r.bookingStatus)}</td>
                         <td className="text-end">
-                          <Button
-                            size="sm"
-                            variant="outline-info"
-                            className="me-2"
-                            onClick={() => openView(r)}
-                          >
-                            <FaEye /> View
-                          </Button>
-                          {r.bookingStatus !== "Cancelled" && (
-                            <Button
-                              size="sm"
-                              variant="outline-danger"
-                              onClick={() => {
-                                setShowCancel(r);
-                                setCancelReason("");
+                          <div className="d-flex gap-3 justify-content-end align-items-center">
+                            {/* View — opens detail modal */}
+                            <FaEye
+                              role="button"
+                              title="View"
+                              style={{
+                                fontSize: 16,
+                                color: "#007bff",
+                                cursor: "pointer",
                               }}
-                            >
-                              <FaTimesCircle /> Cancel
-                            </Button>
-                          )}
+                              onClick={() => openView(r)}
+                            />
+
+                            {/* Edit — opens the edit page. Disabled for
+                                cancelled bookings (cannot edit a cancelled
+                                booking). */}
+                            {r.bookingStatus !== "Cancelled" && (
+                              <FaEdit
+                                role="button"
+                                title="Edit"
+                                style={{
+                                  fontSize: 16,
+                                  color: "#f39c12",
+                                  cursor: "pointer",
+                                }}
+                                onClick={() =>
+                                  navigate(
+                                    `/booking-details/meet-and-space-booking-list/${r.id}/edit`
+                                  )
+                                }
+                              />
+                            )}
+
+                            {/* Voucher — opens PDF modal with iframe */}
+                            <FaEnvelope
+                              role="button"
+                              title="Voucher / Confirmation"
+                              style={{
+                                fontSize: 16,
+                                color: "#28a745",
+                                cursor: "pointer",
+                              }}
+                              onClick={() => openVoucher(r)}
+                            />
+
+                            {/* Cancel — only when not already cancelled */}
+                            {r.bookingStatus !== "Cancelled" && (
+                              <FaTimesCircle
+                                role="button"
+                                title="Cancel"
+                                style={{
+                                  fontSize: 16,
+                                  color: "#dc3545",
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => {
+                                  setShowCancel(r);
+                                  setCancelReason("");
+                                }}
+                              />
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -497,6 +597,78 @@ export default function MeetAndSpaceBookingList() {
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setViewing(null)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Voucher modal — renders the voucher PDF in an inline iframe.
+          The backend returns { status: "SUCCESS", pdfUrl } and the iframe
+          loads that URL directly. */}
+      <Modal
+        show={showVoucherModal}
+        onHide={closeVoucher}
+        size="xl"
+        centered
+        backdrop="static"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            Voucher — {selectedVoucherBooking?.bookingNumber}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {voucherLoading ? (
+            <div className="text-center py-5">
+              <Spinner animation="border" />
+              <div className="mt-2 small text-muted">
+                Generating voucher PDF…
+              </div>
+            </div>
+          ) : voucherPdfUrl ? (
+            <div
+              style={{
+                border: "1px solid #dee2e6",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  padding: "8px 12px",
+                  background: "#f8f9fa",
+                  fontWeight: 600,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span>Voucher PDF Preview</span>
+                <a
+                  href={voucherPdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-sm btn-outline-primary"
+                >
+                  <FaDownload className="me-1" /> Open / Download
+                </a>
+              </div>
+              <iframe
+                src={voucherPdfUrl}
+                title="Voucher PDF"
+                width="100%"
+                height="560px"
+                style={{ border: "none" }}
+              />
+            </div>
+          ) : (
+            <div className="text-muted text-center py-4">
+              No voucher available for this booking.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeVoucher}>
             Close
           </Button>
         </Modal.Footer>

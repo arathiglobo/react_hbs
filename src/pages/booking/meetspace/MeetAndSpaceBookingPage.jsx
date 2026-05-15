@@ -30,6 +30,7 @@ import {
   Spinner,
   Alert,
   Badge,
+  Modal,
 } from "react-bootstrap";
 import {
   FaCheckCircle,
@@ -39,6 +40,7 @@ import {
   FaMapMarkerAlt,
   FaPlus,
   FaTrash,
+  FaEdit,
 } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import Select from "react-select";
@@ -75,6 +77,15 @@ function useQueryParams() {
 export default function MeetAndSpaceBookingPage() {
   const navigate = useNavigate();
   const q = useQueryParams();
+
+  // Edit mode — when the page is opened from the booking-list edit flow we
+  // receive an `editBookingId`. We fetch that booking, prefill every section
+  // and switch the submit endpoint from POST /save to PUT /{id}/edit. The
+  // backend will append `/N` to the bookingNumber on each edit.
+  const editBookingId = q.editBookingId ? Number(q.editBookingId) : null;
+  const isEditMode = !!editBookingId;
+  const [editBooking, setEditBooking] = useState(null); // raw booking loaded for edit
+  const [showOrderSummary, setShowOrderSummary] = useState(false);
 
   const [space, setSpace] = useState(null);
   // Amenities tied to THIS meeting space (saved on the
@@ -206,6 +217,125 @@ export default function MeetAndSpaceBookingPage() {
     // eslint-disable-next-line
   }, []);
 
+  // ── Edit mode — load existing booking & prefill everything ────────────
+  // Mirrors the hotel edit flow: when `editBookingId` is present we GET
+  // /api/meet-and-space/booking/{id}, then override criteria, customer,
+  // payment, addons, amenities and the additionalRequirements field. The
+  // space is loaded from the booking's meetingSpaceId (the search-page
+  // criteria query params are not needed in edit mode).
+  useEffect(() => {
+    if (!isEditMode) return;
+    setLoading(true);
+    axiosInstance
+      .get(`/api/meet-and-space/booking/${editBookingId}`)
+      .then((r) => {
+        const b = r.data || {};
+        setEditBooking(b);
+
+        // Fetch the space record so the page can render the image + amenity
+        // checkbox list using the same component logic as the create flow.
+        if (b.meetingSpaceId) {
+          axiosInstance
+            .get(`/api/meet-and-space/${b.meetingSpaceId}`)
+            .then((sp) => {
+              setSpace(sp.data);
+              // Prime the amenity checkboxes from the space's master list and
+              // pre-tick the ones that were saved against the booking.
+              const saved = (b.amenities || b.selectedAmenities || [])
+                .filter((a) => a.source !== "Custom")
+                .map((a) => a.amenityName);
+              let amenities = [];
+              if (
+                Array.isArray(sp.data?.amenityList) &&
+                sp.data.amenityList.length
+              ) {
+                amenities = sp.data.amenityList
+                  .map((a, idx) => ({
+                    id: a.id ? `db-${a.id}` : `sp-${idx}`,
+                    name: a.amenityName,
+                    masterAmenityId: a.masterAmenityId || null,
+                  }))
+                  .filter((x) => x.name);
+              }
+              setSpaceAmenities(
+                amenities.map((x) => ({
+                  ...x,
+                  isSelected: saved.includes(x.name),
+                }))
+              );
+              // Any saved Custom amenities go into the free-form repeater.
+              const customs = (b.amenities || b.selectedAmenities || [])
+                .filter((a) => a.source === "Custom")
+                .map((a) => a.amenityName);
+              setCustomAmenities(customs);
+            })
+            .catch(() => {});
+        }
+
+        setCriteria({
+          bookingDate: b.bookingDate || "",
+          startTime: b.startTime || "",
+          endTime: b.endTime || "",
+          attendees: b.attendees || 1,
+          layout: b.layout || "",
+          ratePlan: b.ratePlan || "Standard",
+          rateType: b.rateType || "Hourly",
+          unitRate: Number(b.unitRate || 0),
+        });
+        setEventType(b.eventType || "Meeting");
+        setAdditionalRequirements(b.additionalRequirements || "");
+
+        if (b.customer) {
+          setCustomer({
+            salutation: b.customer.salutation || "Mr",
+            firstName: b.customer.firstName || "",
+            lastName: b.customer.lastName || "",
+            email: b.customer.email || "",
+            mobile: b.customer.mobile || "",
+            alternateMobile: b.customer.alternateMobile || "",
+            companyName: b.customer.companyName || "",
+            designation: b.customer.designation || "",
+            gstNumber: b.customer.gstNumber || "",
+            address: b.customer.address || "",
+            cityId: b.customer.cityId || null,
+            cityName: b.customer.city || "",
+            stateId: b.customer.stateId || null,
+            stateName: b.customer.state || "",
+            pincode: b.customer.pincode || "",
+            idType: b.customer.idType || "Aadhaar",
+            idNumber: b.customer.idNumber || "",
+            remarks: b.customer.remarks || "",
+          });
+        }
+        if (b.payment) {
+          setPayment({
+            paymentMode: b.payment.paymentMode || "Cash",
+            paymentStatus: b.payment.paymentStatus || "Partial",
+            amountPaid: b.payment.amountPaid || 0,
+            transactionReference: b.payment.transactionReference || "",
+            notes: b.payment.notes || "",
+          });
+        }
+        if (Array.isArray(b.addons)) {
+          setAddons(
+            b.addons.map((a) => ({
+              addonName: a.addonName || "",
+              quantity: a.quantity || 1,
+              unitPrice: Number(a.unitPrice || 0),
+              totalPrice: Number(a.totalPrice || 0),
+              remarks: a.remarks || "",
+            }))
+          );
+        }
+      })
+      .catch((e) => {
+        console.error("Load booking for edit failed", e);
+        toast.error("Failed to load booking for editing");
+      })
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line
+  }, [editBookingId]);
+
   // ── Load state list for the selected nationality ──────────────────────
   useEffect(() => {
     if (!nationalityId) {
@@ -324,12 +454,28 @@ export default function MeetAndSpaceBookingPage() {
     if (errors[k]) setErrors((er) => ({ ...er, [k]: null }));
   };
 
+  // ── Review (validate + open order-summary modal) ───────────────────
+  // The form's main "Review & Confirm" button does NOT save directly. It
+  // validates and opens an order-summary modal showing the image + every
+  // captured detail. The actual booking endpoint fires from the modal's
+  // Confirm button (handleConfirm below).
+  const handleReview = () => {
+    if (!space) return;
+    if (!validate()) {
+      const first = document.querySelector(".is-invalid, .text-danger");
+      first?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    setShowOrderSummary(true);
+  };
+
   // ── Confirm booking ─────────────────────────────────────────────────
   const handleConfirm = async () => {
     if (!space) return;
     if (!validate()) {
       const first = document.querySelector(".is-invalid, .text-danger");
       first?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setShowOrderSummary(false);
       return;
     }
     setSaving(true);
@@ -416,13 +562,22 @@ export default function MeetAndSpaceBookingPage() {
             remarks: a.remarks,
           })),
       };
-      const res = await axiosInstance.post(
-        "/api/meet-and-space/booking/save",
-        payload
-      );
+      const res = isEditMode
+        ? await axiosInstance.put(
+            `/api/meet-and-space/booking/${editBookingId}/edit`,
+            payload
+          )
+        : await axiosInstance.post(
+            "/api/meet-and-space/booking/save",
+            payload
+          );
+      const ref = res.data?.bookingNumber || res.data?.bookingCode || "";
       toast.success(
-        `Booking confirmed! Ref: ${res.data?.bookingNumber || ""}`
+        isEditMode
+          ? `Booking updated! New ref: ${ref}`
+          : `Booking confirmed! Ref: ${ref}`
       );
+      setShowOrderSummary(false);
       setTimeout(
         () =>
           navigate("/booking-details/meet-and-space-booking-list", {
@@ -475,130 +630,65 @@ export default function MeetAndSpaceBookingPage() {
       <div className="flex-grow-1">
         <TopBar />
         <Container fluid className="p-4">
-          <h4 className="mb-3">
-            <FaCheckCircle className="me-2 text-success" /> Confirm Meet &amp; Space
-            Booking
-          </h4>
+          <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+            <h4 className="mb-0">
+              <FaCheckCircle className="me-2 text-success" />
+              {isEditMode ? "Edit Meet & Space Booking" : "Confirm Meet & Space Booking"}
+            </h4>
+            {isEditMode && editBooking && (
+              <div className="small">
+                <Badge bg="warning" text="dark" className="me-2">
+                  <FaEdit className="me-1" /> Edit Mode
+                </Badge>
+                <span className="text-muted">
+                  Booking #: <strong>{editBooking.bookingNumber}</strong> · Edits
+                  so far: {editBooking.editCount ?? 0} —{" "}
+                  <span className="text-danger">
+                    next save will append /{(editBooking.editCount ?? 0) + 1}
+                  </span>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Slim space header — the full image + repeat of every detail
+              shows in the Order Summary modal on submit. */}
+          <Card className="shadow-sm mb-3">
+            <Card.Body className="d-flex flex-wrap align-items-center gap-3">
+              <div className="flex-grow-1">
+                <h5 className="mb-1">
+                  {space.spaceName}{" "}
+                  <small className="text-muted">
+                    <FaMapMarkerAlt className="me-1" />
+                    {space.hotelName}
+                  </small>
+                </h5>
+                <div className="small text-muted">
+                  <Badge bg="info" className="me-2">
+                    {space.spaceType}
+                  </Badge>
+                  <Badge bg="secondary" className="me-3">
+                    Capacity {space.capacity}
+                  </Badge>
+                  <FaCalendarAlt className="me-1" />
+                  {criteria.bookingDate} ·{" "}
+                  <FaClock className="me-1" />
+                  {criteria.startTime}—{criteria.endTime} ({pricing.hours}h) ·{" "}
+                  <FaUsers className="me-1" />
+                  {criteria.attendees} · Layout: {criteria.layout || "—"} ·
+                  Agent: {agentName || "—"} · Country:{" "}
+                  {nationalityName || "—"}
+                </div>
+              </div>
+            </Card.Body>
+          </Card>
 
           {errors._general && (
             <Alert variant="danger">{errors._general}</Alert>
           )}
 
           <Row>
-            {/* LEFT — booking summary */}
-            <Col lg={4} className="mb-3">
-              <Card className="shadow-sm">
-                {space.images?.[0]?.imageUrl && (
-                  <Card.Img
-                    variant="top"
-                    src={space.images[0].imageUrl}
-                    style={{ height: 200, objectFit: "cover" }}
-                    onError={(e) => (e.target.style.display = "none")}
-                  />
-                )}
-                <Card.Body>
-                  <h5>{space.spaceName}</h5>
-                  <div className="text-muted small mb-2">
-                    <FaMapMarkerAlt className="me-1" />
-                    {space.hotelName}
-                  </div>
-                  <Badge bg="info" className="me-2">
-                    {space.spaceType}
-                  </Badge>
-                  <Badge bg="secondary">Capacity {space.capacity}</Badge>
-                  {space.description && (
-                    <p className="small text-muted mt-2">
-                      {space.description}
-                    </p>
-                  )}
-                  <hr />
-                  <div className="small">
-                    <div>
-                      <FaCalendarAlt className="me-1" />
-                      <strong>Date:</strong> {criteria.bookingDate}
-                    </div>
-                    <div>
-                      <FaClock className="me-1" />
-                      <strong>Time:</strong> {criteria.startTime} —{" "}
-                      {criteria.endTime} ({pricing.hours}h)
-                    </div>
-                    <div>
-                      <FaUsers className="me-1" />
-                      <strong>Attendees:</strong> {criteria.attendees}
-                    </div>
-                    <div>
-                      <strong>Layout:</strong> {criteria.layout || "—"}
-                    </div>
-                    <div>
-                      <strong>Rate Plan:</strong> {criteria.ratePlan} (
-                      {criteria.rateType})
-                    </div>
-                    <div>
-                      <strong>Unit Rate:</strong> {space.currency || "INR"}{" "}
-                      {Number(criteria.unitRate).toFixed(2)}
-                    </div>
-                    <div>
-                      <strong>Agent:</strong> {agentName || "—"}
-                    </div>
-                    <div>
-                      <strong>Nationality / Country:</strong>{" "}
-                      {nationalityName || "—"}
-                    </div>
-                  </div>
-                </Card.Body>
-              </Card>
-
-              <Card className="shadow-sm mt-3">
-                <Card.Header>
-                  <strong>Price Summary</strong>
-                </Card.Header>
-                <Card.Body>
-                  <Table size="sm" borderless className="mb-0">
-                    <tbody>
-                      <tr>
-                        <td>Sub Total</td>
-                        <td className="text-end">
-                          {pricing.subTotal.toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Add-ons</td>
-                        <td className="text-end">
-                          {pricing.addonTotal.toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Tax ({pricing.taxPercent}%)</td>
-                        <td className="text-end">
-                          {pricing.taxAmount.toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr className="fw-bold border-top">
-                        <td>Total</td>
-                        <td className="text-end text-primary">
-                          {space.currency || "INR"}{" "}
-                          {pricing.totalAmount.toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Amount Paid</td>
-                        <td className="text-end">
-                          {Number(payment.amountPaid || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr className="text-danger fw-bold">
-                        <td>Balance Due</td>
-                        <td className="text-end">
-                          {pricing.balanceDue.toFixed(2)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </Table>
-                </Card.Body>
-              </Card>
-            </Col>
-
-            {/* RIGHT — event + amenities + customer + addons + payment */}
+            {/* LEFT — event + amenities + customer + addons + payment */}
             <Col lg={8}>
               <Card className="shadow-sm mb-3">
                 <Card.Header>
@@ -848,7 +938,7 @@ export default function MeetAndSpaceBookingPage() {
                         }
                       />
                     </Col>
-                    <Col md={6}>
+                    <Col md={12}>
                       <Form.Label>Address</Form.Label>
                       <Form.Control
                         value={customer.address}
@@ -859,7 +949,7 @@ export default function MeetAndSpaceBookingPage() {
                     </Col>
 
                     {/* Country = nationality, plain read-only text */}
-                    <Col md={2}>
+                    <Col md={3}>
                       <Form.Label>Country</Form.Label>
                       <div
                         className="form-control bg-light"
@@ -873,7 +963,7 @@ export default function MeetAndSpaceBookingPage() {
                     </Col>
 
                     {/* State dropdown (filtered by nationality) */}
-                    <Col md={2}>
+                    <Col md={3}>
                       <Form.Label>State *</Form.Label>
                       <Select
                         options={stateOptions}
@@ -902,7 +992,7 @@ export default function MeetAndSpaceBookingPage() {
                     </Col>
 
                     {/* City dropdown (filtered by nationality) */}
-                    <Col md={2}>
+                    <Col md={3}>
                       <Form.Label>City *</Form.Label>
                       <Select
                         options={cityOptions}
@@ -930,7 +1020,7 @@ export default function MeetAndSpaceBookingPage() {
                       )}
                     </Col>
 
-                    <Col md={2}>
+                    <Col md={3}>
                       <Form.Label>Pincode</Form.Label>
                       <Form.Control
                         value={customer.pincode}
@@ -939,7 +1029,7 @@ export default function MeetAndSpaceBookingPage() {
                         }
                       />
                     </Col>
-                    <Col md={2}>
+                    <Col md={4}>
                       <Form.Label>ID Type</Form.Label>
                       <Form.Select
                         value={customer.idType}
@@ -952,7 +1042,7 @@ export default function MeetAndSpaceBookingPage() {
                         ))}
                       </Form.Select>
                     </Col>
-                    <Col md={4}>
+                    <Col md={8}>
                       <Form.Label>ID Number</Form.Label>
                       <Form.Control
                         value={customer.idNumber}
@@ -1156,7 +1246,11 @@ export default function MeetAndSpaceBookingPage() {
               <div className="d-flex justify-content-end gap-2 pb-4">
                 <Button
                   variant="outline-secondary"
-                  onClick={() => window.close()}
+                  onClick={() =>
+                    isEditMode
+                      ? navigate(-1)
+                      : window.close()
+                  }
                   disabled={saving}
                 >
                   Cancel
@@ -1164,26 +1258,371 @@ export default function MeetAndSpaceBookingPage() {
                 <Button
                   variant="success"
                   size="lg"
-                  onClick={handleConfirm}
+                  onClick={handleReview}
                   disabled={saving}
                 >
-                  {saving ? (
-                    <>
-                      <Spinner size="sm" animation="border" /> Confirming...
-                    </>
-                  ) : (
-                    <>
-                      <FaCheckCircle className="me-2" /> Confirm Booking —{" "}
-                      {space.currency || "INR"}{" "}
-                      {pricing.totalAmount.toFixed(2)}
-                    </>
-                  )}
+                  <FaCheckCircle className="me-2" />
+                  {isEditMode ? "Review & Update" : "Review & Confirm"} —{" "}
+                  {space.currency || "INR"}{" "}
+                  {pricing.totalAmount.toFixed(2)}
                 </Button>
+              </div>
+            </Col>
+
+            {/* RIGHT — sticky price summary */}
+            <Col lg={4} className="mb-3">
+              <div style={{ position: "sticky", top: 16 }}>
+                <Card className="shadow-sm">
+                  <Card.Header className="bg-light">
+                    <strong>Price Summary</strong>
+                  </Card.Header>
+                  <Card.Body>
+                    <Table size="sm" borderless className="mb-0">
+                      <tbody>
+                        <tr>
+                          <td>Sub Total</td>
+                          <td className="text-end">
+                            {pricing.subTotal.toFixed(2)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>Add-ons</td>
+                          <td className="text-end">
+                            {pricing.addonTotal.toFixed(2)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>Tax ({pricing.taxPercent}%)</td>
+                          <td className="text-end">
+                            {pricing.taxAmount.toFixed(2)}
+                          </td>
+                        </tr>
+                        <tr className="fw-bold border-top">
+                          <td>Total</td>
+                          <td className="text-end text-primary">
+                            {space.currency || "INR"}{" "}
+                            {pricing.totalAmount.toFixed(2)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>Amount Paid</td>
+                          <td className="text-end">
+                            {Number(payment.amountPaid || 0).toFixed(2)}
+                          </td>
+                        </tr>
+                        <tr className="text-danger fw-bold">
+                          <td>Balance Due</td>
+                          <td className="text-end">
+                            {pricing.balanceDue.toFixed(2)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </Table>
+                  </Card.Body>
+                </Card>
               </div>
             </Col>
           </Row>
         </Container>
       </div>
+
+      {/* ── Order Summary Modal — shown when user clicks Review & Confirm.
+          Displays the space image and a full snapshot of every captured
+          detail. The actual booking endpoint fires from the Confirm button
+          inside the modal (handleConfirm). ── */}
+      <Modal
+        show={showOrderSummary}
+        onHide={() => !saving && setShowOrderSummary(false)}
+        size="xl"
+        scrollable
+        backdrop="static"
+        centered
+      >
+        <Modal.Header closeButton={!saving}>
+          <Modal.Title>
+            <FaCheckCircle className="me-2 text-success" />
+            Order Summary{" "}
+            {isEditMode && (
+              <Badge bg="warning" text="dark" className="ms-2">
+                Edit
+              </Badge>
+            )}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Row className="g-3">
+            <Col md={5}>
+              {space.images?.[0]?.imageUrl ? (
+                <img
+                  src={space.images[0].imageUrl}
+                  alt={space.spaceName}
+                  className="w-100 rounded mb-3"
+                  style={{ height: 220, objectFit: "cover" }}
+                  onError={(e) => (e.target.style.display = "none")}
+                />
+              ) : null}
+              <h5 className="mb-1">{space.spaceName}</h5>
+              <div className="text-muted small mb-2">
+                <FaMapMarkerAlt className="me-1" />
+                {space.hotelName}
+              </div>
+              <Badge bg="info" className="me-2">
+                {space.spaceType}
+              </Badge>
+              <Badge bg="secondary">Capacity {space.capacity}</Badge>
+              {space.description && (
+                <p className="small text-muted mt-2 mb-0">
+                  {space.description}
+                </p>
+              )}
+              <hr />
+              <div className="small">
+                <div>
+                  <FaCalendarAlt className="me-1" />
+                  <strong>Date:</strong> {criteria.bookingDate}
+                </div>
+                <div>
+                  <FaClock className="me-1" />
+                  <strong>Time:</strong> {criteria.startTime} —{" "}
+                  {criteria.endTime} ({pricing.hours}h)
+                </div>
+                <div>
+                  <FaUsers className="me-1" />
+                  <strong>Attendees:</strong> {criteria.attendees}
+                </div>
+                <div>
+                  <strong>Layout:</strong> {criteria.layout || "—"}
+                </div>
+                <div>
+                  <strong>Event Type:</strong> {eventType}
+                </div>
+                <div>
+                  <strong>Rate Plan:</strong> {criteria.ratePlan} (
+                  {criteria.rateType})
+                </div>
+                <div>
+                  <strong>Unit Rate:</strong> {space.currency || "INR"}{" "}
+                  {Number(criteria.unitRate).toFixed(2)}
+                </div>
+                <div>
+                  <strong>Agent:</strong> {agentName || "—"}
+                </div>
+                <div>
+                  <strong>Nationality / Country:</strong>{" "}
+                  {nationalityName || "—"}
+                </div>
+              </div>
+            </Col>
+            <Col md={7}>
+              <Card className="mb-2">
+                <Card.Header className="py-2">
+                  <strong>Customer</strong>
+                </Card.Header>
+                <Card.Body className="small">
+                  <div>
+                    <strong>Name:</strong> {customer.salutation}{" "}
+                    {customer.firstName} {customer.lastName}
+                  </div>
+                  <div>
+                    <strong>Mobile:</strong> {customer.mobile}{" "}
+                    {customer.alternateMobile
+                      ? `· Alt: ${customer.alternateMobile}`
+                      : ""}
+                  </div>
+                  <div>
+                    <strong>Email:</strong> {customer.email || "—"}
+                  </div>
+                  <div>
+                    <strong>Company:</strong> {customer.companyName || "—"}{" "}
+                    {customer.designation ? `(${customer.designation})` : ""}
+                  </div>
+                  <div>
+                    <strong>GSTIN:</strong> {customer.gstNumber || "—"}
+                  </div>
+                  <div>
+                    <strong>Address:</strong> {customer.address || "—"},{" "}
+                    {customer.cityName} {customer.stateName}{" "}
+                    {nationalityName} {customer.pincode}
+                  </div>
+                  <div>
+                    <strong>ID:</strong> {customer.idType}{" "}
+                    {customer.idNumber || "—"}
+                  </div>
+                  {customer.remarks && (
+                    <div>
+                      <strong>Remarks:</strong> {customer.remarks}
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+
+              <Card className="mb-2">
+                <Card.Header className="py-2">
+                  <strong>Requested Amenities</strong>
+                </Card.Header>
+                <Card.Body className="small">
+                  {(() => {
+                    const picked = [
+                      ...spaceAmenities
+                        .filter((a) => a.isSelected)
+                        .map((a) => a.name),
+                      ...customAmenities
+                        .filter((n) => n && n.trim())
+                        .map((n) => n.trim()),
+                    ];
+                    return picked.length
+                      ? picked.join(", ")
+                      : "—";
+                  })()}
+                  {additionalRequirements && (
+                    <div className="mt-2">
+                      <strong>Notes:</strong> {additionalRequirements}
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+
+              <Card className="mb-2">
+                <Card.Header className="py-2">
+                  <strong>Add-ons</strong>
+                </Card.Header>
+                <Card.Body className="small">
+                  {addons.filter((a) => a.addonName && a.addonName.trim())
+                    .length === 0 ? (
+                    <em className="text-muted">No add-ons.</em>
+                  ) : (
+                    <Table size="sm" bordered className="mb-0">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Qty</th>
+                          <th>Unit</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {addons
+                          .filter((a) => a.addonName && a.addonName.trim())
+                          .map((a, i) => (
+                            <tr key={i}>
+                              <td>{a.addonName}</td>
+                              <td>{a.quantity}</td>
+                              <td>
+                                {Number(a.unitPrice || 0).toFixed(2)}
+                              </td>
+                              <td>
+                                {Number(a.totalPrice || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </Table>
+                  )}
+                </Card.Body>
+              </Card>
+
+              <Card className="mb-2">
+                <Card.Header className="py-2">
+                  <strong>Payment</strong>
+                </Card.Header>
+                <Card.Body className="small">
+                  <div>
+                    <strong>Mode:</strong> {payment.paymentMode}
+                  </div>
+                  <div>
+                    <strong>Status:</strong> {payment.paymentStatus}
+                  </div>
+                  <div>
+                    <strong>Amount Paid:</strong> {space.currency || "INR"}{" "}
+                    {Number(payment.amountPaid || 0).toFixed(2)}
+                  </div>
+                  <div>
+                    <strong>Transaction Ref:</strong>{" "}
+                    {payment.transactionReference || "—"}
+                  </div>
+                  {payment.notes && (
+                    <div>
+                      <strong>Notes:</strong> {payment.notes}
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+
+              <Card border="primary">
+                <Card.Header className="py-2 bg-light">
+                  <strong>Price Summary</strong>
+                </Card.Header>
+                <Card.Body className="py-2">
+                  <Table size="sm" borderless className="mb-0">
+                    <tbody>
+                      <tr>
+                        <td>Sub Total</td>
+                        <td className="text-end">
+                          {pricing.subTotal.toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Add-ons</td>
+                        <td className="text-end">
+                          {pricing.addonTotal.toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Tax ({pricing.taxPercent}%)</td>
+                        <td className="text-end">
+                          {pricing.taxAmount.toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="fw-bold border-top">
+                        <td>Total</td>
+                        <td className="text-end text-primary">
+                          {space.currency || "INR"}{" "}
+                          {pricing.totalAmount.toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="text-danger fw-bold">
+                        <td>Balance Due</td>
+                        <td className="text-end">
+                          {pricing.balanceDue.toFixed(2)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </Table>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowOrderSummary(false)}
+            disabled={saving}
+          >
+            Back to edit
+          </Button>
+          <Button
+            variant="success"
+            size="lg"
+            onClick={handleConfirm}
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <Spinner size="sm" animation="border" />{" "}
+                {isEditMode ? "Updating..." : "Confirming..."}
+              </>
+            ) : (
+              <>
+                <FaCheckCircle className="me-2" />
+                {isEditMode ? "Update Booking" : "Confirm Booking"} —{" "}
+                {space.currency || "INR"}{" "}
+                {pricing.totalAmount.toFixed(2)}
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

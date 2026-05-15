@@ -196,6 +196,7 @@ import MeetingSpaceManage from "./pages/HotelActions/MeetingSpace/MeetingSpaceMa
 import MeetAndSpaceSearch from "./pages/search/meetspace/MeetAndSpaceSearch";
 import MeetAndSpaceBookingPage from "./pages/booking/meetspace/MeetAndSpaceBookingPage";
 import MeetAndSpaceBookingList from "./pages/list/MeetAndSpaceBookingList";
+import MeetAndSpaceBookingEditPage from "./pages/list/MeetAndSpaceBookingEditPage";
 
 // Restaurant Module
 import RestaurantRegistration from "./pages/restaurant/RestaurantRegistration";
@@ -453,6 +454,7 @@ export default function App() {
         <Route path="/new-booking/meet-and-space" element={<PrivateRoute><MeetAndSpaceSearch /></PrivateRoute>} />
         <Route path="/new-booking/meet-and-space/book" element={<PrivateRoute><MeetAndSpaceBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/meet-and-space-booking-list" element={<PrivateRoute><MeetAndSpaceBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/meet-and-space-booking-list/:id/edit" element={<PrivateRoute><MeetAndSpaceBookingEditPage /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/create" element={<PrivateRoute><CreateLongStayContract /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/:contractId/edit" element={<PrivateRoute><EditLongStayContract /></PrivateRoute>} />
         {/* 24 Hour Check-In configuration pages — list / create / edit. */}
