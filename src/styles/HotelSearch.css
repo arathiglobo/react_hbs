@@ -1,0 +1,917 @@
+/* ============================================================
+   SEARCH FORM CARD
+   ============================================================ */
+
+   
+
+.search-card-modern {
+  max-width: 100%;
+  background: #fff;
+  border: none;
+  border-radius: 20px;
+  /* FIX #7 — overflow must be visible so react-select portals work */
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s ease;
+}
+
+.search-card-modern .card-body {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+.search-card-modern .form-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+}
+
+.search-card-modern h2 {
+  color: #4a5568;
+  font-size: 2rem;
+}
+
+.search-card-modern p {
+  color: #718096;
+  font-size: 1.1rem;
+}
+
+
+
+/* ============================================================
+   FORM CONTROLS
+   ============================================================ */
+
+.form-control-modern {
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  background: #ffffff;
+}
+
+.form-control-modern:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  outline: none;
+}
+
+/* ============================================================
+   REACT SELECT
+   ============================================================ */
+
+.modern-select .css-13cymwt-control,
+.modern-select .css-t3ipsp-control {
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  min-height: 48px;
+  transition: all 0.3s ease;
+}
+
+.modern-select .css-13cymwt-control:hover,
+.modern-select .css-t3ipsp-control:hover {
+  border-color: #cbd5e0;
+}
+
+.modern-select .css-t3ipsp-control {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.modern-select-sm .css-13cymwt-control,
+.modern-select-sm .css-t3ipsp-control {
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  min-height: 38px;
+  font-size: 0.9rem;
+}
+
+.react-select__menu {
+  z-index: 9999;
+}
+
+.react-select__menu-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+.btn-search-modern {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 50px;
+  padding: 16px 40px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.btn-search-modern:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  color: white;
+}
+
+.btn-search-modern:disabled {
+  opacity: 0.7;
+  transform: none;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+}
+
+.rooms-summary-btn-modern {
+  border: 2px solid #667eea;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 500;
+  color: #667eea;
+  transition: all 0.3s ease;
+}
+
+.rooms-summary-btn-modern:hover {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+/* ============================================================
+   SORT / FILTER BAR
+   ============================================================ */
+
+.sort-pill {
+  height: 36px;
+  background: #f2f2f2 !important;
+  color: #333 !important;
+  border: 1px solid #e0e4eb !important;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  min-width: 120px;
+  transition: all 0.2s ease;
+  border-radius: 8px !important;
+}
+
+/* FIX #3 side effect — active sort pill now visually distinct */
+.sort-pill.active {
+  background: #667eea !important;
+  color: #fff !important;
+  border-color: #667eea !important;
+}
+
+.clear-pill {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border-color: #dbe3ff;
+  color: #2d6ecf;
+  width: 100px;
+}
+
+.clear-pill:hover {
+  background: #f5f8ff;
+  color: #2d6ecf;
+}
+
+/* ============================================================
+   LEFT SIDEBAR
+   ============================================================ */
+
+.leftside {
+  position: sticky;
+  top: 60px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  align-self: flex-start;
+  padding-right: 0;
+  margin-right: 0;
+}
+
+/* 4px minimal scrollbar — visible but unobtrusive */
+.leftside::-webkit-scrollbar {
+  width: 4px;
+}
+.leftside::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 99px;
+}
+.leftside::-webkit-scrollbar-thumb {
+  background: #c8cbd0;
+  border-radius: 99px;
+}
+.leftside::-webkit-scrollbar-thumb:hover {
+  background: #a0a4ab;
+}
+/* Firefox */
+.leftside { scrollbar-width: thin; scrollbar-color: #c8cbd0 #f0f0f0; }
+
+/* full width — no gap on right */
+.left-fixed {
+  width: 100%;
+}
+
+.filtersection {
+  border-radius: 14px;
+  border: 1px solid #e9ecef;
+  width: 100%;
+}
+
+/* ── Section headings: HOTEL TYPE, CHANNEL ── */
+.filtersection .fw-semibold.small {
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9ca3af;
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* ── Search input ── */
+.filtersection .form-control {
+  font-size: 0.92rem;
+  border-radius: 10px;
+  border: 1.5px solid #e2e8f0;
+  padding: 8px 14px;
+  color: #374151;
+  background: #f9fafb;
+  text-align: center;
+}
+.filtersection .form-control:focus {
+  border-color: #667eea;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+  outline: none;
+}
+.filtersection .form-control::placeholder {
+  color: #adb5bd;
+  text-align: left;
+}
+
+/* ── Checkbox rows ── */
+.filter-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.filter-checkbox-list .form-check {
+  display: flex;
+  align-items: center;
+  padding: 5px 6px;
+  margin: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.filter-checkbox-list .form-check:hover {
+  background: #f0f4ff;
+}
+
+.filter-checkbox-list .form-check-input {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 0;
+  margin-right: 10px;
+  margin-left: 2px;
+  border: 1.5px solid #c5cfe8;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-checkbox-list .form-check-input:checked {
+  background-color: #667eea;
+  border-color: #667eea;
+}
+
+.filter-checkbox-list .form-check-input:focus {
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+  border-color: #667eea;
+  outline: none;
+}
+
+/* ── Label — bigger and readable ── */
+.filter-checkbox-list .form-check-label {
+  font-size: 0.95rem;
+  color: #374151;
+  cursor: pointer;
+  line-height: 1.4;
+  font-weight: 400;
+  user-select: none;
+}
+
+/* Checked row highlight */
+.filter-checkbox-list .form-check:has(.form-check-input:checked) {
+  background: #eef2ff;
+}
+.filter-checkbox-list .form-check:has(.form-check-input:checked) .form-check-label {
+  color: #4338ca;
+  font-weight: 600;
+}
+
+/* Divider */
+.filtersection hr {
+  margin: 10px 0;
+  border-color: #f0f0f0;
+}
+
+/* ============================================================
+   MAP PREVIEW
+   ============================================================ */
+
+.map-preview-wrapper {
+  position: relative;
+  width: 100%;
+  height: 90px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #e9eef3;
+}
+
+.map-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.1);
+}
+
+.map-overlay-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  background: #ffffff;
+  border: 2px solid #0d6efd;
+  color: #0d6efd;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.map-overlay-btn:hover {
+  background: #0d6efd;
+  color: #fff;
+}
+
+/* ============================================================
+   HOTEL RESULT CARDS
+   FIX #7 — all debug colours (yellow, lightblue, red, lightgreen,
+   purple borders, red box-shadow) have been removed
+   ============================================================ */
+
+/* hotel-card-modern kept for any legacy references but debug overrides stripped */
+.hotel-card-modern {
+  transition: all 0.3s ease;
+  border: none;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.hotel-card-modern:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Card body — clean, no debug borders or background colours */
+.hotel-card-modern .card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  justify-content: space-between;
+  border-radius: 0 0 16px 16px;
+  min-height: 140px;
+  background: white;
+  position: relative;
+  z-index: 1;
+  gap: 8px;
+  overflow: visible;
+}
+
+.hotel-name {
+  font-size: 1rem;
+  line-height: 1.3;
+  color: #2d3748;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin-bottom: 0;
+  font-weight: 700;
+}
+
+.hotel-location {
+  color: #718096;
+  font-size: 0.82rem;
+  margin-bottom: 0;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  font-weight: 500;
+}
+
+.hotel-badge {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  border: none;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+  width: fit-content;
+  color: white;
+}
+
+.hotel-price-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.hotel-price {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #2d3748;
+  flex: 1;
+  line-height: 1.2;
+}
+
+.btn-view-rooms {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  border: none;
+  border-radius: 10px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 95px;
+}
+
+.btn-view-rooms:hover {
+  background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+
+/* ============================================================
+   LOADER
+   ============================================================ */
+
+.results-loader {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader-ring {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+.loader-ring span {
+  position: absolute;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 6px solid transparent;
+  border-radius: 50%;
+  animation: ringSpin 1.2s linear infinite;
+}
+
+.loader-ring span:nth-child(1) { border-top-color: #0d6efd; }
+.loader-ring span:nth-child(2) { border-right-color: #6f42c1; animation-delay: -0.2s; }
+.loader-ring span:nth-child(3) { border-bottom-color: #20c997; animation-delay: -0.4s; }
+.loader-ring span:nth-child(4) { border-left-color: #fd7e14;  animation-delay: -0.6s; }
+
+@keyframes ringSpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   PAGINATION
+   ============================================================ */
+
+.pagination-modern .page-link {
+  border: none;
+  color: #667eea;
+  padding: 8px 12px;
+  margin: 0 4px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.pagination-modern .page-link:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.pagination-modern .page-item.active .page-link {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
+}
+
+/* ============================================================
+   LAZY IMAGE
+   ============================================================ */
+
+.img-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.img-loading {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.img-loaded {
+  opacity: 1;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .search-card-modern h2 { font-size: 1.6rem; }
+  .search-card-modern p  { font-size: 0.95rem; }
+  .btn-search-modern { padding: 14px 30px; font-size: 1rem; }
+  .sort-pill { min-width: 100px; font-size: 0.78rem; }
+}
+
+@media (max-width: 576px) {
+  .search-card-modern .card-body { padding: 1.5rem; }
+  .btn-search-modern { width: 100%; padding: 16px 20px; }
+}
+
+/* ============================================================
+   SEARCH PROGRESS BAR
+   ============================================================ */
+
+.search-progress-bar-wrap {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.search-progress-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.search-progress-percent {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #667eea;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* Track */
+.search-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #eef0f4;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+/* Animated fill */
+.search-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+  background-size: 200% 100%;
+  animation: progressShimmer 1.6s linear infinite;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes progressShimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* Channel pills row */
+.search-progress-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.channel-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  transition: all 0.25s ease;
+}
+
+/* Pending — grey with pulsing dot */
+.channel-pill.pending {
+  background: #f3f4f6;
+  color: #9ca3af;
+  border: 1px solid #e5e7eb;
+}
+
+.pill-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9ca3af;
+  animation: pillPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pillPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50%       { opacity: 1;   transform: scale(1.2); }
+}
+
+/* Done — green */
+.channel-pill.done {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  font-weight: 600;
+}
+
+/* ============================================================
+   ROOM GUEST SELECTOR — grid card layout
+   ============================================================ */
+
+.rgs-wrap {
+  width: 100%;
+}
+
+/* 2-column grid; single column when only 1 card */
+.rgs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* Each room card */
+.rgs-room-card {
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rgs-room-card:hover {
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.1);
+  border-color: #c7d2fe;
+}
+
+/* Header */
+.rgs-room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rgs-room-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rgs-remove-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #fca5a5;
+  background: none;
+  color: #ef4444;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.rgs-remove-btn:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+/* Stacked counter rows inside each card */
+.rgs-counters-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rgs-counter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rgs-counter-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.rgs-counter-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.3;
+}
+
+.rgs-counter-sub {
+  font-size: 0.7rem;
+  color: #9ca3af;
+}
+
+/* +/- counter */
+.rgs-counter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rgs-counter-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid #667eea;
+  background: #fff;
+  color: #667eea;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.rgs-counter-btn:hover:not(:disabled) {
+  background: #667eea;
+  color: #fff;
+}
+
+.rgs-counter-btn:disabled {
+  border-color: #e5e7eb;
+  color: #d1d5db;
+  cursor: not-allowed;
+}
+
+.rgs-counter-val {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Child ages */
+.rgs-child-ages {
+  padding-top: 8px;
+  border-top: 1px dashed #e9ecef;
+}
+
+.rgs-child-ages-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.rgs-child-ages-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rgs-child-age-select {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rgs-child-age-label {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.rgs-age-dropdown {
+  width: 80px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  font-size: 0.82rem;
+  color: #374151;
+  padding: 4px 6px;
+}
+
+.rgs-age-dropdown:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+  outline: none;
+}
+
+/* Add room tile — same size as a room card */
+.rgs-add-room-btn {
+  border: 2px dashed #c7d2fe;
+  border-radius: 14px;
+  background: #f5f7ff;
+  color: #667eea;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 80px;
+}
+
+.rgs-add-room-btn:hover {
+  background: #eef2ff;
+  border-color: #667eea;
+}
+
+.rgs-add-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  font-weight: 300;
+}
+
+@media (max-width: 768px) {
+
+  .rgs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rgs-room-card {
+    padding: 12px;
+  }
+
+  .rgs-counter-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+}

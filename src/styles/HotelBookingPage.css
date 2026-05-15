@@ -1,0 +1,307 @@
+.hotel-booking-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-wrapper {
+  background-color: #ffffff;
+  padding: 0 1rem;
+}
+
+/* Container max width for better fit */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.card {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 1rem 1.5rem;
+}
+
+.form-label {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.input-group-text {
+  background-color: #e9ecef;
+}
+
+.btn-confirm-booking {
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+}
+
+.guest-form {
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 991px) {
+  .hotel-booking-container {
+    flex-direction: column;
+  }
+
+  .main-content {
+    width: 100%;
+  }
+
+  .content-wrapper {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .card {
+    margin-bottom: 1.5rem;
+  }
+
+  .btn-confirm-booking {
+    width: 100%;
+  }
+
+  .guest-form {
+    padding: 1rem;
+  }
+}
+
+.booking-summary-card {
+  border: none;
+  border-radius: 16px;
+}
+
+.booking-summary-card .card-header {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.booking-summary-card .card-body {
+  font-size: 0.95rem;
+}
+
+.booking-summary-card h5 {
+  font-size: 1.1rem;
+}
+.custom-accordion .accordion-button {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: background-color 0.3s ease;
+}
+
+.custom-accordion .accordion-button:hover {
+  background-color: #e9ecef;
+}
+
+.custom-accordion .accordion-body {
+  padding: 20px;
+  background: #fdfdfd;
+  border-radius: 8px;
+}
+
+/* Responsive improvements */
+@media (min-width: 1200px) {
+  .container {
+    max-width: 1140px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .container {
+    max-width: 1320px;
+  }
+}
+
+/* Form improvements */
+.form-control, .form-select {
+  font-size: 0.9rem;
+}
+
+.form-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Card spacing improvements */
+.card {
+  margin-bottom: 1.5rem;
+}
+
+.booking-summary-card {
+  margin-bottom: 2rem;
+}
+
+/* Button improvements */
+.btn {
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+}
+
+/* Accordion improvements */
+.custom-accordion .accordion-item {
+  margin-bottom: 1rem;
+}
+
+.custom-accordion .accordion-header {
+  font-size: 0.95rem;
+}
+
+/* Guest card improvements */
+.guest-card {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.guest-card h6 {
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Guest Details Section Styling */
+.guest-row {
+  padding: 0.5rem 0;
+}
+
+.guest-row .form-control-sm,
+.guest-row .form-select-sm {
+  font-size: 0.875rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 0.375rem;
+}
+
+.guest-row .form-control-sm:focus,
+.guest-row .form-select-sm:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Room header styling */
+.bg-primary {
+  background-color: #0d6efd !important;
+}
+
+/* Guest label styling */
+.guest-row span {
+  font-size: 0.875rem;
+  color: #6c757d;
+}
+
+/* Horizontal line styling */
+.guest-row hr {
+  border-top: 1px solid #dee2e6;
+  margin: 0.75rem 0;
+}
+
+/* Card body padding for guest section */
+.card-body.p-0 {
+  background-color: #f8f9fa;
+}
+
+/* Form control styling to match screenshot */
+.form-control-sm::placeholder {
+  color: #6c757d;
+  font-size: 0.875rem;
+}
+
+.form-select-sm {
+  color: #6c757d;
+}
+
+/* Booking Summary Enhancements */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%) !important;
+}
+
+.bg-gradient-success {
+  background: linear-gradient(135deg, #198754 0%, #20c997 100%) !important;
+}
+
+.hotel-info-card {
+  border-left: 4px solid #0d6efd;
+  transition: transform 0.2s ease-in-out;
+}
+
+.hotel-info-card:hover {
+  transform: translateY(-2px);
+}
+
+.info-card {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  border: 1px solid #e9ecef;
+}
+
+.info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+.pricing-section {
+  transition: transform 0.2s ease-in-out;
+}
+
+.pricing-section:hover {
+  transform: translateY(-1px);
+}
+
+/* Icon styling */
+.bi-geo-alt-fill {
+  font-size: 0.9rem;
+}
+
+/* Badge enhancements */
+.badge {
+  font-size: 0.75rem;
+  padding: 0.5em 0.75em;
+}
+
+/* Card enhancements */
+.booking-summary-card {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+}
+
+.booking-summary-card .card-header {
+  border-bottom: none;
+}
+
+.booking-summary-card .card-body {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.special-request-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem 1.5rem;
+}
+
+.special-request-check .form-check-label {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 991px) {
+  .special-request-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575px) {
+  .special-request-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
