@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Card,
@@ -12,13 +12,12 @@ import {
   Modal,
   Table,
 } from "react-bootstrap";
-import { FaArrowLeft, FaUtensils, FaCheckCircle, FaSave, FaCheck } from "react-icons/fa";
+import { FaArrowLeft, FaUtensils, FaCheckCircle, FaSave, FaCheck, FaFilePdf, FaExternalLinkAlt } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
-import RestaurantMenuModal from "./RestaurantMenuModal";
 import RestaurantSummary from "./RestaurantSummary";
 
 const SEATING_PREFERENCES = ["Indoor", "Outdoor", "AC", "Non-AC", "Smoking", "Non-Smoking"];
@@ -36,8 +35,11 @@ const RestaurantBooking = () => {
   const incoming = location.state || {};
   const restaurant = incoming.restaurant;
 
-  const [menuModalOpen, setMenuModalOpen] = useState(false);
-  const [selectedItems, setSelectedItems] = useState([]);
+  // Booking no longer captures per-item selections — operators upload menu
+  // PDFs on registration and the customer orders at the venue. We keep an
+  // empty selection so the existing payload shape (items: []) keeps working
+  // until the backend stops expecting that field.
+  const selectedItems = [];
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -101,10 +103,6 @@ const RestaurantBooking = () => {
     }
   };
 
-  const handleConfirmMenuSelection = (items) => {
-    setSelectedItems(items);
-  };
-
   /** Returns an errors object, empty when the form is valid. */
   const validate = () => {
     const err = {};
@@ -118,7 +116,13 @@ const RestaurantBooking = () => {
       const minHours = Number(restaurant?.advanceBookingMinHours) || 0;
       const earliest = new Date(Date.now() + minHours * 3600 * 1000);
       if (!isNaN(slot.getTime()) && slot < earliest) {
-        err.bookingTime = `Advance bookings need at least ${minHours} hour(s) notice`;
+        const hhmm = `${String(earliest.getHours()).padStart(2, "0")}:${String(
+          earliest.getMinutes()
+        ).padStart(2, "0")}`;
+        const dateStr = earliest.toLocaleDateString();
+        err.bookingTime =
+          `Advance bookings need at least ${minHours} hour(s) notice. ` +
+          `Earliest valid slot is ${hhmm} on ${dateStr}.`;
       }
     }
     if (!form.memberCount || Number(form.memberCount) < 1)
@@ -129,6 +133,13 @@ const RestaurantBooking = () => {
       err.customerMobile = "Invalid mobile number";
     if (form.customerEmail && !/\S+@\S+\.\S+/.test(form.customerEmail))
       err.customerEmail = "Invalid email";
+    // Restaurants must have a per-person rate set on the registration page
+    // for the booking math to work. Without it, subTotal would be 0 and
+    // the agent credit-limit + invoice flow downstream would be broken.
+    if (!Number(restaurant?.pricePerPerson)) {
+      err._rate =
+        "This restaurant has no per-person rate configured. Ask the operator to set 'Rate Per Person' on the registration page.";
+    }
     return err;
   };
 
@@ -142,12 +153,32 @@ const RestaurantBooking = () => {
    *  the same UX the backend enforces (which throws 400 when credit is
    *  short).
    */
+  /** Friendly label → field-key map so the toast can name the missing
+   *  inputs instead of saying "Please fix the highlighted fields". */
+  const FIELD_LABELS = {
+    bookingDate: "Booking Date",
+    bookingTime: "Booking Time",
+    memberCount: "Members",
+    customerName: "Customer Name",
+    customerMobile: "Mobile",
+    customerEmail: "Email",
+    _rate: "Per-Person Rate (set on restaurant registration)",
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const err = validate();
     setErrors(err);
     if (Object.keys(err).length) {
-      toast.error("Please fix the highlighted fields");
+      const labels = Object.keys(err).map((k) => FIELD_LABELS[k] || k);
+      const head = labels.slice(0, 3).join(", ");
+      const more = labels.length > 3 ? ` (+${labels.length - 3} more)` : "";
+      toast.error(`Please fill: ${head}${more}`);
+      // Scroll the first inline error into view so the user can see it.
+      setTimeout(() => {
+        const first = document.querySelector(".is-invalid, .text-danger");
+        first?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 0);
       return;
     }
     // Credit-limit guard — only for the Cash flow.
@@ -175,17 +206,55 @@ const RestaurantBooking = () => {
     setSummaryOpen(true);
   };
 
+  /**
+   * Earliest acceptable HH:MM for the picked booking date, given the
+   * venue's advance-booking lead time. When the date is today, the time
+   * picker can only allow now + leadHours. For any future date the venue
+   * is wide open (00:00). When the date is in the past nothing's valid;
+   * we still return "00:00" so the picker doesn't refuse to render.
+   *
+   * Used both as the `min` attribute on the time input (so the browser
+   * picker visually grays out impossible slots) and to drive the helper
+   * text below the input.
+   */
+  const earliestSlot = useMemo(() => {
+    const leadHours = Number(restaurant?.advanceBookingMinHours) || 0;
+    if (!form.bookingDate) return null;
+    const earliest = new Date(Date.now() + leadHours * 3600 * 1000);
+    const picked = new Date(`${form.bookingDate}T00:00:00`);
+    // If the picked date is later than today, any time of day is fine.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (picked.getTime() > today.getTime()) return { hhmm: "00:00", date: picked };
+    // Same day or past: enforce now + leadHours.
+    const hh = String(earliest.getHours()).padStart(2, "0");
+    const mm = String(earliest.getMinutes()).padStart(2, "0");
+    return { hhmm: `${hh}:${mm}`, date: earliest, sameDay: true };
+  }, [form.bookingDate, restaurant?.advanceBookingMinHours]);
+
+  /**
+   * Totals are now driven by the restaurant's per-person rate (set on the
+   * registration page) and the member count picked on the search page —
+   * the old item-by-item subtotal disappeared when we replaced manual
+   * menu rows with menu-PDF uploads.
+   *
+   *   subTotal   = pricePerPerson × memberCount
+   *   taxAmount  = subTotal × taxPercent / 100
+   *   grandTotal = subTotal + taxAmount
+   */
   const computeTotals = () => {
-    const subTotal = selectedItems.reduce((a, b) => a + Number(b.total || 0), 0);
+    const rate = Number(restaurant?.pricePerPerson || 0);
+    const members = Number(form.memberCount || 0);
+    const subTotal = rate * members;
     const taxPercent = Number(restaurant.taxPercent || 0);
     const taxAmount = (subTotal * taxPercent) / 100;
     const grandTotal = subTotal + taxAmount;
-    return { subTotal, taxPercent, taxAmount, grandTotal };
+    return { subTotal, taxPercent, taxAmount, grandTotal, rate, members };
   };
 
   /** Final commit — POST to backend, then redirect to bookings list. */
   const confirmAndSave = async () => {
-    const { subTotal, taxPercent, taxAmount, grandTotal } = computeTotals();
+    const { subTotal, taxPercent, taxAmount, grandTotal, rate } = computeTotals();
     setSaving(true);
     try {
       const payload = {
@@ -199,6 +268,9 @@ const RestaurantBooking = () => {
           price: it.price,
           total: it.total,
         })),
+        // Snapshot the per-person rate that drove subTotal — keeps the
+        // booking auditable if the restaurant's rate changes later.
+        pricePerPerson: rate,
         subTotal,
         taxPercent,
         taxAmount,
@@ -247,6 +319,14 @@ const RestaurantBooking = () => {
               <FaArrowLeft className="me-1" /> Back
             </Button>
           </div>
+
+          {/* Surface the per-person-rate-missing error above the form so
+              the agent can act on it without scrolling. */}
+          {errors._rate && (
+            <Alert variant="warning" className="mb-3">
+              {errors._rate}
+            </Alert>
+          )}
 
           <Form onSubmit={handleSubmit}>
             <Row>
@@ -363,16 +443,44 @@ const RestaurantBooking = () => {
                           type="time"
                           name="bookingTime"
                           value={form.bookingTime}
-                          readOnly
-                          plaintext={false}
-                          className="bg-light"
+                          onChange={handleChange}
+                          isInvalid={!!errors.bookingTime}
+                          // When the booking date is today, refuse times
+                          // before now+leadHours at the browser-picker level
+                          // so the user can't even land on a slot that will
+                          // then fail validation. Skipped for Walk-in.
+                          min={
+                            form.bookingMode === "Advance" &&
+                            earliestSlot?.sameDay
+                              ? earliestSlot.hhmm
+                              : undefined
+                          }
                           placeholder={
                             form.bookingMode === "Walk-in" ? "Anytime during open hours" : ""
                           }
                         />
-                        {form.bookingMode === "Walk-in" && (
+                        <Form.Control.Feedback type="invalid">
+                          {errors.bookingTime}
+                        </Form.Control.Feedback>
+                        {form.bookingMode === "Walk-in" ? (
                           <Form.Text muted>
                             Walk-in — guest can arrive any time during open hours.
+                          </Form.Text>
+                        ) : (
+                          <Form.Text muted className="d-block">
+                            {restaurant?.openTime && restaurant?.closeTime && (
+                              <>
+                                Open {String(restaurant.openTime).slice(0, 5)} –{" "}
+                                {String(restaurant.closeTime).slice(0, 5)}
+                                {earliestSlot?.sameDay && " · "}
+                              </>
+                            )}
+                            {earliestSlot?.sameDay && (
+                              <span className="text-danger">
+                                Earliest today: {earliestSlot.hhmm} (
+                                {Number(restaurant?.advanceBookingMinHours) || 0}h notice)
+                              </span>
+                            )}
                           </Form.Text>
                         )}
                       </Col>
@@ -501,45 +609,65 @@ const RestaurantBooking = () => {
                   </Card.Body>
                 </Card>
 
+                {/* Menu PDFs — the operator uploads one or more menu PDFs on
+                    the registration page; we just surface them here so the
+                    customer / agent can browse them while booking. No pre-
+                    selection of items happens on this page anymore. */}
                 <Card className="mb-3 shadow-sm">
-                  <Card.Header className="bg-white d-flex justify-content-between align-items-center fw-semibold">
-                    <span>Pre-Select Menu (optional)</span>
-                    <Button size="sm" variant="outline-success" onClick={() => setMenuModalOpen(true)}>
-                      <FaUtensils className="me-1" /> Choose Items
-                    </Button>
+                  <Card.Header className="bg-white fw-semibold">
+                    <FaFilePdf className="me-2 text-danger" /> Menu PDFs
                   </Card.Header>
                   <Card.Body>
-                    {selectedItems.length === 0 ? (
-                      <Alert variant="light" className="mb-0 text-muted">
-                        No items selected. You can add menu items now or order at the restaurant.
-                      </Alert>
-                    ) : (
+                    {Array.isArray(restaurant.menuPdfs) &&
+                    restaurant.menuPdfs.length > 0 ? (
                       <ul className="list-unstyled mb-0">
-                        {selectedItems.map((it, i) => (
-                          <li key={i} className="d-flex justify-content-between border-bottom py-1">
-                            <span>
-                              <FaCheckCircle className="text-success me-2" />
-                              {it.menuName}{" "}
-                              <Badge bg="light" text="dark">
-                                x{it.qty}
-                              </Badge>
+                        {restaurant.menuPdfs.map((p, i) => (
+                          <li
+                            key={p.id || i}
+                            className="d-flex align-items-center justify-content-between border rounded px-2 py-1 mb-1"
+                          >
+                            <span className="text-truncate" style={{ maxWidth: 380 }}>
+                              <FaFilePdf className="text-danger me-2" />
+                              {p.displayName ||
+                                (p.fileUrl ? p.fileUrl.split("/").pop() : `Menu ${i + 1}`)}
                             </span>
-                            <span>₹ {Number(it.total).toFixed(2)}</span>
+                            {p.fileUrl && (
+                              <a
+                                href={p.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn btn-sm btn-outline-primary"
+                              >
+                                <FaExternalLinkAlt className="me-1" /> View
+                              </a>
+                            )}
                           </li>
                         ))}
                       </ul>
+                    ) : (
+                      <Alert variant="light" className="mb-0 text-muted">
+                        No menu PDFs uploaded for this restaurant yet.
+                      </Alert>
                     )}
                   </Card.Body>
                 </Card>
               </Col>
 
-              {/* Sticky right column — RestaurantSummary and Review & Submit
-                  stay visible as the user scrolls the long form. The 80px
-                  top offset clears the topbar. */}
+              {/* Sticky right column — RestaurantSummary + Review & Submit
+                  stay visible as the user scrolls the long form. The panel
+                  is capped to viewport height with overflow:auto so the
+                  Submit button is always reachable without overlapping the
+                  Copilot widget at the bottom-right of the page. */}
               <Col lg={4}>
                 <div
                   className="restaurant-booking-summary-sticky"
-                  style={{ position: "sticky", top: 80, zIndex: 2 }}
+                  style={{
+                    position: "sticky",
+                    top: 80,
+                    zIndex: 2,
+                    maxHeight: "calc(100vh - 100px)",
+                    overflowY: "auto",
+                  }}
                 >
                   <RestaurantSummary
                     restaurant={restaurant}
@@ -568,7 +696,8 @@ const RestaurantBooking = () => {
                     className="w-100 mt-3"
                     disabled={saving}
                   >
-                    <FaCheck className="me-2" /> Review &amp; Submit
+                    <FaCheck className="me-2" />{" "}
+                    {saving ? "Saving..." : "Review & Submit"}
                   </Button>
                 </div>
               </Col>
@@ -576,15 +705,6 @@ const RestaurantBooking = () => {
           </Form>
         </div>
       </div>
-
-      <RestaurantMenuModal
-        show={menuModalOpen}
-        onHide={() => setMenuModalOpen(false)}
-        restaurant={restaurant}
-        mode="select"
-        initialSelected={selectedItems}
-        onConfirm={handleConfirmMenuSelection}
-      />
 
       {/* Online-payment modal — Card mode informs the user that an online
           gateway redirect will happen on Confirm. (Gateway redirect is

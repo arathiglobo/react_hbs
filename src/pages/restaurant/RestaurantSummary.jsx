@@ -11,7 +11,13 @@ const RestaurantSummary = ({
   customerName,
   agentName,
 }) => {
-  const subTotal = items.reduce((acc, it) => acc + Number(it.total || 0), 0);
+  // Pricing is now driven by the per-person rate set on the restaurant
+  // registration page × the member count picked on the search page.
+  // The legacy `items` prop is still accepted but no longer rendered as
+  // a billable list — restaurants surface their menus as PDFs instead.
+  const ratePerPerson = Number(restaurant?.pricePerPerson || 0);
+  const members = Number(memberCount || 0);
+  const subTotal = ratePerPerson * members;
   const taxAmount = (subTotal * Number(taxPercent || 0)) / 100;
   const grandTotal = subTotal + taxAmount;
 
@@ -48,23 +54,20 @@ const RestaurantSummary = ({
         )}
 
         <hr />
-        <div className="small fw-semibold mb-1">Selected Items</div>
-        {items.length === 0 ? (
-          <div className="text-muted small fst-italic">No items selected.</div>
-        ) : (
-          <Table size="sm" borderless className="mb-0">
-            <tbody>
-              {items.map((it, i) => (
-                <tr key={i}>
-                  <td className="ps-0">
-                    {it.menuName} <Badge bg="light" text="dark">x{it.qty}</Badge>
-                  </td>
-                  <td className="text-end pe-0">₹ {Number(it.total).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
+        <div className="small fw-semibold mb-1">Charges</div>
+        <Table size="sm" borderless className="mb-0">
+          <tbody>
+            <tr>
+              <td className="ps-0">
+                Rate × Members{" "}
+                <Badge bg="light" text="dark">
+                  ₹ {ratePerPerson.toFixed(2)} × {members}
+                </Badge>
+              </td>
+              <td className="text-end pe-0">₹ {subTotal.toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </Table>
 
         <hr />
         <div className="d-flex justify-content-between">

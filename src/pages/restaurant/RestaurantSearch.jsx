@@ -106,6 +106,17 @@ const RestaurantSearch = () => {
   const [errors, setErrors] = useState({});
   /** Result layout — "grid" shows 3-up cards, "list" shows horizontal rows. */
   const [viewMode, setViewMode] = useState("grid");
+  /** Cuisine-type filter selected from the left sidebar. Each entry is
+   *  a cuisine string. Empty array = no filter applied. Toggling these
+   *  re-calls /api/restaurant/search with `cuisineTypes` in the payload so
+   *  the backend returns only matching restaurants. */
+  const [cuisineFilter, setCuisineFilter] = useState([]);
+  /** Cuisine options shown in the left sidebar. Captured from the very
+   *  first search (no cuisine filter) so the list of options does NOT
+   *  shrink as the user narrows the filter — otherwise selecting
+   *  "Italian" would hide all the other cuisine checkboxes the moment
+   *  the backend returned only Italian restaurants. */
+  const [cuisineOptions, setCuisineOptions] = useState([]);
 
   /** Load agents from /api/agent — same source HotelSearch uses. */
   useEffect(() => {
@@ -234,12 +245,103 @@ const RestaurantSearch = () => {
     const err = {};
     if (!form.bookingDate) err.bookingDate = "Booking date is required";
     else if (form.bookingDate < today()) err.bookingDate = "Booking date cannot be in the past";
-    if (!form.bookingTime) err.bookingTime = "Time slot is required";
     if (!form.destination) err.destination = "Destination is required";
     if (!form.agentId) err.agentId = "Agent is required";
     if (!form.memberCount || Number(form.memberCount) < 1)
       err.memberCount = "At least 1 member";
     return err;
+  };
+
+  /**
+   * Build the search payload from the current form. The optional
+   * {@code cuisines} arg is sent as `cuisineTypes` on the request so the
+   * backend can apply server-side cuisine filtering. Kept as a separate
+   * helper so both the submit handler and the cuisine-toggle effect can
+   * call the same /api/restaurant/search endpoint.
+   */
+  const buildPayload = (cuisines) => ({
+    bookingDate: form.bookingDate,
+    bookingTime: form.bookingTime,
+    // Legacy free-text destination — kept so older rows that only
+    // have the `place` column still match.
+    destination: form.destination?.stateName || form.destination?.label,
+    // Preferred filter — the picked option carries both the FK and
+    // the source ("DESTINATION" | "PROVINCE") so the backend can
+    // match against the right master table.
+    destinationId: form.destination?.id || null,
+    placeSource: form.destination?.source || null,
+    agentId: Number(form.agentId) || null,
+    memberCount: Number(form.memberCount),
+    mealType: form.mealType === "Any" ? null : form.mealType,
+    cuisineTypes:
+      Array.isArray(cuisines) && cuisines.length ? cuisines : null,
+  });
+
+  /**
+   * Call /api/restaurant/search.
+   * @param {string[]} cuisines  cuisine filter to apply (empty = none)
+   * @param {object}   opts
+   * @param {boolean}  opts.withProgress  show the 3-second progress card
+   * @param {boolean}  opts.captureOptions  refresh the sidebar cuisine list
+   *   from this response (used on the initial search only — otherwise the
+   *   sidebar would shrink as the filter narrows results).
+   */
+  const runSearch = async (cuisines, { withProgress = false, captureOptions = false } = {}) => {
+    setLoading(true);
+    setHasSearched(true);
+    setResults([]);
+
+    let interval = null;
+    if (withProgress) {
+      setProgress(0);
+      const start = Date.now();
+      interval = setInterval(() => {
+        setProgress(
+          Math.min(95, Math.round(((Date.now() - start) / 3000) * 100))
+        );
+      }, 100);
+      // Hold the spinner visible for ~3s on the very first search so the
+      // user sees the progress card before results appear.
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+
+    try {
+      const res = await axiosInstance.post(
+        "/api/restaurant/search",
+        buildPayload(cuisines)
+      );
+      const data = Array.isArray(res.data) ? res.data : res.data?.content || [];
+      setResults(data);
+      if (captureOptions) {
+        // Snapshot the cuisine list off the unfiltered response so the
+        // sidebar checkboxes don't disappear when the user narrows the
+        // filter on subsequent calls.
+        const seen = new Map();
+        for (const r of data) {
+          for (const c of r?.cuisineTypes || []) {
+            if (!c) continue;
+            const norm = String(c).trim().toLowerCase();
+            if (!norm || seen.has(norm)) continue;
+            seen.set(norm, String(c).trim());
+          }
+        }
+        setCuisineOptions(
+          Array.from(seen.values()).sort((a, b) => a.localeCompare(b))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Search failed — please try again.");
+      setResults([]);
+    } finally {
+      if (interval) {
+        clearInterval(interval);
+        setProgress(100);
+        setTimeout(() => setLoading(false), 250);
+      } else {
+        setLoading(false);
+      }
+    }
   };
 
   const handleSearch = (e) => {
@@ -253,53 +355,28 @@ const RestaurantSearch = () => {
     // Persist the current criteria so the Back button on the booking page
     // can re-hydrate this screen with the same inputs.
     try {
-      sessionStorage.setItem(
-        "restaurantSearchCriteria",
-        JSON.stringify(form)
-      );
+      sessionStorage.setItem("restaurantSearchCriteria", JSON.stringify(form));
     } catch (_) {}
-    setLoading(true);
-    setHasSearched(true);
-    setResults([]);
-    setProgress(0);
-
-    // 3-second progress animation, then fire the search.
-    const start = Date.now();
-    const interval = setInterval(() => {
-      setProgress(Math.min(95, Math.round(((Date.now() - start) / 3000) * 100)));
-    }, 100);
-
-    setTimeout(async () => {
-      try {
-        const payload = {
-          bookingDate: form.bookingDate,
-          bookingTime: form.bookingTime,
-          // Legacy free-text destination — kept so older rows that only
-          // have the `place` column still match.
-          destination: form.destination?.stateName || form.destination?.label,
-          // Preferred filter — the picked option carries both the FK and
-          // the source ("DESTINATION" | "PROVINCE") so the backend can
-          // match against the right master table.
-          destinationId: form.destination?.id || null,
-          placeSource: form.destination?.source || null,
-          agentId: Number(form.agentId) || null,
-          memberCount: Number(form.memberCount),
-          mealType: form.mealType === "Any" ? null : form.mealType,
-        };
-        const res = await axiosInstance.post("/api/restaurant/search", payload);
-        const data = Array.isArray(res.data) ? res.data : res.data?.content || [];
-        setResults(data);
-      } catch (err) {
-        console.error(err);
-        toast.error("Search failed — please try again.");
-        setResults([]);
-      } finally {
-        clearInterval(interval);
-        setProgress(100);
-        setTimeout(() => setLoading(false), 250);
-      }
-    }, 3000);
+    // Reset any active cuisine filter — a brand-new search starts from
+    // the full result set. Pass `captureOptions: true` so the sidebar
+    // re-builds from this unfiltered response.
+    setCuisineFilter([]);
+    runSearch([], { withProgress: true, captureOptions: true });
   };
+
+  // Re-run the search on the server whenever the cuisine filter changes
+  // AFTER the initial search has fired. The cuisine list itself stays
+  // snapshotted in `cuisineOptions` (set on the initial search) so the
+  // sidebar doesn't shrink as the filter narrows the result set.
+  useEffect(() => {
+    if (!hasSearched) return;
+    runSearch(cuisineFilter, { withProgress: false, captureOptions: false });
+  }, [cuisineFilter]); // eslint-disable-line
+
+  const toggleCuisineFilter = (c) =>
+    setCuisineFilter((prev) =>
+      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
+    );
 
   const goToBooking = (restaurant) => {
     navigate("/new-booking/restaurant/booking", {
@@ -335,7 +412,12 @@ const RestaurantSearch = () => {
         : "none",
       "&:hover": { borderColor: isInvalid ? "#dc3545" : "#86b7fe" },
     }),
-    menu: (base) => ({ ...base, zIndex: 5 }),
+    menu: (base) => ({ ...base, zIndex: 9999 }),
+    // When rendered through `menuPortalTarget`, this ensures the floating
+    // list stays above the sibling Search button (which would otherwise
+    // overlap it because it lives inside a Card with its own stacking
+    // context).
+    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
   });
 
   return (
@@ -371,7 +453,7 @@ const RestaurantSearch = () => {
               <Card.Body className="p-4">
                 <Form onSubmit={handleSearch} noValidate>
                   <Row className="g-3">
-                    <Col lg={3} md={6}>
+                    <Col lg={2} md={6}>
                       <Form.Label className="fw-semibold text-dark">
                         <FaCalendarAlt className="me-1 text-primary" /> Booking Date *
                       </Form.Label>
@@ -386,27 +468,7 @@ const RestaurantSearch = () => {
                       <Form.Control.Feedback type="invalid">{errors.bookingDate}</Form.Control.Feedback>
                     </Col>
 
-                    <Col lg={3} md={6}>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaClock className="me-1 text-info" /> Time Slot *
-                      </Form.Label>
-                      <Form.Select
-                        value={form.bookingTime}
-                        onChange={(e) => setField("bookingTime", e.target.value)}
-                        isInvalid={!!errors.bookingTime}
-                        style={{ height: "42px" }}
-                      >
-                        <option value="">Select a time slot</option>
-                        {TIME_SLOTS.map((t) => (
-                          <option key={t} value={t}>
-                            {formatSlot(t)}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      <Form.Control.Feedback type="invalid">{errors.bookingTime}</Form.Control.Feedback>
-                    </Col>
-
-                    <Col lg={3} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold text-dark">
                         <FaMapMarkerAlt className="me-1 text-danger" /> Destination *
                       </Form.Label>
@@ -429,6 +491,11 @@ const RestaurantSearch = () => {
                         noOptionsMessage={() =>
                           destinationLoading ? "Searching..." : "No matches"
                         }
+                        // Portal the menu to <body> so the dropdown list
+                        // isn't clipped by sibling rows (e.g. the Search
+                        // button below) or by the card overflow.
+                        menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                        menuPosition="fixed"
                         styles={rsStyles(!!errors.destination)}
                       />
                       {errors.destination && (
@@ -436,7 +503,7 @@ const RestaurantSearch = () => {
                       )}
                     </Col>
 
-                    <Col lg={3} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold text-dark">
                         <FaUserTie className="me-1 text-info" /> Agent *
                       </Form.Label>
@@ -444,7 +511,7 @@ const RestaurantSearch = () => {
                         value={form.agentId}
                         onChange={onAgentChange}
                         isInvalid={!!errors.agentId}
-                        style={{ height: "42px" }}
+                        style={{ height: "46px" }}
                         disabled={agentsLoading}
                       >
                         <option value="">
@@ -474,7 +541,7 @@ const RestaurantSearch = () => {
                       )}
                     </Col>
 
-                    <Col lg={3} md={6}>
+                    <Col lg={2} md={6}>
                       <Form.Label className="fw-semibold text-dark">
                         <FaUserFriends className="me-1 text-success" /> Members *
                       </Form.Label>
@@ -489,30 +556,31 @@ const RestaurantSearch = () => {
                       <Form.Control.Feedback type="invalid">{errors.memberCount}</Form.Control.Feedback>
                     </Col>
 
-                    <Col lg={3} md={6}>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaUtensils className="me-1 text-warning" /> Meal Type
-                      </Form.Label>
-                      <Form.Select
-                        value={form.mealType}
-                        onChange={(e) => setField("mealType", e.target.value)}
-                        style={{ height: "42px" }}
-                      >
-                        {MEAL_TYPES.map((m) => (
-                          <option key={m}>{m}</option>
-                        ))}
-                      </Form.Select>
-                    </Col>
-
-                    <Col lg={6} md={12} className="d-flex align-items-end">
+                    <Col lg={12} md={12} className="d-flex align-items-end">
                       <Button
                         type="submit"
                         variant="primary"
                         size="lg"
-                        className="w-100 rounded-pill"
+                        className="w-100 rounded-pill d-flex align-items-center justify-content-center"
                         disabled={loading}
                       >
-                        <FaSearch className="me-2" /> Search Restaurants
+                        {loading ? (
+                          <>
+                            <Spinner
+                              as="span"
+                              animation="border"
+                              size="sm"
+                              role="status"
+                              aria-hidden="true"
+                              className="me-2"
+                            />
+                            Searching…
+                          </>
+                        ) : (
+                          <>
+                            <FaSearch className="me-2" /> Search Restaurants
+                          </>
+                        )}
                       </Button>
                     </Col>
                   </Row>
@@ -537,8 +605,12 @@ const RestaurantSearch = () => {
               </Card>
             )}
 
-            {/* Empty state */}
-            {!loading && hasSearched && results.length === 0 && (
+            {/* Empty state — only shown when the very first search
+                returned nothing, i.e. there are no cuisine options to
+                offer either. Once we have a sidebar populated, any
+                "no matches" message renders inside the results column
+                so the user can still toggle the cuisine filter off. */}
+            {!loading && hasSearched && results.length === 0 && cuisineOptions.length === 0 && (
               <Card className="shadow-sm border-0 rounded-4">
                 <Card.Body className="text-center text-muted py-5">
                   <FaUtensils size={48} className="mb-2 opacity-50" />
@@ -548,55 +620,122 @@ const RestaurantSearch = () => {
               </Card>
             )}
 
-            {/* Results */}
-            {!loading && results.length > 0 && (
-              <>
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h5 className="mb-0">
-                    <Badge bg="primary" className="me-2">
-                      {results.length}
-                    </Badge>
-                    restaurants in {form.destination?.label}
-                  </h5>
-                  {/* Grid / List view toggle — same pattern as RoomList.jsx */}
-                  <div className="btn-group shadow-sm gap-1" role="group" aria-label="View mode">
-                    <Button
-                      variant={viewMode === "grid" ? "primary" : "outline-primary"}
-                      onClick={() => setViewMode("grid")}
-                      size="sm"
-                      className="d-flex align-items-center gap-2"
-                      aria-pressed={viewMode === "grid"}
-                    >
-                      <span className="fs-5" style={{ lineHeight: 1 }}>⊞</span>
-                    </Button>
-                    <Button
-                      variant={viewMode === "list" ? "primary" : "outline-primary"}
-                      onClick={() => setViewMode("list")}
-                      size="sm"
-                      className="d-flex align-items-center gap-2"
-                      aria-pressed={viewMode === "list"}
-                    >
-                      <span className="fs-5" style={{ lineHeight: 1 }}>☰</span>
-                    </Button>
+            {/* Results — two-column layout: sidebar cuisine filter (left)
+                + result cards (right). Mirrors HotelSearch.jsx pattern.
+                Shown whenever the initial search produced at least one
+                cuisine option, so the user can adjust the cuisine filter
+                even when the current filtered result set is empty. */}
+            {!loading && hasSearched && cuisineOptions.length > 0 && (
+              <Row className="g-3">
+                {/* LEFT — cuisine filter sidebar */}
+                <Col lg={3} md={4} className="d-none d-md-block">
+                  <div style={{ position: "sticky", top: 16 }}>
+                    <Card className="shadow-sm rounded-4">
+                      <Card.Header className="bg-white fw-semibold d-flex justify-content-between align-items-center">
+                        <span>
+                          <FaUtensils className="me-2 text-warning" />
+                          Cuisine
+                        </span>
+                        {cuisineFilter.length > 0 && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0 text-decoration-none"
+                            onClick={() => setCuisineFilter([])}
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </Card.Header>
+                      <Card.Body className="p-2" style={{ maxHeight: 480, overflowY: "auto" }}>
+                        {cuisineOptions.length === 0 ? (
+                          <div className="text-muted small p-2">
+                            No cuisine tags on these results.
+                          </div>
+                        ) : (
+                          cuisineOptions.map((c) => (
+                            <Form.Check
+                              key={c}
+                              type="checkbox"
+                              id={`cuisine-${c}`}
+                              label={c}
+                              checked={cuisineFilter.includes(c)}
+                              onChange={() => toggleCuisineFilter(c)}
+                              className="mb-1"
+                            />
+                          ))
+                        )}
+                      </Card.Body>
+                    </Card>
                   </div>
-                </div>
-                <Row className="g-3">
-                  {results.map((r) => (
-                    <Col
-                      key={r.id}
-                      md={viewMode === "grid" ? 6 : 12}
-                      lg={viewMode === "grid" ? 4 : 12}
-                    >
-                      <RestaurantCard
-                        restaurant={r}
-                        viewMode={viewMode}
-                        onView={() => goToView(r)}
-                        onBook={() => goToBooking(r)}
-                      />
-                    </Col>
-                  ))}
-                </Row>
-              </>
+                </Col>
+
+                {/* RIGHT — result list */}
+                <Col lg={9} md={8}>
+                  <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h5 className="mb-0">
+                      <Badge bg="primary" className="me-2">
+                        {results.length}
+                      </Badge>
+                      {cuisineFilter.length
+                        ? `restaurants · filtered by ${cuisineFilter.join(", ")}`
+                        : `restaurants in ${form.destination?.label || ""}`}
+                    </h5>
+                    {/* Grid / List view toggle — same pattern as RoomList.jsx */}
+                    <div className="btn-group shadow-sm gap-1" role="group" aria-label="View mode">
+                      <Button
+                        variant={viewMode === "grid" ? "primary" : "outline-primary"}
+                        onClick={() => setViewMode("grid")}
+                        size="sm"
+                        className="d-flex align-items-center gap-2"
+                        aria-pressed={viewMode === "grid"}
+                      >
+                        <span className="fs-5" style={{ lineHeight: 1 }}>⊞</span>
+                      </Button>
+                      <Button
+                        variant={viewMode === "list" ? "primary" : "outline-primary"}
+                        onClick={() => setViewMode("list")}
+                        size="sm"
+                        className="d-flex align-items-center gap-2"
+                        aria-pressed={viewMode === "list"}
+                      >
+                        <span className="fs-5" style={{ lineHeight: 1 }}>☰</span>
+                      </Button>
+                    </div>
+                  </div>
+
+                  {results.length === 0 ? (
+                    <Card className="shadow-sm border-0 rounded-4">
+                      <Card.Body className="text-center text-muted py-5">
+                        <FaUtensils size={48} className="mb-2 opacity-50" />
+                        <h6 className="mb-1">No restaurants match these filters</h6>
+                        <small>
+                          {cuisineFilter.length
+                            ? "Clear the cuisine filter to see all results."
+                            : "Try a different destination or date."}
+                        </small>
+                      </Card.Body>
+                    </Card>
+                  ) : (
+                    <Row className="g-3">
+                      {results.map((r) => (
+                        <Col
+                          key={r.id}
+                          md={viewMode === "grid" ? 6 : 12}
+                          lg={viewMode === "grid" ? 6 : 12}
+                        >
+                          <RestaurantCard
+                            restaurant={r}
+                            viewMode={viewMode}
+                            onView={() => goToView(r)}
+                            onBook={() => goToBooking(r)}
+                          />
+                        </Col>
+                      ))}
+                    </Row>
+                  )}
+                </Col>
+              </Row>
             )}
           </Container>
         </main>

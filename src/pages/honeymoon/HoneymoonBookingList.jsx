@@ -13,7 +13,16 @@ import {
   Modal,
   Container,
 } from "react-bootstrap";
-import { FaSearch, FaCalendarAlt, FaSuitcaseRolling, FaEye, FaTimes, FaExclamationTriangle } from "react-icons/fa";
+import {
+  FaSearch,
+  FaCalendarAlt,
+  FaSuitcaseRolling,
+  FaEye,
+  FaTimes,
+  FaExclamationTriangle,
+  FaFilePdf,
+  FaDownload,
+} from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -32,6 +41,42 @@ const HoneymoonBookingList = () => {
   const [toCancel, setToCancel] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+
+  // ── Voucher modal state ────────────────────────────────────────────
+  // Mirrors the meet-and-space voucher flow: click the envelope icon in
+  // the actions column → server generates a PDF and returns
+  // { status, message, pdfUrl } → the URL is loaded in an inline iframe.
+  const [voucherFor, setVoucherFor] = useState(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+  const [voucherPdfUrl, setVoucherPdfUrl] = useState("");
+
+  const openVoucher = async (booking) => {
+    setVoucherFor(booking);
+    setVoucherLoading(true);
+    setVoucherPdfUrl("");
+    try {
+      const res = await axiosInstance.get(
+        `/api/honeymoon/booking/${booking.id}/voucher`
+      );
+      if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
+        setVoucherPdfUrl(res.data.pdfUrl);
+      } else {
+        toast.error(res.data?.message || "Failed to generate voucher PDF");
+      }
+    } catch (e) {
+      console.error("Voucher fetch failed", e);
+      toast.error(
+        e?.response?.data?.message || "Failed to load voucher PDF"
+      );
+    } finally {
+      setVoucherLoading(false);
+    }
+  };
+
+  const closeVoucher = () => {
+    setVoucherFor(null);
+    setVoucherPdfUrl("");
+  };
 
   const load = async () => {
     setLoading(true);
@@ -184,25 +229,37 @@ const HoneymoonBookingList = () => {
                             )}
                           </td>
                           <td>
-                            <Button
-                              size="sm"
-                              variant="outline-info"
-                              className="me-1"
-                              onClick={() => setSelected(b)}
-                              title="View"
-                            >
-                              <FaEye />
-                            </Button>
-                            {!b.isCancelled && (
+                            <div className="d-flex gap-2 flex-wrap">
                               <Button
                                 size="sm"
-                                variant="outline-danger"
-                                onClick={() => setToCancel(b)}
-                                title="Cancel"
+                                variant="outline-info"
+                                onClick={() => setSelected(b)}
+                                title="View"
                               >
-                                <FaTimes />
+                                <FaEye />
                               </Button>
-                            )}
+                              {/* Voucher — generates a PDF via the backend
+                                  and opens it in an iframe modal. */}
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                onClick={() => openVoucher(b)}
+                                title="Voucher"
+                                disabled={b.isCancelled}
+                              >
+                                <FaFilePdf />
+                              </Button>
+                              {!b.isCancelled && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  onClick={() => setToCancel(b)}
+                                  title="Cancel"
+                                >
+                                  <FaTimes />
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -289,6 +346,79 @@ const HoneymoonBookingList = () => {
             </>
           )}
         </Modal.Body>
+      </Modal>
+
+      {/* Voucher modal — backend returns { status, message, pdfUrl };
+          the pdfUrl is loaded into an inline iframe so the agent can scroll
+          through the voucher without leaving the page. */}
+      <Modal
+        show={!!voucherFor}
+        onHide={closeVoucher}
+        size="xl"
+        centered
+        backdrop="static"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <FaFilePdf className="text-danger me-2" />
+            Voucher — {voucherFor?.bookingNumber}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {voucherLoading ? (
+            <div className="text-center py-5">
+              <Spinner animation="border" />
+              <div className="mt-2 small text-muted">
+                Generating voucher PDF…
+              </div>
+            </div>
+          ) : voucherPdfUrl ? (
+            <div
+              style={{
+                border: "1px solid #dee2e6",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  padding: "8px 12px",
+                  background: "#f8f9fa",
+                  fontWeight: 600,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span>Voucher PDF Preview</span>
+                <a
+                  href={voucherPdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-sm btn-outline-primary"
+                >
+                  <FaDownload className="me-1" /> Open / Download
+                </a>
+              </div>
+              <iframe
+                src={voucherPdfUrl}
+                title="Honeymoon Voucher"
+                width="100%"
+                height="560px"
+                style={{ border: "none" }}
+              />
+            </div>
+          ) : (
+            <div className="text-muted text-center py-4">
+              No voucher available for this booking.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeVoucher}>
+            Close
+          </Button>
+        </Modal.Footer>
       </Modal>
 
       <Modal show={!!toCancel} onHide={() => !cancelling && setToCancel(null)} centered>

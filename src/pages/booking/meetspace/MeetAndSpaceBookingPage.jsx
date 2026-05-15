@@ -430,7 +430,25 @@ export default function MeetAndSpaceBookingPage() {
     });
 
   // ── Validation (inline) ────────────────────────────────────────────
-  const validate = () => {
+  // Human-readable labels for each errored field — used by `toastErrors`
+  // below to tell the user exactly which inputs are missing rather than
+  // the generic "Please fix the highlighted fields" they were seeing.
+  const FIELD_LABELS = {
+    firstName: "First Name",
+    mobile: "Mobile",
+    email: "Email",
+    cityId: "City",
+    stateId: "State",
+    eventType: "Event Type",
+    attendees: "Attendees",
+    amountPaid: "Amount Paid",
+  };
+
+  /** Pure error-collection — returns the errors map without touching state.
+   *  Used both by `validate()` (which commits the map via setErrors) and by
+   *  the review/confirm handlers when they need a fresh snapshot to toast
+   *  the missing-field names. */
+  const collectErrors = () => {
     const e = {};
     if (!customer.firstName.trim()) e.firstName = "First name is required";
     if (!customer.mobile.trim()) e.mobile = "Mobile is required";
@@ -445,8 +463,40 @@ export default function MeetAndSpaceBookingPage() {
       e.attendees = "Attendees must be > 0";
     if (Number(payment.amountPaid || 0) < 0)
       e.amountPaid = "Amount cannot be negative";
+    return e;
+  };
+
+  const validate = () => {
+    const e = collectErrors();
     setErrors(e);
     return Object.keys(e).length === 0;
+  };
+
+  /** Show a toast listing the fields that failed validation. Up to three
+   *  field names are surfaced inline; the rest are summarised as "+N more". */
+  const toastErrors = (errs) => {
+    const labels = Object.keys(errs)
+      .filter((k) => k !== "_general")
+      .map((k) => FIELD_LABELS[k] || k);
+    if (labels.length === 0) {
+      toast.error("Please fix the highlighted fields");
+      return;
+    }
+    const head = labels.slice(0, 3).join(", ");
+    const more = labels.length > 3 ? ` (+${labels.length - 3} more)` : "";
+    toast.error(`Please fill: ${head}${more}`);
+  };
+
+  /** react-select style override that surfaces inline error state with a
+   *  red border, matching the Bootstrap `.is-invalid` look on the rest of
+   *  the form. Used by the State / City pickers below. */
+  const invalidSelectStyles = {
+    control: (base, state) => ({
+      ...base,
+      borderColor: "#dc3545",
+      boxShadow: state.isFocused ? "0 0 0 .25rem rgba(220,53,69,.25)" : "none",
+      "&:hover": { borderColor: "#dc3545" },
+    }),
   };
 
   const setCustomerField = (k, v) => {
@@ -462,6 +512,12 @@ export default function MeetAndSpaceBookingPage() {
   const handleReview = () => {
     if (!space) return;
     if (!validate()) {
+      // Surface every missing field by name so the user knows exactly what
+      // to fix. The validate() call already populated `errors` via state —
+      // read the latest map by re-running the same checks instead of relying
+      // on a stale `errors` snapshot.
+      const fresh = collectErrors();
+      toastErrors(fresh);
       const first = document.querySelector(".is-invalid, .text-danger");
       first?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
@@ -473,6 +529,8 @@ export default function MeetAndSpaceBookingPage() {
   const handleConfirm = async () => {
     if (!space) return;
     if (!validate()) {
+      const fresh = collectErrors();
+      toastErrors(fresh);
       const first = document.querySelector(".is-invalid, .text-danger");
       first?.scrollIntoView({ behavior: "smooth", block: "center" });
       setShowOrderSummary(false);
@@ -983,6 +1041,8 @@ export default function MeetAndSpaceBookingPage() {
                         }}
                         placeholder="Select state..."
                         isClearable
+                        styles={errors.stateId ? invalidSelectStyles : undefined}
+                        className={errors.stateId ? "text-danger" : ""}
                       />
                       {errors.stateId && (
                         <div className="text-danger small mt-1">
@@ -1012,6 +1072,8 @@ export default function MeetAndSpaceBookingPage() {
                         }}
                         placeholder="Select city..."
                         isClearable
+                        styles={errors.cityId ? invalidSelectStyles : undefined}
+                        className={errors.cityId ? "text-danger" : ""}
                       />
                       {errors.cityId && (
                         <div className="text-danger small mt-1">

@@ -89,6 +89,10 @@ const initialState = {
   hotelCategoryLabel: "",
   mealPlanId: "",
   mealPlanLabel: "",
+  // Multi-select meal plans — list of plan labels (e.g. ["Breakfast",
+  // "Half Board"]). The legacy single-select fields above are kept so
+  // older view-pages that read mealPlanLabel keep rendering something.
+  mealPlans: [],
   status: "Active",
 };
 
@@ -258,6 +262,14 @@ const HoneymoonRegistration = () => {
           validityTo: d.validityTo ? d.validityTo.slice(0, 16) : "",
           hotelCategoryLabel: d.hotelCategory || "",
           mealPlanLabel: d.mealPlan || "",
+          // Server returns the multi-select list in `mealPlans` (array of
+          // labels). Older rows only have the single `mealPlan` CSV — fall
+          // back to splitting that.
+          mealPlans: Array.isArray(d.mealPlans) && d.mealPlans.length
+            ? d.mealPlans
+            : (typeof d.mealPlan === "string" && d.mealPlan
+                ? d.mealPlan.split(",").map((s) => s.trim()).filter(Boolean)
+                : []),
           status: d.status || "Active",
         }));
         setExistingImages(d.images || []);
@@ -471,7 +483,11 @@ const HoneymoonRegistration = () => {
         validityFrom: formData.validityFrom || null,
         validityTo: formData.validityTo || null,
         hotelCategory: formData.hotelCategoryLabel || null,
-        mealPlan: formData.mealPlanLabel || null,
+        // Multi-select list — server joins it into the legacy `meal_plan`
+        // CSV column. Keep `mealPlan` populated with the first item so
+        // older read paths still find a non-empty single value.
+        mealPlans: Array.isArray(formData.mealPlans) ? formData.mealPlans : [],
+        mealPlan: (formData.mealPlans && formData.mealPlans[0]) || formData.mealPlanLabel || null,
         inclusions: serialiseList(inclusions),
         exclusions: serialiseList(exclusions),
         cancellationPolicy: serialiseList(cancellationPolicies),
@@ -481,7 +497,10 @@ const HoneymoonRegistration = () => {
         itinerary: days
           .filter((d) => d.heading || d.activities || d.place || d.placeOption)
           .map((d, i) => ({
-            dayNumber: d.dayNumber || i + 1,
+            // Day number is always derived from the filtered row index so
+            // the saved sequence stays 1, 2, 3, ... regardless of what
+            // stale `dayNumber` may have been on the in-memory row.
+            dayNumber: i + 1,
             heading: d.heading || "",
             // rawId carries the actual numeric id (province or destination).
             // placeOption.value is prefixed "p_…" / "d_…" purely to keep the
@@ -771,22 +790,43 @@ const HoneymoonRegistration = () => {
                     </Col>
                     <Col md={3}>
                       <Form.Label>Meal Plan</Form.Label>
-                      <Form.Select
-                        value={formData.mealPlanId}
-                        onChange={(e) => {
-                          const idStr = e.target.value;
-                          const m = mealPlans.find((x) => String(x.mealPlanId) === idStr);
-                          setField("mealPlanId", idStr);
-                          setField("mealPlanLabel", m?.name || "");
+                      {/* Multi-select — the package may offer more than one
+                          meal plan. Stored on the server as a comma-separated
+                          string under `mealPlan`; the FE works with a plain
+                          array of labels in `formData.mealPlans`. */}
+                      <Select
+                        isMulti
+                        options={mealPlans.map((m) => ({
+                          value: m.name,
+                          label: m.name,
+                          mealPlanId: m.mealPlanId,
+                        }))}
+                        value={(formData.mealPlans || []).map((name) => ({
+                          value: name,
+                          label: name,
+                        }))}
+                        onChange={(opts) => {
+                          const list = Array.isArray(opts)
+                            ? opts.map((o) => o.value).filter(Boolean)
+                            : [];
+                          setField("mealPlans", list);
+                          // Keep the legacy single fields in sync with the
+                          // first picked plan so existing read sites still
+                          // render a label.
+                          setField("mealPlanLabel", list[0] || "");
+                          const firstOpt = Array.isArray(opts) ? opts[0] : null;
+                          setField(
+                            "mealPlanId",
+                            firstOpt?.mealPlanId ? String(firstOpt.mealPlanId) : ""
+                          );
                         }}
-                      >
-                        <option value="">Select meal plan</option>
-                        {mealPlans.map((m) => (
-                          <option key={m.mealPlanId} value={m.mealPlanId}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </Form.Select>
+                        placeholder="Select meal plans..."
+                        menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                        styles={{
+                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                          menu: (b) => ({ ...b, zIndex: 9999 }),
+                        }}
+                      />
                     </Col>
 
                     <Col md={12}>
@@ -891,11 +931,18 @@ const HoneymoonRegistration = () => {
                       {days.map((d, idx) => (
                         <tr key={idx}>
                           <td>
+                            {/* Day number is purely a serial — always shows
+                                the row's index + 1 and isn't user-editable.
+                                Reordering / removing rows keeps the
+                                sequence contiguous (Day 1, 2, 3, ...). */}
                             <Form.Control
                               type="number"
-                              min={1}
-                              value={d.dayNumber}
-                              onChange={(e) => updateDay(idx, "dayNumber", Number(e.target.value) || idx + 1)}
+                              value={idx + 1}
+                              readOnly
+                              plaintext={false}
+                              className="bg-light text-center"
+                              style={{ maxWidth: 70 }}
+                              tabIndex={-1}
                             />
                           </td>
                           <td>

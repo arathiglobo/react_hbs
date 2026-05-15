@@ -291,8 +291,20 @@ const HoneymoonSearch = () => {
           : "0 0 0 .25rem rgba(13,110,253,.25)"
         : "none",
     }),
-    menu: (b) => ({ ...b, zIndex: 5 }),
+    menu: (b) => ({ ...b, zIndex: 9999 }),
+    // Portal anchor — keeps the dropdown above sibling rows + cards and
+    // outside the search card's own overflow context so the list scrolls
+    // properly even when the parent has clipping.
+    menuPortal: (b) => ({ ...b, zIndex: 9999 }),
   });
+
+  // Shared prop set for portal-rendered selects (Starting From / Going To)
+  // so the dropdown list isn't clipped by sibling rows or the search card's
+  // overflow context.
+  const portalProps = {
+    menuPortalTarget: typeof document !== "undefined" ? document.body : null,
+    menuPosition: "fixed",
+  };
 
   return (
     <div className="min-vh-100 d-flex flex-column" style={{ background: "#f5f7fb" }}>
@@ -342,6 +354,7 @@ const HoneymoonSearch = () => {
                             : "No matches"
                         }
                         styles={rsStyles(!!errors.startingFrom)}
+                        {...portalProps}
                       />
                       {errors.startingFrom && (
                         <div className="text-danger small mt-1">{errors.startingFrom}</div>
@@ -370,6 +383,7 @@ const HoneymoonSearch = () => {
                             : "No matches"
                         }
                         styles={rsStyles(!!errors.destination)}
+                        {...portalProps}
                       />
                       {errors.destination && (
                         <div className="text-danger small mt-1">{errors.destination}</div>
@@ -434,7 +448,7 @@ const HoneymoonSearch = () => {
                       />
                     </Col>
 
-                    <Col lg={4} md={6}>
+                    <Col lg={6} md={6}>
                       <Form.Label className="fw-semibold">
                         <FaUserTie className="me-1 text-info" /> Agent *
                       </Form.Label>

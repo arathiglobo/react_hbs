@@ -159,21 +159,41 @@ const HoneymoonBooking = () => {
     const childCount = Number(form.children) || 0;
     const pax = Math.max(1, adults + childCount);
 
-    // Pricing now comes from the package rate row (HoneymoonPackageRate).
-    // Fall back to the legacy perPaxRate if no rate row is available.
+    // Pricing comes from the package rate row (HoneymoonPackageRate). Fall
+    // back to the legacy perPaxRate if no rate row is available.
+    //
+    // ── Children pricing fix (Issue 9) ──
+    // Some rate rows don't have a per-child rate configured. When that
+    // happens, default the child rate to 50% of the per-adult rate so
+    // adding a child can NEVER make the total go down (the previous
+    // behaviour caused 5500 → 3750 when a child was added because the
+    // per-child rate was missing and the search-page perPaxRate divided
+    // a smaller subtotal across more pax).
     let baseTotal;
+    let perAdult = 0;
+    let perChild = 0;
     let perPax;
     if (selectedRate) {
-      const perAdult = Number(selectedRate.perAdultRate || 0);
-      const perChild = Number(selectedRate.perChildWithBed || 0);
+      perAdult = Number(selectedRate.perAdultRate || 0);
+      const rawChild = Number(selectedRate.perChildWithBed || 0);
+      perChild = rawChild > 0 ? rawChild : Math.round(perAdult * 0.5);
       baseTotal = perAdult * adults + perChild * childCount;
       perPax = pax > 0 ? baseTotal / pax : perAdult;
     } else {
       perPax = Number(pkg.baseRate ?? pkg.perPaxRate ?? 0);
-      baseTotal = perPax * pax;
+      perAdult = perPax;
+      perChild = Math.round(perPax * 0.5);
+      baseTotal = perAdult * adults + perChild * childCount;
     }
 
-    const markupPct = Number(pkg.markupPercent ?? 0);
+    // Markup priority (Issue 7):
+    //   1. Agent's configured markup percent (delivered on the package
+    //      via /api/honeymoon/search → `agentMarkupPercent`)
+    //   2. Package's legacy `markupPercent`
+    //   3. Zero
+    const markupPct = Number(
+      pkg.agentMarkupPercent ?? pkg.markupPercent ?? 0
+    );
     const markupAmount = (baseTotal * markupPct) / 100;
     const taxPct = 5;
     const taxable = baseTotal + markupAmount;
@@ -193,6 +213,10 @@ const HoneymoonBooking = () => {
     const grandTotal = taxable + taxAmount + addonsGrand;
     return {
       perPax,
+      perAdult,
+      perChild,
+      adults,
+      childCount,
       pax,
       baseTotal,
       markupPct,
@@ -501,11 +525,16 @@ const HoneymoonBooking = () => {
                                   )
                                 }
                               />
+                              {/* Price for the selected add-on. Label and
+                                  placeholder are descriptive so the agent
+                                  knows what to enter (Issue 3). */}
                               <Form.Control
                                 type="number"
                                 min={0}
                                 step="0.01"
-                                placeholder="Price"
+                                placeholder={`Price for ${a.label} (₹)`}
+                                aria-label={`${a.label} price`}
+                                title={`Enter the price for ${a.label}`}
                                 value={a.price}
                                 disabled={!a.checked}
                                 onChange={(e) =>
@@ -517,9 +546,15 @@ const HoneymoonBooking = () => {
                                     )
                                   )
                                 }
-                                style={{ maxWidth: 140 }}
+                                style={{ maxWidth: 180 }}
                               />
                             </div>
+                            {a.checked && (
+                              <Form.Text muted className="small">
+                                Enter the price (₹) for {a.label}. Adds on
+                                top of the package total.
+                              </Form.Text>
+                            )}
                           </Col>
                         ))}
                       </Row>
@@ -557,7 +592,8 @@ const HoneymoonBooking = () => {
                               type="number"
                               min={0}
                               step="0.01"
-                              placeholder="Price"
+                              placeholder="Price in ₹ (per service)"
+                              aria-label="Custom service price"
                               value={row.price}
                               onChange={(e) =>
                                 setExtraServices((p) =>

@@ -19,6 +19,8 @@ import {
   FaImages,
   FaSave,
   FaArrowLeft,
+  FaFilePdf,
+  FaExternalLinkAlt,
 } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
@@ -90,6 +92,7 @@ const initialState = {
   cuisineTypes: [],
   foodType: "Both",
   averageCostForTwo: "",
+  pricePerPerson: "",
   seatingCapacity: "",
   numberOfTables: "",
   dressCode: "Casual",
@@ -184,6 +187,12 @@ const RestaurantRegistration = () => {
   // them separate so the user can delete individual ones.
   const [existingImages, setExistingImages] = useState([]);
   const [menuList, setMenuList] = useState([emptyMenuRow()]);
+  // Menu PDFs — newly uploaded File objects this session
+  const [menuPdfFiles, setMenuPdfFiles] = useState([]);
+  // Already-saved menu PDFs returned by the backend in edit mode (kept
+  // separate so the user can delete individual ones without re-uploading).
+  // Each item: { id?, fileUrl, displayName, displayOrder? }
+  const [existingMenuPdfs, setExistingMenuPdfs] = useState([]);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(isEdit);
@@ -324,6 +333,7 @@ const RestaurantRegistration = () => {
           cuisineTypes: Array.isArray(d.cuisineTypes) ? d.cuisineTypes : [],
           foodType: d.foodType || "Both",
           averageCostForTwo: d.averageCostForTwo ?? "",
+          pricePerPerson: d.pricePerPerson ?? "",
           seatingCapacity: d.seatingCapacity ?? "",
           numberOfTables: d.numberOfTables ?? "",
           dressCode: d.dressCode || "Casual",
@@ -393,6 +403,11 @@ const RestaurantRegistration = () => {
             : [],
         });
         setExistingImages(Array.isArray(d.images) ? d.images : []);
+        setExistingMenuPdfs(
+          Array.isArray(d.menuPdfs)
+            ? d.menuPdfs.filter((p) => p && p.fileUrl)
+            : []
+        );
         const menus = Array.isArray(d.menuList) && d.menuList.length
           ? d.menuList.map((m) => ({
               menuName: m.menuName || "",
@@ -469,6 +484,34 @@ const RestaurantRegistration = () => {
     updateMenuRow(idx, "image", file);
     updateMenuRow(idx, "imagePreview", URL.createObjectURL(file));
   };
+
+  /* ---------- menu PDF uploads ---------- */
+  const handleMenuPdfsUpload = (e) => {
+    const picked = Array.from(e.target.files || []);
+    // Accept PDFs only — quietly drop anything else and inform the user.
+    const pdfs = picked.filter(
+      (f) => f && (f.type === "application/pdf" || /\.pdf$/i.test(f.name))
+    );
+    const rejected = picked.length - pdfs.length;
+    if (rejected > 0) {
+      toast.error(`Skipped ${rejected} non-PDF file(s).`);
+    }
+    if (!pdfs.length) {
+      // Reset the input so picking the same file again still fires change.
+      e.target.value = "";
+      return;
+    }
+    setMenuPdfFiles((prev) => [...prev, ...pdfs]);
+    if (errors.menuPdfs) setErrors((p) => ({ ...p, menuPdfs: "" }));
+    // Clear the input so a re-pick of the same file fires change again.
+    e.target.value = "";
+  };
+
+  const removeNewMenuPdf = (idx) =>
+    setMenuPdfFiles((prev) => prev.filter((_, i) => i !== idx));
+
+  const removeExistingMenuPdf = (idx) =>
+    setExistingMenuPdfs((prev) => prev.filter((_, i) => i !== idx));
 
   /* ---------- promotion rows (weekday offers + special promotions) ----- */
   /** Append a new promotion row. `type` distinguishes WEEKDAY from SPECIAL —
@@ -593,8 +636,10 @@ const RestaurantRegistration = () => {
     // re-uploading. Only require new files when creating from scratch.
     if (!isEdit && !images.length && !existingImages.length)
       err.images = "Please upload at least 1 image";
-    if (menuList.length === 0 || !menuList.some((m) => m.menuName.trim() && m.price))
-      err.menu = "Add at least 1 menu item with name & price";
+    // Menu PDFs replace the previous row-by-row menu list. Require at least
+    // one PDF (either newly picked or kept from an earlier save).
+    if (menuPdfFiles.length === 0 && existingMenuPdfs.length === 0)
+      err.menuPdfs = "Upload at least 1 menu PDF";
 
     setErrors(err);
     return Object.keys(err).length === 0;
@@ -618,18 +663,18 @@ const RestaurantRegistration = () => {
         // Send back the existing image URLs the user kept so the backend
         // retains them; new uploads are appended via the "images" file parts.
         images: existingImages,
-        menuList: menuList
-          .filter((m) => m.menuName && m.price)
-          .map((m) => ({
-            menuName: m.menuName,
-            category: m.category,
-            price: Number(m.price) || 0,
-            description: m.description || "",
-            isVeg: !!m.isVeg,
-            isAvailable: !!m.isAvailable,
-            // Keep the existing menu image URL when no new file was attached.
-            image: undefined,
-          })),
+        // Menu rows are no longer captured on the registration form — the
+        // operator uploads menu PDFs instead. Send an empty array so older
+        // backend code paths that read this field continue to work.
+        menuList: [],
+        // Existing PDFs the user kept (no new file attached). New uploads
+        // travel as separate "menuPdf" file parts below.
+        menuPdfs: existingMenuPdfs.map((p, idx) => ({
+          id: p.id || null,
+          fileUrl: p.fileUrl,
+          displayName: p.displayName || "",
+          displayOrder: idx,
+        })),
         // Promotions — flatten the dayMaskList back into the comma string the
         // RestaurantPromotion entity stores. Skip blank rows.
         promotions: (formData.promotions || [])
@@ -699,6 +744,13 @@ const RestaurantRegistration = () => {
         if (row.image instanceof File) fd.append(`menuImage_${idx}`, row.image);
       });
 
+      // Newly uploaded menu PDFs — backend reads from "menuPdf" multi-value
+      // and any "menuPdf_<idx>" keys, so either works. We use the multi-value
+      // form so all PDFs share a single field name.
+      menuPdfFiles.forEach((file) => {
+        if (file instanceof File) fd.append("menuPdf", file);
+      });
+
       if (isEdit) {
         await axiosInstance.put(`/api/restaurant/${id}`, fd);
       } else {
@@ -726,6 +778,8 @@ const RestaurantRegistration = () => {
     setImages([]);
     setImagePreviews([]);
     setMenuList([emptyMenuRow()]);
+    setMenuPdfFiles([]);
+    setExistingMenuPdfs([]);
     setErrors({});
   };
 
@@ -953,6 +1007,21 @@ const RestaurantRegistration = () => {
                       value={formData.averageCostForTwo}
                       onChange={handleChange}
                     />
+                  </Col>
+                  <Col md={3}>
+                    <Form.Label>Rate Per Person</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      name="pricePerPerson"
+                      value={formData.pricePerPerson}
+                      onChange={handleChange}
+                    />
+                    <Form.Text muted>
+                      Used at booking time as the per-cover billing rate
+                      (subtotal = rate × members).
+                    </Form.Text>
                   </Col>
                   <Col md={3}>
                     <Form.Label>Food Type</Form.Label>
@@ -1614,120 +1683,109 @@ const RestaurantRegistration = () => {
               </Card.Body>
             </Card>
 
-            {/* Menu */}
+            {/* Menu PDFs — upload one or more menu PDF files. Replaces the
+                old row-by-row Menu Items table. */}
             <Card className="mb-3 shadow-sm">
               <Card.Header className="bg-white fw-semibold d-flex justify-content-between align-items-center">
                 <span>
-                  <FaUtensils className="me-2 text-success" />
-                  Menu Items
+                  <FaFilePdf className="me-2 text-danger" />
+                  Menu PDFs
                 </span>
-                <Button size="sm" variant="success" onClick={addMenuRow}>
-                  <FaPlus className="me-1" /> Add Menu
-                </Button>
+                <Form.Label
+                  htmlFor="menu-pdf-input"
+                  className="btn btn-sm btn-success mb-0"
+                  style={{ cursor: "pointer" }}
+                >
+                  <FaPlus className="me-1" /> Upload PDFs
+                  <Form.Control
+                    id="menu-pdf-input"
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    multiple
+                    className="d-none"
+                    onChange={handleMenuPdfsUpload}
+                  />
+                </Form.Label>
               </Card.Header>
-              <Card.Body className="p-0">
-                <Table responsive bordered hover className="mb-0 align-middle">
-                  <thead className="table-light">
-                    <tr>
-                      <th style={{ width: 40 }}>#</th>
-                      <th>Menu Name</th>
-                      <th>Category</th>
-                      <th style={{ width: 110 }}>Price</th>
-                      <th>Description</th>
-                      <th style={{ width: 90 }}>Veg</th>
-                      <th style={{ width: 110 }}>Available</th>
-                      <th style={{ width: 130 }}>Image</th>
-                      <th style={{ width: 60 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {menuList.map((row, idx) => (
-                      <tr key={idx}>
-                        <td>{idx + 1}</td>
-                        <td>
-                          <Form.Control
-                            value={row.menuName}
-                            onChange={(e) => updateMenuRow(idx, "menuName", e.target.value)}
-                            placeholder="Chicken Biriyani"
-                          />
-                        </td>
-                        <td>
-                          <Form.Select
-                            value={row.category}
-                            onChange={(e) => updateMenuRow(idx, "category", e.target.value)}
-                          >
-                            {MEAL_CATEGORIES.map((c) => (
-                              <option key={c}>{c}</option>
-                            ))}
-                          </Form.Select>
-                        </td>
-                        <td>
-                          <Form.Control
-                            type="number"
-                            value={row.price}
-                            onChange={(e) => updateMenuRow(idx, "price", e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <Form.Control
-                            value={row.description}
-                            onChange={(e) => updateMenuRow(idx, "description", e.target.value)}
-                            placeholder="optional"
-                          />
-                        </td>
-                        <td className="text-center">
-                          <Form.Check
-                            type="switch"
-                            id={`veg-${idx}`}
-                            checked={row.isVeg}
-                            onChange={(e) => updateMenuRow(idx, "isVeg", e.target.checked)}
-                          />
-                        </td>
-                        <td className="text-center">
-                          <Form.Check
-                            type="switch"
-                            id={`avl-${idx}`}
-                            checked={row.isAvailable}
-                            onChange={(e) => updateMenuRow(idx, "isAvailable", e.target.checked)}
-                          />
-                        </td>
-                        <td>
-                          {row.imagePreview ? (
-                            <Image
-                              src={row.imagePreview}
-                              alt="menu"
-                              style={{
-                                width: 80,
-                                height: 50,
-                                objectFit: "cover",
-                                cursor: "pointer",
-                              }}
-                              onClick={() => setPreviewImage(row.imagePreview)}
-                            />
-                          ) : (
-                            <Form.Control
-                              type="file"
-                              size="sm"
-                              accept="image/*"
-                              onChange={(e) => handleMenuImage(idx, e.target.files[0])}
-                            />
+              <Card.Body>
+                <Form.Text className="text-muted d-block mb-2">
+                  Upload one or more menu PDFs (lunch menu, dinner menu, drinks
+                  menu, etc.). Guests will see these on the booking page.
+                </Form.Text>
+
+                {existingMenuPdfs.length === 0 && menuPdfFiles.length === 0 ? (
+                  <div className="text-muted small fst-italic">
+                    No menu PDFs yet — click <strong>Upload PDFs</strong> to
+                    attach files.
+                  </div>
+                ) : (
+                  <ul className="list-unstyled mb-0">
+                    {existingMenuPdfs.map((p, idx) => (
+                      <li
+                        key={`existing-${p.id || idx}`}
+                        className="d-flex align-items-center justify-content-between border rounded px-2 py-1 mb-1"
+                      >
+                        <span className="text-truncate" style={{ maxWidth: 380 }}>
+                          <FaFilePdf className="text-danger me-2" />
+                          {p.displayName ||
+                            (p.fileUrl ? p.fileUrl.split("/").pop() : "Menu PDF")}
+                          <Badge bg="light" text="dark" className="ms-2">
+                            Saved
+                          </Badge>
+                        </span>
+                        <span className="d-flex gap-2">
+                          {p.fileUrl && (
+                            <a
+                              href={p.fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="btn btn-sm btn-outline-primary"
+                              title="Open PDF"
+                            >
+                              <FaExternalLinkAlt />
+                            </a>
                           )}
-                        </td>
-                        <td className="text-center">
                           <Button
                             variant="outline-danger"
                             size="sm"
-                            disabled={menuList.length === 1}
-                            onClick={() => removeMenuRow(idx)}
+                            onClick={() => removeExistingMenuPdf(idx)}
+                            title="Remove"
                           >
                             <FaTrash />
                           </Button>
-                        </td>
-                      </tr>
+                        </span>
+                      </li>
                     ))}
-                  </tbody>
-                </Table>
-                {errors.menu && <div className="text-danger small p-2">{errors.menu}</div>}
+                    {menuPdfFiles.map((f, idx) => (
+                      <li
+                        key={`new-${idx}`}
+                        className="d-flex align-items-center justify-content-between border rounded px-2 py-1 mb-1"
+                      >
+                        <span className="text-truncate" style={{ maxWidth: 380 }}>
+                          <FaFilePdf className="text-danger me-2" />
+                          {f.name}
+                          <Badge bg="warning" text="dark" className="ms-2">
+                            New
+                          </Badge>
+                          <small className="text-muted ms-2">
+                            {(f.size / 1024).toFixed(0)} KB
+                          </small>
+                        </span>
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={() => removeNewMenuPdf(idx)}
+                          title="Remove"
+                        >
+                          <FaTrash />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {errors.menuPdfs && (
+                  <div className="text-danger small mt-2">{errors.menuPdfs}</div>
+                )}
               </Card.Body>
             </Card>
 

@@ -17,6 +17,59 @@ const BookingModeBadges = ({ modes }) => {
     </>
   );
 };
+
+/** "08:00" / "08:00:00" → "8 AM". Falls back to the raw value on bad input. */
+const formatHour = (hhmm) => {
+  if (!hhmm) return "";
+  const [hStr, mStr = "0"] = String(hhmm).split(":");
+  const h = Number(hStr);
+  const m = Number(mStr);
+  if (!Number.isFinite(h)) return String(hhmm);
+  const period = h >= 12 ? "PM" : "AM";
+  const hr12 = ((h + 11) % 12) + 1;
+  return m > 0
+    ? `${hr12}:${String(m).padStart(2, "0")} ${period}`
+    : `${hr12} ${period}`;
+};
+
+/** Reads whatever currency code the restaurant has on it, falling back to
+ *  the rupee sign for legacy rows. */
+const currencyLabel = (restaurant) =>
+  restaurant.currencyCode || restaurant.currency || "₹";
+
+/** Renders the "rate" line for a result card. Uses Avg. Cost For Two from
+ *  the registration page; hidden when the operator left it blank. */
+const RateLine = ({ restaurant, className = "" }) => {
+  const cost = Number(restaurant.averageCostForTwo || 0);
+  if (!cost) return null;
+  return (
+    <div className={`small fw-semibold text-success ${className}`}>
+      {currencyLabel(restaurant)} {cost} <span className="text-muted fw-normal">for two</span>
+    </div>
+  );
+};
+
+/** Highlighted open-hours pill — "Open 8 AM till 10 PM". */
+const OpenHoursPill = ({ openTime, closeTime, className = "" }) => {
+  if (!openTime || !closeTime) return null;
+  return (
+    <span
+      className={`d-inline-flex align-items-center fw-semibold ${className}`}
+      style={{
+        backgroundColor: "#d1f4dd",
+        color: "#0f7a3a",
+        border: "1px solid #0f7a3a33",
+        borderRadius: 999,
+        padding: "2px 10px",
+        fontSize: "0.78rem",
+        lineHeight: 1.4,
+      }}
+    >
+      <FaClock className="me-1" />
+      Open {formatHour(openTime)} till {formatHour(closeTime)}
+    </span>
+  );
+};
 import {
   FaMapMarkerAlt,
   FaClock,
@@ -90,22 +143,18 @@ const RestaurantCard = ({ restaurant, viewMode = "grid", onView, onBook }) => {
                   {restaurant.place}
                   {restaurant.address ? ` · ${restaurant.address}` : ""}
                 </div>
+                <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                  <OpenHoursPill
+                    openTime={restaurant.openTime}
+                    closeTime={restaurant.closeTime}
+                  />
+                  <RateLine restaurant={restaurant} />
+                </div>
                 <Row className="g-2 small text-muted mb-2">
-                  <Col xs={6} md={4}>
-                    <FaClock className="me-1 text-info" />
-                    {String(restaurant.openTime || "").slice(0, 5)} -{" "}
-                    {String(restaurant.closeTime || "").slice(0, 5)}
-                  </Col>
                   {restaurant.contactNumber && (
                     <Col xs={6} md={4}>
                       <FaPhone className="me-1 text-success" />
                       {restaurant.contactNumber}
-                    </Col>
-                  )}
-                  {restaurant.averageCostForTwo > 0 && (
-                    <Col xs={6} md={4}>
-                      <FaRupeeSign className="me-1" />
-                      {restaurant.averageCostForTwo} for two
                     </Col>
                   )}
                 </Row>
@@ -214,11 +263,13 @@ const RestaurantCard = ({ restaurant, viewMode = "grid", onView, onBook }) => {
             {restaurant.address}
           </div>
         )}
-        <div className="small mb-2">
-          <FaClock className="me-1 text-info" />
-          {String(restaurant.openTime || "").slice(0, 5)} -{" "}
-          {String(restaurant.closeTime || "").slice(0, 5)}
+        <div className="mb-2 d-flex flex-wrap align-items-center gap-2">
+          <OpenHoursPill
+            openTime={restaurant.openTime}
+            closeTime={restaurant.closeTime}
+          />
         </div>
+        <RateLine restaurant={restaurant} className="mb-2" />
         <div className="mb-2 d-flex flex-wrap gap-1">
           <BookingModeBadges modes={restaurant.bookingModes} />
         </div>

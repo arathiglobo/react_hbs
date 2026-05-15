@@ -27,6 +27,9 @@ import {
   FaRupeeSign,
   FaCheck,
   FaTimes,
+  FaFilePdf,
+  FaExternalLinkAlt,
+  FaDownload,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -48,13 +51,20 @@ const RestaurantViewPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Seed from router state for an instant first paint, but ALWAYS refresh
+  // from /api/restaurant/{id} on mount so we get the latest menu PDFs and
+  // any newly-saved fields that may not have been included in the search
+  // response. The search results carry the cuisineTypes / images but not
+  // always every detail field.
   const [restaurant, setRestaurant] = useState(location.state?.restaurant || null);
   const [loading, setLoading] = useState(!location.state?.restaurant);
   const [activeTab, setActiveTab] = useState("images");
   const [previewImage, setPreviewImage] = useState(null);
+  /** Currently-previewed menu PDF in the Menu tab (open in modal/iframe). */
+  const [previewPdf, setPreviewPdf] = useState(null);
 
   useEffect(() => {
-    if (restaurant) return;
+    if (!id) return;
     let cancelled = false;
     (async () => {
       try {
@@ -69,7 +79,7 @@ const RestaurantViewPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [id, restaurant]);
+  }, [id]);
 
   const goBack = () => navigate("/new-booking/restaurant");
 
@@ -112,6 +122,11 @@ const RestaurantViewPage = () => {
   }
 
   const images = restaurant.images || [];
+  // The Menu tab now surfaces the uploaded menu PDFs (replaces the old
+  // row-by-row menu list captured on the registration form). Restaurants
+  // saved before the PDF feature landed may still have entries in
+  // `menuList` — we surface those as a fallback table.
+  const menuPdfs = Array.isArray(restaurant.menuPdfs) ? restaurant.menuPdfs : [];
   const menus = restaurant.menuList || [];
 
   return (
@@ -207,64 +222,151 @@ const RestaurantViewPage = () => {
                     </span>
                   }
                 >
-                  {menus.length === 0 ? (
+                  {menuPdfs.length === 0 && menus.length === 0 ? (
                     <div className="text-center text-muted py-5">
-                      No menu items available.
+                      <FaFilePdf size={36} className="mb-2 opacity-50" />
+                      <div>No menu PDFs uploaded for this restaurant.</div>
                     </div>
                   ) : (
-                    <Row className="g-3">
-                      {menus.map((m) => (
-                        <Col key={m.id || m.menuName} md={6} lg={4}>
-                          <Card className="h-100 border">
-                            {m.image ? (
-                              <div
-                                style={{
-                                  height: 140,
-                                  backgroundImage: `url(${m.image})`,
-                                  backgroundSize: "cover",
-                                  backgroundPosition: "center",
-                                }}
-                              />
-                            ) : (
-                              <div
-                                style={{
-                                  height: 140,
-                                  background: "#f3f4f6",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  color: "#9ca3af",
-                                }}
-                              >
-                                <FaUtensils size={40} />
-                              </div>
-                            )}
-                            <Card.Body>
-                              <div className="d-flex justify-content-between align-items-start">
-                                <div>
-                                  <h6 className="mb-1">{m.menuName}</h6>
-                                  <Badge bg="light" text="dark" className="border">
-                                    {m.category}
-                                  </Badge>
-                                </div>
-                                <div className="text-end">
-                                  <Badge bg={m.isVeg ? "success" : "danger"}>
-                                    {m.isVeg ? "Veg" : "Non-Veg"}
-                                  </Badge>
-                                </div>
-                              </div>
-                              {m.description && (
-                                <p className="small text-muted mt-2 mb-2">{m.description}</p>
-                              )}
-                              <div className="fw-semibold text-success">
-                                <FaRupeeSign className="me-1" />
-                                {Number(m.price).toFixed(2)}
-                              </div>
-                            </Card.Body>
-                          </Card>
-                        </Col>
-                      ))}
-                    </Row>
+                    <>
+                      {/* Menu PDFs — primary surface. Each card embeds the
+                          PDF in an inline <iframe> preview, with a button to
+                          open the full PDF in a new tab and a download link. */}
+                      {menuPdfs.length > 0 && (
+                        <Row className="g-3">
+                          {menuPdfs.map((p, i) => {
+                            const name =
+                              p.displayName ||
+                              (p.fileUrl ? p.fileUrl.split("/").pop() : `Menu ${i + 1}`);
+                            return (
+                              <Col key={p.id || i} md={6} lg={6}>
+                                <Card className="h-100 border shadow-sm">
+                                  <Card.Header className="bg-white d-flex justify-content-between align-items-center">
+                                    <span
+                                      className="text-truncate fw-semibold"
+                                      style={{ maxWidth: 240 }}
+                                      title={name}
+                                    >
+                                      <FaFilePdf className="text-danger me-2" />
+                                      {name}
+                                    </span>
+                                    <div className="d-flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline-primary"
+                                        onClick={() => setPreviewPdf(p)}
+                                        title="Preview full size"
+                                      >
+                                        <FaExternalLinkAlt />
+                                      </Button>
+                                      {p.fileUrl && (
+                                        <a
+                                          href={p.fileUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="btn btn-sm btn-outline-secondary"
+                                          title="Open / Download"
+                                          download
+                                        >
+                                          <FaDownload />
+                                        </a>
+                                      )}
+                                    </div>
+                                  </Card.Header>
+                                  <div
+                                    style={{
+                                      height: 460,
+                                      background: "#f3f4f6",
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    {p.fileUrl ? (
+                                      <iframe
+                                        src={p.fileUrl}
+                                        title={name}
+                                        width="100%"
+                                        height="100%"
+                                        style={{ border: "none" }}
+                                      />
+                                    ) : (
+                                      <div className="d-flex align-items-center justify-content-center h-100 text-muted">
+                                        Preview unavailable
+                                      </div>
+                                    )}
+                                  </div>
+                                </Card>
+                              </Col>
+                            );
+                          })}
+                        </Row>
+                      )}
+
+                      {/* Legacy fallback — older restaurants saved before the
+                          PDF feature landed still have row-by-row menu items.
+                          Show them below the PDF cards so nothing is lost. */}
+                      {menus.length > 0 && (
+                        <>
+                          {menuPdfs.length > 0 && <hr className="my-4" />}
+                          <h6 className="mb-3 text-muted">
+                            <FaUtensils className="me-2" />
+                            Menu Items (legacy)
+                          </h6>
+                          <Row className="g-3">
+                            {menus.map((m) => (
+                              <Col key={m.id || m.menuName} md={6} lg={4}>
+                                <Card className="h-100 border">
+                                  {m.image ? (
+                                    <div
+                                      style={{
+                                        height: 140,
+                                        backgroundImage: `url(${m.image})`,
+                                        backgroundSize: "cover",
+                                        backgroundPosition: "center",
+                                      }}
+                                    />
+                                  ) : (
+                                    <div
+                                      style={{
+                                        height: 140,
+                                        background: "#f3f4f6",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        color: "#9ca3af",
+                                      }}
+                                    >
+                                      <FaUtensils size={40} />
+                                    </div>
+                                  )}
+                                  <Card.Body>
+                                    <div className="d-flex justify-content-between align-items-start">
+                                      <div>
+                                        <h6 className="mb-1">{m.menuName}</h6>
+                                        <Badge bg="light" text="dark" className="border">
+                                          {m.category}
+                                        </Badge>
+                                      </div>
+                                      <div className="text-end">
+                                        <Badge bg={m.isVeg ? "success" : "danger"}>
+                                          {m.isVeg ? "Veg" : "Non-Veg"}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                    {m.description && (
+                                      <p className="small text-muted mt-2 mb-2">{m.description}</p>
+                                    )}
+                                    <div className="fw-semibold text-success">
+                                      <FaRupeeSign className="me-1" />
+                                      {Number(m.price).toFixed(2)}
+                                    </div>
+                                  </Card.Body>
+                                </Card>
+                              </Col>
+                            ))}
+                          </Row>
+                        </>
+                      )}
+                    </>
                   )}
                 </Tab>
 
@@ -434,6 +536,56 @@ const RestaurantViewPage = () => {
             <img src={previewImage} alt="preview" style={{ width: "100%", display: "block" }} />
           )}
         </Modal.Body>
+      </Modal>
+
+      {/* Menu-PDF preview modal — opens when the user clicks the "expand"
+          icon on a menu-PDF card. Renders the PDF in a full-size iframe. */}
+      <Modal
+        show={!!previewPdf}
+        onHide={() => setPreviewPdf(null)}
+        centered
+        size="xl"
+        backdrop="static"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title className="text-truncate" style={{ maxWidth: "70%" }}>
+            <FaFilePdf className="text-danger me-2" />
+            {previewPdf?.displayName ||
+              (previewPdf?.fileUrl
+                ? previewPdf.fileUrl.split("/").pop()
+                : "Menu PDF")}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-0">
+          {previewPdf?.fileUrl ? (
+            <iframe
+              src={previewPdf.fileUrl}
+              title="Menu PDF preview"
+              width="100%"
+              height="640px"
+              style={{ border: "none" }}
+            />
+          ) : (
+            <div className="text-muted text-center py-5">
+              Preview unavailable.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          {previewPdf?.fileUrl && (
+            <a
+              href={previewPdf.fileUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-outline-primary"
+            >
+              <FaDownload className="me-1" /> Open / Download
+            </a>
+          )}
+          <Button variant="secondary" onClick={() => setPreviewPdf(null)}>
+            Close
+          </Button>
+        </Modal.Footer>
       </Modal>
     </div>
   );

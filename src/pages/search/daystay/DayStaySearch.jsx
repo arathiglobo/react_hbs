@@ -397,7 +397,7 @@ export default function DayStaySearch() {
                         Agent
                       </Form.Label>
                       <Form.Select
-                        style={{ height: "42px" }}
+                        style={{ height: "46px" }}
                         value={agent}
                         onChange={(e) => {
                           setAgent(e.target.value);
