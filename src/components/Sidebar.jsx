@@ -258,6 +258,11 @@ export default function Sidebar() {
           label: "Honeymoon Package",
           to: "/new-booking/honeymoon",
         },
+        // Government-Employee Booking — parallel flow with discounted rates
+        {
+          label: "Government Employee",
+          to: "/new-booking/gov-employee",
+        },
       ],
     },
     {
@@ -332,6 +337,11 @@ export default function Sidebar() {
         {
           label: "Honeymoon Package",
           to: "/booking-details/honeymoon-booking-list",
+        },
+        // Government-Employee Booking list — view / cancel / voucher
+        {
+          label: "Government Employee Booking",
+          to: "/booking-details/gov-employee-booking-list",
         },
       ],
     },

@@ -220,6 +220,9 @@ const HotelRegistrationActions = () => {
     { label: "Day Stay", icon: FaCalendarAlt, status: "count", count: 0 },
     { label: "Long Stay Contract", icon: FaCalendarAlt, status: "count", count: 0 },
     { label: "Promotion", icon: FaGift, status: "count", count: 0 },
+    // Government Employee Discount — opens the per-hotel CRUD page.
+    // The discount configured there is applied at gov-employee search/booking time.
+    { label: "Govt Employee Discount", icon: FaGift, status: "count", count: 0 },
     { label: "Policy", icon: FaFileAlt, status: "count", count: 0 },
     {
       label: "Compulsory Events",
@@ -746,6 +749,10 @@ const HotelRegistrationActions = () => {
       navigate(`/hotel-actions/${id}/long-stay-contract`);
     } else if (actionLabel === "Promotion") {
       navigate(`/hotel-actions/${id}/promotions`);
+    } else if (actionLabel === "Govt Employee Discount") {
+      // Government Employee Discount — per-hotel CRUD page that drives
+      // the discount applied in the gov-employee search + booking flow.
+      navigate(`/hotel-actions/${id}/gov-employee-promotion`);
     } else if (actionLabel === "Policy") {
       navigate(`/hotel-actions/${id}/hotel-policy`);
     } else if (actionLabel === "Validity Periods") {

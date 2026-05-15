@@ -208,6 +208,18 @@ import HoneymoonBooking from "./pages/honeymoon/HoneymoonBooking";
 import HoneymoonBookingList from "./pages/honeymoon/HoneymoonBookingList";
 import HoneyMoonPackageRates from "./pages/honeymoon/HoneyMoonPackageRates";
 
+// Government Employee Booking Module — parallel flow that mirrors the
+// hotel-booking pages but talks to dedicated /api/gov-employee* APIs
+// and stores into gov-employee-only tables. Existing flows untouched.
+// Govt-employee verification is captured directly on the booking page
+// (no separate registration page anymore).
+import GovEmployeePromotion from "./pages/HotelActions/GovEmployeePromotion/GovEmployeePromotion";
+import GovEmployeeSearch from "./pages/search/govemployee/GovEmployeeSearch";
+import GovEmployeeRoomList from "./pages/roomlist/GovEmployeeRoomList";
+import GovEmployeeBookingPage from "./pages/booking/govemployee/GovEmployeeBookingPage";
+import GovEmployeeBookingList from "./pages/list/GovEmployeeBookingList";
+import GovEmployeeBookingDetailView from "./pages/list/GovEmployeeBookingDetailView";
+
 
 export default function App() {
   return (
@@ -419,6 +431,17 @@ export default function App() {
         <Route path="/honeymoon/package-rates/:id" element={<PrivateRoute><HoneyMoonPackageRates /></PrivateRoute>} />
         <Route path="/new-booking/honeymoon" element={<PrivateRoute><HoneymoonSearch /></PrivateRoute>} />
         <Route path="/booking-details/honeymoon-booking-list" element={<PrivateRoute><HoneymoonBookingList /></PrivateRoute>} />
+
+        {/* Government Employee Booking Module — parallel flow */}
+        {/* Per-hotel gov-employee discount config (opens from hotel-details) */}
+        <Route path="/hotel-actions/:id/gov-employee-promotion" element={<PrivateRoute><GovEmployeePromotion /></PrivateRoute>} />
+        {/* New-Booking flow — search → room-list → booking-page */}
+        <Route path="/new-booking/gov-employee" element={<PrivateRoute><GovEmployeeSearch /></PrivateRoute>} />
+        <Route path="/gov-employee-room-list" element={<PrivateRoute><GovEmployeeRoomList /></PrivateRoute>} />
+        <Route path="/gov-employee-booking-page" element={<PrivateRoute><GovEmployeeBookingPage /></PrivateRoute>} />
+        {/* Booking list + view (cancel/voucher live inside the list) */}
+        <Route path="/booking-details/gov-employee-booking-list" element={<PrivateRoute><GovEmployeeBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/gov-employee-booking/:id" element={<PrivateRoute><GovEmployeeBookingDetailView /></PrivateRoute>} />
 
 
         {/* Hotel Actions */}
