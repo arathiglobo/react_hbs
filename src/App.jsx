@@ -220,6 +220,15 @@ import GovEmployeeBookingPage from "./pages/booking/govemployee/GovEmployeeBooki
 import GovEmployeeBookingList from "./pages/list/GovEmployeeBookingList";
 import GovEmployeeBookingDetailView from "./pages/list/GovEmployeeBookingDetailView";
 
+// Ayurveda Module — standalone flow (separate APIs/tables).
+// Does not touch hotel booking flow. Adds:
+//   /registration/ayurveda           → manage packages/consultations/courses
+//   /new-booking/ayurveda            → search & book any of the three
+//   /booking-details/ayurveda-booking-list → view all ayurveda bookings
+import AyurvedaRegistration from "./pages/ayurveda/AyurvedaRegistration";
+import AyurvedaSearch from "./pages/ayurveda/AyurvedaSearch";
+import AyurvedaBookingList from "./pages/ayurveda/AyurvedaBookingList";
+
 // Student Booking Module — parallel flow with student-discount + admin
 // verification (Student ID Upload). All separate tables / endpoints.
 import StudentDiscountPromotion from "./pages/HotelActions/StudentDiscountPromotion/StudentDiscountPromotion";
@@ -399,6 +408,11 @@ export default function App() {
         
         <Route path="/new-booking/offline-search" element={<PrivateRoute><OfflineSearch /> </PrivateRoute>}/>
         
+
+        {/* Ayurveda Module — standalone flow (no impact on hotel booking) */}
+        <Route path="/registration/ayurveda" element={<PrivateRoute><AyurvedaRegistration /></PrivateRoute>} />
+        <Route path="/new-booking/ayurveda" element={<PrivateRoute><AyurvedaSearch /></PrivateRoute>} />
+        <Route path="/booking-details/ayurveda-booking-list" element={<PrivateRoute><AyurvedaBookingList /></PrivateRoute>} />
 
         {/* Booking List/Details */}
         <Route path="/booking-details/cab-booking-list" element={<PrivateRoute><CabBookingList /></PrivateRoute>} />

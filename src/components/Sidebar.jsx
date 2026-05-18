@@ -214,6 +214,8 @@ export default function Sidebar() {
         { label: "Restaurants", to: "/restaurant/list" },
         // Honeymoon Package — same list-then-create pattern.
         { label: "Honeymoon Packages", to: "/honeymoon/list" },
+        // Ayurveda — manage packages, doctor consultations, courses
+        { label: "Ayurveda", to: "/registration/ayurveda" },
       ],
     },
     {
@@ -257,6 +259,11 @@ export default function Sidebar() {
         {
           label: "Honeymoon Package",
           to: "/new-booking/honeymoon",
+        },
+        // Ayurveda — packages, doctor consultations, courses
+        {
+          label: "Ayurveda",
+          to: "/new-booking/ayurveda",
         },
         // Government-Employee Booking — parallel flow with discounted rates
         {
@@ -343,6 +350,11 @@ export default function Sidebar() {
         {
           label: "Honeymoon Package",
           to: "/booking-details/honeymoon-booking-list",
+        },
+        // Ayurveda — packages/consultations/courses bookings
+        {
+          label: "Ayurveda Booking",
+          to: "/booking-details/ayurveda-booking-list",
         },
         // Government-Employee Booking list — view / cancel / voucher
         {
