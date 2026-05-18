@@ -220,6 +220,17 @@ import GovEmployeeBookingPage from "./pages/booking/govemployee/GovEmployeeBooki
 import GovEmployeeBookingList from "./pages/list/GovEmployeeBookingList";
 import GovEmployeeBookingDetailView from "./pages/list/GovEmployeeBookingDetailView";
 
+// Student Booking Module — parallel flow with student-discount + admin
+// verification (Student ID Upload). All separate tables / endpoints.
+import StudentDiscountPromotion from "./pages/HotelActions/StudentDiscountPromotion/StudentDiscountPromotion";
+import StudentSearch from "./pages/search/student/StudentSearch";
+import StudentRoomList from "./pages/roomlist/StudentRoomList";
+import StudentBookingPage from "./pages/booking/student/StudentBookingPage";
+import StudentBookingList from "./pages/list/StudentBookingList";
+import StudentBookingDetailView from "./pages/list/StudentBookingDetailView";
+// Admin verification actions live INSIDE StudentBookingList itself —
+// the dedicated /admin/student-verification page has been removed.
+
 
 export default function App() {
   return (
@@ -442,6 +453,18 @@ export default function App() {
         {/* Booking list + view (cancel/voucher live inside the list) */}
         <Route path="/booking-details/gov-employee-booking-list" element={<PrivateRoute><GovEmployeeBookingList /></PrivateRoute>} />
         <Route path="/booking-details/gov-employee-booking/:id" element={<PrivateRoute><GovEmployeeBookingDetailView /></PrivateRoute>} />
+
+        {/* Student Booking Module — parallel flow */}
+        {/* Per-hotel student discount config (opens from hotel-details) */}
+        <Route path="/hotel-actions/:id/student-discount" element={<PrivateRoute><StudentDiscountPromotion /></PrivateRoute>} />
+        {/* New-Booking flow — search → room-list → booking-page */}
+        <Route path="/new-booking/student" element={<PrivateRoute><StudentSearch /></PrivateRoute>} />
+        <Route path="/student-room-list" element={<PrivateRoute><StudentRoomList /></PrivateRoute>} />
+        <Route path="/student-booking-page" element={<PrivateRoute><StudentBookingPage /></PrivateRoute>} />
+        {/* Booking list + detail view */}
+        <Route path="/booking-details/student-booking-list" element={<PrivateRoute><StudentBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/student-booking/:id" element={<PrivateRoute><StudentBookingDetailView /></PrivateRoute>} />
+        {/* Admin verification now lives inline on the StudentBookingList page. */}
 
 
         {/* Hotel Actions */}

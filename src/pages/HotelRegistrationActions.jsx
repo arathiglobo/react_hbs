@@ -223,6 +223,9 @@ const HotelRegistrationActions = () => {
     // Government Employee Discount — opens the per-hotel CRUD page.
     // The discount configured there is applied at gov-employee search/booking time.
     { label: "Govt Employee Discount", icon: FaGift, status: "count", count: 0 },
+    // Student Discount — opens the per-hotel CRUD page for the student
+    // discount programme. Applied at student search/booking time.
+    { label: "Student Discount", icon: FaGift, status: "count", count: 0 },
     { label: "Policy", icon: FaFileAlt, status: "count", count: 0 },
     {
       label: "Compulsory Events",
@@ -753,6 +756,10 @@ const HotelRegistrationActions = () => {
       // Government Employee Discount — per-hotel CRUD page that drives
       // the discount applied in the gov-employee search + booking flow.
       navigate(`/hotel-actions/${id}/gov-employee-promotion`);
+    } else if (actionLabel === "Student Discount") {
+      // Student Discount — per-hotel CRUD page that drives the discount
+      // applied in the student search + booking flow.
+      navigate(`/hotel-actions/${id}/student-discount`);
     } else if (actionLabel === "Policy") {
       navigate(`/hotel-actions/${id}/hotel-policy`);
     } else if (actionLabel === "Validity Periods") {

@@ -263,6 +263,12 @@ export default function Sidebar() {
           label: "Government Employee",
           to: "/new-booking/gov-employee",
         },
+        // Student Booking — parallel flow with student discount + admin
+        // verification of the uploaded Student ID.
+        {
+          label: "Student Booking",
+          to: "/new-booking/student",
+        },
       ],
     },
     {
@@ -342,6 +348,11 @@ export default function Sidebar() {
         {
           label: "Government Employee Booking",
           to: "/booking-details/gov-employee-booking-list",
+        },
+        // Student Booking list — view / cancel / voucher + verification status
+        {
+          label: "Student Booking",
+          to: "/booking-details/student-booking-list",
         },
       ],
     },
