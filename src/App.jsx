@@ -424,7 +424,7 @@ export default function App() {
 
         {/* Restaurant Module */}
         <Route path="/registration/schefferDriver" element={<PrivateRoute><SchefferDriverReg /></PrivateRoute>} />
-        <Route path="/scheffer-driver-rates" element={<PrivateRoute><SchefferDriverRates /></PrivateRoute>} />
+        <Route path="/scheffer-driver-rates" element={<PrivateRoute><SchefferDriverRates /></PrivateRoute>} /> 
 
 
         {/* Restaurant Module */}
