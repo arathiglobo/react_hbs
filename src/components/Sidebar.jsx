@@ -210,7 +210,7 @@ export default function Sidebar() {
         { label: "Supplier", to: "/registration/supplier" },
         { label: "Restaurants", to: "/restaurant/list" },
         { label: "Honeymoon Packages", to: "/honeymoon/list" },
-        { label: "Scheffer Driver and Lumousin", to: "/registration/schefferDriver" },
+        { label: "Scheffer Driver and Limousine", to: "/registration/schefferDriver" },
       ],
     },
     {
@@ -239,6 +239,7 @@ export default function Sidebar() {
         },
         { label: "Package Booking", to: "/new-booking/package-search" },
         { label: "Cab Booking", to: "/new-booking/cab" },
+        { label: "Scheffer Driver and Limousine Booking", to: "/new-booking/scheffer-driver" },
         {
           label: "Tours and Activity",
           to: "/new-booking/tours-and-activities",
@@ -322,6 +323,10 @@ export default function Sidebar() {
         {
           label: "Cab Booking",
           to: "/booking-details/cab-booking-list",
+        },
+        {
+          label: "Scheffer Driver and Limousine Booking",
+          to: "/booking-details/scheffer-driver-booking-list",
         },
         // {
         //   label: "Complete Booking",

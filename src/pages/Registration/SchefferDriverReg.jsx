@@ -208,7 +208,7 @@ const SchefferDriverReg = () => {
   const [zoneLoading, setZoneLoading] = useState(false);
   const [zoneSaving, setZoneSaving] = useState(false);
   // Cache of existing zones for the provider, keyed by cabId (string).
-  // Populated once when the modal opens via /api/cab-zones/by-provider/{id}
+  // Populated once when the modal opens via /api/scheffer-zones/by-provider/{id}
   // so picking a cab from the dropdown shows its prior data instantly.
   const [zonesByCabId, setZonesByCabId] = useState({});
 
@@ -225,13 +225,13 @@ const SchefferDriverReg = () => {
   });
 
   // Combined Zones / Hotels / Airports source — driven by the new
-  // /api/cab-search/lookup endpoint. The provider registers the cab's
+  // /api/scheffer-search/lookup endpoint. The provider registers the cab's
   // pickup / dropoff against any of these so the cab-search can match
   // them later.
   const fetchZoneLocationOptions = async (search = "") => {
     try {
       const res = await axiosInstance.get(
-        `/api/cab-search/lookup?search=${encodeURIComponent(search)}&limit=20`
+        `/api/scheffer-search/lookup?search=${encodeURIComponent(search)}&limit=20`
       );
       const d = res?.data || {};
       const groups = [];
@@ -295,7 +295,7 @@ const SchefferDriverReg = () => {
       return;
     }
     try {
-      const res = await axiosInstance.get(`/api/cab-zones/by-cab/${cabId}`);
+      const res = await axiosInstance.get(`/api/scheffer-zones/by-cab/${cabId}`);
       const zone = res.data || null;
       setZonesByCabId((prev) => ({ ...prev, [String(cabId)]: zone }));
       applyZoneToSelections(zone);
@@ -321,9 +321,9 @@ const SchefferDriverReg = () => {
       // and any zones already saved for this provider so picking a cab below
       // shows its prior data instantly.
       const [cabsRes, zonesRes] = await Promise.all([
-        axiosInstance.get(`/api/cabProvider/cabs/${providerId}`),
+        axiosInstance.get(`/api/SchefferDriver/cabs/${providerId}`),
         fetchZoneLocationOptions(),
-        axiosInstance.get(`/api/cab-zones/by-provider/${providerId}`),
+        axiosInstance.get(`/api/scheffer-zones/by-provider/${providerId}`),
       ]).then(([cabsResLocal, , zonesResLocal]) => [cabsResLocal, zonesResLocal]);
 
       const cabs = Array.isArray(cabsRes.data) ? cabsRes.data : [];
@@ -414,7 +414,7 @@ const SchefferDriverReg = () => {
     };
     try {
       setZoneSaving(true);
-      const saveRes = await axiosInstance.post("/api/cab-zones/save", payload);
+      const saveRes = await axiosInstance.post("/api/scheffer-zones/save", payload);
       // Refresh the cache for this cab so the next open shows the latest data.
       const savedZone = saveRes?.data || null;
       if (savedZone) {
@@ -612,7 +612,7 @@ const SchefferDriverReg = () => {
       // Try to fetch detailed cab data for this provider
       try {
         console.log("Attempting to fetch detailed cab data for ID:", item.cabprovider || item.id);
-        const detailedResponse = await axiosInstance.get(`/api/cabProvider/${item.cabprovider || item.id}`);
+        const detailedResponse = await axiosInstance.get(`/api/SchefferDriver/${item.cabprovider || item.id}`);
         console.log("Detailed cab provider data:", detailedResponse.data);
         
         if (detailedResponse.data && detailedResponse.data.cabList && Array.isArray(detailedResponse.data.cabList)) {
@@ -710,7 +710,7 @@ const SchefferDriverReg = () => {
       // Try to fetch detailed cab data for this provider
       try {
         console.log("Attempting to fetch detailed cab data for view, ID:", item.cabprovider || item.id);
-        const detailedResponse = await axiosInstance.get(`/api/cabProvider/${item.cabprovider || item.id}`);
+        const detailedResponse = await axiosInstance.get(`/api/SchefferDriver/${item.cabprovider || item.id}`);
         console.log("Detailed cab provider data for view:", detailedResponse.data);
         
         if (detailedResponse.data && detailedResponse.data.cabList && Array.isArray(detailedResponse.data.cabList)) {
@@ -1307,7 +1307,7 @@ const SchefferDriverReg = () => {
 
       console.log("formDataPayload:::", formDataPayload);
       const cabSaveResponse = await axiosInstance.post(
-        "/api/cabProvider/register",
+        "/api/SchefferDriver/register",
         formDataPayload,
         {
           headers: {
@@ -1408,7 +1408,7 @@ const SchefferDriverReg = () => {
 
     console.log("FormData prepared for edit:", formDataPayload);
 
-    const editRes = await axiosInstance.put(`/api/cabProvider/${editing.cabprovider}`, formDataPayload, {
+    const editRes = await axiosInstance.put(`/api/SchefferDriver/${editing.cabprovider}`, formDataPayload, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -1471,7 +1471,7 @@ const SchefferDriverReg = () => {
         params.append("search", searchTerm.trim());
       }
 
-      const res = await axiosInstance.get(`/api/cabProvider?${params.toString()}`);
+      const res = await axiosInstance.get(`/api/SchefferDriver?${params.toString()}`);
       console.log("cab list :::" , res)
 
       if (res.data && Array.isArray(res.data)) {
@@ -1535,7 +1535,7 @@ const SchefferDriverReg = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         axiosInstance
-          .delete(`/api/cabProvider/${item.cabprovider}`)
+          .delete(`/api/SchefferDriver/${item.cabprovider}`)
           .then(() => {
             toast.success("Cab Provider deleted successfully");
             fetchCabList(page, search);
