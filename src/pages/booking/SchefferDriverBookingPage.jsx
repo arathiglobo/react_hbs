@@ -354,16 +354,38 @@ const SchefferDriverBookingPage = () => {
       driverContact: transporterDetails.driverContact,
       sellingPrice: String(sellingWithTd.toFixed(2)),
       totalPrice: String(totalWithTd.toFixed(2)),
-      // Pickup / Drop-off details forwarded from the search page.
-      pickupType: searchCriteria.pickupType || null,
-      pickupName: searchCriteria.pickupName || null,
+      // Pickup / Drop-off details — prefer the zone-based search result row
+      // (selectedOption.pickup / dropOff / pickupTime / dropoffTime), then
+      // fall back to the search criteria's origin/destination location, then
+      // finally the legacy hidden-form fields. Without this, all four
+      // columns end up null in the DB because the modern search page no
+      // longer populates the legacy pickupName / pickupType fields.
+      pickupType:
+        searchCriteria.originSource || searchCriteria.pickupType || null,
+      pickupName:
+        selectedOption.pickup ||
+        searchCriteria.originLocationName ||
+        searchCriteria.pickupName ||
+        null,
       pickupTime:
-        searchCriteria.pickupType === "AIRPORT" && searchCriteria.pickupTime
+        selectedOption.pickupTime ||
+        searchCriteria.departureTime ||
+        (searchCriteria.pickupType === "AIRPORT" && searchCriteria.pickupTime
           ? searchCriteria.pickupTime
-          : null,
-      dropoffType: searchCriteria.dropoffType || null,
-      dropoffName: searchCriteria.dropoffName || null,
-      dropoffTime: searchCriteria.dropoffTime || null,
+          : null),
+      dropoffType:
+        searchCriteria.destinationSource || searchCriteria.dropoffType || null,
+      dropoffName:
+        selectedOption.dropOff ||
+        selectedOption.dropoff ||
+        searchCriteria.destinationLocationName ||
+        searchCriteria.dropoffName ||
+        null,
+      dropoffTime:
+        selectedOption.dropoffTime ||
+        searchCriteria.returnTime ||
+        searchCriteria.dropoffTime ||
+        null,
     };
 
     setPendingPayload(payload);
