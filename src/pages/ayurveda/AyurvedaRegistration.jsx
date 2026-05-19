@@ -13,7 +13,7 @@ import {
   Modal,
   Spinner,
 } from "react-bootstrap";
-import { FaPlus, FaEdit, FaTrash, FaSpa, FaUserMd, FaBookOpen, FaLeaf } from "react-icons/fa";
+import { FaPlus, FaEdit, FaTrash, FaSpa, FaUserMd, FaBookOpen, FaLeaf, FaEnvelopeOpenText, FaReply } from "react-icons/fa";
 import toast from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -38,6 +38,8 @@ const emptyPackage = {
   imageUrl: "",
   category: "",
   treatmentsIncluded: "",
+  countryId: "",
+  cityId: "",
 };
 
 const emptyCourse = {
@@ -54,6 +56,8 @@ const emptyCourse = {
   certificationIncluded: false,
   courseImageUrl: "",
   prerequisites: "",
+  countryId: "",
+  cityId: "",
 };
 
 const emptyConsultation = {
@@ -68,6 +72,8 @@ const emptyConsultation = {
   maxPatientsPerSlot: 1,
   isActive: true,
   doctorImageUrl: "",
+  countryId: "",
+  cityId: "",
 };
 
 const AyurvedaRegistration = () => {
@@ -85,11 +91,28 @@ const AyurvedaRegistration = () => {
   const [consultations, setConsultations] = useState([]);
   const [consultationsLoading, setConsultationsLoading] = useState(false);
 
+  // enquiries
+  const [enquiries, setEnquiries] = useState([]);
+  const [enquiriesLoading, setEnquiriesLoading] = useState(false);
+  const [enquiryStatusFilter, setEnquiryStatusFilter] = useState("");
+  const [respondingEnquiry, setRespondingEnquiry] = useState(null);
+  const [respondForm, setRespondForm] = useState({ status: "RESPONDED", response: "", respondedBy: "" });
+  const [responding, setResponding] = useState(false);
+
   // modal state
   const [modalType, setModalType] = useState(null); // 'package' | 'course' | 'consultation'
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
+
+  // Pending image uploads. For packages/courses this is a FileList (multiple).
+  // For consultations it's a single File. Cleared on modal open.
+  const [pendingImages, setPendingImages] = useState([]);
+
+  // Country & City lookups for registration forms
+  const [countries, setCountries] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
 
   const loadPackages = useCallback(async () => {
     setPackagesLoading(true);
@@ -130,23 +153,134 @@ const AyurvedaRegistration = () => {
     }
   }, []);
 
+  const loadEnquiries = useCallback(async () => {
+    setEnquiriesLoading(true);
+    try {
+      const params = { page: 0, size: 100 };
+      if (enquiryStatusFilter) params.status = enquiryStatusFilter;
+      const res = await axiosInstance.get(`${AYURVEDA_API}/enquiries`, { params });
+      const data = res.data?.content || res.data || [];
+      setEnquiries(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to load enquiries");
+    } finally {
+      setEnquiriesLoading(false);
+    }
+  }, [enquiryStatusFilter]);
+
   useEffect(() => {
     loadPackages();
     loadCourses();
     loadConsultations();
   }, [loadPackages, loadCourses, loadConsultations]);
 
+  // Load countries once. We pass a large `limit` because the /api/country
+  // endpoint paginates (default 50) — without this we'd cap the dropdown.
+  useEffect(() => {
+    axiosInstance
+      .get("/api/country?limit=10000")
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        setCountries(list.filter((c) => !c.isDeleted));
+      })
+      .catch((e) => console.error("Failed to load countries", e));
+  }, []);
+
+  // Reload cities whenever the country in the active form changes.
+  // - With a country selected, use the dedicated `/getByCountryId` endpoint
+  //   (returns the full list, no pagination).
+  // - Without a country, fall back to the paginated province list with a
+  //   large limit so the user still sees the full catalogue.
+  useEffect(() => {
+    if (modalType === null) return;
+    const countryId = form.countryId;
+    setCitiesLoading(true);
+    const url = countryId
+      ? `/api/province/getByCountryId/${countryId}`
+      : `/api/province?limit=10000`;
+    axiosInstance
+      .get(url)
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        setCities(list.filter((c) => !c.isDeleted));
+      })
+      .catch((e) => {
+        console.error("Failed to load cities", e);
+        setCities([]);
+      })
+      .finally(() => setCitiesLoading(false));
+  }, [modalType, form.countryId]);
+
+  useEffect(() => {
+    if (activeTab === "enquiries") loadEnquiries();
+  }, [activeTab, loadEnquiries]);
+
+  const openRespond = (enquiry) => {
+    setRespondingEnquiry(enquiry);
+    setRespondForm({
+      status: enquiry.status === "NEW" ? "IN_PROGRESS" : enquiry.status,
+      response: enquiry.response || "",
+      respondedBy:
+        localStorage.getItem("UserName") ||
+        localStorage.getItem("userName") ||
+        "",
+    });
+  };
+
+  const closeRespond = () => {
+    setRespondingEnquiry(null);
+    setRespondForm({ status: "RESPONDED", response: "", respondedBy: "" });
+  };
+
+  const submitRespond = async () => {
+    if (!respondingEnquiry) return;
+    if (!respondForm.status) {
+      toast.error("Status is required");
+      return;
+    }
+    setResponding(true);
+    try {
+      await axiosInstance.put(
+        `${AYURVEDA_API}/enquiries/${respondingEnquiry.id}/status`,
+        respondForm
+      );
+      toast.success("Enquiry updated");
+      closeRespond();
+      loadEnquiries();
+    } catch (e) {
+      console.error(e);
+      toast.error("Update failed");
+    } finally {
+      setResponding(false);
+    }
+  };
+
+  const deleteEnquiry = async (id) => {
+    if (!window.confirm("Delete this enquiry permanently?")) return;
+    try {
+      await axiosInstance.delete(`${AYURVEDA_API}/enquiries/${id}`);
+      toast.success("Deleted");
+      loadEnquiries();
+    } catch (e) {
+      console.error(e);
+      toast.error("Delete failed");
+    }
+  };
+
   const openCreate = (type) => {
     setEditingId(null);
     if (type === "package") setForm({ ...emptyPackage });
     if (type === "course") setForm({ ...emptyCourse });
     if (type === "consultation") setForm({ ...emptyConsultation });
+    setPendingImages([]);
     setModalType(type);
   };
 
   const openEdit = (type, row) => {
     setEditingId(row.id);
     setForm({ ...row });
+    setPendingImages([]);
     setModalType(type);
   };
 
@@ -154,10 +288,19 @@ const AyurvedaRegistration = () => {
     setModalType(null);
     setEditingId(null);
     setForm({});
+    setPendingImages([]);
   };
 
   const setField = (key, value) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      // Changing the country should clear the previously selected city
+      // so we never persist a mismatched (countryId, cityId) pair.
+      if (key === "countryId" && prev.countryId !== value) {
+        next.cityId = "";
+      }
+      return next;
+    });
 
   const validatePackage = (f) => {
     if (!f.packageName?.trim()) return "Package name is required";
@@ -191,6 +334,10 @@ const AyurvedaRegistration = () => {
     let url = "";
     let payload = { ...form };
 
+    // Coerce country/city IDs to Long-friendly values (or null when blank)
+    payload.countryId = payload.countryId ? Number(payload.countryId) : null;
+    payload.cityId = payload.cityId ? Number(payload.cityId) : null;
+
     if (modalType === "package") {
       err = validatePackage(form);
       url = `${AYURVEDA_API}/packages${editingId ? `/${editingId}` : ""}`;
@@ -218,13 +365,33 @@ const AyurvedaRegistration = () => {
 
     setSaving(true);
     try {
-      if (editingId) {
-        await axiosInstance.put(url, payload);
-        toast.success("Updated successfully");
+      // If the user picked file(s), submit as multipart. Otherwise fall
+      // back to JSON so we don't strip the existing imageUrl on edits
+      // where they didn't re-upload.
+      const hasFiles = pendingImages && pendingImages.length > 0;
+      const method = editingId ? "put" : "post";
+
+      if (hasFiles) {
+        const fd = new FormData();
+        fd.append("data", new Blob([JSON.stringify(payload)], { type: "application/json" }));
+        if (modalType === "consultation") {
+          // single file under the "image" part
+          fd.append("image", pendingImages[0]);
+        } else {
+          // multiple files under "images" — repeat the part name
+          Array.from(pendingImages).forEach((f) => fd.append("images", f));
+        }
+        await axiosInstance({
+          method,
+          url,
+          data: fd,
+          headers: { "Content-Type": "multipart/form-data" },
+        });
       } else {
-        await axiosInstance.post(url, payload);
-        toast.success("Created successfully");
+        await axiosInstance[method](url, payload);
       }
+
+      toast.success(editingId ? "Updated successfully" : "Created successfully");
       closeModal();
       if (modalType === "package") loadPackages();
       if (modalType === "course") loadCourses();
@@ -439,6 +606,120 @@ const AyurvedaRegistration = () => {
               </Tab>
 
               <Tab
+                eventKey="enquiries"
+                title={
+                  <span>
+                    <FaEnvelopeOpenText className="me-2" />
+                    Enquiries
+                  </span>
+                }
+              >
+                <div className="ayurveda-action-bar">
+                  <Form.Select
+                    style={{ maxWidth: 200 }}
+                    value={enquiryStatusFilter}
+                    onChange={(e) => setEnquiryStatusFilter(e.target.value)}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="NEW">New</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="RESPONDED">Responded</option>
+                    <option value="CLOSED">Closed</option>
+                  </Form.Select>
+                  <Button variant="outline-success" onClick={loadEnquiries}>
+                    Refresh
+                  </Button>
+                </div>
+                <Card className="ayurveda-card-body">
+                  {enquiriesLoading ? (
+                    <div className="text-center py-4">
+                      <Spinner animation="border" variant="success" />
+                    </div>
+                  ) : enquiries.length === 0 ? (
+                    <div className="ayurveda-empty">No enquiries yet.</div>
+                  ) : (
+                    <Table responsive striped hover size="sm">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Ref</th>
+                          <th>Customer</th>
+                          <th>Contact</th>
+                          <th>Treatment</th>
+                          <th>Travel</th>
+                          <th>Pax</th>
+                          <th>Health Concern</th>
+                          <th>Status</th>
+                          <th>Submitted</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {enquiries.map((e, idx) => (
+                          <tr key={e.id}>
+                            <td>{idx + 1}</td>
+                            <td><strong>{e.enquiryReference}</strong></td>
+                            <td>{e.name}</td>
+                            <td>
+                              <div>{e.email || "-"}</div>
+                              <div className="small text-muted">{e.phone || "-"}</div>
+                            </td>
+                            <td>{e.preferredTreatment || "-"}</td>
+                            <td>
+                              {e.travelStartDate || "-"}
+                              {e.travelEndDate ? ` → ${e.travelEndDate}` : ""}
+                            </td>
+                            <td>{e.numberOfPersons}</td>
+                            <td style={{ maxWidth: 200, whiteSpace: "normal" }}>
+                              {e.healthConcern || "-"}
+                            </td>
+                            <td>
+                              <Badge
+                                bg={
+                                  e.status === "NEW"
+                                    ? "warning"
+                                    : e.status === "IN_PROGRESS"
+                                    ? "info"
+                                    : e.status === "RESPONDED"
+                                    ? "success"
+                                    : "secondary"
+                                }
+                              >
+                                {e.status}
+                              </Badge>
+                            </td>
+                            <td>
+                              {e.createdDate
+                                ? new Date(e.createdDate).toLocaleString()
+                                : "-"}
+                            </td>
+                            <td>
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="me-1"
+                                onClick={() => openRespond(e)}
+                                title="Respond / update status"
+                              >
+                                <FaReply />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                onClick={() => deleteEnquiry(e.id)}
+                              >
+                                <FaTrash />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  )}
+                </Card>
+              </Tab>
+
+              <Tab
                 eventKey="courses"
                 title={
                   <span>
@@ -605,11 +886,24 @@ const AyurvedaRegistration = () => {
                 </Col>
                 <Col md={3}>
                   <Form.Group className="mb-2">
-                    <Form.Label>Image URL</Form.Label>
+                    <Form.Label>Images (multiple)</Form.Label>
                     <Form.Control
-                      value={form.imageUrl || ""}
-                      onChange={(e) => setField("imageUrl", e.target.value)}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => setPendingImages(Array.from(e.target.files || []))}
                     />
+                    {pendingImages.length > 0 ? (
+                      <Form.Text className="text-success">
+                        {pendingImages.length} new image
+                        {pendingImages.length > 1 ? "s" : ""} selected
+                      </Form.Text>
+                    ) : form.imageUrl ? (
+                      <Form.Text className="text-muted">
+                        {form.imageUrl.split(",").filter(Boolean).length} existing image
+                        {form.imageUrl.split(",").filter(Boolean).length > 1 ? "s" : ""} kept
+                      </Form.Text>
+                    ) : null}
                   </Form.Group>
                 </Col>
               </Row>
@@ -677,6 +971,44 @@ const AyurvedaRegistration = () => {
                     checked={!!form.isAllInclusive}
                     onChange={(e) => setField("isAllInclusive", e.target.checked)}
                   />
+                </Col>
+              </Row>
+              <Row className="mt-2">
+                <Col md={6}>
+                  <Form.Group className="mb-2">
+                    <Form.Label>Country</Form.Label>
+                    <Form.Select
+                      value={form.countryId || ""}
+                      onChange={(e) => setField("countryId", e.target.value)}
+                    >
+                      <option value="">-- Select Country --</option>
+                      {countries.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-2">
+                    <Form.Label>
+                      City {citiesLoading && <Spinner size="sm" animation="border" />}
+                    </Form.Label>
+                    <Form.Select
+                      value={form.cityId || ""}
+                      onChange={(e) => setField("cityId", e.target.value)}
+                      disabled={citiesLoading}
+                    >
+                      <option value="">-- Select City --</option>
+                      {cities.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.stateName}
+                          {c.country ? ` (${c.country})` : ""}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
                 </Col>
               </Row>
               <Form.Check
@@ -788,11 +1120,24 @@ const AyurvedaRegistration = () => {
                 </Col>
                 <Col md={4}>
                   <Form.Group className="mb-2">
-                    <Form.Label>Image URL</Form.Label>
+                    <Form.Label>Images (multiple)</Form.Label>
                     <Form.Control
-                      value={form.courseImageUrl || ""}
-                      onChange={(e) => setField("courseImageUrl", e.target.value)}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => setPendingImages(Array.from(e.target.files || []))}
                     />
+                    {pendingImages.length > 0 ? (
+                      <Form.Text className="text-success">
+                        {pendingImages.length} new image
+                        {pendingImages.length > 1 ? "s" : ""} selected
+                      </Form.Text>
+                    ) : form.courseImageUrl ? (
+                      <Form.Text className="text-muted">
+                        {form.courseImageUrl.split(",").filter(Boolean).length} existing image
+                        {form.courseImageUrl.split(",").filter(Boolean).length > 1 ? "s" : ""} kept
+                      </Form.Text>
+                    ) : null}
                   </Form.Group>
                 </Col>
               </Row>
@@ -811,6 +1156,44 @@ const AyurvedaRegistration = () => {
                 checked={!!form.certificationIncluded}
                 onChange={(e) => setField("certificationIncluded", e.target.checked)}
               />
+              <Row className="mt-2">
+                <Col md={6}>
+                  <Form.Group className="mb-2">
+                    <Form.Label>Country</Form.Label>
+                    <Form.Select
+                      value={form.countryId || ""}
+                      onChange={(e) => setField("countryId", e.target.value)}
+                    >
+                      <option value="">-- Select Country --</option>
+                      {countries.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-2">
+                    <Form.Label>
+                      City {citiesLoading && <Spinner size="sm" animation="border" />}
+                    </Form.Label>
+                    <Form.Select
+                      value={form.cityId || ""}
+                      onChange={(e) => setField("cityId", e.target.value)}
+                      disabled={citiesLoading}
+                    >
+                      <option value="">-- Select City --</option>
+                      {cities.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.stateName}
+                          {c.country ? ` (${c.country})` : ""}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+              </Row>
               <Form.Check
                 type="switch"
                 className="mt-2"
@@ -920,12 +1303,58 @@ const AyurvedaRegistration = () => {
                 </Col>
               </Row>
               <Form.Group className="mb-2">
-                <Form.Label>Image URL</Form.Label>
+                <Form.Label>Doctor Image</Form.Label>
                 <Form.Control
-                  value={form.doctorImageUrl || ""}
-                  onChange={(e) => setField("doctorImageUrl", e.target.value)}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setPendingImages(Array.from(e.target.files || []))}
                 />
+                {pendingImages.length > 0 ? (
+                  <Form.Text className="text-success">New image selected</Form.Text>
+                ) : form.doctorImageUrl ? (
+                  <Form.Text className="text-muted">
+                    Current image will be kept (upload a new one to replace it).
+                  </Form.Text>
+                ) : null}
               </Form.Group>
+              <Row>
+                <Col md={6}>
+                  <Form.Group className="mb-2">
+                    <Form.Label>Country</Form.Label>
+                    <Form.Select
+                      value={form.countryId || ""}
+                      onChange={(e) => setField("countryId", e.target.value)}
+                    >
+                      <option value="">-- Select Country --</option>
+                      {countries.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-2">
+                    <Form.Label>
+                      City {citiesLoading && <Spinner size="sm" animation="border" />}
+                    </Form.Label>
+                    <Form.Select
+                      value={form.cityId || ""}
+                      onChange={(e) => setField("cityId", e.target.value)}
+                      disabled={citiesLoading}
+                    >
+                      <option value="">-- Select City --</option>
+                      {cities.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.stateName}
+                          {c.country ? ` (${c.country})` : ""}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+              </Row>
               <Form.Check
                 type="switch"
                 className="mt-2"
@@ -942,6 +1371,121 @@ const AyurvedaRegistration = () => {
           </Button>
           <Button variant="success" onClick={submit} disabled={saving}>
             {saving ? <Spinner size="sm" animation="border" /> : editingId ? "Update" : "Create"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ===== Enquiry Respond Modal ===== */}
+      <Modal show={!!respondingEnquiry} onHide={closeRespond} centered size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <FaReply className="me-2" /> Respond to Enquiry
+            {respondingEnquiry?.enquiryReference
+              ? ` — ${respondingEnquiry.enquiryReference}`
+              : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {respondingEnquiry && (
+            <>
+              <div className="ayurveda-summary-card">
+                <Row className="g-2">
+                  <Col md={6}>
+                    <strong>Name:</strong> {respondingEnquiry.name}
+                  </Col>
+                  <Col md={6}>
+                    <strong>Persons:</strong> {respondingEnquiry.numberOfPersons}
+                  </Col>
+                  <Col md={6}>
+                    <strong>Email:</strong> {respondingEnquiry.email || "-"}
+                  </Col>
+                  <Col md={6}>
+                    <strong>Phone:</strong> {respondingEnquiry.phone || "-"}
+                  </Col>
+                  <Col md={6}>
+                    <strong>Preferred Treatment:</strong>{" "}
+                    {respondingEnquiry.preferredTreatment || "-"}
+                  </Col>
+                  <Col md={6}>
+                    <strong>Travel:</strong>{" "}
+                    {respondingEnquiry.travelStartDate || "-"}
+                    {respondingEnquiry.travelEndDate
+                      ? ` → ${respondingEnquiry.travelEndDate}`
+                      : ""}
+                  </Col>
+                  {respondingEnquiry.healthConcern && (
+                    <Col md={12}>
+                      <strong>Health Concern:</strong>{" "}
+                      {respondingEnquiry.healthConcern}
+                    </Col>
+                  )}
+                  {respondingEnquiry.notes && (
+                    <Col md={12}>
+                      <strong>Notes:</strong> {respondingEnquiry.notes}
+                    </Col>
+                  )}
+                </Row>
+              </div>
+
+              <Form>
+                <Row>
+                  <Col md={4}>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Status *</Form.Label>
+                      <Form.Select
+                        value={respondForm.status}
+                        onChange={(e) =>
+                          setRespondForm({ ...respondForm, status: e.target.value })
+                        }
+                      >
+                        <option value="NEW">New</option>
+                        <option value="IN_PROGRESS">In Progress</option>
+                        <option value="RESPONDED">Responded</option>
+                        <option value="CLOSED">Closed</option>
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                  <Col md={8}>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Responded By</Form.Label>
+                      <Form.Control
+                        value={respondForm.respondedBy}
+                        onChange={(e) =>
+                          setRespondForm({
+                            ...respondForm,
+                            respondedBy: e.target.value,
+                          })
+                        }
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+                <Form.Group className="mb-2">
+                  <Form.Label>Response Message</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={4}
+                    value={respondForm.response}
+                    onChange={(e) =>
+                      setRespondForm({ ...respondForm, response: e.target.value })
+                    }
+                    placeholder="Recommendation, suggested package/consultation/course, follow-up details..."
+                  />
+                </Form.Group>
+              </Form>
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeRespond} disabled={responding}>
+            Cancel
+          </Button>
+          <Button variant="success" onClick={submitRespond} disabled={responding}>
+            {responding ? (
+              <Spinner size="sm" animation="border" />
+            ) : (
+              "Save"
+            )}
           </Button>
         </Modal.Footer>
       </Modal>
