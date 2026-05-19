@@ -78,8 +78,29 @@ const SERVICE_GATES = [
 export default function MakePkgAddOnsFirstPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  // Search criteria forwarded from /new-booking/make-your-own-package-v2
-  const criteria = location.state || {};
+  // Search criteria forwarded from /new-booking/make-your-own-package-v2.
+  // Fall back to sessionStorage so a hard refresh of /addons doesn't drop
+  // destination/nationality (they're needed for the hotel search payload).
+  const criteria = (() => {
+    if (location.state && Object.keys(location.state).length > 0) {
+      try {
+        sessionStorage.setItem(
+          "makePkgV2Criteria",
+          JSON.stringify(location.state)
+        );
+      } catch {
+        /* ignore */
+      }
+      return location.state;
+    }
+    try {
+      const raw = sessionStorage.getItem("makePkgV2Criteria");
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return {};
+  })();
 
   // Service gates — what becomes searchable on the next page.
   const [services, setServices] = useState(() => {
@@ -89,7 +110,7 @@ export default function MakePkgAddOnsFirstPage() {
     } catch {
       /* fall through */
     }
-    return { hotel: true, transfer: false, tour: false };
+    return { hotel: true, transfer: true, tour: true };
   });
 
   // Visa — YES/NO only. NO means "no action needed"; YES surfaces a
@@ -274,10 +295,7 @@ export default function MakePkgAddOnsFirstPage() {
                   Optional services (meet &amp; greet, car rental, etc.) —
                   toggle any service to add it to the booking.
                 </small>
-                <AddOnServicesPanel
-                  title="Services"
-                  hideServiceKeys={["visa"]}
-                />
+                <AddOnServicesPanel title="Services" />
               </Card.Body>
             </Card>
 
@@ -305,10 +323,10 @@ export default function MakePkgAddOnsFirstPage() {
 export const readV2Services = () => {
   try {
     const raw = sessionStorage.getItem(V2_SERVICES_KEY);
-    if (!raw) return { hotel: true, transfer: false, tour: false };
+    if (!raw) return { hotel: true, transfer: true, tour: true };
     return { hotel: true, transfer: false, tour: false, ...JSON.parse(raw) };
   } catch {
-    return { hotel: true, transfer: false, tour: false };
+    return { hotel: true, transfer: true, tour: true };
   }
 };
 export const readV2VisaRequired = () => {

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Form, Row, Col, Badge, Accordion } from "react-bootstrap";
+import { FaChevronDown } from "react-icons/fa";
 
 // ── Storage key ──────────────────────────────────────────────────────
 // The Make Your Own Package flow spans three pages (search → results →
@@ -371,11 +372,22 @@ export default function AddOnServicesPanel({
         >
           {visibleCatalog.map((svc, idx) => {
             const current = state[svc.key] || blankService(svc);
+            const isOpen = expandedKeys.includes(String(idx));
             return (
               <Accordion.Item key={svc.key} eventKey={String(idx)}>
                 <Accordion.Header>
                   <div className="d-flex w-100 align-items-center justify-content-between pe-2">
-                    <span className="small fw-semibold">{svc.label}</span>
+                    <span className="d-flex align-items-center gap-2">
+                      <FaChevronDown
+                        size={12}
+                        className="text-muted"
+                        style={{
+                          transition: "transform 0.15s ease",
+                          transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                        }}
+                      />
+                      <span className="small fw-semibold">{svc.label}</span>
+                    </span>
                     <Form.Check
                       type="switch"
                       id={`addon-switch-${svc.key}`}

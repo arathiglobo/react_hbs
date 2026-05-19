@@ -242,7 +242,23 @@ export default function MakePkgCombineSearchV2() {
     ? "tours"
     : "accommodation";
   const location = useLocation();
-  const searchCriteria = location.state;
+  // Pull search criteria from location.state first; fall back to the
+  // sessionStorage snapshot written by MakeUrOwnPackageV2 / addons page
+  // so destination + nationality survive a refresh of the search page.
+  // Without this the hotel search payload would ship empty cityId /
+  // countryId / nationalityId / nationalityCode after any page reload.
+  const searchCriteria = (() => {
+    if (location.state && Object.keys(location.state).length > 0) {
+      return location.state;
+    }
+    try {
+      const raw = sessionStorage.getItem("makePkgV2Criteria");
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return {};
+  })();
   const {
     travelDate,
     agent,
@@ -652,14 +668,33 @@ const [activeAccordion, setActiveAccordion] = useState({});
     setCompletedChannels(new Set());
 
     try {
-      const nationalityId = nationality?.value || "";
+      // Fall back to itinerary[0] if `destination` somehow ended up null
+      // (e.g. came back from cart with a partially-populated state). This
+      // keeps the hotel-search payload populated.
+      const dest =
+        destination ||
+        (itinerary && itinerary.length > 0
+          ? itinerary[0]?.selectedDestination
+          : null) ||
+        {};
+
+      const nationalityId = nationality?.value != null
+        ? String(nationality.value)
+        : "";
       const nationalityCode = nationality?.code || "";
-      const destinationCityId = destination?.value || "";
-      const destinationCountryId = destination?.countryId || "";
-      
-      const destinationCityIds = itinerary && itinerary.length > 0
-        ? itinerary.map(item => String(item.selectedDestination?.value)).filter(id => id && id !== "undefined")
-        : [String(destination?.value)].filter(id => id && id !== "undefined");
+      const destinationCityId = dest?.value != null ? String(dest.value) : "";
+      const destinationCountryId =
+        dest?.countryId != null ? String(dest.countryId) : "";
+
+      const destinationCityIds =
+        itinerary && itinerary.length > 0
+          ? itinerary
+              .map((item) => item.selectedDestination?.value)
+              .filter((id) => id != null && id !== "")
+              .map(String)
+          : destinationCityId
+            ? [destinationCityId]
+            : [];
 
       const noOfRooms = String(rooms.length);
 

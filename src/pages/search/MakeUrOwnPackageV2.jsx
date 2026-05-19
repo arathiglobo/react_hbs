@@ -268,20 +268,35 @@ export default function MakeUrOwnPackageV2() {
     // the v2 booking-page instead of the legacy one.
     sessionStorage.setItem("makePkgFlow", "v2");
 
+    // Build the criteria payload once so we can both pass it via
+    // location.state AND persist it to sessionStorage as a fallback —
+    // location.state evaporates on page refresh / back-forward cache,
+    // and the v2 search page falls back to sessionStorage when state is
+    // missing so the hotel-search payload always carries destination +
+    // nationality.
+    const criteriaPayload = {
+      travelDate,
+      agent,
+      nationality: selectedNationality,
+      itinerary,
+      adults,
+      children,
+      childAges: childAges.map((age) => parseInt(age) || 0),
+      destination: itinerary[0].selectedDestination,
+      nights: itinerary.reduce((acc, curr) => acc + curr.nights, 0),
+    };
+    try {
+      sessionStorage.setItem(
+        "makePkgV2Criteria",
+        JSON.stringify(criteriaPayload)
+      );
+    } catch {
+      /* private mode / quota — non-fatal */
+    }
+
     // Navigate to the Add-Ons-First picker (v2 step 2)
     navigate("/new-booking/make-your-own-package-v2/addons", {
-      state: {
-        travelDate,
-        agent,
-        nationality: selectedNationality,
-        itinerary, // Pass the entire itinerary array
-        adults,
-        children,
-        childAges: childAges.map(age => parseInt(age) || 0),
-        // Pass the first destination and total nights for backward compatibility if needed
-        destination: itinerary[0].selectedDestination,
-        nights: itinerary.reduce((acc, curr) => acc + curr.nights, 0),
-      },
+      state: criteriaPayload,
     });
 
   };
