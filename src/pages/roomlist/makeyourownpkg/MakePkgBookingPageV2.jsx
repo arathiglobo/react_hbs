@@ -3485,10 +3485,10 @@ const MakePkgBookingPageV2 = () => {
                 </small>
               </div>
 
-              {/* v2 Visa + Add-Ons summary inside Price Summary. The
-                  legacy visaAdult/visaChild/visaInfant rate inputs are
-                  replaced with a YES/NO line (visas are arranged by the
-                  support team offline) and a per-service mini-list. */}
+              {/* v2 Add-Ons summary — each enabled service expanded
+                  with the field-level details the operator captured on
+                  /addons. Visa is just one of the catalogue entries, so
+                  no separate "Visa Required" row is needed up top. */}
               {(() => {
                 let svcMap = {};
                 try {
@@ -3501,51 +3501,54 @@ const MakePkgBookingPageV2 = () => {
                 const enabled = ADDON_SERVICES_CATALOG.filter(
                   (svc) => svcMap[svc.key]?.enabled
                 );
-                const hasAnything =
-                  v2VisaRequired === "YES" || enabled.length > 0;
-                if (!hasAnything) return null;
+                if (enabled.length === 0) return null;
                 return (
                   <div className="pt-3 mt-3 border-top">
                     <h6
                       className="mb-2 fw-semibold"
                       style={{ fontSize: "0.875rem", color: "#495057" }}
                     >
-                      Add-Ons &amp; Visa
+                      Addons
                     </h6>
-                    <div
-                      className="d-flex justify-content-between mb-2"
-                      style={{ fontSize: "0.8125rem" }}
-                    >
-                      <span className="text-muted">Visa required</span>
-                      <span
-                        className={`badge bg-${v2VisaRequired === "YES" ? "danger" : "secondary"}`}
-                      >
-                        {v2VisaRequired}
-                      </span>
-                    </div>
-                    {enabled.length > 0 && (
-                      <div
-                        className="d-flex flex-column gap-1"
-                        style={{ fontSize: "0.8125rem" }}
-                      >
-                        {enabled.map((svc) => (
+                    <div className="d-flex flex-column gap-2">
+                      {enabled.map((svc) => {
+                        const data = svcMap[svc.key] || {};
+                        const filled = (svc.fields || []).filter((f) => {
+                          const v = data[f.name];
+                          return v !== undefined && v !== "" && v !== null;
+                        });
+                        return (
                           <div
                             key={svc.key}
-                            className="d-flex justify-content-between"
+                            className="p-2 rounded border bg-light"
+                            style={{ fontSize: "0.8125rem" }}
                           >
-                            <span className="text-muted">{svc.label}</span>
-                            <span className="badge bg-success-subtle text-success">
-                              Selected
-                            </span>
+                            <div className="fw-semibold text-success mb-1">
+                              {svc.label}
+                            </div>
+                            {filled.length === 0 ? (
+                              <span className="text-muted fst-italic">
+                                Enabled (no extra details captured)
+                              </span>
+                            ) : (
+                              <div className="d-flex flex-column gap-1">
+                                {filled.map((f) => (
+                                  <div
+                                    key={f.name}
+                                    className="d-flex justify-content-between"
+                                  >
+                                    <span className="text-muted">
+                                      {f.label}
+                                    </span>
+                                    <span>{String(data[f.name])}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {v2VisaRequired === "YES" && (
-                      <small className="text-muted d-block mt-2">
-                        Our team will follow up about the visa offline.
-                      </small>
-                    )}
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })()}
