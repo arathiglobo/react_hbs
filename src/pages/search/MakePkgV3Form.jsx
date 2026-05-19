@@ -103,25 +103,28 @@ const MakePkgV3Form = () => {
       .then((r) => setAgentList(Array.isArray(r.data) ? r.data : []))
       .catch(() => setAgentList([]));
 
-    // Load destinations (cities)
+    // Load destinations (provinces / cities). The legacy endpoint is
+    // /api/province — returns rows with stateName + countryName.
     axiosInstance
-      .get("/api/master/city?limit=500")
+      .get("/api/province?limit=500")
       .then((r) => {
-        const opts = (r.data || []).map((c) => ({
+        const rows = Array.isArray(r.data) ? r.data : [];
+        const opts = rows.map((c) => ({
           value: c.id,
-          label: c.name,
+          label: c.country ? `${c.stateName}, ${c.country}` : c.stateName,
           countryId: c.countryId,
-          countryName: c.countryName,
+          countryName: c.country,
         }));
         setDestOptions(opts);
       })
       .catch(() => setDestOptions([]));
 
-    // Load nationalities (countries)
+    // Load nationalities — legacy /api/country.
     axiosInstance
-      .get("/api/master/country?limit=500")
+      .get("/api/country?limit=500")
       .then((r) => {
-        const opts = (r.data || []).map((c) => ({
+        const rows = Array.isArray(r.data) ? r.data : [];
+        const opts = rows.map((c) => ({
           value: c.id,
           label: c.name,
           code: c.countryCode,
