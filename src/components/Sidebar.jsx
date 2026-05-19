@@ -321,6 +321,12 @@ export default function Sidebar() {
           to: "/booking-details/custom-booking-list",
         },
         {
+          // Listings for the v2 Make-Your-Own-Package flow (separate
+          // table tree, separate endpoints).
+          label: "Make Your Own Package (v2)",
+          to: "/booking-details/make-your-own-package-v2-list",
+        },
+        {
           label: "Package Booking",
           to: "/booking-details/package-booking-list",
         },

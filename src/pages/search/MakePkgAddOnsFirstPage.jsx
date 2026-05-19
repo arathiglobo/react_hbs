@@ -114,7 +114,7 @@ export default function MakePkgAddOnsFirstPage() {
       return;
     }
     axiosInstance
-      .post(`/api/makeYourOwnPackage/clearFromCart?userId=${agentId}`)
+      .post(`/api/makeYourOwnPackageV2/cart/clear?userId=${agentId}`)
       .then(() => {
         try {
           window.dispatchEvent(new Event("cartUpdated"));

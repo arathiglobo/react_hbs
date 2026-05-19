@@ -351,7 +351,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
     try {
       const response = await axiosInstance.post(
-        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
+        `/api/makeYourOwnPackageV2/cart/fetch?userId=${encodeURIComponent(
           currentAgentId
         )}`
       );
@@ -693,7 +693,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
       };
 
       const searchRes = await axiosInstance.post(
-        "/api/makeYourOwnPackageHotel/search",
+        "/api/makeYourOwnPackageV2/hotel/search",
         searchPayloadReq
       );
 
@@ -806,7 +806,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
       };
 
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/getActivityInhouse",
+        "/api/makeYourOwnPackageV2/getActivityInhouse",
         activityPayload
       );
 
@@ -991,7 +991,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
       };
 
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackageHotel/saveHotelDetailsToCart",
+        "/api/makeYourOwnPackageV2/cart/addHotel",
         cartItem
       );
       if (response.data && response.data.success !== false) {
@@ -1099,7 +1099,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
     try {
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/saveActivityDetailsToCart",
+        "/api/makeYourOwnPackageV2/cart/addActivity",
         payload
       );
       if (response.data === "1" || response.data === 1) {
@@ -1150,7 +1150,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
       };
 
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/getTransferInhouse",
+        "/api/makeYourOwnPackageV2/getTransferInhouse",
         transferPayload
       );
 
@@ -1253,7 +1253,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
     try {
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/saveCabDetailsToCart",
+        "/api/makeYourOwnPackageV2/cart/addCab",
         payload
       );
       if (

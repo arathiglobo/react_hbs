@@ -1258,29 +1258,85 @@ const MakePkgBookingPageV2 = () => {
         addOnServices: collectEnabledAddOnServices(),
       };
 
-      console.log("Makepkg Booking payload:", bookingPayload);
+      console.log("Makepkg Booking payload (legacy shape):", bookingPayload);
 
+      // ── v2: transform the legacy payload into the v2 wire format ──
+      // The v2 backend stores hotels / cabs / activities as flat lists and
+      // visa as YES/NO; we keep the legacy bookingPayload assembly above
+      // intact so all the nested calculations still run, then project the
+      // pieces into the v2 shape here. Sends to /api/makeYourOwnPackageV2.
+      const _custDTO = bookingPayload.customerDTO || {};
+      const v2Payload = {
+        agentId: bookingPayload.agentId || null,
+        agentName:
+          sessionStorage.getItem("makePkgAgentName") ||
+          (typeof _custDTO.firstName === "string" ? _custDTO.firstName : ""),
+        userId: bookingPayload.agentId || null,
+        salutation: _custDTO.salutation || _custDTO.salutaion || null,
+        customerFirstName: _custDTO.firstName || null,
+        customerLastName: _custDTO.lastName || null,
+        customerEmail: _custDTO.emailId || _custDTO.email || null,
+        customerPhone: _custDTO.mobileNumber || _custDTO.phone || null,
+        customerPassport: _custDTO.passportNo || null,
+        customerNationality: _custDTO.nationality || _custDTO.nativeCountry || null,
+        sellingPrice: bookingPayload.sellingPrice || null,
+        totalPrice: bookingPayload.totalPrice || null,
+        tourismDirham: bookingPayload.tourismDirham || null,
+        paymentMode: null,
+        visaRequired: v2VisaRequired,
+        serviceFlags: (() => {
+          try {
+            return JSON.parse(
+              sessionStorage.getItem("makePkgV2Services") || "{}"
+            );
+          } catch {
+            return {};
+          }
+        })(),
+        addOnServices: bookingPayload.addOnServices || null,
+        // Flatten cart data into per-type arrays. The v2 backend stores
+        // these as loose maps so the legacy shapes pass through.
+        hotels: Array.isArray(cartData)
+          ? cartData
+              .filter((it) => it && it.hotel)
+              .map((it) => it.hotel)
+          : [],
+        cabs: Array.isArray(cartData)
+          ? cartData.filter((it) => it && it.cab).map((it) => it.cab)
+          : [],
+        activities: Array.isArray(cartData)
+          ? cartData
+              .filter((it) => it && it.activity)
+              .map((it) => it.activity)
+          : [],
+        // Use whatever guest manifest the legacy payload assembled.
+        guests:
+          bookingPayload.customBookingActivityDTO &&
+          Array.isArray(bookingPayload.customBookingActivityDTO[0]?.activityCustomer)
+            ? bookingPayload.customBookingActivityDTO[0].activityCustomer
+            : [],
+      };
+      console.log("Makepkg Booking payload (v2 shape):", v2Payload);
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/saveMakeYourOwnPackageBooking",
-        bookingPayload,
+        "/api/makeYourOwnPackageV2/booking/save",
+        v2Payload,
       );
 
-      // Check booking response structure
+      // v2 response shape: { id: <Long>, status: "SUCCESS" }
       if (
         response.data &&
-        response.data.bookingId != null &&
-        response.data.bookingId != 0 &&
-        response.data.message === "Booking completed successfully"
+        response.data.status === "SUCCESS" &&
+        response.data.id != null
       ) {
-        // Clear quoteId from sessionStorage after successful booking
-        if (quoteId) {
-          sessionStorage.removeItem("makePkgQuoteId");
-        }
+        if (quoteId) sessionStorage.removeItem("makePkgQuoteId");
+        // Clear the v2 flow flag so subsequent legacy bookings work as
+        // before. Cart was already cleared server-side after save.
+        sessionStorage.removeItem("makePkgFlow");
+        sessionStorage.removeItem("makePkgV2Services");
+        sessionStorage.removeItem("makePkgV2VisaRequired");
         setShowOrderSummaryModal(false);
-        toast.success(
-          response.data.message || "Booking submitted successfully!",
-        );
-        navigate("/booking-details/custom-booking-list");
+        toast.success(`Booking saved (id ${response.data.id}).`);
+        navigate("/booking-details/make-your-own-package-v2-list");
       } else {
         toast.error(response.data?.message || "Failed to submit booking.");
       }

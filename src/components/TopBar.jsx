@@ -45,6 +45,28 @@ export default function TopBar() {
     localStorage.getItem("makeYourOwnPackageAgentId") ||
     "";
 
+  // v2 flow detection — when set by MakeUrOwnPackageV2 on entry, every
+  // mypkg cart API call below targets /api/makeYourOwnPackageV2/cart/*
+  // instead of the legacy /api/makeYourOwnPackage* endpoints. The legacy
+  // flow keeps working unchanged.
+  const _isV2Flow = () =>
+    typeof window !== "undefined" &&
+    sessionStorage.getItem("makePkgFlow") === "v2";
+
+  // URL builders so the rest of the file stays readable.
+  const _fetchUrl = (uid) =>
+    _isV2Flow()
+      ? `/api/makeYourOwnPackageV2/cart/fetch?userId=${encodeURIComponent(uid)}`
+      : `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(uid)}`;
+  const _deleteUrl = () =>
+    _isV2Flow()
+      ? "/api/makeYourOwnPackageV2/cart/remove"
+      : "/api/makeYourOwnPackage/deleteFromCart";
+  const _clearUrl = () =>
+    _isV2Flow()
+      ? "/api/makeYourOwnPackageV2/cart/clear"
+      : "/api/makeYourOwnPackage/clearFromCart";
+
   const getCartKey = (item) => {
     if (!item) return "";
     return (
@@ -339,11 +361,7 @@ export default function TopBar() {
         return;
       }
 
-      const response = await axiosInstance.post(
-        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
-          agentId
-        )}`
-      );
+      const response = await axiosInstance.post(_fetchUrl(agentId));
 
       if (Array.isArray(response.data)) {
         setCartItems(response.data || []);
@@ -379,16 +397,11 @@ export default function TopBar() {
         return;
       }
 
-      const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/deleteFromCart",
-        null,
-        {
-          params: {
-            agentId: agentId,
-            cartKey: cartKey,
-          },
-        }
-      );
+      const response = await axiosInstance.post(_deleteUrl(), null, {
+        params: _isV2Flow()
+          ? { userId: agentId, cartItemId: cartKey }
+          : { agentId: agentId, cartKey: cartKey },
+      });
       console.log("Response:", response.data);
       if (response.data === 1) {
         toast.success("Item removed from cart.");
@@ -428,15 +441,9 @@ export default function TopBar() {
         return;
       }
 
-      const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/clearFromCart",
-        null,
-        {
-          params: {
-            agentId: agentId,
-          },
-        }
-      );
+      const response = await axiosInstance.post(_clearUrl(), null, {
+        params: _isV2Flow() ? { userId: agentId } : { agentId: agentId },
+      });
       
       console.log("Clear cart response:", response.data);
       
@@ -474,11 +481,7 @@ export default function TopBar() {
       }
 
       // Fetch latest cart data before navigating
-      const response = await axiosInstance.post(
-        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
-          agentId
-        )}`
-      );
+      const response = await axiosInstance.post(_fetchUrl(agentId));
 
       if (Array.isArray(response.data) && response.data.length > 0) {
         // Apply markups to cart data
@@ -538,11 +541,7 @@ export default function TopBar() {
       }
 
       // Fetch latest cart data before navigating
-      const response = await axiosInstance.post(
-        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
-          agentId
-        )}`
-      );
+      const response = await axiosInstance.post(_fetchUrl(agentId));
 
       if (Array.isArray(response.data) && response.data.length > 0) {
         // Apply markups to cart data
