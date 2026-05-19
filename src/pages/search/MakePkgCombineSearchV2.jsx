@@ -1029,7 +1029,12 @@ const [activeAccordion, setActiveAccordion] = useState({});
         "/api/makeYourOwnPackageV2/cart/addHotel",
         cartItem
       );
-      if (response.data && response.data.success !== false) {
+      // v2 endpoint returns { status: "SUCCESS", cartItemId, type }.
+      if (
+        response.data?.status === "SUCCESS" ||
+        response.data === "1" ||
+        response.data === 1
+      ) {
         toast.success("Room added to cart successfully!");
         window.dispatchEvent(new CustomEvent("cartUpdated"));
       } else {
@@ -1137,7 +1142,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
         "/api/makeYourOwnPackageV2/cart/addActivity",
         payload
       );
-      if (response.data === "1" || response.data === 1) {
+      // v2 add-to-cart returns { status: "SUCCESS", cartItemId, type }.
+      // Accept either the v2 shape or the legacy "1" string so this code
+      // works for both flows if the endpoint is ever swapped.
+      if (
+        response.data?.status === "SUCCESS" ||
+        response.data === "1" ||
+        response.data === 1
+      ) {
         toast.success("Activity added to cart successfully.");
         window.dispatchEvent(new Event("cartUpdated"));
       } else {
@@ -1291,10 +1303,11 @@ const [activeAccordion, setActiveAccordion] = useState({});
         "/api/makeYourOwnPackageV2/cart/addCab",
         payload
       );
+      // v2 endpoint returns { status: "SUCCESS", cartItemId, type }.
       if (
+        response.data?.status === "SUCCESS" ||
         response.data === "1" ||
-        response.data === 1 ||
-        (response.data && response.data.success !== false)
+        response.data === 1
       ) {
         toast.success("Transfer added to cart successfully.");
         window.dispatchEvent(new Event("cartUpdated"));
