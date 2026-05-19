@@ -39,6 +39,12 @@ const HoneymoonBooking = () => {
     rooms: sf.rooms || 1,
     adults: sf.adults || 2,
     children: sf.children || 0,
+    // Per-child ages carried forward from the search page. Used for
+    // pax-aware pricing (children > 3 are charged, 0-3 ride free) and
+    // persisted on the booking + voucher.
+    childAges: Array.isArray(sf.childAges)
+      ? sf.childAges.map((a) => Number(a) || 0)
+      : [],
     salutation: "Mr",
     customerName: "",
     mobile: "",
@@ -49,6 +55,33 @@ const HoneymoonBooking = () => {
     // keep it as a string so the input behaves naturally.
     tourismDirham: "",
   });
+  // Authoritative agent markup config — fetched on mount via the same
+  // endpoint the backend uses (`/api/agents/{id}/markup`). Falls back to
+  // the search-time copy when the endpoint isn't reachable.
+  const [agentMarkup, setAgentMarkup] = useState({
+    value: Number(pkg?.agentMarkupPercent ?? pkg?.markupPercent ?? 0),
+    type: pkg?.agentMarkupType || "PERCENT",
+  });
+  useEffect(() => {
+    if (!sf.agentId) return;
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agents/${sf.agentId}/markup`)
+      .then((res) => {
+        if (cancelled) return;
+        const cfg = res?.data;
+        if (cfg && cfg.markupValue != null) {
+          setAgentMarkup({
+            value: Number(cfg.markupValue),
+            type: cfg.markupType || "PERCENT",
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sf.agentId]);
   const [errors, setErrors] = useState({});
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -157,18 +190,18 @@ const HoneymoonBooking = () => {
   const computeTotals = () => {
     const adults = Number(form.adults) || 0;
     const childCount = Number(form.children) || 0;
+    // Children > 3 are charged; 0-3 ride free (mirrors backend).
+    const ages = Array.isArray(form.childAges) ? form.childAges : [];
+    const payingChildren = childCount
+      ? Array.from({ length: childCount }, (_, i) => Number(ages[i] ?? 0))
+          .filter((a) => a > 3).length
+      : 0;
+    const billedPax = Math.max(1, adults + payingChildren);
     const pax = Math.max(1, adults + childCount);
 
     // Pricing comes from the package rate row (HoneymoonPackageRate). Fall
-    // back to the legacy perPaxRate if no rate row is available.
-    //
-    // ── Children pricing fix (Issue 9) ──
-    // Some rate rows don't have a per-child rate configured. When that
-    // happens, default the child rate to 50% of the per-adult rate so
-    // adding a child can NEVER make the total go down (the previous
-    // behaviour caused 5500 → 3750 when a child was added because the
-    // per-child rate was missing and the search-page perPaxRate divided
-    // a smaller subtotal across more pax).
+    // back to the legacy perPaxRate if no rate row is available. Only
+    // `payingChildren` contribute to the base total — 0-3 ride free.
     let baseTotal;
     let perAdult = 0;
     let perChild = 0;
@@ -176,24 +209,26 @@ const HoneymoonBooking = () => {
     if (selectedRate) {
       perAdult = Number(selectedRate.perAdultRate || 0);
       const rawChild = Number(selectedRate.perChildWithBed || 0);
+      // Default per-child to 50% of perAdult only when a paying child is
+      // present but the rate row has none configured.
       perChild = rawChild > 0 ? rawChild : Math.round(perAdult * 0.5);
-      baseTotal = perAdult * adults + perChild * childCount;
-      perPax = pax > 0 ? baseTotal / pax : perAdult;
+      baseTotal = perAdult * adults + perChild * payingChildren;
+      perPax = baseTotal / billedPax;
     } else {
       perPax = Number(pkg.baseRate ?? pkg.perPaxRate ?? 0);
       perAdult = perPax;
       perChild = Math.round(perPax * 0.5);
-      baseTotal = perAdult * adults + perChild * childCount;
+      baseTotal = perAdult * adults + perChild * payingChildren;
     }
 
-    // Markup priority (Issue 7):
-    //   1. Agent's configured markup percent (delivered on the package
-    //      via /api/honeymoon/search → `agentMarkupPercent`)
-    //   2. Package's legacy `markupPercent`
-    //   3. Zero
-    const markupPct = Number(
-      pkg.agentMarkupPercent ?? pkg.markupPercent ?? 0
-    );
+    // Markup (Issue 7) — authoritative source is `agentMarkup` state,
+    // hydrated on mount from /api/agents/{agentId}/markup (same endpoint
+    // the backend booking service uses). Search-time copy on `pkg` is the
+    // fallback for when the endpoint isn't reachable.
+    const markupPct =
+      agentMarkup.type === "PERCENT" && agentMarkup.value > 0
+        ? Number(agentMarkup.value)
+        : Number(pkg.agentMarkupPercent ?? pkg.markupPercent ?? 0);
     const markupAmount = (baseTotal * markupPct) / 100;
     const taxPct = 5;
     const taxable = baseTotal + markupAmount;
@@ -217,6 +252,8 @@ const HoneymoonBooking = () => {
       perChild,
       adults,
       childCount,
+      payingChildren,
+      billedPax,
       pax,
       baseTotal,
       markupPct,
@@ -253,6 +290,7 @@ const HoneymoonBooking = () => {
         rooms: Number(form.rooms),
         adults: Number(form.adults),
         children: Number(form.children),
+        childAges: (form.childAges || []).map((a) => Number(a) || 0),
         salutation: form.salutation,
         customerName: form.customerName,
         mobile: form.mobile,
@@ -418,6 +456,47 @@ const HoneymoonBooking = () => {
                           <div className="text-muted small mb-1">Children</div>
                           <div className="fw-semibold">{form.children}</div>
                         </Col>
+                        {/* Child ages — display read-only chips when ages
+                            came in from the search page; otherwise allow
+                            the agent to enter them here so the booking +
+                            voucher capture the manifest. */}
+                        {Number(form.children) > 0 && (
+                          <Col md={12}>
+                            <div className="text-muted small mb-1">
+                              Child Ages
+                            </div>
+                            <div className="d-flex flex-wrap gap-2">
+                              {Array.from(
+                                { length: Number(form.children) },
+                                (_, i) => (
+                                  <Form.Control
+                                    key={i}
+                                    type="number"
+                                    min={0}
+                                    max={17}
+                                    placeholder={`Child ${i + 1}`}
+                                    value={form.childAges[i] ?? ""}
+                                    onChange={(e) => {
+                                      const v =
+                                        e.target.value === ""
+                                          ? 0
+                                          : Number(e.target.value);
+                                      setForm((p) => {
+                                        const next = [...(p.childAges || [])];
+                                        next[i] = v;
+                                        return { ...p, childAges: next };
+                                      });
+                                    }}
+                                    style={{ width: 100, height: 38 }}
+                                  />
+                                )
+                              )}
+                            </div>
+                            <small className="text-muted">
+                              Ages 0–3 ride free; 4+ are charged the child rate.
+                            </small>
+                          </Col>
+                        )}
                       </Row>
                     </Card.Body>
                   </Card>
@@ -659,16 +738,28 @@ const HoneymoonBooking = () => {
                         <h6 className="mb-2">{pkg.packageName}</h6>
                         <div className="small text-muted mb-3">{pkg.destination}</div>
                         <div className="d-flex justify-content-between small">
-                          <span>Per pax</span>
-                          <span>₹ {totals.perPax.toLocaleString()}</span>
+                          <span>Adult ({totals.adults} × ₹ {Math.round(totals.perAdult).toLocaleString()})</span>
+                          <span>₹ {(totals.perAdult * totals.adults).toLocaleString()}</span>
                         </div>
-                        <div className="d-flex justify-content-between small">
-                          <span>Pax</span>
-                          <span>{totals.pax}</span>
-                        </div>
+                        {totals.payingChildren > 0 && (
+                          <div className="d-flex justify-content-between small">
+                            <span>
+                              Child ({totals.payingChildren} × ₹ {Math.round(totals.perChild).toLocaleString()})
+                            </span>
+                            <span>₹ {(totals.perChild * totals.payingChildren).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {totals.childCount > totals.payingChildren && (
+                          <div className="d-flex justify-content-between small text-success">
+                            <span>
+                              Children ≤3 (free)
+                            </span>
+                            <span>{totals.childCount - totals.payingChildren}</span>
+                          </div>
+                        )}
                         <hr />
                         <div className="d-flex justify-content-between">
-                          <span>Base Total</span>
+                          <span>Base Total ({totals.billedPax} billed pax)</span>
                           <span>₹ {totals.baseTotal.toLocaleString()}</span>
                         </div>
                         {totals.markupPct > 0 && (

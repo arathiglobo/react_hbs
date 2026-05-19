@@ -205,6 +205,8 @@ const HoneymoonBookingList = () => {
                         <th>Pax / Rooms</th>
                         <th>Customer</th>
                         <th>Mobile</th>
+                        <th>Base</th>
+                        <th>Markup</th>
                         <th>Total</th>
                         <th>Status</th>
                         <th style={{ width: 100 }}>Actions</th>
@@ -220,7 +222,16 @@ const HoneymoonBookingList = () => {
                           <td>{(b.adults || 0) + (b.children || 0)} pax / {b.rooms || 0} room(s)</td>
                           <td>{b.customerName}</td>
                           <td>{b.mobile}</td>
-                          <td>₹ {Number(b.totalAmount || 0).toFixed(2)}</td>
+                          <td className="text-end">₹ {Number(b.baseRate || 0).toFixed(2)}</td>
+                          <td className="text-end">
+                            <Badge bg="info" pill>
+                              {Number(b.markupPercent || 0).toFixed(2)}%
+                            </Badge>
+                            <div className="small text-muted">
+                              +₹ {Number(b.markupAmount || 0).toFixed(2)}
+                            </div>
+                          </td>
+                          <td className="fw-semibold">₹ {Number(b.totalAmount || 0).toFixed(2)}</td>
                           <td>
                             {b.isCancelled ? (
                               <Badge bg="danger">Cancelled</Badge>
@@ -310,7 +321,16 @@ const HoneymoonBookingList = () => {
                 <Col md={6}><strong>Start Date:</strong> {selected.startingDate}</Col>
                 <Col md={6}><strong>Nights:</strong> {selected.noOfNights}</Col>
                 <Col md={6}><strong>Rooms:</strong> {selected.rooms}</Col>
-                <Col md={6}><strong>Pax:</strong> {selected.adults} Adults{selected.children ? `, ${selected.children} Children` : ""}</Col>
+                <Col md={6}>
+                  <strong>Pax:</strong> {selected.adults} Adults
+                  {selected.children
+                    ? `, ${selected.children} Children${
+                        Array.isArray(selected.childAges) && selected.childAges.length
+                          ? ` (ages: ${selected.childAges.join(", ")})`
+                          : ""
+                      }`
+                    : ""}
+                </Col>
                 <Col md={6}><strong>Customer:</strong> {selected.customerName} ({selected.mobile})</Col>
                 <Col md={6}><strong>Email:</strong> {selected.email || "-"}</Col>
                 <Col md={6}><strong>Agent:</strong> {selected.agentName || "-"}</Col>

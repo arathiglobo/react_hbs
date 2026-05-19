@@ -79,9 +79,14 @@ const HoneymoonSearch = () => {
     rooms: 1,
     adults: 2,
     children: 0,
+    // One age per child — kept in sync with `children` count via the
+    // useEffect below. Used for pax-aware pricing (children > 3 are
+    // charged, 0-3 ride free) and persisted on the booking + voucher.
+    childAges: [],
     agentId: "",
     agentName: "",
     markupPercent: 0,
+    markupType: "PERCENT",
   });
   const [agents, setAgents] = useState([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -150,6 +155,12 @@ const HoneymoonSearch = () => {
   const onAgentChange = (e) => {
     const id = e.target.value;
     const a = agents.find((x) => String(x.id) === String(id));
+    // Seed markup from the agent record so the UI updates immediately,
+    // then refine with the authoritative /api/agents/{id}/markup response
+    // (same source that backend search + booking use). Without the second
+    // fetch the Price Summary on the booking page can show a stale value
+    // if the agent profile's `markupPercentage` lag behind the AgentMarkup
+    // configuration.
     setForm((p) => ({
       ...p,
       agentId: id,
@@ -159,10 +170,40 @@ const HoneymoonSearch = () => {
           ? Number(a.markupPercentage)
           : a?.markup != null
           ? Number(a.markup)
-          : 10,
+          : 0,
+      markupType: "PERCENT",
     }));
     if (errors.agentId) setErrors((p) => ({ ...p, agentId: "" }));
+    if (id) {
+      axiosInstance
+        .get(`/api/agents/${id}/markup`)
+        .then((res) => {
+          const cfg = res?.data;
+          if (!cfg) return;
+          setForm((p) => ({
+            ...p,
+            markupPercent: cfg.markupValue != null ? Number(cfg.markupValue) : p.markupPercent,
+            markupType: cfg.markupType || "PERCENT",
+          }));
+        })
+        .catch(() => {
+          /* keep agent-profile fallback */
+        });
+    }
   };
+
+  // Keep `childAges` aligned with the `children` count.
+  useEffect(() => {
+    setForm((p) => {
+      const n = Number(p.children) || 0;
+      const cur = Array.isArray(p.childAges) ? p.childAges : [];
+      if (cur.length === n) return p;
+      const next = [...cur];
+      while (next.length < n) next.push(0);
+      next.length = n;
+      return { ...p, childAges: next };
+    });
+  }, [form.children]);
 
   const validate = () => {
     const e = {};
@@ -203,6 +244,7 @@ const HoneymoonSearch = () => {
           rooms: Number(form.rooms),
           adults: Number(form.adults),
           children: Number(form.children),
+          childAges: (form.childAges || []).map((a) => Number(a) || 0),
           agentId: Number(form.agentId) || null,
           markupPercent: Number(form.markupPercent) || 0,
         };
@@ -213,8 +255,17 @@ const HoneymoonSearch = () => {
         // derived per-pax rate based on the requested adults/children. The
         // legacy perPaxRate on the package row is now usually empty —
         // displayed rate must come from the rate rows.
+        //
+        // Pax math: adults are always charged; children > 3 are charged a
+        // child rate, ages 0-3 ride free. Matches the operations rule
+        // applied in the cab + restaurant flows and the HoneymoonBookingService.
         const adults = Number(form.adults) || 0;
         const childCount = Number(form.children) || 0;
+        const ages = Array.isArray(form.childAges) ? form.childAges : [];
+        const payingChildren = childCount
+          ? Array.from({ length: childCount }, (_, i) => Number(ages[i] ?? 0))
+              .filter((a) => a > 3).length
+          : 0;
         const enriched = await Promise.all(
           data.map(async (pkg) => {
             try {
@@ -242,9 +293,11 @@ const HoneymoonSearch = () => {
               }
               const perAdult = Number(match.perAdultRate || 0);
               const perChild = Number(match.perChildWithBed || 0);
-              const total = perAdult * adults + perChild * childCount;
-              const pax = Math.max(1, adults + childCount);
-              const perPax = pax > 0 ? total / pax : perAdult;
+              // Only `payingChildren` (age > 3) contribute to the base
+              // total; 0-3 ride free. Adults always pay perAdult.
+              const total = perAdult * adults + perChild * payingChildren;
+              const billedPax = Math.max(1, adults + payingChildren);
+              const perPax = total / billedPax;
               const mp = Number(payload.markupPercent || 0);
               const marked = +(perPax * (1 + mp / 100)).toFixed(2);
               return {
@@ -254,8 +307,18 @@ const HoneymoonSearch = () => {
                 baseRate: perPax,
                 markedUpRate: marked,
                 derivedTotal: total,
+                derivedTotalWithMarkup: +(total * (1 + mp / 100)).toFixed(2),
                 perPaxRate: perPax,
+                perAdultRate: perAdult,
+                perChildRate: perChild,
+                billedPax,
+                payingChildren,
                 markupPercent: mp,
+                // Surface the agent markup config so the booking page can
+                // re-render the Price Summary against the same source the
+                // backend will charge against.
+                agentMarkupPercent: mp,
+                agentMarkupType: form.markupType || "PERCENT",
               };
             } catch {
               return { ...pkg, packageRates: [], selectedRate: null };
@@ -442,11 +505,48 @@ const HoneymoonSearch = () => {
                       <Form.Control
                         type="number"
                         min={0}
+                        max={9}
                         value={form.children}
                         onChange={(e) => setField("children", e.target.value)}
                         style={{ height: 42 }}
                       />
                     </Col>
+
+                    {/* Child ages — show once per child whenever children > 0.
+                        Children > 3 are charged, 0-3 ride free. Values flow
+                        through to the booking page + voucher. */}
+                    {Number(form.children) > 0 && (
+                      <Col xs={12} className="mt-2">
+                        <Form.Label className="fw-semibold mb-1">
+                          Child Ages
+                        </Form.Label>
+                        <div className="d-flex flex-wrap gap-2">
+                          {Array.from({ length: Number(form.children) }, (_, i) => (
+                            <div key={i} style={{ width: 110 }}>
+                              <Form.Control
+                                type="number"
+                                min={0}
+                                max={17}
+                                placeholder={`Child ${i + 1}`}
+                                value={form.childAges[i] ?? ""}
+                                onChange={(e) => {
+                                  const v = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setForm((p) => {
+                                    const next = [...(p.childAges || [])];
+                                    next[i] = v;
+                                    return { ...p, childAges: next };
+                                  });
+                                }}
+                                style={{ height: 38 }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <small className="text-muted">
+                          Children aged 0–3 ride free; ages 4+ are charged the child rate.
+                        </small>
+                      </Col>
+                    )}
 
                     <Col lg={6} md={6}>
                       <Form.Label className="fw-semibold">
