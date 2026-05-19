@@ -50,6 +50,19 @@ export default function StudentSearch() {
   const [results, setResults] = useState([]);
   const resultsRef = useRef(null);
 
+  // ── date helpers — mirror HotelSearch.jsx so the auto-fill behaviour
+  //    (picking check-in defaults check-out to the next day) matches. ──
+  const formatDate = (d) => d.toISOString().split("T")[0];
+  const getTomorrow = (from = new Date()) => {
+    const t = new Date(from);
+    t.setDate(t.getDate() + 1);
+    return t;
+  };
+  const today = formatDate(new Date());
+  const minCheckOutDate = checkIn
+    ? formatDate(getTomorrow(new Date(checkIn)))
+    : formatDate(getTomorrow());
+
   // ── load destinations + nationalities + agents ───────────────────
   useEffect(() => {
     (async () => {
@@ -202,12 +215,31 @@ export default function StudentSearch() {
                 </Col>
                 <Col md={2}>
                   <Form.Label>Check-In *</Form.Label>
-                  <Form.Control type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
+                  <Form.Control
+                    type="date"
+                    value={checkIn}
+                    min={today}
+                    onChange={(e) => {
+                      const newCheckIn = e.target.value;
+                      setCheckIn(newCheckIn);
+                      if (newCheckIn) {
+                        const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
+                        if (!checkOut || checkOut <= newCheckIn) {
+                          setCheckOut(nextDay);
+                        }
+                      }
+                    }}
+                  />
                   {errors.checkIn && <small className="text-danger">{errors.checkIn}</small>}
                 </Col>
                 <Col md={2}>
                   <Form.Label>Check-Out *</Form.Label>
-                  <Form.Control type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} />
+                  <Form.Control
+                    type="date"
+                    value={checkOut}
+                    min={minCheckOutDate}
+                    onChange={(e) => setCheckOut(e.target.value)}
+                  />
                   {errors.checkOut && <small className="text-danger">{errors.checkOut}</small>}
                 </Col>
                 <Col md={1}>
