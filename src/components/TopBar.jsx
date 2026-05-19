@@ -403,7 +403,17 @@ export default function TopBar() {
           : { agentId: agentId, cartKey: cartKey },
       });
       console.log("Response:", response.data);
-      if (response.data === 1) {
+      // Accept both the legacy "1" sentinel and the v2 endpoint's
+      // { status: "SUCCESS" } / { status: "NOT_FOUND" } shape. A
+      // NOT_FOUND from v2 still means the row isn't on the server, so
+      // refreshing the cart matches the user's intent.
+      const v2Status = response.data?.status;
+      const ok =
+        response.data === 1 ||
+        response.data === "1" ||
+        v2Status === "SUCCESS" ||
+        v2Status === "NOT_FOUND";
+      if (ok) {
         toast.success("Item removed from cart.");
         fetchCartData();
         // let nextCart = [];
@@ -447,7 +457,17 @@ export default function TopBar() {
       
       console.log("Clear cart response:", response.data);
       
-      if (response.data === 1 || response.data === true || response.data?.success === true) {
+      // Accept the legacy "1"/true response shape AND the v2 endpoint's
+      // { status: "CLEARED" } / { status: "EMPTY" } shape — both mean the
+      // cart is empty server-side, which is what the operator wanted.
+      const v2Status = response.data?.status;
+      const ok =
+        response.data === 1 ||
+        response.data === true ||
+        response.data?.success === true ||
+        v2Status === "CLEARED" ||
+        v2Status === "EMPTY";
+      if (ok) {
         toast.success("Cart cleared successfully.");
         fetchCartData();
       } else {
