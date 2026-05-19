@@ -576,7 +576,15 @@ export default function TopBar() {
         // Store cart data in sessionStorage for the booking page
         sessionStorage.setItem("makePkgCartData", JSON.stringify(cartWithMarkups));
         sessionStorage.setItem("makePkgAgentId", agentId);
-        window.open("/new-booking/make-your-own-package/booking-page");
+        // Flow-aware: when the operator entered via the v2 menu we route
+        // the cart's Proceed button to the v2 booking-page instead.
+        // makePkgFlow flag is set by MakeUrOwnPackageV2 on entry.
+        const _v2 =
+          typeof window !== "undefined" &&
+          sessionStorage.getItem("makePkgFlow") === "v2"
+            ? "-v2"
+            : "";
+        window.open(`/new-booking/make-your-own-package${_v2}/booking-page`);
       } else {
         toast.error("Your cart is empty. Please add items to cart first.");
       }

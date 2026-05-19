@@ -120,6 +120,12 @@ import MakePkgCombineSearch from "./pages/search/MakePkgCombineSearch";
 import AccomodationRoomList from "./pages/roomlist/makeyourownpkg/AccomodationRoomList";
 import Invoice from "./pages/Invoice";
 import MakePkgBookingPage from "./pages/roomlist/makeyourownpkg/MakePkgBookingPage";
+// Parallel v2 flow — add-ons selected first, then search/cart/booking.
+// Legacy components above are left untouched so the original flow still works.
+import MakeUrOwnPackageV2 from "./pages/search/MakeUrOwnPackageV2";
+import MakePkgAddOnsFirstPage from "./pages/search/MakePkgAddOnsFirstPage";
+import MakePkgCombineSearchV2 from "./pages/search/MakePkgCombineSearchV2";
+import MakePkgBookingPageV2 from "./pages/roomlist/makeyourownpkg/MakePkgBookingPageV2";
 import GenerateQuotationBooking from "./pages/roomlist/makeyourownpkg/GenerateQuotationBooking";
 import QuotationBookingList from "./pages/roomlist/makeyourownpkg/QuotationBookingList";
 import QuotationBookingPage from "./pages/roomlist/makeyourownpkg/QuotationBookingPage";
@@ -375,6 +381,11 @@ export default function App() {
         <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
         <Route path="/api-room-list" element={<PrivateRoute><ExternalApiRoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
+        {/* v2 flow — add-ons first, then search, cart, booking */}
+        <Route path="/new-booking/make-your-own-package-v2" element={<PrivateRoute><MakeUrOwnPackageV2 /></PrivateRoute>} />
+        <Route path="/new-booking/make-your-own-package-v2/addons" element={<PrivateRoute><MakePkgAddOnsFirstPage /></PrivateRoute>} />
+        <Route path="/new-booking/make-your-own-package-v2/search" element={<PrivateRoute><MakePkgCombineSearchV2 /></PrivateRoute>} />
+        <Route path="/new-booking/make-your-own-package-v2/booking-page" element={<PrivateRoute><MakePkgBookingPageV2 /></PrivateRoute>} />
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
         {/* Dedicated 24-Hour Check-In booking list — same component as
             /booking-details/hotel-booking-list but with `force24HourOnly`

@@ -259,15 +259,32 @@ export const collectEnabledAddOnServices = () => {
  * Sticky right-rail panel. Place once on any page in the
  * Make-Your-Own-Package flow; state is shared via sessionStorage.
  */
-export default function AddOnServicesPanel({ title = "Add-On Services" }) {
+/**
+ * Props:
+ *   title           — section title (defaults to "Add-On Services")
+ *   hideServiceKeys — array of catalog keys to hide (e.g. ["visa"]) so a
+ *                     page can render its own simplified question instead.
+ *                     The legacy flow passes nothing and gets every item.
+ */
+export default function AddOnServicesPanel({
+  title = "Add-On Services",
+  hideServiceKeys = [],
+}) {
   const [state, setState] = useState(() => readAddOnServices());
+  const visibleCatalog = useMemo(
+    () =>
+      ADDON_SERVICES_CATALOG.filter(
+        (svc) => !hideServiceKeys.includes(svc.key)
+      ),
+    [hideServiceKeys]
+  );
 
   // Controlled accordion — list of eventKey strings that are currently
   // expanded. Seeded from the already-enabled services so when the
   // operator re-opens the panel they see the same expanded rows.
   const [expandedKeys, setExpandedKeys] = useState(() => {
     const keys = [];
-    ADDON_SERVICES_CATALOG.forEach((svc, idx) => {
+    visibleCatalog.forEach((svc, idx) => {
       const v = (readAddOnServices() || {})[svc.key];
       if (v && v.enabled) keys.push(String(idx));
     });
@@ -352,7 +369,7 @@ export default function AddOnServicesPanel({ title = "Add-On Services" }) {
             }
           }}
         >
-          {ADDON_SERVICES_CATALOG.map((svc, idx) => {
+          {visibleCatalog.map((svc, idx) => {
             const current = state[svc.key] || blankService(svc);
             return (
               <Accordion.Item key={svc.key} eventKey={String(idx)}>
