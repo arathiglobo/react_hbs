@@ -35,6 +35,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AddOnServicesPanel, {
+  ADDON_SERVICES_CATALOG,
   collectEnabledAddOnServices,
   readAddOnServices,
 } from "../../../components/AddOnServicesPanel";
@@ -2884,13 +2885,90 @@ const MakePkgBookingPageV2 = () => {
                        other section. The inner panel manages its own
                        sessionStorage; on close we refresh the count
                        badge in the header. */}
-                  {/* v2: Add-Ons accordion REMOVED.
-                      In v2 the operator already selected add-on services
-                      on the dedicated /addons step before searching, so
-                      we don't ask again here. The selections still live
-                      in sessionStorage and are picked up by the save
-                      handler via collectEnabledAddOnServices(). The
-                      header above shows a read-only count summary. */}
+                  {/* v2: Add-Ons accordion REMOVED — replaced by a
+                       read-only "Selected Add-On Services" panel below
+                       so the operator can verify what they picked on
+                       /addons before confirming the booking. Selections
+                       still live in sessionStorage and are picked up by
+                       the save handler via collectEnabledAddOnServices(). */}
+                  <Accordion.Item eventKey="6" className="mb-2">
+                    <Accordion.Header>
+                      <h5 className="mb-0 fw-bold d-flex align-items-center">
+                        Selected Add-On Services
+                        <span
+                          className={`badge ms-2 bg-${
+                            addOnsCount > 0 ? "success" : "secondary"
+                          }`}
+                        >
+                          {addOnsCount > 0 ? `${addOnsCount} on` : "None"}
+                        </span>
+                      </h5>
+                    </Accordion.Header>
+                    <Accordion.Body>
+                      {(() => {
+                        const all = readAddOnServices() || {};
+                        const enabled = ADDON_SERVICES_CATALOG.filter(
+                          (svc) => all[svc.key]?.enabled
+                        );
+                        if (enabled.length === 0) {
+                          return (
+                            <div className="text-muted small fst-italic">
+                              No add-on services selected on the /addons step.
+                              Go back to the Add-Ons page to pick services for
+                              this booking.
+                            </div>
+                          );
+                        }
+                        return (
+                          <Row className="g-3">
+                            {enabled.map((svc) => {
+                              const data = all[svc.key] || {};
+                              const filled = (svc.fields || []).filter((f) => {
+                                const v = data[f.name];
+                                return v !== undefined && v !== "" && v !== null;
+                              });
+                              return (
+                                <Col md={6} key={svc.key}>
+                                  <Card className="h-100 border-success-subtle">
+                                    <Card.Header className="bg-success-subtle py-2">
+                                      <strong className="small">
+                                        {svc.label}
+                                      </strong>
+                                    </Card.Header>
+                                    <Card.Body className="p-2">
+                                      {filled.length === 0 ? (
+                                        <span className="small text-muted fst-italic">
+                                          Enabled (no extra details captured)
+                                        </span>
+                                      ) : (
+                                        <table className="table table-sm mb-0">
+                                          <tbody>
+                                            {filled.map((f) => (
+                                              <tr key={f.name}>
+                                                <td
+                                                  className="small text-muted fw-semibold"
+                                                  style={{ width: "45%" }}
+                                                >
+                                                  {f.label}
+                                                </td>
+                                                <td className="small">
+                                                  {String(data[f.name])}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      )}
+                                    </Card.Body>
+                                  </Card>
+                                </Col>
+                              );
+                            })}
+                          </Row>
+                        );
+                      })()}
+                    </Accordion.Body>
+                  </Accordion.Item>
                 </Accordion>
               </Col>
             </Row>

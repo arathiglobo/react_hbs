@@ -729,6 +729,45 @@ export default function TopBar() {
                 </div>
               )}
               {cartItems.map((item, index) => renderCartItem(item, index))}
+              {/* v2 add-ons summary — surfaces what the operator picked
+                  on /addons so they see it without leaving the cart. */}
+              {_isV2Flow() && (() => {
+                let svcMap = {};
+                try {
+                  svcMap = JSON.parse(
+                    sessionStorage.getItem("mypkg_addon_services") || "{}"
+                  );
+                } catch {
+                  svcMap = {};
+                }
+                const enabled = Object.entries(svcMap)
+                  .filter(([, v]) => v && v.enabled === true)
+                  .map(([k]) => k);
+                const visa = sessionStorage.getItem("makePkgV2VisaRequired") || "NO";
+                if (enabled.length === 0 && visa === "NO") return null;
+                return (
+                  <div
+                    className="mt-3 p-2 rounded border bg-light"
+                    style={{ fontSize: "0.85rem" }}
+                  >
+                    <div className="fw-semibold text-secondary mb-1">
+                      Add-ons selected on the /addons step
+                    </div>
+                    <div className="d-flex flex-wrap gap-1">
+                      <span
+                        className={`badge ${visa === "YES" ? "bg-danger" : "bg-secondary"}`}
+                      >
+                        Visa: {visa}
+                      </span>
+                      {enabled.map((k) => (
+                        <span key={k} className="badge bg-success-subtle text-success">
+                          {k}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </Modal.Body>

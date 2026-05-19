@@ -16,6 +16,19 @@ import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import { ADDON_SERVICES_CATALOG } from "../../components/AddOnServicesPanel";
+
+// Look up the human-readable label + field schema for a service key.
+const _catalogByKey = ADDON_SERVICES_CATALOG.reduce((acc, svc) => {
+  acc[svc.key] = svc;
+  return acc;
+}, {});
+const _labelForServiceField = (svcKey, fieldName) => {
+  const svc = _catalogByKey[svcKey];
+  if (!svc) return fieldName;
+  const f = (svc.fields || []).find((x) => x.name === fieldName);
+  return f ? f.label : fieldName;
+};
 
 /**
  * Booking list for the v2 Make-Your-Own-Package flow.
@@ -416,17 +429,62 @@ const MakeYourOwnPackageV2BookingList = () => {
                 </>
               )}
 
-              {selected.addOnServices && (
-                <>
-                  <h6>Add-On Services</h6>
-                  <pre
-                    className="border rounded p-2 small"
-                    style={{ background: "#f8f9fa" }}
-                  >
-                    {JSON.stringify(selected.addOnServices, null, 2)}
-                  </pre>
-                </>
-              )}
+              {selected.addOnServices &&
+                Object.keys(selected.addOnServices).length > 0 && (
+                  <>
+                    <h6>Add-On Services</h6>
+                    <Row className="g-2 mb-3">
+                      {Object.entries(selected.addOnServices).map(
+                        ([svcKey, data]) => {
+                          if (!data || data.enabled !== true) return null;
+                          const svc = _catalogByKey[svcKey];
+                          const label = svc ? svc.label : svcKey;
+                          const filled = Object.entries(data || {}).filter(
+                            ([k, v]) =>
+                              k !== "enabled" &&
+                              v !== undefined &&
+                              v !== null &&
+                              v !== ""
+                          );
+                          return (
+                            <Col md={6} key={svcKey}>
+                              <Card className="h-100 border-success-subtle">
+                                <Card.Header className="bg-success-subtle py-2">
+                                  <strong className="small">{label}</strong>
+                                </Card.Header>
+                                <Card.Body className="p-2">
+                                  {filled.length === 0 ? (
+                                    <span className="small text-muted fst-italic">
+                                      Enabled (no extra details captured)
+                                    </span>
+                                  ) : (
+                                    <Table size="sm" borderless className="mb-0">
+                                      <tbody>
+                                        {filled.map(([k, v]) => (
+                                          <tr key={k}>
+                                            <td
+                                              className="small text-muted fw-semibold"
+                                              style={{ width: "45%" }}
+                                            >
+                                              {_labelForServiceField(svcKey, k)}
+                                            </td>
+                                            <td className="small">
+                                              {String(v)}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </Table>
+                                  )}
+                                </Card.Body>
+                              </Card>
+                            </Col>
+                          );
+                        }
+                      )}
+                    </Row>
+                  </>
+                )}
             </>
           )}
         </Modal.Body>

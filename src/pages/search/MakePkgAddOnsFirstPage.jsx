@@ -233,7 +233,7 @@ export default function MakePkgAddOnsFirstPage() {
               </Card.Body>
             </Card>
 
-            {/* Visa — YES / NO only. */}
+            {/* Visa — YES / NO only.
             <Card className="shadow-sm mb-3">
               <Card.Header className="bg-white fw-semibold">
                 <FaPassport className="me-2 text-primary" />
@@ -279,7 +279,7 @@ export default function MakePkgAddOnsFirstPage() {
                   </Alert>
                 )}
               </Card.Body>
-            </Card>
+            </Card> */}
 
             {/* Add-on services panel — reuses the same component the
                 legacy booking page uses, with visa hidden because we
