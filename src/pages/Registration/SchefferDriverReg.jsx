@@ -1569,7 +1569,7 @@ const SchefferDriverReg = () => {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <span className="fw-semibold">Transfers</span>
+              <span className="fw-semibold">Scheffer Driver and Limousine</span>
               <Form.Group className="hotel-search-bar position-relative">
                 <Form.Control
                   type="text"
