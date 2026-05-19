@@ -228,6 +228,9 @@ import StudentBookingList from "./pages/list/StudentBookingList";
 import StudentBookingDetailView from "./pages/list/StudentBookingDetailView";
 import SchefferDriverReg from "./pages/Registration/SchefferDriverReg";
 import SchefferDriverRates from "./pages/Registration/SchefferDriverRates";
+import { SchefferDriverSearch } from "./pages/search/schefferDriver/SchefferDriverSearch";
+import SchefferDriverBookingPage from "./pages/booking/SchefferDriverBookingPage";
+import SchefferDriverBookingList from "./pages/list/SchefferDriverBookingList";
 
 
 export default function App() {
@@ -422,9 +425,12 @@ export default function App() {
         <Route path="/registration/hotel/create" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
         <Route path="/registration/hotel/create/:id" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
 
-        {/* Restaurant Module */}
+        {/* Scheffer Driver and Limousine (single combined feature) */}
         <Route path="/registration/schefferDriver" element={<PrivateRoute><SchefferDriverReg /></PrivateRoute>} />
-        <Route path="/scheffer-driver-rates" element={<PrivateRoute><SchefferDriverRates /></PrivateRoute>} /> 
+        <Route path="/scheffer-driver-rates" element={<PrivateRoute><SchefferDriverRates /></PrivateRoute>} />
+        <Route path="/new-booking/scheffer-driver" element={<PrivateRoute><SchefferDriverSearch /></PrivateRoute>} />
+        <Route path="/scheffer-driver-booking-page" element={<PrivateRoute><SchefferDriverBookingPage /></PrivateRoute>} />
+        <Route path="/booking-details/scheffer-driver-booking-list" element={<PrivateRoute><SchefferDriverBookingList /></PrivateRoute>} />
 
 
         {/* Restaurant Module */}
