@@ -1562,7 +1562,7 @@ const SchefferDriverReg = () => {
   };
 
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 bg-light d-flex flex-column"> 
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
