@@ -264,6 +264,13 @@ export default function MakeUrOwnPackage() {
       sessionStorage.setItem("makePkgTravelDate", travelDate);
     }
 
+    // Legacy flow — explicitly clear the v2 flag so TopBar's cart panel
+    // points back at the legacy /api/makeYourOwnPackage* endpoints. If we
+    // leave it as "v2" from a previous v2 session, legacy add-to-cart
+    // writes go into the legacy Redis key while TopBar reads from the v2
+    // key and the cart shows up empty.
+    sessionStorage.removeItem("makePkgFlow");
+
     // Navigate to new Package Generation page
     navigate("/new-booking/make-your-own-package/search", {
       state: {
