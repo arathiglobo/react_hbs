@@ -643,24 +643,27 @@ export default function TopBar() {
   <span className="fw-semibold">Globosoft</span>
 </Navbar.Brand>
         <Nav className="ms-auto d-flex flex-row align-items-center gap-2 gap-md-3 flex-nowrap">
-  {/* Cart Button */}
-  <Button
-    variant="link"
-    className="position-relative text-dark text-decoration-none p-0 d-flex align-items-center"
-    onClick={handleCartClick}
-    style={{ border: "none", background: "none", minWidth: "auto" }}
-  >
-    <FaShoppingCart size={20} />
-    {cartCount > 0 && (
-      <Badge
-        bg="danger"
-        className="position-absolute top-0 start-100 translate-middle rounded-pill"
-        style={{ fontSize: "0.65rem", padding: "2px 6px" }}
-      >
-        {cartCount}
-      </Badge>
-    )}
-  </Button>
+  {/* Cart Button — hidden in the v3 flow (no Redis cart there;
+       selection is held in component state on /results) */}
+  {sessionStorage.getItem("makePkgFlow") !== "v3" && (
+    <Button
+      variant="link"
+      className="position-relative text-dark text-decoration-none p-0 d-flex align-items-center"
+      onClick={handleCartClick}
+      style={{ border: "none", background: "none", minWidth: "auto" }}
+    >
+      <FaShoppingCart size={20} />
+      {cartCount > 0 && (
+        <Badge
+          bg="danger"
+          className="position-absolute top-0 start-100 translate-middle rounded-pill"
+          style={{ fontSize: "0.65rem", padding: "2px 6px" }}
+        >
+          {cartCount}
+        </Badge>
+      )}
+    </Button>
+  )}
 
   {/* Profile Dropdown */}
   <Dropdown align="end">

@@ -245,6 +245,13 @@ export default function Sidebar() {
           label: "Make Your Own Package (v2 — Add-Ons First)",
           to: "/new-booking/make-your-own-package-v2",
         },
+        {
+          // v3 — one criteria → one search → unified inventory page with
+          // multi-select per module. No Redis cart; selection is
+          // forwarded straight to the booking page.
+          label: "Make Your Own Package (Unified)",
+          to: "/new-booking/make-your-own-package-v3",
+        },
         { label: "Package Booking", to: "/new-booking/package-search" },
         { label: "Cab Booking", to: "/new-booking/cab" },
         { label: "Scheffer Driver and Limousine Booking", to: "/new-booking/scheffer-driver" },

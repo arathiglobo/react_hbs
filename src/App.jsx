@@ -127,6 +127,9 @@ import MakePkgAddOnsFirstPage from "./pages/search/MakePkgAddOnsFirstPage";
 import MakePkgCombineSearchV2 from "./pages/search/MakePkgCombineSearchV2";
 import MakePkgBookingPageV2 from "./pages/roomlist/makeyourownpkg/MakePkgBookingPageV2";
 import MakeYourOwnPackageV2BookingList from "./pages/list/MakeYourOwnPackageV2BookingList";
+import MakePkgV3Form from "./pages/search/MakePkgV3Form";
+import MakePkgV3Results from "./pages/search/MakePkgV3Results";
+import MakePkgV3BookingPage from "./pages/roomlist/makeyourownpkg/MakePkgV3BookingPage";
 import GenerateQuotationBooking from "./pages/roomlist/makeyourownpkg/GenerateQuotationBooking";
 import QuotationBookingList from "./pages/roomlist/makeyourownpkg/QuotationBookingList";
 import QuotationBookingPage from "./pages/roomlist/makeyourownpkg/QuotationBookingPage";
@@ -388,6 +391,10 @@ export default function App() {
         <Route path="/new-booking/make-your-own-package-v2/search" element={<PrivateRoute><MakePkgCombineSearchV2 /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package-v2/booking-page" element={<PrivateRoute><MakePkgBookingPageV2 /></PrivateRoute>} />
         <Route path="/booking-details/make-your-own-package-v2-list" element={<PrivateRoute><MakeYourOwnPackageV2BookingList /></PrivateRoute>} />
+        {/* v3 unified-search flow */}
+        <Route path="/new-booking/make-your-own-package-v3" element={<PrivateRoute><MakePkgV3Form /></PrivateRoute>} />
+        <Route path="/new-booking/make-your-own-package-v3/results" element={<PrivateRoute><MakePkgV3Results /></PrivateRoute>} />
+        <Route path="/new-booking/make-your-own-package-v3/booking" element={<PrivateRoute><MakePkgV3BookingPage /></PrivateRoute>} />
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
         {/* Dedicated 24-Hour Check-In booking list — same component as
             /booking-details/hotel-booking-list but with `force24HourOnly`
