@@ -1510,15 +1510,30 @@ const MakePkgBookingPageV2 = () => {
 
             <Row>
               <Col lg={12}>
+                {/* v2: default-open the two sections the operator
+                    actually has to fill out — Guest Details (5) and
+                    Add-Ons (6). The cart-line accordions
+                    (0 Itinerary / 1 Hotel / 2 Tour / 3 Transfer)
+                    start collapsed so the page opens compact; each
+                    header surfaces a quick summary chip so the
+                    operator can scan without expanding. */}
                 <Accordion
-                  defaultActiveKey={["0", "5"]}
+                  defaultActiveKey={["5", "6"]}
                   alwaysOpen
                   className="booking-accordion"
                 >
                   {/* Itinerary Option Section */}
                   <Accordion.Item eventKey="0" className="mb-2">
                     <Accordion.Header>
-                      <h5 className="mb-0 fw-bold">Itinerary option</h5>
+                      <h5 className="mb-0 fw-bold d-flex align-items-center">
+                        Itinerary
+                        {uniqueActivityDates.length > 0 && (
+                          <span className="badge bg-info-subtle text-info ms-2">
+                            {uniqueActivityDates.length} day
+                            {uniqueActivityDates.length === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </h5>
                     </Accordion.Header>
                     <Accordion.Body>
                       <div className="itinerary-days-container">
@@ -1610,7 +1625,12 @@ const MakePkgBookingPageV2 = () => {
                   {hotels.length > 0 && (
                     <Accordion.Item eventKey="1" className="mb-2">
                       <Accordion.Header>
-                        <h5 className="mb-0 fw-bold">Hotel option</h5>
+                        <h5 className="mb-0 fw-bold d-flex align-items-center">
+                          Hotels
+                          <span className="badge bg-primary-subtle text-primary ms-2">
+                            {hotels.length}
+                          </span>
+                        </h5>
                       </Accordion.Header>
                       <Accordion.Body>
                         {hotels.map((item, hotelIndex) => {
@@ -2234,7 +2254,12 @@ const MakePkgBookingPageV2 = () => {
                   {activities.length > 0 && (
                     <Accordion.Item eventKey="2" className="mb-2">
                       <Accordion.Header>
-                        <h5 className="mb-0 fw-bold">Tour option</h5>
+                        <h5 className="mb-0 fw-bold d-flex align-items-center">
+                          Tours &amp; Activities
+                          <span className="badge bg-warning-subtle text-warning ms-2">
+                            {activities.length}
+                          </span>
+                        </h5>
                       </Accordion.Header>
                       <Accordion.Body>
                         {activities.map((item, activityIndex) => {
@@ -2403,7 +2428,12 @@ const MakePkgBookingPageV2 = () => {
                   {transfers.length > 0 && (
                     <Accordion.Item eventKey="3" className="mb-2">
                       <Accordion.Header>
-                        <h5 className="mb-0 fw-bold">Transfer option</h5>
+                        <h5 className="mb-0 fw-bold d-flex align-items-center">
+                          Transfers
+                          <span className="badge bg-info-subtle text-info ms-2">
+                            {transfers.length}
+                          </span>
+                        </h5>
                       </Accordion.Header>
                       <Accordion.Body>
                         {transfers.map((item, transferIndex) => {
@@ -2660,45 +2690,12 @@ const MakePkgBookingPageV2 = () => {
                     </Accordion.Item>
                   )}
 
-                  {/* Visa Information Section */}
-                  {/* v2: Visa Information — read-only summary of the YES/NO
-                      answer captured on the /addons step. When YES, we surface
-                      the support contact info so the operator can hand off to
-                      the visa team. No inline rate inputs in v2. */}
-                  <Accordion.Item eventKey="4" className="mb-2">
-                    <Accordion.Header>
-                      <h5 className="mb-0 fw-bold">
-                        Visa Information{" "}
-                        <span
-                          className={`badge ms-2 bg-${v2VisaRequired === "YES" ? "danger" : "secondary"}`}
-                        >
-                          {v2VisaRequired}
-                        </span>
-                      </h5>
-                    </Accordion.Header>
-                    <Accordion.Body>
-                      {v2VisaRequired === "YES" ? (
-                        <div className="alert alert-info mb-0">
-                          <strong>Visa Required.</strong> Our team handles visa
-                          arrangements offline. Please contact us with the
-                          traveller's details:
-                          <ul className="mb-0 mt-2">
-                            <li>
-                              Email:{" "}
-                              <a href={`mailto:${V2_SUPPORT_EMAIL}`}>
-                                {V2_SUPPORT_EMAIL}
-                              </a>
-                            </li>
-                            <li>Phone: {V2_SUPPORT_PHONE}</li>
-                          </ul>
-                        </div>
-                      ) : (
-                        <p className="text-muted mb-0">
-                          No visa required for this booking.
-                        </p>
-                      )}
-                    </Accordion.Body>
-                  </Accordion.Item>
+                  {/* Visa Information accordion removed in v2 — the
+                      Visa YES/NO + support contact is captured on the
+                      /addons step and surfaced in the "Selected Add-On
+                      Services" panel below alongside the other add-ons,
+                      so duplicating it as its own accordion here was
+                      redundant. */}
 
                   {/* Guest Details Section - Always Open */}
                   <Accordion.Item eventKey="5" className="mb-2">
@@ -3488,64 +3485,70 @@ const MakePkgBookingPageV2 = () => {
                 </small>
               </div>
 
-              {visaRequired && (
-                <div className="pt-3 mt-3 border-top">
-                  <h6
-                    className="mb-2 fw-semibold"
-                    style={{ fontSize: "0.875rem", color: "#495057" }}
-                  >
-                    Visa Charges
-                  </h6>
-                  {parseInt(visaDetails.visaAdult || "0") > 0 && (
+              {/* v2 Visa + Add-Ons summary inside Price Summary. The
+                  legacy visaAdult/visaChild/visaInfant rate inputs are
+                  replaced with a YES/NO line (visas are arranged by the
+                  support team offline) and a per-service mini-list. */}
+              {(() => {
+                let svcMap = {};
+                try {
+                  svcMap = JSON.parse(
+                    sessionStorage.getItem("mypkg_addon_services") || "{}"
+                  );
+                } catch {
+                  svcMap = {};
+                }
+                const enabled = ADDON_SERVICES_CATALOG.filter(
+                  (svc) => svcMap[svc.key]?.enabled
+                );
+                const hasAnything =
+                  v2VisaRequired === "YES" || enabled.length > 0;
+                if (!hasAnything) return null;
+                return (
+                  <div className="pt-3 mt-3 border-top">
+                    <h6
+                      className="mb-2 fw-semibold"
+                      style={{ fontSize: "0.875rem", color: "#495057" }}
+                    >
+                      Add-Ons &amp; Visa
+                    </h6>
                     <div
-                      className="d-flex justify-content-between mb-1"
+                      className="d-flex justify-content-between mb-2"
                       style={{ fontSize: "0.8125rem" }}
                     >
-                      <span className="text-muted">
-                        Adults ({visaDetails.visaAdult})
-                      </span>
-                      <span>
-                        AED{" "}
-                        {parseFloat(visaDetails.visaAdultRate || "0").toFixed(
-                          2,
-                        )}
+                      <span className="text-muted">Visa required</span>
+                      <span
+                        className={`badge bg-${v2VisaRequired === "YES" ? "danger" : "secondary"}`}
+                      >
+                        {v2VisaRequired}
                       </span>
                     </div>
-                  )}
-                  {parseInt(visaDetails.visaChild || "0") > 0 && (
-                    <div
-                      className="d-flex justify-content-between mb-1"
-                      style={{ fontSize: "0.8125rem" }}
-                    >
-                      <span className="text-muted">
-                        Children ({visaDetails.visaChild})
-                      </span>
-                      <span>
-                        AED{" "}
-                        {parseFloat(visaDetails.visaChildRate || "0").toFixed(
-                          2,
-                        )}
-                      </span>
-                    </div>
-                  )}
-                  {parseInt(visaDetails.visaInfant || "0") > 0 && (
-                    <div
-                      className="d-flex justify-content-between"
-                      style={{ fontSize: "0.8125rem" }}
-                    >
-                      <span className="text-muted">
-                        Infants ({visaDetails.visaInfant})
-                      </span>
-                      <span>
-                        AED{" "}
-                        {parseFloat(visaDetails.visaInfantRate || "0").toFixed(
-                          2,
-                        )}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
+                    {enabled.length > 0 && (
+                      <div
+                        className="d-flex flex-column gap-1"
+                        style={{ fontSize: "0.8125rem" }}
+                      >
+                        {enabled.map((svc) => (
+                          <div
+                            key={svc.key}
+                            className="d-flex justify-content-between"
+                          >
+                            <span className="text-muted">{svc.label}</span>
+                            <span className="badge bg-success-subtle text-success">
+                              Selected
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {v2VisaRequired === "YES" && (
+                      <small className="text-muted d-block mt-2">
+                        Our team will follow up about the visa offline.
+                      </small>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div
                 className="mt-3 pt-3 border-top d-flex justify-content-between align-items-center"
