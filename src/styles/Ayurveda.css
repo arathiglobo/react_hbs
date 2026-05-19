@@ -123,6 +123,26 @@
   color: #2e7d32;
 }
 
+.ayurveda-page .ayurveda-card-base-price {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #7c8b78;
+  margin-top: 2px;
+}
+
+.ayurveda-page .ayurveda-card-centre {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: #1b5e20;
+  background: #e8f5e9;
+  border-radius: 8px;
+  padding: 2px 8px;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
 .ayurveda-page .ayurveda-feature-chip {
   display: inline-flex;
   align-items: center;

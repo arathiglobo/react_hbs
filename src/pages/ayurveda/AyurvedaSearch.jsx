@@ -61,6 +61,29 @@ const splitImageUrls = (raw) =>
 
 const firstImageUrl = (raw) => splitImageUrls(raw)[0] || "";
 
+// Renders price block. When the backend has applied an agent markup
+// it returns `displayPrice` and `markupAmount` alongside the base
+// price; we show both so the agent knows their take-home margin.
+const PriceBlock = ({ item }) => {
+  const base = item.price;
+  const display = item.displayPrice;
+  if (display != null && Number(display) !== Number(base)) {
+    return (
+      <span className="ayurveda-card-price">
+        ₹{display}
+        <div className="ayurveda-card-base-price">
+          base ₹{base}
+          {item.markupAmount != null && <> · markup ₹{item.markupAmount}</>}
+          {item.markupType === "PERCENT" && item.markupValue != null && (
+            <> ({item.markupValue}%)</>
+          )}
+        </div>
+      </span>
+    );
+  }
+  return <span className="ayurveda-card-price">₹{base}</span>;
+};
+
 const EMPTY_CUSTOMER = {
   customerName: "",
   customerAge: "",
@@ -101,6 +124,11 @@ const AyurvedaSearch = () => {
   // Destination (city) filter — shared across all 3 tabs
   const [destinationCityId, setDestinationCityId] = useState("");
   const [cityOptions, setCityOptions] = useState([]);
+
+  // Agent — when set, the backend applies the agent's markup to every
+  // listed price and we display both the original and marked-up rate.
+  const [agentId, setAgentId] = useState("");
+  const [agents, setAgents] = useState([]);
 
   // Single booking modal
   const [bookingTarget, setBookingTarget] = useState(null);
@@ -155,6 +183,7 @@ const AyurvedaSearch = () => {
       if (minPrice) params.minPrice = minPrice;
       if (maxPrice) params.maxPrice = maxPrice;
       if (destinationCityId) params.cityId = destinationCityId;
+      if (agentId) params.agentId = agentId;
 
       const url = allInclusiveOnly
         ? `${AYURVEDA_API}/packages/all-inclusive`
@@ -177,7 +206,7 @@ const AyurvedaSearch = () => {
     } finally {
       setLoading(false);
     }
-  }, [packageCategory, minPrice, maxPrice, keyword, allInclusiveOnly, destinationCityId]);
+  }, [packageCategory, minPrice, maxPrice, keyword, allInclusiveOnly, destinationCityId, agentId]);
 
   const loadConsultations = useCallback(async () => {
     setLoading(true);
@@ -186,6 +215,7 @@ const AyurvedaSearch = () => {
       if (consultationStartDate) params.startDate = consultationStartDate;
       if (consultationEndDate) params.endDate = consultationEndDate;
       if (destinationCityId) params.cityId = destinationCityId;
+      if (agentId) params.agentId = agentId;
       const res = await axiosInstance.get(`${AYURVEDA_API}/consultations/available`, {
         params,
       });
@@ -205,7 +235,7 @@ const AyurvedaSearch = () => {
     } finally {
       setLoading(false);
     }
-  }, [consultationStartDate, consultationEndDate, keyword, destinationCityId]);
+  }, [consultationStartDate, consultationEndDate, keyword, destinationCityId, agentId]);
 
   const loadCourses = useCallback(async () => {
     setLoading(true);
@@ -215,6 +245,7 @@ const AyurvedaSearch = () => {
       if (minPrice) params.minPrice = minPrice;
       if (maxPrice) params.maxPrice = maxPrice;
       if (destinationCityId) params.cityId = destinationCityId;
+      if (agentId) params.agentId = agentId;
       const res = await axiosInstance.get(`${AYURVEDA_API}/courses`, { params });
       let data = Array.isArray(res.data) ? res.data : [];
       if (keyword.trim()) {
@@ -233,13 +264,25 @@ const AyurvedaSearch = () => {
     } finally {
       setLoading(false);
     }
-  }, [courseLevel, minPrice, maxPrice, keyword, destinationCityId]);
+  }, [courseLevel, minPrice, maxPrice, keyword, destinationCityId, agentId]);
 
   useEffect(() => {
     if (activeTab === "packages") loadPackages();
     else if (activeTab === "consultations") loadConsultations();
     else if (activeTab === "courses") loadCourses();
   }, [activeTab, loadPackages, loadConsultations, loadCourses]);
+
+  // Load the agent list once — used for the agent dropdown so the
+  // search results can be priced with the agent's markup applied.
+  useEffect(() => {
+    axiosInstance
+      .get("/api/agent")
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : res.data?.content || [];
+        setAgents(list);
+      })
+      .catch((e) => console.error("Failed to load agents", e));
+  }, []);
 
   // Load destination (city/province) list once for the search dropdown.
   // `limit=10000` so the dropdown shows the full list instead of being
@@ -408,6 +451,27 @@ const AyurvedaSearch = () => {
     [combo]
   );
 
+  // The centreId of the first item added to the combo "locks" the combo
+  // to that centre. Subsequent cards from other centres still show the
+  // "+ Combo" button but it's disabled with an explanatory tooltip.
+  const lockedCentreId = useMemo(() => {
+    const first =
+      combo.package?.centreId ??
+      combo.consultation?.centreId ??
+      combo.course?.centreId ??
+      null;
+    return first ?? null;
+  }, [combo]);
+
+  // True if a card from the given centreId is allowed into the current
+  // combo. Always true when no combo item is selected yet or when the
+  // card itself has no centreId set (legacy data).
+  const isAllowedInCombo = (cardCentreId) => {
+    if (lockedCentreId == null) return true;
+    if (cardCentreId == null) return false;
+    return Number(cardCentreId) === Number(lockedCentreId);
+  };
+
   const comboBaseTotal = useMemo(() => {
     const pkg = combo.package?.price ? Number(combo.package.price) : 0;
     const con = combo.consultation?.price
@@ -567,14 +631,26 @@ const AyurvedaSearch = () => {
   };
 
   // ----- Renderers -----
-  const renderPackages = () => (
+  const renderPackages = () => {
+    // While a combo is being built we only want to show items from the
+    // locked centre — the user can't combine across centres so showing
+    // off-centre items just clutters the list. Items already in the
+    // combo are always kept so the user can see / remove them.
+    const visible = packages.filter(
+      (p) => isInCombo("package", p.id) || isAllowedInCombo(p.centreId)
+    );
+    return (
     <Row className="g-3">
-      {packages.length === 0 ? (
+      {visible.length === 0 ? (
         <Col xs={12}>
-          <div className="ayurveda-empty">No matching packages found.</div>
+          <div className="ayurveda-empty">
+            {lockedCentreId && packages.length > 0
+              ? "No matching packages for the selected combo centre."
+              : "No matching packages found."}
+          </div>
         </Col>
       ) : (
-        packages.map((p) => (
+        visible.map((p) => (
           <Col md={6} lg={4} key={p.id}>
             <Card className="ayurveda-card">
               <div className="ayurveda-card-img">
@@ -613,8 +689,13 @@ const AyurvedaSearch = () => {
                     <FaInfoCircle /> {p.treatmentsIncluded}
                   </div>
                 )}
+                {p.centreName && (
+                  <div>
+                    <span className="ayurveda-card-centre">🏛 {p.centreName}</span>
+                  </div>
+                )}
                 <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
-                  <span className="ayurveda-card-price">₹{p.price}</span>
+                  <PriceBlock item={p} />
                   <div className="d-flex gap-2 flex-wrap">
                     <Button
                       size="sm"
@@ -624,26 +705,38 @@ const AyurvedaSearch = () => {
                     >
                       <FaEye className="me-1" /> View
                     </Button>
-                    <button
-                      type="button"
-                      className={
-                        isInCombo("package", p.id)
-                          ? "ayurveda-combo-added-btn"
-                          : "ayurveda-combo-add-btn"
-                      }
-                      onClick={() => toggleCombo("package", p)}
-                      title="Add to combo (book with other items together)"
-                    >
-                      {isInCombo("package", p.id) ? (
-                        <>
-                          <FaCheckCircle /> Added
-                        </>
-                      ) : (
-                        <>
-                          <FaPlus /> Combo
-                        </>
-                      )}
-                    </button>
+                    {(() => {
+                      const inCombo = isInCombo("package", p.id);
+                      const allowed = inCombo || isAllowedInCombo(p.centreId);
+                      return (
+                        <button
+                          type="button"
+                          className={
+                            inCombo
+                              ? "ayurveda-combo-added-btn"
+                              : "ayurveda-combo-add-btn"
+                          }
+                          onClick={() => allowed && toggleCombo("package", p)}
+                          disabled={!allowed}
+                          style={!allowed ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+                          title={
+                            allowed
+                              ? "Add to combo (book with other items together)"
+                              : "Different centre — clear combo to switch"
+                          }
+                        >
+                          {inCombo ? (
+                            <>
+                              <FaCheckCircle /> Added
+                            </>
+                          ) : (
+                            <>
+                              <FaPlus /> Combo
+                            </>
+                          )}
+                        </button>
+                      );
+                    })()}
                     <Button
                       size="sm"
                       variant="success"
@@ -659,16 +752,25 @@ const AyurvedaSearch = () => {
         ))
       )}
     </Row>
-  );
+    );
+  };
 
-  const renderConsultations = () => (
+  const renderConsultations = () => {
+    const visible = consultations.filter(
+      (c) => isInCombo("consultation", c.id) || isAllowedInCombo(c.centreId)
+    );
+    return (
     <Row className="g-3">
-      {consultations.length === 0 ? (
+      {visible.length === 0 ? (
         <Col xs={12}>
-          <div className="ayurveda-empty">No available consultation slots.</div>
+          <div className="ayurveda-empty">
+            {lockedCentreId && consultations.length > 0
+              ? "No available consultation slots for the selected combo centre."
+              : "No available consultation slots."}
+          </div>
         </Col>
       ) : (
-        consultations.map((c) => (
+        visible.map((c) => (
           <Col md={6} lg={4} key={c.id}>
             <Card className="ayurveda-card">
               <div className="ayurveda-card-img">
@@ -698,8 +800,13 @@ const AyurvedaSearch = () => {
                   Slots available:{" "}
                   <b>{(c.maxPatientsPerSlot || 0) - (c.currentBookings || 0)}</b>
                 </div>
+                {c.centreName && (
+                  <div>
+                    <span className="ayurveda-card-centre">🏛 {c.centreName}</span>
+                  </div>
+                )}
                 <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
-                  <span className="ayurveda-card-price">₹{c.price}</span>
+                  <PriceBlock item={c} />
                   <div className="d-flex gap-2 flex-wrap">
                     <Button
                       size="sm"
@@ -709,25 +816,38 @@ const AyurvedaSearch = () => {
                     >
                       <FaEye className="me-1" /> View
                     </Button>
-                    <button
-                      type="button"
-                      className={
-                        isInCombo("consultation", c.id)
-                          ? "ayurveda-combo-added-btn"
-                          : "ayurveda-combo-add-btn"
-                      }
-                      onClick={() => toggleCombo("consultation", c)}
-                    >
-                      {isInCombo("consultation", c.id) ? (
-                        <>
-                          <FaCheckCircle /> Added
-                        </>
-                      ) : (
-                        <>
-                          <FaPlus /> Combo
-                        </>
-                      )}
-                    </button>
+                    {(() => {
+                      const inCombo = isInCombo("consultation", c.id);
+                      const allowed = inCombo || isAllowedInCombo(c.centreId);
+                      return (
+                        <button
+                          type="button"
+                          className={
+                            inCombo
+                              ? "ayurveda-combo-added-btn"
+                              : "ayurveda-combo-add-btn"
+                          }
+                          onClick={() => allowed && toggleCombo("consultation", c)}
+                          disabled={!allowed}
+                          style={!allowed ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+                          title={
+                            allowed
+                              ? "Add to combo"
+                              : "Different centre — clear combo to switch"
+                          }
+                        >
+                          {inCombo ? (
+                            <>
+                              <FaCheckCircle /> Added
+                            </>
+                          ) : (
+                            <>
+                              <FaPlus /> Combo
+                            </>
+                          )}
+                        </button>
+                      );
+                    })()}
                     <Button
                       size="sm"
                       variant="success"
@@ -743,16 +863,25 @@ const AyurvedaSearch = () => {
         ))
       )}
     </Row>
-  );
+    );
+  };
 
-  const renderCourses = () => (
+  const renderCourses = () => {
+    const visible = courses.filter(
+      (c) => isInCombo("course", c.id) || isAllowedInCombo(c.centreId)
+    );
+    return (
     <Row className="g-3">
-      {courses.length === 0 ? (
+      {visible.length === 0 ? (
         <Col xs={12}>
-          <div className="ayurveda-empty">No matching courses found.</div>
+          <div className="ayurveda-empty">
+            {lockedCentreId && courses.length > 0
+              ? "No matching courses for the selected combo centre."
+              : "No matching courses found."}
+          </div>
         </Col>
       ) : (
-        courses.map((c) => (
+        visible.map((c) => (
           <Col md={6} lg={4} key={c.id}>
             <Card className="ayurveda-card">
               <div className="ayurveda-card-img">
@@ -793,8 +922,13 @@ const AyurvedaSearch = () => {
                     Prerequisites: {c.prerequisites}
                   </div>
                 )}
+                {c.centreName && (
+                  <div>
+                    <span className="ayurveda-card-centre">🏛 {c.centreName}</span>
+                  </div>
+                )}
                 <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
-                  <span className="ayurveda-card-price">₹{c.price}</span>
+                  <PriceBlock item={c} />
                   <div className="d-flex gap-2 flex-wrap">
                     <Button
                       size="sm"
@@ -804,25 +938,38 @@ const AyurvedaSearch = () => {
                     >
                       <FaEye className="me-1" /> View
                     </Button>
-                    <button
-                      type="button"
-                      className={
-                        isInCombo("course", c.id)
-                          ? "ayurveda-combo-added-btn"
-                          : "ayurveda-combo-add-btn"
-                      }
-                      onClick={() => toggleCombo("course", c)}
-                    >
-                      {isInCombo("course", c.id) ? (
-                        <>
-                          <FaCheckCircle /> Added
-                        </>
-                      ) : (
-                        <>
-                          <FaPlus /> Combo
-                        </>
-                      )}
-                    </button>
+                    {(() => {
+                      const inCombo = isInCombo("course", c.id);
+                      const allowed = inCombo || isAllowedInCombo(c.centreId);
+                      return (
+                        <button
+                          type="button"
+                          className={
+                            inCombo
+                              ? "ayurveda-combo-added-btn"
+                              : "ayurveda-combo-add-btn"
+                          }
+                          onClick={() => allowed && toggleCombo("course", c)}
+                          disabled={!allowed}
+                          style={!allowed ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+                          title={
+                            allowed
+                              ? "Add to combo"
+                              : "Different centre — clear combo to switch"
+                          }
+                        >
+                          {inCombo ? (
+                            <>
+                              <FaCheckCircle /> Added
+                            </>
+                          ) : (
+                            <>
+                              <FaPlus /> Combo
+                            </>
+                          )}
+                        </button>
+                      );
+                    })()}
                     <Button
                       size="sm"
                       variant="success"
@@ -838,7 +985,8 @@ const AyurvedaSearch = () => {
         ))
       )}
     </Row>
-  );
+    );
+  };
 
   return (
     <div className="d-flex">
@@ -909,6 +1057,22 @@ const AyurvedaSearch = () => {
                 {cityOptions.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.label}
+                  </option>
+                ))}
+              </Form.Select>
+
+              <Form.Select
+                style={{ maxWidth: 240 }}
+                value={agentId}
+                onChange={(e) => setAgentId(e.target.value)}
+                title="Select an agent to apply their markup to displayed prices"
+              >
+                <option value="">No Agent (base price)</option>
+                {agents.map((a) => (
+                  <option key={a.id || a.agentId} value={a.id || a.agentId}>
+                    {a.companyName ||
+                      [a.firstName, a.lastName].filter(Boolean).join(" ") ||
+                      `Agent #${a.id || a.agentId}`}
                   </option>
                 ))}
               </Form.Select>

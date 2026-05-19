@@ -226,6 +226,7 @@ import GovEmployeeBookingDetailView from "./pages/list/GovEmployeeBookingDetailV
 //   /new-booking/ayurveda            → search & book any of the three
 //   /booking-details/ayurveda-booking-list → view all ayurveda bookings
 import AyurvedaRegistration from "./pages/ayurveda/AyurvedaRegistration";
+import AyurvedaCentreManage from "./pages/ayurveda/AyurvedaCentreManage";
 import AyurvedaSearch from "./pages/ayurveda/AyurvedaSearch";
 import AyurvedaBookingList from "./pages/ayurveda/AyurvedaBookingList";
 
@@ -411,6 +412,7 @@ export default function App() {
 
         {/* Ayurveda Module — standalone flow (no impact on hotel booking) */}
         <Route path="/registration/ayurveda" element={<PrivateRoute><AyurvedaRegistration /></PrivateRoute>} />
+        <Route path="/registration/ayurveda/centre/:centreId" element={<PrivateRoute><AyurvedaCentreManage /></PrivateRoute>} />
         <Route path="/new-booking/ayurveda" element={<PrivateRoute><AyurvedaSearch /></PrivateRoute>} />
         <Route path="/booking-details/ayurveda-booking-list" element={<PrivateRoute><AyurvedaBookingList /></PrivateRoute>} />
 
