@@ -241,6 +241,14 @@ import StudentBookingDetailView from "./pages/list/StudentBookingDetailView";
 // Admin verification actions live INSIDE StudentBookingList itself —
 // the dedicated /admin/student-verification page has been removed.
 
+// Agent Incentive Module — self-contained: admin configures rules per
+// service type, agents track points & claim rewards. No existing flows
+// are modified — incentives are accrued by a reconciliation job that
+// reads booking tables and idempotently inserts incentive rows.
+import IncentiveConfig from "./pages/incentive/IncentiveConfig";
+import AgentIncentiveDashboard from "./pages/incentive/AgentIncentiveDashboard";
+import IncentiveClaims from "./pages/incentive/IncentiveClaims";
+
 
 export default function App() {
   return (
@@ -565,8 +573,10 @@ export default function App() {
         <Route path="/extranet/:id/promotions-staypay-create" element={<PrivateRoute><ExtranetStayPayPromotion/></PrivateRoute>} />
         <Route path="/extranet/:id/edit-staypay-promotion/:editId" element={<PrivateRoute><EditStayPayPromotionExtranet/></PrivateRoute>} />
 
-        
-       
+        {/* Agent Incentive Module */}
+        <Route path="/incentive/config" element={<PrivateRoute><IncentiveConfig /></PrivateRoute>} />
+        <Route path="/incentive/my-incentives" element={<PrivateRoute><AgentIncentiveDashboard /></PrivateRoute>} />
+        <Route path="/incentive/claims" element={<PrivateRoute><IncentiveClaims /></PrivateRoute>} />
 
       </Routes>
 

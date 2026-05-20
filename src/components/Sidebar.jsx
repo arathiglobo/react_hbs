@@ -19,6 +19,8 @@ import {
   ImagePlus,
   Dot,
   Utensils,
+  Trophy,
+  Award,
 } from "lucide-react";
 import { FaBrain, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
@@ -485,6 +487,25 @@ export default function Sidebar() {
         },
       ],
     },
+    // Agent Incentive Module — admin manages rules + reviews claims;
+    // agents see their points dashboard and claim history.
+    {
+      label: "Agent Incentive",
+      roles: ["admin"],
+      children: [
+        { label: "Configuration", to: "/incentive/config" },
+        { label: "Agent Summary", to: "/incentive/my-incentives" },
+        { label: "Claims", to: "/incentive/claims" },
+      ],
+    },
+    {
+      label: "My Incentives",
+      roles: ["agent"],
+      children: [
+        { label: "Dashboard", to: "/incentive/my-incentives" },
+        { label: "My Claims", to: "/incentive/claims" },
+      ],
+    },
     {
       label: "Offer",
       to: "/offer",
@@ -938,6 +959,12 @@ function getIcon(label) {
 
     case "Report":
       return <BarChart3 {...iconProps} />;
+
+    case "Agent Incentive":
+      return <Trophy {...iconProps} />;
+
+    case "My Incentives":
+      return <Award {...iconProps} />;
 
     case "Offer":
       return <Tag {...iconProps} />;
