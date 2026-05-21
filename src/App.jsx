@@ -241,6 +241,13 @@ import SchefferDriverRates from "./pages/Registration/SchefferDriverRates";
 import { SchefferDriverSearch } from "./pages/search/schefferDriver/SchefferDriverSearch";
 import SchefferDriverBookingPage from "./pages/booking/SchefferDriverBookingPage";
 import SchefferDriverBookingList from "./pages/list/SchefferDriverBookingList";
+import AyurvedaRegistration from "./pages/ayurveda/AyurvedaRegistration";
+import AyurvedaCentreManage from "./pages/ayurveda/AyurvedaCentreManage";
+import AyurvedaSearch from "./pages/ayurveda/AyurvedaSearch";
+import AyurvedaBookingList from "./pages/ayurveda/AyurvedaBookingList";
+import IncentiveConfig from "./pages/incentive/IncentiveConfig";
+import AgentIncentiveDashboard from "./pages/incentive/AgentIncentiveDashboard";
+import IncentiveClaims from "./pages/incentive/IncentiveClaims";
 
 
 export default function App() {
@@ -494,6 +501,18 @@ export default function App() {
         <Route path="/booking-details/student-booking-list" element={<PrivateRoute><StudentBookingList /></PrivateRoute>} />
         <Route path="/booking-details/student-booking/:id" element={<PrivateRoute><StudentBookingDetailView /></PrivateRoute>} />
         {/* Admin verification now lives inline on the StudentBookingList page. */}
+
+
+        {/* Ayurveda Module — standalone flow (no impact on hotel booking) */}
+        <Route path="/registration/ayurveda" element={<PrivateRoute><AyurvedaRegistration /></PrivateRoute>} />
+        <Route path="/registration/ayurveda/centre/:centreId" element={<PrivateRoute><AyurvedaCentreManage /></PrivateRoute>} />
+        <Route path="/new-booking/ayurveda" element={<PrivateRoute><AyurvedaSearch /></PrivateRoute>} />
+        <Route path="/booking-details/ayurveda-booking-list" element={<PrivateRoute><AyurvedaBookingList /></PrivateRoute>} />
+
+         {/* Agent Incentive Module */}
+        <Route path="/incentive/config" element={<PrivateRoute><IncentiveConfig /></PrivateRoute>} />
+        <Route path="/incentive/my-incentives" element={<PrivateRoute><AgentIncentiveDashboard /></PrivateRoute>} />
+        <Route path="/incentive/claims" element={<PrivateRoute><IncentiveClaims /></PrivateRoute>} />
 
 
         {/* Hotel Actions */}
