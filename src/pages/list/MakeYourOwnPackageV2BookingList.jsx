@@ -59,6 +59,7 @@ const MakeYourOwnPackageV2BookingList = () => {
   // Details modal
   const [showDetails, setShowDetails] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Cancel modal
   const [showCancel, setShowCancel] = useState(false);
@@ -80,7 +81,9 @@ const MakeYourOwnPackageV2BookingList = () => {
   const fetchList = async () => {
     setLoading(true);
     try {
-      const role = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
+      const role = (
+        localStorage.getItem("currentActiveRole") || ""
+      ).toLowerCase();
       const params = {};
       if (role === "agent") {
         const agentId = localStorage.getItem("agentId");
@@ -88,7 +91,7 @@ const MakeYourOwnPackageV2BookingList = () => {
       }
       const res = await axiosInstance.get(
         "/api/makeYourOwnPackageV2/booking/list",
-        { params }
+        { params },
       );
       setRows(Array.isArray(res.data) ? res.data : []);
     } catch (e) {
@@ -125,9 +128,31 @@ const MakeYourOwnPackageV2BookingList = () => {
   }, [rows, status, search]);
 
   // ── actions ────────────────────────────────────────────────────────
-  const onView = (b) => {
+  // Eye-icon → re-fetch the booking by ID so the modal always shows
+  // the latest server-side data (including the freshly-saved primary
+  // guest + per-room pax manifest). We seed `selected` with the list
+  // row immediately so the modal header has the booking code while
+  // the GET is in flight.
+  const onView = async (b) => {
     setSelected(b);
     setShowDetails(true);
+    setLoadingDetails(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/makeYourOwnPackageV2/booking/${b.id}`,
+      );
+      if (res.data) setSelected(res.data);
+    } catch (e) {
+      console.error("v2 booking detail error", e);
+      toast.error("Failed to load booking details");
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+  const closeDetails = () => {
+    setShowDetails(false);
+    setSelected(null);
+    setLoadingDetails(false);
   };
   const onCancelClick = (b) => {
     setToCancel(b);
@@ -140,7 +165,7 @@ const MakeYourOwnPackageV2BookingList = () => {
     try {
       await axiosInstance.delete(
         `/api/makeYourOwnPackageV2/booking/${toCancel.id}`,
-        { params: { reason: cancelReason || "" } }
+        { params: { reason: cancelReason || "" } },
       );
       toast.success("Booking cancelled");
       setShowCancel(false);
@@ -164,7 +189,7 @@ const MakeYourOwnPackageV2BookingList = () => {
     setLoadingPdf(true);
     try {
       const res = await axiosInstance.get(
-        `/api/makeYourOwnPackageV2/booking/${b.id}/voucher`
+        `/api/makeYourOwnPackageV2/booking/${b.id}/voucher`,
       );
       if (res.data?.status === "SUCCESS" && res.data?.pdfUrl) {
         setPdfUrl(res.data.pdfUrl);
@@ -203,7 +228,7 @@ const MakeYourOwnPackageV2BookingList = () => {
           email,
           pdfUrl,
           bookingId: pdfBooking?.id,
-        }
+        },
       );
       if (res.data?.status === "SUCCESS") {
         toast.success("Voucher emailed to " + email);
@@ -315,7 +340,12 @@ const MakeYourOwnPackageV2BookingList = () => {
                       boxShadow: "0 2px 4px rgba(0,0,0,0.06)",
                     }}
                   >
-                    <tr style={{ textTransform: "uppercase", fontSize: "0.72rem" }}>
+                    <tr
+                      style={{
+                        textTransform: "uppercase",
+                        fontSize: "0.72rem",
+                      }}
+                    >
                       <th style={{ width: 50 }}>S.N</th>
                       <th style={{ width: 130 }}>Booking Code</th>
                       <th>Customer</th>
@@ -350,7 +380,11 @@ const MakeYourOwnPackageV2BookingList = () => {
                           </td>
                           <td>
                             <div className="fw-semibold">
-                              {[b.salutation, b.customerFirstName, b.customerLastName]
+                              {[
+                                b.salutation,
+                                b.customerFirstName,
+                                b.customerLastName,
+                              ]
                                 .filter(Boolean)
                                 .join(" ") || "—"}
                             </div>
@@ -393,7 +427,10 @@ const MakeYourOwnPackageV2BookingList = () => {
                                 <FaTrash
                                   title="Cancel"
                                   role="button"
-                                  style={{ color: "#dc3545", cursor: "pointer" }}
+                                  style={{
+                                    color: "#dc3545",
+                                    cursor: "pointer",
+                                  }}
                                   onClick={() => onCancelClick(b)}
                                 />
                               )}
@@ -420,13 +457,17 @@ const MakeYourOwnPackageV2BookingList = () => {
         </main>
       </div>
 
-      {/* Details modal */}
+      {/* Details modal — backdrop="static" + keyboard={false} so the modal
+          only closes when the user clicks the explicit Close / X button
+          (no accidental close on outside-click or Esc). */}
       <Modal
         show={showDetails}
-        onHide={() => setShowDetails(false)}
+        onHide={closeDetails}
         size="lg"
         scrollable
         centered
+        backdrop="static"
+        keyboard={false}
       >
         <Modal.Header closeButton className="bg-light">
           <Modal.Title className="fw-bold">
@@ -434,7 +475,12 @@ const MakeYourOwnPackageV2BookingList = () => {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selected && (
+          {loadingDetails && (
+            <div className="text-center py-4">
+              <Spinner animation="border" size="sm" /> Loading details…
+            </div>
+          )}
+          {!loadingDetails && selected && (
             <>
               {/* Customer details */}
               <h6 className="fw-bold border-bottom pb-1 mb-2">
@@ -497,12 +543,12 @@ const MakeYourOwnPackageV2BookingList = () => {
                   <strong>Payment Mode:</strong> {selected.paymentMode || "—"}
                 </Col>
                 <Col md={6}>
-                  <strong>Selling Price:</strong>{" "}
-                  ₹ {Number(selected.sellingPrice || 0).toLocaleString()}
+                  <strong>Selling Price:</strong> ₹{" "}
+                  {Number(selected.sellingPrice || 0).toLocaleString()}
                 </Col>
                 <Col md={6}>
-                  <strong>Total Price:</strong>{" "}
-                  ₹ {Number(selected.totalPrice || 0).toLocaleString()}
+                  <strong>Total Price:</strong> ₹{" "}
+                  {Number(selected.totalPrice || 0).toLocaleString()}
                 </Col>
               </Row>
 
@@ -533,9 +579,7 @@ const MakeYourOwnPackageV2BookingList = () => {
                           <td>
                             {h.noOfAdults || 0}A / {h.noOfChildren || 0}C
                           </td>
-                          <td>
-                            ₹ {Number(h.totalRate || 0).toLocaleString()}
-                          </td>
+                          <td>₹ {Number(h.totalRate || 0).toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -576,9 +620,7 @@ const MakeYourOwnPackageV2BookingList = () => {
                           <td>
                             {c.noOfAdult || 0}A / {c.noOfChild || 0}C
                           </td>
-                          <td>
-                            ₹ {Number(c.totalRate || 0).toLocaleString()}
-                          </td>
+                          <td>₹ {Number(c.totalRate || 0).toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -611,11 +653,72 @@ const MakeYourOwnPackageV2BookingList = () => {
                           <td>
                             {a.noOfAdult || 0}A / {a.noOfChild || 0}C
                           </td>
-                          <td>
-                            ₹ {Number(a.totalRate || 0).toLocaleString()}
-                          </td>
+                          <td>₹ {Number(a.totalRate || 0).toLocaleString()}</td>
                         </tr>
                       ))}
+                    </tbody>
+                  </Table>
+                </>
+              )}
+
+              {/* Guests — full pax manifest. The lead traveller is
+                  flagged with a "Primary" badge and surfaces the
+                  booking-owner contact details (email / phone /
+                  passport / native country / agent LPO). */}
+              {selected.guests?.length > 0 && (
+                <>
+                  <h6 className="fw-bold border-bottom pb-1 mb-2">
+                    Guests ({selected.guests.length})
+                  </h6>
+                  <Table size="sm" bordered className="mb-3">
+                    <thead className="table-light">
+                      <tr>
+                        <th style={{ width: 40 }}>S.No</th>
+                        <th style={{ width: 80 }}>Type</th>
+                        <th>Name</th>
+                        <th style={{ width: 80 }}>Gender</th>
+                        <th style={{ width: 70 }}>Age</th>
+                        <th>Contact / Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selected.guests.map((g, i) => {
+                        const isPrimary = g.primaryGuest === true;
+                        const contactBits = [];
+                        if (g.email) contactBits.push(`✉ ${g.email}`);
+                        if (g.phone) contactBits.push(`☎ ${g.phone}`);
+                        if (g.passportNo)
+                          contactBits.push(`Passport: ${g.passportNo}`);
+                        if (g.nativeCountry)
+                          contactBits.push(`Nationality: ${g.nativeCountry}`);
+                        if (g.agentLpo) contactBits.push(`LPO: ${g.agentLpo}`);
+                        return (
+                          <tr key={i}>
+                            <td>{i + 1}</td>
+                            <td>
+                              {g.isChild ? "CHD" : "ADT"}
+                              {isPrimary && <span className="ms-1"></span>}
+                            </td>
+                            <td>
+                              {[
+                                g.salutation,
+                                g.firstName,
+                                g.middleName,
+                                g.lastName,
+                              ]
+                                .filter(Boolean)
+                                .join(" ") || ""}
+                            </td>
+                            <td>{g.gender || ""}</td>
+                            <td>{g.age || ""}</td>
+                            <td className="small">
+                              {contactBits.length
+                                ? contactBits.join(" · ")
+                                : ""}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </Table>
                 </>
@@ -639,7 +742,7 @@ const MakeYourOwnPackageV2BookingList = () => {
                               k !== "enabled" &&
                               v !== undefined &&
                               v !== null &&
-                              v !== ""
+                              v !== "",
                           );
                           return (
                             <Col md={6} key={svcKey}>
@@ -679,7 +782,7 @@ const MakeYourOwnPackageV2BookingList = () => {
                               </Card>
                             </Col>
                           );
-                        }
+                        },
                       )}
                     </Row>
                   </>
@@ -688,7 +791,7 @@ const MakeYourOwnPackageV2BookingList = () => {
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowDetails(false)}>
+          <Button variant="secondary" onClick={closeDetails}>
             Close
           </Button>
         </Modal.Footer>

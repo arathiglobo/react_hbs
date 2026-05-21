@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
+import RegionalClock from "../components/RegionalClock";
 import axiosInstance from "../components/AxiosInstance";
 import {
   FaUser,
@@ -119,15 +120,30 @@ const ExtranetHotelDashboard = () => {
         <Sidebar />
 
         <div style={{ flex: 1, overflowY: "auto", padding: "32px 32px 48px" }}>
-          
-          {/* Header */}
-          <div style={{ marginBottom: "28px" }}>
-            <h1 style={{ fontSize: "20px", fontWeight: 600, color: "#111827", margin: 0 }}>
-              Hotel Dashboard
-            </h1>
-            <p style={{ fontSize: "13.5px", color: "#6B7280", marginTop: "4px" }}>
-              Welcome back. Here's what's happening today.
-            </p>
+
+          {/* Header — title on the left, regional clock on the right.
+              Hotels carry a country relation on the entity, so the
+              clock displays the hotel's local time (e.g. Asia/Dubai
+              for a UAE hotel). */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "28px",
+              gap: "16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h1 style={{ fontSize: "20px", fontWeight: 600, color: "#111827", margin: 0 }}>
+                Hotel Dashboard
+              </h1>
+              <p style={{ fontSize: "13.5px", color: "#6B7280", marginTop: "4px", marginBottom: 0 }}>
+                Welcome back. Here's what's happening today.
+              </p>
+            </div>
+            <RegionalClock />
           </div>
 
           {/* Action Cards */}

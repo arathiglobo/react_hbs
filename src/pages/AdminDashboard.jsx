@@ -4,6 +4,7 @@ import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
+import RegionalClock from '../components/RegionalClock';
 import axiosInstance from '../components/AxiosInstance';
 
 /* ─── static demo data ─── */
@@ -247,9 +248,9 @@ export default function AdminDashboard() {
     { label: 'Add New Hotel',      cls: 'btn-indigo', icon: 'hotel',    to: '/registration/hotel/create' },
     { label: 'Add New Agent',      cls: 'btn-green',  icon: 'agent',    to: '/registration/agent' },
     { label: 'Accommodation',      cls: 'btn-yellow', icon: 'booking',  to: '/new-booking/hotel' },
-    { label: 'Transfer',           cls: 'btn-blue',   icon: 'transfer', to: null },
-    { label: 'Tours & Activities', cls: 'btn-pink',   icon: 'tour',     to: null },
-    { label: 'Agent Account',      cls: 'btn-purple', icon: 'account',  to: null },
+    { label: 'Transfer',           cls: 'btn-blue',   icon: 'transfer', to: '/new-booking/cab' },
+    { label: 'Tours & Activities', cls: 'btn-pink',   icon: 'tour',     to: '/new-booking/tours-and-activities' },
+    { label: 'Agent Account',      cls: 'btn-purple', icon: 'account',  to: '/incentive/config' },
   ];
 
   return (
@@ -260,6 +261,30 @@ export default function AdminDashboard() {
         <div className="dash-body">
           <Sidebar />
           <main className="dash-main">
+
+            {/* Regional date+time chip — driven by the logged-in user's
+                registered country (timezone resolved server-side via
+                /api/personalProfile, with browser-TZ fallback). */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "28px",
+              gap: "16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h1 style={{ fontSize: "20px", fontWeight: 600, color: "#111827", margin: 0 }}>
+                Admin Dashboard
+              </h1>
+              <p style={{ fontSize: "13.5px", color: "#6B7280", marginTop: "4px", marginBottom: 0 }}>
+                Welcome back. Here's what's happening today.
+              </p>
+            </div>
+            <RegionalClock />
+          </div>
 
             {/* ── Quick Actions ── */}
             <section className="qa-section">

@@ -6,6 +6,7 @@ import BarChart from '../components/BarChart';
 import { Container, Row, Col, Button, Card } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
+import RegionalClock from '../components/RegionalClock';
 import axiosInstance from '../components/AxiosInstance';
 
 const kpiData = {
@@ -46,6 +47,29 @@ export default function StaffDashboard(){
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4" style={{ overflow: 'auto' }}>
+        {/* Regional date+time chip — staff users typically don't have a
+            country on their profile, so this falls back to the browser
+            timezone (which is what the user's machine reports). */}
+         <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "28px",
+              gap: "16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h1 style={{ fontSize: "20px", fontWeight: 600, color: "#111827", margin: 0 }}>
+                Staff Dashboard
+              </h1>
+              <p style={{ fontSize: "13.5px", color: "#6B7280", marginTop: "4px", marginBottom: 0 }}>
+                Welcome back. Here's what's happening today.
+              </p>
+            </div>
+            <RegionalClock />
+          </div>
         <div className="mb-4">
           {/* <h1 className="h3">Admin </h1> */}
           <div className="d-flex flex-wrap gap-2">

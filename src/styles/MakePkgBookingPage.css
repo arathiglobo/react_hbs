@@ -55,15 +55,27 @@
   box-shadow: none;
 }
 
-/* Down-arrow indicator on every booking-accordion header — visible
-   blue chevron so the operator can see at a glance that the row is
-   expandable. The chevron rotates 180° when the section opens. */
+/* Down-arrow indicator on every booking-accordion header — a simple
+   small black chevron, no background. !important is needed because
+   RoomList.css ships an unscoped `.accordion-button::after` rule that
+   can win on equal specificity depending on load order. */
 .booking-accordion .accordion-button::after {
-  width: 1.1rem;
-  height: 1.1rem;
-  background-size: 1.1rem;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%230d6efd'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
-  transition: transform 0.2s ease-in-out;
+  width: 0.85rem !important;
+  height: 0.85rem !important;
+  background-size: 0.85rem 0.85rem !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23212529'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+  transition: transform 0.2s ease-in-out !important;
+}
+
+.booking-accordion .accordion-button:not(.collapsed)::after {
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23212529'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
 }
 
 .booking-accordion .accordion-button:not(.collapsed) {
@@ -84,6 +96,31 @@
 .booking-accordion .accordion-body {
   background: white;
   padding: 1.25rem;
+}
+
+/* Compact in-section row used by Hotels / Tours / Transfers — replaces
+   the previous nested Card-per-item layout so each entry sits on a
+   single divider strip instead of in its own boxed card. */
+.simple-section-row {
+  border-top: 1px solid #e9ecef;
+  padding: 0.75rem 0;
+}
+.simple-section-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.simple-section-row:last-child {
+  padding-bottom: 0;
+}
+.simple-section-row-title {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  color: #212529;
+}
+.simple-section-row-body {
+  padding-left: 1.5rem;
 }
 
 /* Itinerary Checkboxes */

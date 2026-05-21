@@ -1266,20 +1266,85 @@ const MakePkgBookingPageV2 = () => {
       // visa as YES/NO; we keep the legacy bookingPayload assembly above
       // intact so all the nested calculations still run, then project the
       // pieces into the v2 shape here. Sends to /api/makeYourOwnPackageV2.
-      const _custDTO = bookingPayload.customerDTO || {};
+      // Primary guest + per-room guests are mirrored from HotelBookingPage.jsx
+      // so the backend receives the same manifest shape it already understands.
+      const firstHotelNationality = (() => {
+        const firstHotel = (cartData || []).find((it) => it && it.hotel)?.hotel;
+        return firstHotel?.nationality || "";
+      })();
+
+      const primaryGuestPayload = {
+        salutation: primaryGuest.salutation || "",
+        firstName: primaryGuest.firstName || "",
+        middleName: primaryGuest.middleName || "",
+        lastName: primaryGuest.lastName || "",
+        email: primaryGuest.emailId || "",
+        phone: primaryGuest.contactNumber || "",
+        passportNo: primaryGuest.passportNumber || "",
+        agentLpo: primaryGuest.lpo || "",
+        nativeCountry: firstHotelNationality,
+      };
+
+      // Flat list of every guest captured across all hotels/rooms. The
+      // master guest (first room, first guest of the first hotel) IS the
+      // primary guest — we don't ship a duplicate entry for the lead
+      // traveller. The master row is tagged `primaryGuest: true` and
+      // carries the booking-owner contact info (email / phone /
+      // agentLpo / nativeCountry); every other row is `primaryGuest:
+      // false`. Total entries == real pax count (adults + children).
+      const flatGuests = [];
+      const firstHotelIdx = (cartData || []).findIndex(
+        (it) => it && it.hotel
+      );
+      (cartData || []).forEach((cartItem, hotelIdx) => {
+        if (!cartItem || !cartItem.hotel) return;
+        const hotel = cartItem.hotel || {};
+        const rooms = hotel.searchRoomDTOs || [];
+        rooms.forEach((room, roomIdx) => {
+          const guestKey = `${hotelIdx}-${roomIdx}`;
+          const guests = roomGuests[guestKey] || [];
+          guests.forEach((guest, guestIdx) => {
+            const isMaster =
+              hotelIdx === firstHotelIdx &&
+              roomIdx === 0 &&
+              guestIdx === 0;
+            const row = {
+              hotelIndex: hotelIdx,
+              roomIndex: roomIdx,
+              guestIndex: guestIdx,
+              primaryGuest: isMaster,
+              salutation: guest.salutation || "",
+              firstName: guest.firstName || "",
+              middleName: guest.middleName || "",
+              lastName: guest.lastName || "",
+              gender: guest.gender || "",
+              isChild: !!guest.isChild,
+              age: guest.age || "",
+            };
+            if (isMaster) {
+              row.email = primaryGuest.emailId || "";
+              row.phone = primaryGuest.contactNumber || "";
+              row.passportNo = primaryGuest.passportNumber || "";
+              row.nativeCountry = firstHotelNationality;
+              row.agentLpo = primaryGuest.lpo || "";
+            }
+            flatGuests.push(row);
+          });
+        });
+      });
+
       const v2Payload = {
         agentId: bookingPayload.agentId || null,
-        agentName:
-          sessionStorage.getItem("makePkgAgentName") ||
-          (typeof _custDTO.firstName === "string" ? _custDTO.firstName : ""),
+        agentName: sessionStorage.getItem("makePkgAgentName") || "",
         userId: bookingPayload.agentId || null,
-        salutation: _custDTO.salutation || _custDTO.salutaion || null,
-        customerFirstName: _custDTO.firstName || null,
-        customerLastName: _custDTO.lastName || null,
-        customerEmail: _custDTO.emailId || _custDTO.email || null,
-        customerPhone: _custDTO.mobileNumber || _custDTO.phone || null,
-        customerPassport: _custDTO.passportNo || null,
-        customerNationality: _custDTO.nationality || _custDTO.nativeCountry || null,
+        salutation: primaryGuest.salutation || null,
+        customerFirstName: primaryGuest.firstName || null,
+        customerLastName: primaryGuest.lastName || null,
+        customerEmail: primaryGuest.emailId || null,
+        customerPhone: primaryGuest.contactNumber || null,
+        customerPassport: primaryGuest.passportNumber || null,
+        customerNationality: firstHotelNationality || null,
+        agentLpo: primaryGuest.lpo || null,
         sellingPrice: bookingPayload.sellingPrice || null,
         totalPrice: bookingPayload.totalPrice || null,
         tourismDirham: bookingPayload.tourismDirham || null,
@@ -1295,27 +1360,73 @@ const MakePkgBookingPageV2 = () => {
           }
         })(),
         addOnServices: bookingPayload.addOnServices || null,
-        // Flatten cart data into per-type arrays. The v2 backend stores
-        // these as loose maps so the legacy shapes pass through.
-        hotels: Array.isArray(cartData)
-          ? cartData
-              .filter((it) => it && it.hotel)
-              .map((it) => it.hotel)
-          : [],
+        // Primary guest mirrors HotelBookingPage.jsx so the backend gets the
+        // same lead-traveller block it already knows how to persist.
+        primaryGuest: primaryGuestPayload,
+        // Hotels carry the per-room guests[] inline (same shape used by
+        // HotelBookingPage.jsx). Falls back to the raw cart shape for any
+        // hotel that doesn't have per-room guest entries yet.
+        hotels: (cartData || [])
+          .filter((it) => it && it.hotel)
+          .map((cartItem, hotelIdx) => {
+            const hotel = cartItem.hotel || {};
+            const searchRooms = hotel.searchRoomDTOs || [];
+            const rooms = searchRooms.map((room, roomIdx) => {
+              const guestKey = `${hotelIdx}-${roomIdx}`;
+              const guests = (roomGuests[guestKey] || []).map((guest) => ({
+                salutation: guest.salutation || "",
+                firstName: guest.firstName || "",
+                middleName: guest.middleName || "",
+                lastName: guest.lastName || "",
+                gender: guest.gender || "",
+                isChild: !!guest.isChild,
+                age: guest.age || "",
+              }));
+              return {
+                roomNo: roomIdx + 1,
+                adults: parseInt(room.adult || room.adults || 1) || 1,
+                children: parseInt(room.child || room.children || 0) || 0,
+                childAges: Array.isArray(room.childAge)
+                  ? room.childAge.map((a) => parseInt(a) || 0)
+                  : room.childAge
+                  ? [parseInt(room.childAge) || 0]
+                  : [],
+                guests,
+              };
+            });
+            return {
+              ...hotel,
+              rooms,
+              tourismDirhams:
+                parseFloat(hotelTourismDirhams[hotelIdx] || "0") || 0,
+              remarks: hotelRemarks[hotelIdx] || "",
+              specialRequests: hotelSpecialRequests[hotelIdx] || "",
+              bookingConfirmation:
+                hotelBookingConfirmation[hotelIdx] || "Book & Voucher",
+            };
+          }),
         cabs: Array.isArray(cartData)
-          ? cartData.filter((it) => it && it.cab).map((it) => it.cab)
+          ? cartData
+              .filter((it) => it && it.cab)
+              .map((it, idx) => {
+                const cab = it.cab || {};
+                const td = transferDetails[idx] || {};
+                return {
+                  ...cab,
+                  transporter: td.transporterName || cab.transporter || "",
+                  driverName: td.driverName || cab.driverName || "",
+                  driverContact: td.driverContact || cab.driverContact || "",
+                };
+              })
           : [],
         activities: Array.isArray(cartData)
           ? cartData
               .filter((it) => it && it.activity)
               .map((it) => it.activity)
           : [],
-        // Use whatever guest manifest the legacy payload assembled.
-        guests:
-          bookingPayload.customBookingActivityDTO &&
-          Array.isArray(bookingPayload.customBookingActivityDTO[0]?.activityCustomer)
-            ? bookingPayload.customBookingActivityDTO[0].activityCustomer
-            : [],
+        // Flat guest manifest — every traveller across every room, keyed by
+        // hotelIndex/roomIndex so the backend can rebuild the matrix.
+        guests: flatGuests,
       };
       console.log("Makepkg Booking payload (v2 shape):", v2Payload);
       const response = await axiosInstance.post(
@@ -1912,27 +2023,26 @@ const MakePkgBookingPageV2 = () => {
                               : hotelTotalPrice;
 
                           return (
-                            <Card
+                            <div
                               key={hotelIndex}
-                              className="mb-3 hotel-item-card"
+                              className="simple-section-row"
                             >
-                              <Card.Header className="hotel-section-header">
-                                <div className="d-flex align-items-center gap-2">
-                                  <FaBed className="text-primary" size={20} />
-                                  <h6 className="mb-0 fw-bold">
-                                    {hotels.length > 1
-                                      ? `Hotel ${hotelIndex + 1}: `
-                                      : ""}
-                                    {hotel.hotelName || "Hotel"}
-                                  </h6>
-                                </div>
-                              </Card.Header>
-                              <Card.Body>
-                                <div className="date-display">
-                                  <FaCalendarAlt className="text-primary me-2" />
-                                  <strong>Checkin :</strong>{" "}
-                                  {formatDate(checkIn)}{" "}
-                                  <strong className="ms-3">Checkout :</strong>{" "}
+                              <div className="simple-section-row-title">
+                                <FaBed className="text-primary me-2" />
+                                <span className="fw-bold">
+                                  {hotels.length > 1
+                                    ? `Hotel ${hotelIndex + 1}: `
+                                    : ""}
+                                  {hotel.hotelName || "Hotel"}
+                                </span>
+                              </div>
+                              <div className="simple-section-row-body">
+                                <div className="small mb-2">
+                                  <FaCalendarAlt className="text-primary me-1" />
+                                  <strong>Checkin:</strong>{" "}
+                                  {formatDate(checkIn)}
+                                  {" / "}
+                                  <strong>Checkout:</strong>{" "}
                                   {formatDate(checkOut)}
                                 </div>
 
@@ -2456,8 +2566,8 @@ const MakePkgBookingPageV2 = () => {
                                     />
                                   </div>
                                 </div>
-                              </Card.Body>
-                            </Card>
+                              </div>
+                            </div>
                           );
                         })}
                       </Accordion.Body>
@@ -2530,64 +2640,52 @@ const MakePkgBookingPageV2 = () => {
                           const activityDetail = activityDetails[actualIndex] || {};
 
                           return (
-                            <Card
+                            <div
                               key={activityIndex}
-                              className="mb-3 activity-item-card"
+                              className="simple-section-row"
                             >
-                              <Card.Header className="activity-header">
-                                <div className="d-flex align-items-center gap-2">
-                                  <FaTicketAlt
-                                    className="text-primary"
-                                    size={20}
-                                  />
-                                  <h6 className="mb-0 fw-bold">
-                                    {activities.length > 1
-                                      ? `Activity ${activityIndex + 1}: `
-                                      : ""}
-                                    {activityName}
-                                  </h6>
-                                </div>
-                              </Card.Header>
-                              <Card.Body>
-                                <div className="date-display">
-                                  <FaCalendarAlt className="text-primary me-2" />
-                                  <strong>Tour date:</strong>{" "}
-                                  {formatDate(activityDate)}
-                                </div>
-
-                                <div className="activity-info-summary mt-2 pt-2 border-top">
-                                  <Row className="g-3 align-items-end">
-                                    <Col xs={6} sm={3} md={2}>
-                                      <label className="text-muted small d-block mb-1">Adult Count</label>
-                                      <div className="fw-bold fs-6">{adult}</div>
-                                    </Col>
-                                    <Col xs={6} sm={3} md={2}>
-                                      <label className="text-muted small d-block mb-1">Child Count</label>
-                                      <div className="fw-bold fs-6">
-                                        {child}
-                                        {childAges.length > 0 && (
-                                          <span className="text-muted ms-1 small" style={{ fontSize: '0.75rem' }}>
-                                            ({childAges.join(', ')})
-                                          </span>
-                                        )}
-                                      </div>
-                                    </Col>
-                                    <Col xs={6} sm={3} md={4} className="text-sm-end">
-                                      <label className="text-muted small d-block mb-1">Selling Price</label>
-                                      <div className="text-success fw-bold fs-5">
-                                        <small className="me-1">AED</small>
-                                        {sellingPrice.toFixed(2)}
-                                      </div>
-                                    </Col>
-                                    <Col xs={6} sm={3} md={4} className="text-sm-end">
-                                      <label className="text-muted small d-block mb-1">Total Price</label>
-                                      <div className="text-primary fw-bold fs-5">
-                                        <small className="me-1">AED</small>
-                                        {totalPrice.toFixed(2)}
-                                      </div>
-                                    </Col>
-                                  </Row>
-                                </div>
+                              <div className="simple-section-row-title">
+                                <FaTicketAlt className="text-primary me-2" />
+                                <span className="fw-bold">
+                                  {activities.length > 1
+                                    ? `Activity ${activityIndex + 1}: `
+                                    : ""}
+                                  {activityName}
+                                </span>
+                              </div>
+                              <div className="simple-section-row-body">
+                                <Row className="g-2 align-items-center small">
+                                  <Col md={4}>
+                                    <FaCalendarAlt className="text-primary me-1" />
+                                    <strong>Tour date:</strong>{" "}
+                                    {formatDate(activityDate)}
+                                  </Col>
+                                  <Col md={2}>
+                                    <span className="text-muted">Adults: </span>
+                                    <strong>{adult}</strong>
+                                  </Col>
+                                  <Col md={2}>
+                                    <span className="text-muted">Children: </span>
+                                    <strong>{child}</strong>
+                                    {childAges.length > 0 && (
+                                      <span className="text-muted ms-1">
+                                        ({childAges.join(", ")})
+                                      </span>
+                                    )}
+                                  </Col>
+                                  <Col md={2} className="text-md-end">
+                                    <span className="text-muted">Selling: </span>
+                                    <strong className="text-success">
+                                      AED {sellingPrice.toFixed(2)}
+                                    </strong>
+                                  </Col>
+                                  <Col md={2} className="text-md-end">
+                                    <span className="text-muted">Total: </span>
+                                    <strong className="text-primary">
+                                      AED {totalPrice.toFixed(2)}
+                                    </strong>
+                                  </Col>
+                                </Row>
 
                                 {/* <div className="mb-3 p-3 bg-light rounded mt-3">
                                   <h6 className="mb-3 fw-bold text-primary">
@@ -2630,8 +2728,8 @@ const MakePkgBookingPageV2 = () => {
                                     </Col>
                                   </Row>
                                 </div> */}
-                              </Card.Body>
-                            </Card>
+                              </div>
+                            </div>
                           );
                         })}
                       </Accordion.Body>
@@ -2712,192 +2810,98 @@ const MakePkgBookingPageV2 = () => {
                           };
 
                           return (
-                            <Card
+                            <div
                               key={transferIndex}
-                              className="mb-3 transfer-item-card"
+                              className="simple-section-row"
                             >
-                              <Card.Header className="transfer-header">
-                                <div className="d-flex align-items-center gap-2">
-                                  <FaCar className="text-primary" size={20} />
-                                  <h6 className="mb-0 fw-bold">
-                                    {transfers.length > 1
-                                      ? `Transfer ${transferIndex + 1}: `
-                                      : ""}
-                                    {capacity
-                                      ? `${capacity} Seater`
-                                      : vehicleName}
-                                  </h6>
-                                </div>
-                              </Card.Header>
-                              <Card.Body>
-                                <div className="date-display">
-                                  <FaCalendarAlt className="text-primary me-2" />
-                                  <strong>Pickup date :</strong>{" "}
-                                  {formatDate(pickupDate)}{" "}
-                                  <strong className="ms-3">Drop date :</strong>{" "}
-                                  {formatDate(dropDate)}
-                                </div>
-
-                                {/* Transfer Option/Share type Table */}
-                                <Table
-                                  striped
-                                  bordered
-                                  hover
-                                  responsive
-                                  size="sm"
-                                  className="mb-3 transfer-table"
-                                >
-                                  <thead>
-                                    <tr>
-                                      <th>Transfer Option/Share type</th>
-                                      <th>Adult Count</th>
-                                      <th>Child Count</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    <tr>
-                                      <td>
-                                        {getTravelTypeLabel(travelType)} /{" "}
-                                        {shareType}
-                                      </td>
-                                      <td>{adult}</td>
-                                      <td>
-                                        {child}
-                                        {childAges.length > 0 &&
-                                          childAges.length === 1 && (
-                                            <small className="text-muted d-block">
-                                              {child} Child : {childAges[0]} Age
-                                            </small>
-                                          )}
-                                        {childAges.length > 1 && (
-                                          <small className="text-muted d-block">
-                                            {childAges.map((age, idx) => (
-                                              <span key={idx}>
-                                                {idx + 1} Child : {age} Age
-                                                {idx < childAges.length - 1
-                                                  ? ", "
-                                                  : ""}
-                                              </span>
-                                            ))}
-                                          </small>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  </tbody>
-                                </Table>
-
-                                {/* Transporter and Driver Details */}
-                                <div className="mb-3 p-3 bg-light rounded">
-                                  <h6 className="mb-3 fw-bold text-primary">
-                                    Transporter & Driver Details
-                                  </h6>
-                                  <Row className="g-3">
-                                    <Col md={6}>
-                                      <Form.Label>Transporter Name</Form.Label>
-                                      <Form.Control
-  type="text"
-  value={
-    transferDetails[transferIndex]?.transporterName !== undefined
-      ? transferDetails[transferIndex].transporterName
-      : primaryGuest.firstName || ""
-  }
-  onChange={(e) =>
-    setTransferDetails({
-      ...transferDetails,
-      [transferIndex]: {
-        ...transferDetail,
-        transporterName: e.target.value,
-      },
-    })
-  }
-  placeholder="Enter transporter name"
-/>
-                                    </Col>
-                                    <Col md={6}>
-                                      <Form.Label>Contact Number</Form.Label>
-                                      <Form.Control
-                                        type="text"
-                                        value={
-                                          transferDetail.contactNumber || ""
-                                        }
-                                        onChange={(e) =>
-                                          setTransferDetails({
-                                            ...transferDetails,
-                                            [transferIndex]: {
-                                              ...transferDetail,
-                                              contactNumber: e.target.value,
-                                            },
-                                          })
-                                        }
-                                        placeholder="Enter contact number"
-                                      />
-                                    </Col>
-                                    {/* <Col md={6}>
-                                      <Form.Label>Driver Name</Form.Label>
-                                      <Form.Control
-                                        type="text"
-                                        value={transferDetail.driverName || ""}
-                                        onChange={(e) =>
-                                          setTransferDetails({
-                                            ...transferDetails,
-                                            [transferIndex]: {
-                                              ...transferDetail,
-                                              driverName: e.target.value,
-                                            },
-                                          })
-                                        }
-                                        placeholder="Enter driver name"
-                                      />
-                                    </Col>
-                                    <Col md={6}>
-                                      <Form.Label>Driver Contact</Form.Label>
-                                      <Form.Control
-                                        type="text"
-                                        value={
-                                          transferDetail.driverContact || ""
-                                        }
-                                        onChange={(e) =>
-                                          setTransferDetails({
-                                            ...transferDetails,
-                                            [transferIndex]: {
-                                              ...transferDetail,
-                                              driverContact: e.target.value,
-                                            },
-                                          })
-                                        }
-                                        placeholder="Enter driver contact"
-                                      />
-                                    </Col> */}
-                                  </Row>
-                                </div>
-
-                                {/* Selling Price and Total Price */}
-                                <Row className="g-3">
-                                  <Col md={6}>
-                                    <div className="d-flex align-items-center justify-content-between">
-                                      <strong>Selling Price</strong>
-                                      <div className="d-flex align-items-center gap-2">
-                                        <span className="text-success fw-bold">
-                                          {sellingPrice.toFixed(2)}
-                                        </span>
-                                        <FaEdit className="text-success edit-icon" />
-                                      </div>
-                                    </div>
+                              <div className="simple-section-row-title">
+                                <FaCar className="text-primary me-2" />
+                                <span className="fw-bold">
+                                  {transfers.length > 1
+                                    ? `Transfer ${transferIndex + 1}: `
+                                    : ""}
+                                  {capacity
+                                    ? `${capacity} Seater`
+                                    : vehicleName}
+                                </span>
+                              </div>
+                              <div className="simple-section-row-body">
+                                <Row className="g-2 align-items-center small mb-2">
+                                  <Col md={4}>
+                                    <FaCalendarAlt className="text-primary me-1" />
+                                    <strong>Pickup:</strong>{" "}
+                                    {formatDate(pickupDate)}
+                                    {" / "}
+                                    <strong>Drop:</strong>{" "}
+                                    {formatDate(dropDate)}
                                   </Col>
-                                  <Col md={6}>
-                                    <div className="d-flex align-items-center justify-content-between">
-                                      <strong>Total Price</strong>
-                                      <div className="d-flex align-items-center gap-2">
-                                        <span className="text-primary fw-bold">
-                                          {totalPrice.toFixed(2)}
-                                        </span>
-                                        <FaEdit className="text-success edit-icon" />
-                                      </div>
-                                    </div>
+                                  <Col md={3}>
+                                    <span className="text-muted">Type: </span>
+                                    <strong>
+                                      {getTravelTypeLabel(travelType)} /{" "}
+                                      {shareType}
+                                    </strong>
+                                  </Col>
+                                  <Col md={2}>
+                                    <span className="text-muted">Adults: </span>
+                                    <strong>{adult}</strong>
+                                  </Col>
+                                  <Col md={3}>
+                                    <span className="text-muted">Children: </span>
+                                    <strong>{child}</strong>
+                                    {childAges.length > 0 && (
+                                      <span className="text-muted ms-1">
+                                        ({childAges.join(", ")})
+                                      </span>
+                                    )}
                                   </Col>
                                 </Row>
-                              </Card.Body>
-                            </Card>
+                                <Row className="g-2 align-items-end mb-2">
+                                  <Col md={6}>
+                                    <Form.Label className="small mb-1">
+                                      Transporter Name
+                                    </Form.Label>
+                                    <Form.Control
+                                      size="sm"
+                                      type="text"
+                                      value={
+                                        transferDetails[transferIndex]
+                                          ?.transporterName !== undefined
+                                          ? transferDetails[transferIndex]
+                                              .transporterName
+                                          : primaryGuest.firstName || ""
+                                      }
+                                      onChange={(e) =>
+                                        setTransferDetails({
+                                          ...transferDetails,
+                                          [transferIndex]: {
+                                            ...transferDetail,
+                                            transporterName: e.target.value,
+                                          },
+                                        })
+                                      }
+                                      placeholder="Enter transporter name"
+                                    />
+                                  </Col>
+                                  <Col md={3} className="text-md-end">
+                                    <span className="text-muted small">
+                                      Selling:{" "}
+                                    </span>
+                                    <strong className="text-success">
+                                      AED {sellingPrice.toFixed(2)}
+                                    </strong>
+                                  </Col>
+                                  <Col md={3} className="text-md-end">
+                                    <span className="text-muted small">
+                                      Total:{" "}
+                                    </span>
+                                    <strong className="text-primary">
+                                      AED {totalPrice.toFixed(2)}
+                                    </strong>
+                                  </Col>
+                                </Row>
+                              </div>
+                            </div>
                           );
                         })}
                       </Accordion.Body>
@@ -2913,13 +2917,7 @@ const MakePkgBookingPageV2 = () => {
 
                   {/* Guest Details Section - Always Open */}
                   <Accordion.Item eventKey="5" className="mb-2">
-                    <Accordion.Header
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      style={{ cursor: "default" }}
-                    >
+                    <Accordion.Header>
                       <h5 className="mb-0 fw-bold">Guest Details</h5>
                     </Accordion.Header>
                     <Accordion.Body>

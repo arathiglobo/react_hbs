@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
+import RegionalClock from "../../components/RegionalClock";
 import { formatDateTime } from "../../utils/dateUtils";
 
 const Tile = ({ title, value, hint, link, color = "primary" }) => (
@@ -69,6 +70,11 @@ export default function AiDashboard() {
       <div className="flex-grow-1">
         <Topbar />
         <div className="p-4">
+          {/* Regional date+time chip — top of the page so it's visible
+              regardless of how much KPI content scrolls below. */}
+          <div className="d-flex justify-content-end mb-3">
+            <RegionalClock />
+          </div>
           <h4 className="mb-1">AI Insights</h4>
           <p className="text-muted">
             Forward-looking demand, agent behavior, and risk signals — plus high-value

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Card, Button, Table, ProgressBar, Spinner, Form, Modal } from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
+import RegionalClock from "../../components/RegionalClock";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
@@ -136,6 +137,11 @@ export default function AgentIncentiveDashboard() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
+          {/* Regional date+time chip — uses the logged-in user's
+              registered country's timezone. */}
+          <div className="d-flex justify-content-end mb-3">
+            <RegionalClock />
+          </div>
           <Card className="shadow-sm rounded-xl mb-3">
             <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <span className="fw-semibold">My Incentives</span>

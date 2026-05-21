@@ -13,6 +13,7 @@ import {
 } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
+import RegionalClock from "../components/RegionalClock";
 import axiosInstance from "../components/AxiosInstance";
 
 const bookingsLabels = ["Aug 1", "Aug 2", "Aug 3", "Aug 4", "Aug 5"];
@@ -129,6 +130,31 @@ export default function AgentDashboard() {
         </div> */}
 
           <Container fluid>
+            {/* Regional date+time chip — uses the agent's registered
+                country's timezone (resolved server-side via
+                /api/personalProfile). Falls back to browser TZ when
+                the profile has no country. */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "28px",
+              gap: "16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h1 style={{ fontSize: "20px", fontWeight: 600, color: "#111827", margin: 0 }}>
+                Agent Dashboard
+              </h1>
+              <p style={{ fontSize: "13.5px", color: "#6B7280", marginTop: "4px", marginBottom: 0 }}>
+                Welcome back. Here's what's happening today.
+              </p>
+            </div>
+            <RegionalClock />
+          </div>
+
             {/* Credit summary (left) and Quick Access (right) */}
             <Row className="g-4 mb-4">
               <Col lg={7}>

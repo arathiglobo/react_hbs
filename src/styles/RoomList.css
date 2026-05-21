@@ -34,8 +34,14 @@
   transform: rotate(180deg);
 }
 
-/* 🔥 Remove default accordion arrow */
-.accordion-button::after {
+/* 🔥 Remove default accordion arrow — scoped to the RoomList page only.
+   Originally this rule was unscoped, which killed the chevron on every
+   Bootstrap accordion across the entire app (e.g. the make-your-own
+   package v2 booking page). It is only needed here because RoomList
+   renders its own `.accordion-arrow` icon instead of the default. */
+.toproomlist .accordion-button::after,
+.room-category-header.accordion-button::after,
+.room-category-header .accordion-button::after {
   display: none !important;
 }
 
