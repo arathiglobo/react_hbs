@@ -237,7 +237,7 @@ const MakeYourOwnPackageV2BookingList = () => {
             >
               <Card.Body className="d-flex justify-content-between align-items-center">
                 <h3 className="fw-bold text-dark mb-0">
-                  Make Your Own Package (v2) — Bookings
+                  Make Your Own Package Bookings
                 </h3>
                 <div className="d-flex gap-2 align-items-center">
                   <InputGroup style={{ width: 300 }}>

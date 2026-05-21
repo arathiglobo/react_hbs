@@ -19,6 +19,8 @@ import {
   ImagePlus,
   Dot,
   Utensils,
+  Trophy,
+  Award,
 } from "lucide-react";
 import { FaBrain, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
@@ -210,6 +212,7 @@ export default function Sidebar() {
         { label: "Supplier", to: "/registration/supplier" },
         { label: "Restaurants", to: "/restaurant/list" },
         { label: "Honeymoon Packages", to: "/honeymoon/list" },
+        { label: "Ayurveda", to: "/registration/ayurveda" },
         { label: "Scheffer Driver and Limousine", to: "/registration/schefferDriver" },
       ],
     },
@@ -273,6 +276,11 @@ export default function Sidebar() {
         {
           label: "Government Employee",
           to: "/new-booking/gov-employee",
+        },
+        // Ayurveda — packages, doctor consultations, courses
+        {
+          label: "Ayurveda",
+          to: "/new-booking/ayurveda",
         },
         {
           label: "Student Booking",
@@ -371,6 +379,10 @@ export default function Sidebar() {
         {
           label: "Government Employee Booking",
           to: "/booking-details/gov-employee-booking-list",
+        },
+        {
+          label: "Ayurveda Booking",
+          to: "/booking-details/ayurveda-booking-list",
         },
         {
           label: "Student Booking",
@@ -495,6 +507,27 @@ export default function Sidebar() {
         },
       ],
     },
+
+    // Agent Incentive Module — admin manages rules + reviews claims;
+    // agents see their points dashboard and claim history.
+    {
+      label: "Agent Incentive",
+      roles: ["admin"],
+      children: [
+        { label: "Configuration", to: "/incentive/config" },
+        { label: "Agent Summary", to: "/incentive/my-incentives" },
+        { label: "Claims", to: "/incentive/claims" },
+      ],
+    },
+    {
+      label: "My Incentives",
+      roles: ["agent"],
+      children: [
+        { label: "Dashboard", to: "/incentive/my-incentives" },
+        { label: "My Claims", to: "/incentive/claims" },
+      ],
+    },
+
     {
       label: "Offer",
       to: "/offer",
@@ -969,6 +1002,12 @@ function getIcon(label) {
 
     case "Gallery":
       return <FaImages {...iconProps} />;
+    
+    case "Agent Incentive":
+      return <Trophy {...iconProps} />;
+
+    case "My Incentives":
+      return <Award {...iconProps} />;
 
     default:
       return <Dot {...iconProps} />;
