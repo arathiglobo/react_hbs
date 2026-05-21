@@ -21,6 +21,10 @@ import {
   FaEdit,
   FaFileInvoice,
   FaSyncAlt,
+  FaRupeeSign,
+  FaDownload,
+  FaEnvelope,
+  FaPrint,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -53,14 +57,28 @@ const RestaurantBookingList = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
-  // The booking that's having its status edited via the modal.
+  // The booking that's having its status / rate edited via the modal.
+  // We keep a single modal so the operator can flip status + set price
+  // in one round-trip. Opening with `focus: "rate"` jumps the price
+  // field into view when launched from the Edit Price button.
   const [statusEditing, setStatusEditing] = useState(null);
   const [statusForm, setStatusForm] = useState({
     bookingStatus: "",
     paymentStatus: "",
+    totalAmount: "",
     note: "",
   });
   const [statusSaving, setStatusSaving] = useState(false);
+  const [statusFocus, setStatusFocus] = useState("status"); // "status" | "rate"
+
+  // Voucher modal — opened from the FaFileInvoice action button.
+  // `voucherBooking` is the booking the modal is showing; null = closed.
+  // `voucherEmail` pre-fills the send-email input from the customer record.
+  // `voucherSending` blocks the buttons while the email API call runs.
+  const [voucherBooking, setVoucherBooking] = useState(null);
+  const [voucherEmail, setVoucherEmail] = useState("");
+  const [voucherSending, setVoucherSending] = useState(false);
+  const [voucherDownloading, setVoucherDownloading] = useState(false);
 
   const fetchList = async () => {
     setLoading(true);
@@ -122,58 +140,169 @@ const RestaurantBookingList = () => {
     });
   };
 
-  /** Voucher → backend stub returns metadata for now. We just hit the
-   *  endpoint and show a toast / preview blob. When the PDF endpoint
-   *  lands, swap the toast for a window.open of the returned URL. */
-  const handleVoucher = async (b) => {
+  /** Voucher button → open the voucher modal with the booking pre-loaded.
+   *  The modal renders a preview, plus Download (PDF) and Send (email)
+   *  actions wired to the backend voucher endpoints. */
+  const handleVoucher = (b) => {
+    setVoucherBooking(b);
+    setVoucherEmail(b.customerEmail || b.email || "");
+  };
+
+  /** Download voucher as PDF. Hits the backend voucher endpoint with
+   *  `responseType: blob` so the browser saves the binary instead of
+   *  parsing it as JSON. Falls back to a JSON-derived blob if the
+   *  endpoint returns metadata only (stub backend). */
+  const downloadVoucher = async () => {
+    if (!voucherBooking) return;
+    setVoucherDownloading(true);
     try {
       const res = await axiosInstance.get(
-        `/api/restaurant/booking/${b.id}/voucher`
+        `/api/restaurant/booking/${voucherBooking.id}/voucher`,
+        { responseType: "blob" }
       );
-      // If/when the backend starts returning a binary PDF, swap to a
-      // window.open(res.data.url) here.
-      Swal.fire({
-        icon: "info",
-        title: `Voucher — ${b.bookingNumber}`,
-        html:
-          `<div class="text-start">` +
-          `Booking: <strong>${res.data?.bookingNumber || b.bookingNumber}</strong><br/>` +
-          `Restaurant: ${res.data?.restaurantName || b.restaurantName}<br/>` +
-          `Customer: ${res.data?.customerName || b.customerName}<br/>` +
-          `Total: ₹ ${Number(res.data?.totalAmount || b.totalAmount || 0).toFixed(2)}<br/><br/>` +
-          `<em>${res.data?.message || "Voucher PDF is being generated…"}</em>` +
-          `</div>`,
-        confirmButtonText: "OK",
+      // Detect whether the server returned a real PDF or a JSON stub.
+      const ct = res.headers?.["content-type"] || "";
+      const filename = `voucher-${voucherBooking.bookingNumber || voucherBooking.id}.${
+        ct.includes("pdf") ? "pdf" : "json"
+      }`;
+      const blob = new Blob([res.data], {
+        type: ct || "application/octet-stream",
       });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Voucher downloaded");
     } catch (e) {
-      toast.error("Failed to fetch voucher details");
+      toast.error(
+        e?.response?.data?.message || "Failed to download voucher"
+      );
+    } finally {
+      setVoucherDownloading(false);
     }
   };
 
-  /** Open the status edit modal with the booking's current values. */
-  const openStatusEdit = (b) => {
+  /** Send voucher via email. Backend is expected to email the PDF to the
+   *  given address; we pass the booking id + recipient. */
+  const sendVoucherEmail = async () => {
+    if (!voucherBooking) return;
+    if (!voucherEmail || !/\S+@\S+\.\S+/.test(voucherEmail)) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    setVoucherSending(true);
+    try {
+      await axiosInstance.post(
+        `/api/restaurant/booking/${voucherBooking.id}/voucher/send`,
+        { email: voucherEmail }
+      );
+      toast.success(`Voucher sent to ${voucherEmail}`);
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.message || "Failed to send voucher email"
+      );
+    } finally {
+      setVoucherSending(false);
+    }
+  };
+
+  /** Print the voucher preview (browser-native — opens the print dialog
+   *  scoped to the voucher card). */
+  const printVoucher = () => {
+    const node = document.getElementById("voucher-print-area");
+    if (!node) return;
+    const w = window.open("", "_blank", "width=800,height=900");
+    if (!w) return;
+    w.document.write(`
+      <html><head><title>Voucher</title>
+      <style>
+        body { font-family: system-ui, sans-serif; padding: 24px; color: #1f2937; }
+        h2 { margin-top: 0; }
+        .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e5e7eb; }
+        .label { color: #6b7280; }
+        .total { font-size: 1.2rem; font-weight: 700; margin-top: 12px; }
+        .muted { color: #6b7280; font-style: italic; }
+        .header { border-bottom: 2px solid #6366f1; padding-bottom: 8px; margin-bottom: 16px; }
+      </style></head>
+      <body>${node.innerHTML}</body></html>
+    `);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  /** Open the status edit modal with the booking's current values.
+   *  `focus` controls which subsection auto-scrolls in: "status" for
+   *  the status badge / FaSyncAlt button, "rate" for the FaRupeeSign
+   *  "Edit Price" button. */
+  const openStatusEdit = (b, focus = "status") => {
     setStatusEditing(b);
     setStatusForm({
       bookingStatus: b.bookingStatus || "Pending Approval",
       paymentStatus: b.paymentStatus || "Not Paid",
+      // Price set later by the operator (the booking page no longer
+      // collects it). Existing bookings might already have one — load it.
+      totalAmount:
+        b.totalAmount != null && b.totalAmount !== ""
+          ? String(b.totalAmount)
+          : "",
       note: "",
     });
+    setStatusFocus(focus);
   };
 
-  /** PUT /api/restaurant/booking/{id}/status with the new values. */
+  /** PUT /api/restaurant/booking/{id}/status with the new values.
+   *  Includes `totalAmount` so the same call updates the rate too.
+   *  If the backend has a dedicated rate endpoint we fall back to it. */
   const submitStatus = async () => {
     if (!statusEditing) return;
+    // Validate rate if provided.
+    if (
+      statusForm.totalAmount !== "" &&
+      (isNaN(Number(statusForm.totalAmount)) || Number(statusForm.totalAmount) < 0)
+    ) {
+      toast.error("Price must be a positive number");
+      return;
+    }
     setStatusSaving(true);
     try {
-      await axiosInstance.put(
-        `/api/restaurant/booking/${statusEditing.id}/status`,
-        statusForm
-      );
-      toast.success("Status updated");
+      const payload = {
+        ...statusForm,
+        totalAmount:
+          statusForm.totalAmount === "" ? null : Number(statusForm.totalAmount),
+      };
+      try {
+        await axiosInstance.put(
+          `/api/restaurant/booking/${statusEditing.id}/status`,
+          payload
+        );
+      } catch (firstErr) {
+        // Best-effort fallback: if the server doesn't accept the rate on
+        // the status endpoint, push the rate separately.
+        if (payload.totalAmount != null) {
+          await axiosInstance.put(
+            `/api/restaurant/booking/${statusEditing.id}/rate`,
+            { totalAmount: payload.totalAmount }
+          );
+          // re-try the status update without the rate
+          const { totalAmount, ...rest } = payload;
+          await axiosInstance.put(
+            `/api/restaurant/booking/${statusEditing.id}/status`,
+            rest
+          );
+        } else {
+          throw firstErr;
+        }
+      }
+      toast.success("Booking updated");
       setStatusEditing(null);
       fetchList();
     } catch (e) {
-      toast.error(e?.response?.data?.message || "Failed to update status");
+      toast.error(e?.response?.data?.message || "Failed to update booking");
     } finally {
       setStatusSaving(false);
     }
@@ -283,7 +412,24 @@ const RestaurantBookingList = () => {
                         <td>{b.memberCount}</td>
                         <td>{b.customerName}</td>
                         <td>{b.mobile}</td>
-                        <td>₹ {Number(b.totalAmount || 0).toFixed(2)}</td>
+                        <td>
+                          {b.totalAmount != null && Number(b.totalAmount) > 0 ? (
+                            <span className="fw-semibold">
+                              ₹ {Number(b.totalAmount).toFixed(2)}
+                            </span>
+                          ) : (
+                            <Badge
+                              bg="light"
+                              text="warning"
+                              className="border border-warning"
+                              style={{ cursor: "pointer" }}
+                              onClick={() => openStatusEdit(b, "rate")}
+                              title="Click to add price"
+                            >
+                              + Add price
+                            </Badge>
+                          )}
+                        </td>
                         <td>
                           {/* Status badge doubles as a "click-to-edit" button
                               — operators commonly need to flip Pending →
@@ -332,10 +478,23 @@ const RestaurantBookingList = () => {
                             size="sm"
                             variant="outline-warning"
                             className="me-1"
-                            onClick={() => openStatusEdit(b)}
+                            onClick={() => openStatusEdit(b, "status")}
                             title="Update Status"
                           >
                             <FaSyncAlt />
+                          </Button>
+                          {/* Edit price — opens the same modal with the
+                              rate field focused. Booking page no longer
+                              collects price; this is the only place to
+                              add / update it. */}
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            className="me-1"
+                            onClick={() => openStatusEdit(b, "rate")}
+                            title={b.totalAmount ? "Update Price" : "Add Price"}
+                          >
+                            <FaRupeeSign />
                           </Button>
                           {/* Voucher */}
                           <Button
@@ -440,14 +599,23 @@ const RestaurantBookingList = () => {
                 </Table>
               )}
               <div className="text-end mt-2">
-                <strong>Grand Total: ₹ {Number(selected.totalAmount || 0).toFixed(2)}</strong>
+                {selected.totalAmount != null && Number(selected.totalAmount) > 0 ? (
+                  <strong>
+                    Grand Total: ₹ {Number(selected.totalAmount).toFixed(2)}
+                  </strong>
+                ) : (
+                  <span className="text-muted fst-italic">
+                    Price not set yet — add it from the bookings list.
+                  </span>
+                )}
               </div>
             </>
           )}
         </Modal.Body>
       </Modal>
 
-      {/* Status update modal — booking + payment status with a free-form note */}
+      {/* Status + Rate update modal — booking + payment status, total
+          amount, and a free-form note. One submit pushes all three. */}
       <Modal
         show={!!statusEditing}
         onHide={() => setStatusEditing(null)}
@@ -456,7 +624,9 @@ const RestaurantBookingList = () => {
       >
         <Modal.Header closeButton>
           <Modal.Title>
-            Update Status — {statusEditing?.bookingNumber}
+            {statusFocus === "rate" ? "Update Price" : "Update Booking"}
+            {" — "}
+            {statusEditing?.bookingNumber}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -488,6 +658,35 @@ const RestaurantBookingList = () => {
               </Form.Select>
             </Col>
             <Col md={12}>
+              <Form.Label className="d-flex align-items-center">
+                <FaRupeeSign className="me-1 text-success" />
+                Total Amount (Price)
+                {statusFocus === "rate" && (
+                  <Badge bg="warning" text="dark" className="ms-2">
+                    Focus
+                  </Badge>
+                )}
+              </Form.Label>
+              <InputGroup>
+                <InputGroup.Text>₹</InputGroup.Text>
+                <Form.Control
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="e.g. 1500.00"
+                  autoFocus={statusFocus === "rate"}
+                  value={statusForm.totalAmount}
+                  onChange={(e) =>
+                    setStatusForm((p) => ({ ...p, totalAmount: e.target.value }))
+                  }
+                />
+              </InputGroup>
+              <Form.Text muted>
+                Booking page no longer collects a price — add or update
+                it here once the restaurant confirms.
+              </Form.Text>
+            </Col>
+            <Col md={12}>
               <Form.Label>Note (optional)</Form.Label>
               <Form.Control
                 as="textarea"
@@ -510,8 +709,183 @@ const RestaurantBookingList = () => {
             Close
           </Button>
           <Button variant="primary" onClick={submitStatus} disabled={statusSaving}>
-            {statusSaving ? "Saving..." : "Save Status"}
+            {statusSaving ? "Saving..." : "Save"}
           </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Voucher view modal ──
+          Shows a printable voucher preview for the selected booking,
+          plus three actions:
+            • Download — pulls the PDF from the backend voucher endpoint.
+            • Print    — opens the browser print dialog scoped to the
+                         preview card (great for in-house copies).
+            • Send     — emails the voucher to the typed recipient. */}
+      <Modal
+        show={!!voucherBooking}
+        onHide={() => !voucherSending && setVoucherBooking(null)}
+        size="lg"
+        centered
+      >
+        <Modal.Header closeButton={!voucherSending}>
+          <Modal.Title>
+            <FaFileInvoice className="me-2 text-success" />
+            Voucher — {voucherBooking?.bookingNumber}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {voucherBooking && (
+            <div
+              id="voucher-print-area"
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: 12,
+                padding: 20,
+                background: "#fff",
+              }}
+            >
+              <div className="header d-flex justify-content-between align-items-start">
+                <div>
+                  <h2 className="m-0" style={{ fontSize: "1.4rem" }}>
+                    Restaurant Booking Voucher
+                  </h2>
+                  <div className="text-muted small">
+                    Booking #{voucherBooking.bookingNumber}
+                  </div>
+                </div>
+                <Badge
+                  bg={statusVariant(voucherBooking.bookingStatus)}
+                  className="px-3 py-2"
+                >
+                  {voucherBooking.bookingStatus || "Pending Approval"}
+                </Badge>
+              </div>
+
+              <div className="mt-3">
+                <div className="row">
+                  <span className="label">Restaurant</span>
+                  <span className="fw-semibold">{voucherBooking.restaurantName}</span>
+                </div>
+                <div className="row">
+                  <span className="label">Date / Time</span>
+                  <span className="fw-semibold">
+                    {voucherBooking.bookingDate}
+                    {voucherBooking.bookingTime ? ` · ${voucherBooking.bookingTime}` : ""}
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="label">Members</span>
+                  <span className="fw-semibold">{voucherBooking.memberCount}</span>
+                </div>
+                <div className="row">
+                  <span className="label">Customer</span>
+                  <span className="fw-semibold">
+                    {voucherBooking.customerName}
+                    {voucherBooking.mobile ? ` · ${voucherBooking.mobile}` : ""}
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="label">Agent</span>
+                  <span className="fw-semibold">{voucherBooking.agentName || "—"}</span>
+                </div>
+                <div className="row">
+                  <span className="label">Meal / Seating</span>
+                  <span className="fw-semibold">
+                    {voucherBooking.mealType || "—"} ·{" "}
+                    {voucherBooking.seatingPreference || "—"}
+                  </span>
+                </div>
+                {voucherBooking.specialRequest && (
+                  <div className="row">
+                    <span className="label">Special Request</span>
+                    <span className="fw-semibold">{voucherBooking.specialRequest}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="total text-end mt-3">
+                {voucherBooking.totalAmount != null &&
+                Number(voucherBooking.totalAmount) > 0 ? (
+                  <>Total: ₹ {Number(voucherBooking.totalAmount).toFixed(2)}</>
+                ) : (
+                  <span className="muted" style={{ fontSize: "0.9rem" }}>
+                    Price not set yet — add it from the bookings list.
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Send-voucher email input */}
+          <div className="mt-3">
+            <Form.Label className="fw-semibold">
+              <FaEnvelope className="me-1 text-primary" />
+              Send voucher to
+            </Form.Label>
+            <InputGroup>
+              <Form.Control
+                type="email"
+                placeholder="customer@example.com"
+                value={voucherEmail}
+                onChange={(e) => setVoucherEmail(e.target.value)}
+                disabled={voucherSending}
+              />
+              <Button
+                variant="primary"
+                onClick={sendVoucherEmail}
+                disabled={voucherSending || !voucherEmail}
+              >
+                {voucherSending ? (
+                  <>
+                    <Spinner size="sm" animation="border" className="me-1" />
+                    Sending…
+                  </>
+                ) : (
+                  <>
+                    <FaEnvelope className="me-1" />
+                    Send
+                  </>
+                )}
+              </Button>
+            </InputGroup>
+            <Form.Text muted>
+              Sends the voucher PDF to this email address.
+            </Form.Text>
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="d-flex justify-content-between">
+          <Button
+            variant="outline-secondary"
+            onClick={printVoucher}
+            disabled={voucherSending || voucherDownloading}
+          >
+            <FaPrint className="me-1" /> Print
+          </Button>
+          <div className="d-flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setVoucherBooking(null)}
+              disabled={voucherSending || voucherDownloading}
+            >
+              Close
+            </Button>
+            <Button
+              variant="success"
+              onClick={downloadVoucher}
+              disabled={voucherSending || voucherDownloading}
+            >
+              {voucherDownloading ? (
+                <>
+                  <Spinner size="sm" animation="border" className="me-1" />
+                  Downloading…
+                </>
+              ) : (
+                <>
+                  <FaDownload className="me-1" /> Download PDF
+                </>
+              )}
+            </Button>
+          </div>
         </Modal.Footer>
       </Modal>
     </div>

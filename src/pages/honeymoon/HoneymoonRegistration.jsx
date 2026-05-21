@@ -59,6 +59,64 @@ const parseList = (raw) => {
   return [String(raw)];
 };
 
+// Honeymoon add-on services are now FREE-FORM per package — the agent
+// declares the list of add-ons offered with this package right here
+// (just the names). Prices are set later on the Package Rates page,
+// and the Booking page only surfaces add-ons that ended up with a
+// non-zero rate.
+//
+// Each entry has a stable `key` (slug) plus a human label. Storage key
+// per package: `honeymoon_addons_<packageId>` → { addOns: [{key,label,price}] }.
+
+// Lowercase-slug from a label, used as a stable key. Falls back to a
+// timestamp if the label is empty so collisions don't break list keys.
+const slugifyAddOn = (label) => {
+  const s = String(label || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s || `addon-${Date.now().toString(36)}`;
+};
+
+// Ensure unique keys in case two labels slugify to the same thing.
+const uniquifyKey = (key, used) => {
+  if (!used.has(key)) {
+    used.add(key);
+    return key;
+  }
+  let i = 2;
+  while (used.has(`${key}-${i}`)) i++;
+  const k = `${key}-${i}`;
+  used.add(k);
+  return k;
+};
+
+// localStorage key per package — client-side fallback so the rates
+// survive across pages even if the backend hasn't been extended to
+// persist the `addOns` payload yet.
+const addonsStorageKey = (packageId) =>
+  packageId ? `honeymoon_addons_${packageId}` : null;
+
+// Normalise an incoming list into [{key,label,price}] with unique keys.
+const normaliseAddOns = (incoming) => {
+  if (!Array.isArray(incoming)) return [];
+  const used = new Set();
+  return incoming
+    .map((a) => {
+      const label = String(a?.label || "").trim();
+      if (!label) return null;
+      const baseKey = a?.key && String(a.key).trim()
+        ? String(a.key).trim()
+        : slugifyAddOn(label);
+      return {
+        key: uniquifyKey(baseKey, used),
+        label,
+        price: Number(a?.price) || 0,
+      };
+    })
+    .filter(Boolean);
+};
+
 const initialState = {
   packageName: "",
   packageCode: "",
@@ -113,6 +171,13 @@ const HoneymoonRegistration = () => {
   const [cancellationPolicies, setCancellationPolicies] = useState([""]);
   const [dateChangePolicies, setDateChangePolicies] = useState([""]);
   const [termsAndConditions, setTermsAndConditions] = useState([""]);
+
+  // Per-package add-on services (free-form names). Agent types whatever
+  // add-on names this package offers. Prices are set later on the
+  // Package Rates page (/honeymoon/package-rates/:id) and only those
+  // with a non-zero rate appear at booking time.
+  // Stored shape: [{ key, label, price }]. price stays 0 here.
+  const [addOns, setAddOns] = useState([{ key: slugifyAddOn(""), label: "", price: 0 }]);
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -295,6 +360,29 @@ const HoneymoonRegistration = () => {
         setCancellationPolicies(parseList(d.cancellationPolicy));
         setDateChangePolicies(parseList(d.dateChangePolicy));
         setTermsAndConditions(parseList(d.termsAndConditions));
+
+        // Add-on services (free-form). Prefer the server-side `addOns`,
+        // fall back to a localStorage cache, finally fall back to a
+        // single empty row so the agent can type.
+        let storedAddOns = null;
+        try {
+          const raw = localStorage.getItem(addonsStorageKey(id));
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed?.addOns)) storedAddOns = parsed.addOns;
+          }
+        } catch {
+          /* ignore — quota / private-mode */
+        }
+        const source = Array.isArray(d.addOns) && d.addOns.length
+          ? d.addOns
+          : storedAddOns;
+        const normalised = normaliseAddOns(source);
+        setAddOns(
+          normalised.length
+            ? normalised
+            : [{ key: slugifyAddOn(""), label: "", price: 0 }]
+        );
       } catch {
         toast.error("Failed to load package");
       }
@@ -493,6 +581,14 @@ const HoneymoonRegistration = () => {
         cancellationPolicy: serialiseList(cancellationPolicies),
         dateChangePolicy: serialiseList(dateChangePolicies),
         termsAndConditions: serialiseList(termsAndConditions),
+        // Per-package add-on service NAMES (free-form). Rates aren't set
+        // here — they're entered on the Package Rates page and the
+        // Booking screen only surfaces add-ons whose rate ends up
+        // non-zero. We still ship a `price: 0` placeholder so the
+        // shape stays stable for the rates page that reads this list.
+        addOns: normaliseAddOns(
+          addOns.filter((a) => (a.label || "").trim())
+        ),
         status: formData.status,
         itinerary: days
           .filter((d) => d.heading || d.activities || d.place || d.placeOption)
@@ -522,7 +618,28 @@ const HoneymoonRegistration = () => {
 
       const url = isEdit ? `/api/honeymoon/${id}` : "/api/honeymoon/save";
       const method = isEdit ? "put" : "post";
-      await axiosInstance({ method, url, data: fd });
+      const saveRes = await axiosInstance({ method, url, data: fd });
+
+      // Mirror the add-on rates to localStorage keyed by package id so
+      // the Booking screen can read them even if the backend hasn't been
+      // extended yet to round-trip the `addOns` field.
+      const savedId =
+        id ||
+        saveRes?.data?.id ||
+        saveRes?.data?.packageId ||
+        saveRes?.data?.honeymoonPackageId ||
+        saveRes?.data?.data?.id ||
+        null;
+      if (savedId) {
+        try {
+          localStorage.setItem(
+            addonsStorageKey(savedId),
+            JSON.stringify({ addOns: data.addOns })
+          );
+        } catch {
+          /* ignore — quota / private-mode */
+        }
+      }
 
       await Swal.fire({
         icon: "success",
@@ -1028,6 +1145,71 @@ const HoneymoonRegistration = () => {
                       ))}
                     </tbody>
                   </Table>
+                </Card.Body>
+              </Card>
+
+              {/* Add-on Services — free-form list. Agent enters the names
+                  of add-ons offered with this package (e.g. "Candle Light
+                  Dinner", "Sunset Cruise"). Rates are set later on the
+                  Package Rates page, and the Booking screen only shows
+                  add-ons that ended up with a non-zero rate. */}
+              <Card className="shadow-sm mb-3">
+                <Card.Header className="bg-white fw-semibold d-flex align-items-center justify-content-between">
+                  <span>Add-on Services</span>
+                  <div className="d-flex align-items-center gap-2">
+                    <small className="text-muted fw-normal">
+                      Add the names; rates are set in Package Rates.
+                    </small>
+                    <Button
+                      size="sm"
+                      variant="success"
+                      onClick={() =>
+                        setAddOns((p) => [
+                          ...p,
+                          { key: slugifyAddOn("") + "-" + (p.length + 1), label: "", price: 0 },
+                        ])
+                      }
+                    >
+                      <FaPlus className="me-1" /> Add
+                    </Button>
+                  </div>
+                </Card.Header>
+                <Card.Body>
+                  {addOns.length === 0 && (
+                    <div className="text-muted small fst-italic">
+                      No add-ons yet — click <strong>Add</strong> to list a service.
+                    </div>
+                  )}
+                  {addOns.map((a, idx) => (
+                    <InputGroup key={a.key} className="mb-2">
+                      <InputGroup.Text style={{ minWidth: 50, justifyContent: "center" }}>
+                        {idx + 1}
+                      </InputGroup.Text>
+                      <Form.Control
+                        value={a.label}
+                        placeholder="e.g. Candle Light Dinner"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setAddOns((prev) =>
+                            prev.map((x, i) =>
+                              i === idx ? { ...x, label: v } : x
+                            )
+                          );
+                        }}
+                      />
+                      <Button
+                        variant="outline-danger"
+                        disabled={addOns.length === 1}
+                        onClick={() =>
+                          setAddOns((p) =>
+                            p.length === 1 ? p : p.filter((_, i) => i !== idx)
+                          )
+                        }
+                      >
+                        <FaTrash />
+                      </Button>
+                    </InputGroup>
+                  ))}
                 </Card.Body>
               </Card>
 

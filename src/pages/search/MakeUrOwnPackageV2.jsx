@@ -26,6 +26,290 @@ import {
 
 import { useNavigate } from "react-router-dom";
 
+// ── v2 prefetch ────────────────────────────────────────────────────────
+// The next page (MakePkgCombineSearchV2) ships the same hotel/transfer/
+// activity payloads that this page already has all the inputs for, so we
+// fire those three searches in the background here and stash the mapped
+// results in sessionStorage keyed by a hash of the criteria. The combined
+// search page reads them on mount and skips its own per-tab search — the
+// operator only hits "Search" once.
+const PREFETCH_KEYS = {
+  criteria: "makePkgV2PrefetchCriteriaKey",
+  status: "makePkgV2PrefetchStatus",
+  hotel: "makePkgV2PrefetchHotel",
+  transfer: "makePkgV2PrefetchTransfer",
+  tour: "makePkgV2PrefetchTour",
+};
+
+const computeCriteriaKey = (c) => {
+  try {
+    return JSON.stringify({
+      travelDate: c?.travelDate || "",
+      agentId: c?.agent || "",
+      natId: c?.nationality?.value ?? "",
+      natCode: c?.nationality?.code ?? "",
+      dests: (c?.itinerary || []).map((it) => ({
+        v: it?.selectedDestination?.value ?? "",
+        n: it?.nights || 1,
+      })),
+      adults: c?.adults || 1,
+      children: c?.children || 0,
+      childAges: c?.childAges || [],
+    });
+  } catch {
+    return String(Date.now());
+  }
+};
+
+const ensureHotelImage = (imageUrl) => {
+  if (!imageUrl) return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  if (typeof imageUrl === "string") {
+    const fileName = imageUrl.split(/[/\\]/).pop();
+    if (fileName) return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
+  }
+  return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
+};
+
+const ensureTransferImage = (imageUrl) => {
+  if (!imageUrl) return "https://via.placeholder.com/400x225?text=Transfer";
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  if (typeof imageUrl === "string") {
+    const fileName = imageUrl.split(/[/\\]/).pop();
+    if (fileName) return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
+  }
+  return "https://via.placeholder.com/400x225?text=Transfer";
+};
+
+const formatActivityDate = (dateString) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const computeCheckOutIso = (checkIn, nights) => {
+  if (!checkIn || !nights) return "";
+  const d = new Date(checkIn);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + parseInt(nights));
+  return d.toISOString().split("T")[0];
+};
+
+const setPrefetchStatus = (patch) => {
+  try {
+    const raw = sessionStorage.getItem(PREFETCH_KEYS.status);
+    const cur = raw ? JSON.parse(raw) : {};
+    sessionStorage.setItem(
+      PREFETCH_KEYS.status,
+      JSON.stringify({ ...cur, ...patch })
+    );
+  } catch {
+    /* private mode / quota — non-fatal */
+  }
+};
+
+// Kick off hotel + transfer + tour searches in parallel. Returns
+// immediately; each call writes its mapped result to sessionStorage when
+// it resolves so the combined search page can pick it up.
+const prefetchCombinedResults = (criteria) => {
+  const {
+    travelDate,
+    agent,
+    nationality,
+    itinerary,
+    adults,
+    children,
+    childAges,
+    destination,
+    nights,
+  } = criteria || {};
+
+  const checkIn = travelDate || "";
+  const checkOut = computeCheckOutIso(checkIn, nights || 1);
+
+  const dest =
+    destination ||
+    (itinerary && itinerary.length > 0 ? itinerary[0]?.selectedDestination : null) ||
+    {};
+
+  const nationalityId =
+    nationality?.value != null ? String(nationality.value) : "";
+  const nationalityCode = nationality?.code || "";
+  const destinationCityId = dest?.value != null ? String(dest.value) : "";
+  const destinationCountryId =
+    dest?.countryId != null ? String(dest.countryId) : "";
+  const destinationCityIds =
+    itinerary && itinerary.length > 0
+      ? itinerary
+          .map((it) => it.selectedDestination?.value)
+          .filter((v) => v != null && v !== "")
+          .map(String)
+      : destinationCityId
+        ? [destinationCityId]
+        : [];
+
+  const agentIdFinal = agent || 1;
+
+  const childAgeNums =
+    childAges && childAges.length > 0
+      ? childAges.map((a) => parseInt(a) || 0)
+      : children > 0
+        ? Array(children).fill(0)
+        : [];
+
+  const hotelPayload = {
+    nationalityId,
+    nationalityCode,
+    destinationCityId,
+    destinationCityIds,
+    destinationCountryId,
+    checkIn,
+    checkOut,
+    noOfRooms: "1",
+    roomConfigurations: [
+      {
+        roomNo: 1,
+        adultCount: String(adults || 1),
+        childCount: String(children || 0),
+        childAges: childAgeNums.length > 0 ? childAgeNums : [0],
+        adultAges: [25],
+      },
+    ],
+    agentId: agentIdFinal,
+    apiType: ["INHOUSE"],
+  };
+
+  const transferPayload = {
+    checkIn,
+    checkOut,
+    nativeCountryId: nationality?.value ? Number(nationality.value) : null,
+    destinationCountryId,
+    destinationCityId,
+    destinationCityIds,
+    searchCorCtype: "city",
+    agentid: String(agentIdFinal),
+    childAge: childAgeNums,
+    adult: adults || 1,
+    child: children || 0,
+  };
+
+  const tourPayload = {
+    activityDate: formatActivityDate(travelDate),
+    nativeCountryId: nationality?.value ? String(nationality.value) : "",
+    destinationCountryId,
+    destinationCityId,
+    destinationCityIds,
+    searchCorCtype: dest?.type || "State",
+    agentId: String(agentIdFinal),
+    childAge:
+      childAges && childAges.length > 0
+        ? childAges.map((a) => String(parseInt(a) || 0))
+        : children > 0
+          ? Array(children).fill("0")
+          : [],
+    adult: String(adults || 1),
+    child: String(children || 0),
+  };
+
+  axiosInstance
+    .post("/api/makeYourOwnPackageV2/hotel/search", hotelPayload)
+    .then((res) => {
+      const data = Array.isArray(res.data) ? res.data : [];
+      const mapped = data.map((hotel, index) => ({
+        id: hotel.hotelCode ? `local-${hotel.hotelCode}` : `local-h${index + 1}`,
+        searchId: "local",
+        hotelCode: hotel.hotelCode || null,
+        name: hotel.hotelName || "Unknown Hotel",
+        address: hotel.hotelAddress || "",
+        city: hotel.hotelAddress
+          ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+          : "Unknown City",
+        price: hotel.baseRate ?? null,
+        badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+        image: ensureHotelImage(hotel.hotelImage),
+        rating: hotel.starRating || 0,
+        hotelType: "hotel",
+        channelType: hotel.apiType?.toLowerCase() || "inhouse",
+      }));
+      try {
+        sessionStorage.setItem(PREFETCH_KEYS.hotel, JSON.stringify(mapped));
+      } catch {
+        /* ignore */
+      }
+      setPrefetchStatus({ hotel: "success" });
+    })
+    .catch(() => setPrefetchStatus({ hotel: "error" }));
+
+  axiosInstance
+    .post("/api/makeYourOwnPackageV2/getTransferInhouse", transferPayload)
+    .then((res) => {
+      const mapped = Array.isArray(res.data)
+        ? res.data.map((cab, index) => ({
+            cabid: cab.cabid || cab.cabId || `cab-${index}`,
+            cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
+            cabdetails: cab.cabdetails || "",
+            cabpic: ensureTransferImage(cab.cabpic || cab.cabPic),
+            noOfCabs: cab.noOfCabs || 1,
+            searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
+              ? cab.searchCabDetailsDTO
+              : [],
+          }))
+        : [];
+      try {
+        sessionStorage.setItem(PREFETCH_KEYS.transfer, JSON.stringify(mapped));
+      } catch {
+        /* ignore */
+      }
+      setPrefetchStatus({ transfer: "success" });
+    })
+    .catch(() => setPrefetchStatus({ transfer: "error" }));
+
+  axiosInstance
+    .post("/api/makeYourOwnPackageV2/getActivityInhouse", tourPayload)
+    .then((res) => {
+      const mapped = Array.isArray(res.data)
+        ? res.data.map((activity, index) => ({
+            id: activity.activityId || `activity-${index}`,
+            activityName: activity.activityname || "",
+            activityDetails: activity.activityDetails || "",
+            starRating: activity.starRating || 0,
+            totalRate: activity.totalRate || activity.activityRate || 0,
+            totalRateWithoutMrk:
+              activity.totalRateWithoutmrk || activity.activityRate || 0,
+            activityImage:
+              activity.activityImage ||
+              "https://via.placeholder.com/400x225?text=Activity",
+            childMax: activity.childMax || 0,
+            childMin: activity.childMin || 0,
+            adultRate: activity.adultRate || 0,
+            childRate: activity.childRate || 0,
+            activityType: activity.activityType || 1,
+            maxPax: activity.maxPax || 0,
+            minPaxsic: activity.minPaxsic || 0,
+            currency: activity.currencyCode || "AED",
+            duration:
+              activity.viatorActivityDurationFrom &&
+              activity.viatorActivityDurationTo
+                ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
+                : null,
+            apiType: activity.apiType || null,
+            viatorProductCode: activity.viatorProductCode || null,
+          }))
+        : [];
+      try {
+        sessionStorage.setItem(PREFETCH_KEYS.tour, JSON.stringify(mapped));
+      } catch {
+        /* ignore */
+      }
+      setPrefetchStatus({ tour: "success" });
+    })
+    .catch(() => setPrefetchStatus({ tour: "error" }));
+};
+
 export default function MakeUrOwnPackageV2() {
   const navigate = useNavigate();
   const [nationalityList, setNationalityList] = useState([]);
@@ -294,8 +578,63 @@ export default function MakeUrOwnPackageV2() {
       /* private mode / quota — non-fatal */
     }
 
-    // Navigate to the Add-Ons-First picker (v2 step 2)
-    navigate("/new-booking/make-your-own-package-v2/addons", {
+    // Drop any prior prefetch (criteria may have changed) and kick off
+    // the three search endpoints in the background — by the time the
+    // user reaches the combined search page it can hydrate from
+    // sessionStorage without re-asking the operator.
+    try {
+      sessionStorage.removeItem(PREFETCH_KEYS.hotel);
+      sessionStorage.removeItem(PREFETCH_KEYS.transfer);
+      sessionStorage.removeItem(PREFETCH_KEYS.tour);
+      sessionStorage.setItem(
+        PREFETCH_KEYS.criteria,
+        computeCriteriaKey(criteriaPayload)
+      );
+      sessionStorage.setItem(
+        PREFETCH_KEYS.status,
+        JSON.stringify({ hotel: "loading", transfer: "loading", tour: "loading" })
+      );
+    } catch {
+      /* ignore */
+    }
+    prefetchCombinedResults(criteriaPayload);
+
+    // The dedicated /addons page is removed from the flow — services are
+    // all enabled by default and add-on selection happens as the last
+    // wizard step on the search page itself. Persist the defaults the
+    // search page expects to read from sessionStorage on mount.
+    try {
+      sessionStorage.setItem(
+        "makePkgV2Services",
+        JSON.stringify({ hotel: true, transfer: true, tour: true })
+      );
+      sessionStorage.setItem("makePkgV2VisaRequired", "NO");
+    } catch {
+      /* ignore */
+    }
+
+    // Clear any previous Redis cart in the background so the v2 flow
+    // starts clean (used to be done on entry to /addons).
+    const cartAgentId =
+      sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+      localStorage.getItem("makeYourOwnPackageAgentId");
+    if (cartAgentId) {
+      axiosInstance
+        .post(`/api/makeYourOwnPackageV2/cart/clear?userId=${cartAgentId}`)
+        .then(() => {
+          try {
+            window.dispatchEvent(new Event("cartUpdated"));
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => {
+          /* best-effort */
+        });
+    }
+
+    // Skip the /addons page and go straight to the combined search page.
+    navigate("/new-booking/make-your-own-package-v2/search", {
       state: criteriaPayload,
     });
 

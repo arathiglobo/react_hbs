@@ -8,7 +8,7 @@ import {
   Spinner,
   Badge,
 } from "react-bootstrap";
-import { FaSearch, FaStar, FaClock } from "react-icons/fa";
+import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import Sidebar from "../../../components/Sidebar";
@@ -41,8 +41,14 @@ export default function DayStaySearch() {
   const [agentBalanceLoading, setAgentBalanceLoading] = useState(false);
 
   const [checkInDate, setCheckInDate] = useState("");
-  const [checkInTime, setCheckInTime] = useState("");
-  const [checkOutTime, setCheckOutTime] = useState("");
+  // Day Stay no longer asks the agent for a specific check-in / out
+  // time. We always send a full-day range (00:00 → 23:59) so the
+  // backend returns every hotel that has a day-stay contract for the
+  // picked date, regardless of its hourly window. The View Rooms
+  // button still picks up each contract's own checkInStartTime /
+  // checkInEndTime when launching the room list.
+  const [checkInTime] = useState("00:00");
+  const [checkOutTime] = useState("23:59");
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   // Per-child ages (0-17). Length tracks `children`. Default age 5.
@@ -209,18 +215,8 @@ export default function DayStaySearch() {
     });
   }, [children]);
 
-  // Default check-out time to 2 hours after the chosen check-in.
-  useEffect(() => {
-    if (checkInTime && !checkOutTime) {
-      const [hh, mm] = checkInTime.split(":").map(Number);
-      const total = (hh + 2) * 60 + mm;
-      const h = Math.min(23, Math.floor(total / 60));
-      const m = total % 60;
-      setCheckOutTime(
-        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
-      );
-    }
-  }, [checkInTime]);
+  // (Removed) Default check-out time auto-fill — time is no longer
+  // captured on this page. The full-day range is sent as-is.
 
   const clearError = (field) => {
     setErrors((prev) => {
@@ -235,10 +231,8 @@ export default function DayStaySearch() {
     if (!selectedNationality) e.nationality = "Nationality is required";
     if (!selectedDestination) e.destination = "Destination is required";
     if (!checkInDate) e.checkInDate = "Check-in date is required";
-    if (!checkInTime) e.checkInTime = "Check-in time is required";
-    if (!checkOutTime) e.checkOutTime = "Check-out time is required";
-    if (checkInTime && checkOutTime && checkOutTime <= checkInTime)
-      e.checkOutTime = "Check-out time must be after check-in time";
+    // Time-window validation removed — Day Stay search returns every
+    // hotel with a contract for the date, regardless of hourly window.
     if (!agent) e.agent = "Agent is required";
     if (!adults || Number(adults) < 1) e.adults = "At least one adult required";
     return e;
@@ -254,13 +248,18 @@ export default function DayStaySearch() {
     setHasSearched(true);
     setResults([]);
     try {
+      // checkInTime / checkOutTime intentionally omitted — Day Stay
+      // search now lists every hotel with a contract for the picked
+      // date regardless of hourly window. Sending the full-day range
+      // 00:00–23:59 still excluded hotels whose contract window was
+      // narrower (e.g. 09:00–17:00) because the backend compared the
+      // request times against the contract window. Omitting the fields
+      // tells the backend "no time filter".
       const payload = {
         destinationCityId: selectedDestination?.value || null,
         agentId: Number(agent),
         nationalityCode: selectedNationality?.code || null,
         checkInDate,
-        checkInTime,
-        checkOutTime,
         adults: Number(adults),
         children: Number(children),
         rooms: Number(rooms),
@@ -463,51 +462,11 @@ export default function DayStaySearch() {
                     </Form.Group>
                   </Col>
 
-                  <Col lg={4} md={3}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaClock className="me-2 text-primary" />
-                        Check-in Time
-                      </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        type="time"
-                        value={checkInTime}
-                        onChange={(e) => {
-                          setCheckInTime(e.target.value);
-                          if (e.target.value) clearError("checkInTime");
-                        }}
-                      />
-                      {errors.checkInTime && (
-                        <div className="text-danger small mt-1">
-                          {errors.checkInTime}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
-
-                  <Col lg={4} md={3}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaClock className="me-2 text-primary" />
-                        Check-out Time
-                      </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        type="time"
-                        value={checkOutTime}
-                        onChange={(e) => {
-                          setCheckOutTime(e.target.value);
-                          if (e.target.value) clearError("checkOutTime");
-                        }}
-                      />
-                      {errors.checkOutTime && (
-                        <div className="text-danger small mt-1">
-                          {errors.checkOutTime}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
+                  {/* Check-in / Check-out Time fields removed — Day Stay
+                      search now lists every hotel with a contract on
+                      the picked date regardless of hourly window. The
+                      contract's own start/end times are picked up when
+                      the operator clicks "View Rooms". */}
 
                   <Col lg={2} md={4}>
                     <Form.Group>

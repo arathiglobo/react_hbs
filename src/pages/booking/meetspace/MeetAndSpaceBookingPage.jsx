@@ -49,6 +49,12 @@ import axiosInstance from "../../../components/AxiosInstance";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 
+// Feature flag — Add-ons section hidden for now per spec. Flip to `true`
+// to re-enable both the editor card and the summary rows; all the
+// underlying state, helpers and payload fields stay intact so flipping
+// is reversible without further code changes.
+const SHOW_ADDONS = false;
+
 // ── fixed dropdown options ────────────────────────────────────────────────
 const SALUTATIONS = ["Mr", "Ms", "Mrs", "Dr"];
 const EVENT_TYPES = [
@@ -1139,89 +1145,91 @@ export default function MeetAndSpaceBookingPage() {
                 </Card.Body>
               </Card>
 
-              <Card className="shadow-sm mb-3">
-                <Card.Header className="d-flex justify-content-between">
-                  <strong>Add-ons</strong>
-                  <Button size="sm" variant="outline-primary" onClick={addAddon}>
-                    <FaPlus /> Add
-                  </Button>
-                </Card.Header>
-                <Card.Body>
-                  {addons.length === 0 ? (
-                    <div className="text-muted small">
-                      No add-ons added. Click "Add" to include catering, AV
-                      rental, etc.
-                    </div>
-                  ) : (
-                    <Table size="sm" bordered>
-                      <thead>
-                        <tr>
-                          <th>Item</th>
-                          <th style={{ width: 80 }}>Qty</th>
-                          <th style={{ width: 120 }}>Unit Price</th>
-                          <th style={{ width: 120 }}>Total</th>
-                          <th>Remarks</th>
-                          <th style={{ width: 40 }} />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {addons.map((a, i) => (
-                          <tr key={i}>
-                            <td>
-                              <Form.Control
-                                size="sm"
-                                value={a.addonName}
-                                onChange={(e) =>
-                                  updateAddon(i, "addonName", e.target.value)
-                                }
-                              />
-                            </td>
-                            <td>
-                              <Form.Control
-                                size="sm"
-                                type="number"
-                                value={a.quantity}
-                                onChange={(e) =>
-                                  updateAddon(i, "quantity", e.target.value)
-                                }
-                              />
-                            </td>
-                            <td>
-                              <Form.Control
-                                size="sm"
-                                type="number"
-                                value={a.unitPrice}
-                                onChange={(e) =>
-                                  updateAddon(i, "unitPrice", e.target.value)
-                                }
-                              />
-                            </td>
-                            <td>{Number(a.totalPrice || 0).toFixed(2)}</td>
-                            <td>
-                              <Form.Control
-                                size="sm"
-                                value={a.remarks}
-                                onChange={(e) =>
-                                  updateAddon(i, "remarks", e.target.value)
-                                }
-                              />
-                            </td>
-                            <td>
-                              <Button
-                                size="sm"
-                                variant="outline-danger"
-                                onClick={() => removeAddon(i)}
-                              >
-                                <FaTrash />
-                              </Button>
-                            </td>
+              {SHOW_ADDONS && (
+                <Card className="shadow-sm mb-3">
+                  <Card.Header className="d-flex justify-content-between">
+                    <strong>Add-ons</strong>
+                    <Button size="sm" variant="outline-primary" onClick={addAddon}>
+                      <FaPlus /> Add
+                    </Button>
+                  </Card.Header>
+                  <Card.Body>
+                    {addons.length === 0 ? (
+                      <div className="text-muted small">
+                        No add-ons added. Click "Add" to include catering, AV
+                        rental, etc.
+                      </div>
+                    ) : (
+                      <Table size="sm" bordered>
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th style={{ width: 80 }}>Qty</th>
+                            <th style={{ width: 120 }}>Unit Price</th>
+                            <th style={{ width: 120 }}>Total</th>
+                            <th>Remarks</th>
+                            <th style={{ width: 40 }} />
                           </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  )}
-                </Card.Body>
-              </Card>
+                        </thead>
+                        <tbody>
+                          {addons.map((a, i) => (
+                            <tr key={i}>
+                              <td>
+                                <Form.Control
+                                  size="sm"
+                                  value={a.addonName}
+                                  onChange={(e) =>
+                                    updateAddon(i, "addonName", e.target.value)
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <Form.Control
+                                  size="sm"
+                                  type="number"
+                                  value={a.quantity}
+                                  onChange={(e) =>
+                                    updateAddon(i, "quantity", e.target.value)
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <Form.Control
+                                  size="sm"
+                                  type="number"
+                                  value={a.unitPrice}
+                                  onChange={(e) =>
+                                    updateAddon(i, "unitPrice", e.target.value)
+                                  }
+                                />
+                              </td>
+                              <td>{Number(a.totalPrice || 0).toFixed(2)}</td>
+                              <td>
+                                <Form.Control
+                                  size="sm"
+                                  value={a.remarks}
+                                  onChange={(e) =>
+                                    updateAddon(i, "remarks", e.target.value)
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  onClick={() => removeAddon(i)}
+                                >
+                                  <FaTrash />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    )}
+                  </Card.Body>
+                </Card>
+              )}
 
               <Card className="shadow-sm mb-3">
                 <Card.Header>
@@ -1347,12 +1355,14 @@ export default function MeetAndSpaceBookingPage() {
                             {pricing.subTotal.toFixed(2)}
                           </td>
                         </tr>
-                        <tr>
-                          <td>Add-ons</td>
-                          <td className="text-end">
-                            {pricing.addonTotal.toFixed(2)}
-                          </td>
-                        </tr>
+                        {SHOW_ADDONS && (
+                          <tr>
+                            <td>Add-ons</td>
+                            <td className="text-end">
+                              {pricing.addonTotal.toFixed(2)}
+                            </td>
+                          </tr>
+                        )}
                         <tr>
                           <td>Tax ({pricing.taxPercent}%)</td>
                           <td className="text-end">
@@ -1544,44 +1554,46 @@ export default function MeetAndSpaceBookingPage() {
                 </Card.Body>
               </Card>
 
-              <Card className="mb-2">
-                <Card.Header className="py-2">
-                  <strong>Add-ons</strong>
-                </Card.Header>
-                <Card.Body className="small">
-                  {addons.filter((a) => a.addonName && a.addonName.trim())
-                    .length === 0 ? (
-                    <em className="text-muted">No add-ons.</em>
-                  ) : (
-                    <Table size="sm" bordered className="mb-0">
-                      <thead>
-                        <tr>
-                          <th>Item</th>
-                          <th>Qty</th>
-                          <th>Unit</th>
-                          <th>Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {addons
-                          .filter((a) => a.addonName && a.addonName.trim())
-                          .map((a, i) => (
-                            <tr key={i}>
-                              <td>{a.addonName}</td>
-                              <td>{a.quantity}</td>
-                              <td>
-                                {Number(a.unitPrice || 0).toFixed(2)}
-                              </td>
-                              <td>
-                                {Number(a.totalPrice || 0).toFixed(2)}
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </Table>
-                  )}
-                </Card.Body>
-              </Card>
+              {SHOW_ADDONS && (
+                <Card className="mb-2">
+                  <Card.Header className="py-2">
+                    <strong>Add-ons</strong>
+                  </Card.Header>
+                  <Card.Body className="small">
+                    {addons.filter((a) => a.addonName && a.addonName.trim())
+                      .length === 0 ? (
+                      <em className="text-muted">No add-ons.</em>
+                    ) : (
+                      <Table size="sm" bordered className="mb-0">
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Unit</th>
+                            <th>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {addons
+                            .filter((a) => a.addonName && a.addonName.trim())
+                            .map((a, i) => (
+                              <tr key={i}>
+                                <td>{a.addonName}</td>
+                                <td>{a.quantity}</td>
+                                <td>
+                                  {Number(a.unitPrice || 0).toFixed(2)}
+                                </td>
+                                <td>
+                                  {Number(a.totalPrice || 0).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </Table>
+                    )}
+                  </Card.Body>
+                </Card>
+              )}
 
               <Card className="mb-2">
                 <Card.Header className="py-2">
@@ -1623,12 +1635,14 @@ export default function MeetAndSpaceBookingPage() {
                           {pricing.subTotal.toFixed(2)}
                         </td>
                       </tr>
-                      <tr>
-                        <td>Add-ons</td>
-                        <td className="text-end">
-                          {pricing.addonTotal.toFixed(2)}
-                        </td>
-                      </tr>
+                      {SHOW_ADDONS && (
+                        <tr>
+                          <td>Add-ons</td>
+                          <td className="text-end">
+                            {pricing.addonTotal.toFixed(2)}
+                          </td>
+                        </tr>
+                      )}
                       <tr>
                         <td>Tax ({pricing.taxPercent}%)</td>
                         <td className="text-end">

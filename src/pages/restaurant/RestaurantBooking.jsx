@@ -18,16 +18,12 @@ import Swal from "sweetalert2";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
-import RestaurantSummary from "./RestaurantSummary";
+// RestaurantSummary is no longer imported — we now render a lightweight
+// recap inline (no prices/rates on the booking page).
 
 const SEATING_PREFERENCES = ["Indoor", "Outdoor", "AC", "Non-AC", "Smoking", "Non-Smoking"];
 const MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Brunch", "High Tea"];
 const OCCASIONS = ["None", "Birthday", "Anniversary", "Business Meeting", "Family Gathering", "Date"];
-// Only two payment paths are supported:
-//   Cash → settles against the agent's credit limit (backend deducts on save)
-//   Card → triggers the online-payment modal; backend keeps the booking
-//          in "Not Paid" until the gateway confirms.
-const PAYMENT_MODES = ["Cash", "Card"];
 
 const RestaurantBooking = () => {
   const navigate = useNavigate();
@@ -35,30 +31,26 @@ const RestaurantBooking = () => {
   const incoming = location.state || {};
   const restaurant = incoming.restaurant;
 
-  // Booking no longer captures per-item selections — operators upload menu
-  // PDFs on registration and the customer orders at the venue. We keep an
-  // empty selection so the existing payload shape (items: []) keeps working
-  // until the backend stops expecting that field.
+  // Booking no longer captures per-item selections OR rates — operators
+  // upload menu PDFs on registration, the customer orders at the venue,
+  // and the price is added later on the booking list. We keep
+  // selectedItems = [] so the existing payload shape (items: []) keeps
+  // working until the backend stops expecting that field.
   const selectedItems = [];
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const [summaryOpen, setSummaryOpen] = useState(false);
-  // Modal shown when paymentMode === "Card" is picked — informs the user
-  // they'll be redirected to the online payment gateway.
-  const [cardModalOpen, setCardModalOpen] = useState(false);
-  // Live agent balance forwarded from the search page. Used to pop up the
-  // "Not enough credit limit" warning client-side before hitting the API.
-  const agentBalance =
-    typeof incoming.agentBalance === "number"
-      ? incoming.agentBalance
-      : null;
 
-  // What modes does this restaurant offer? Defaults to "Both" when missing.
+  // Availability info — read-only display only. The agent doesn't pick
+  // a mode here; whichever modes the restaurant supports are shown as
+  // badges so the agent / customer know what's possible at this venue.
+  // Possible values for restaurant.bookingModes: "Advance", "Walk-in",
+  // "Both" (default).
   const offeredModes = restaurant?.bookingModes || "Both";
-  const initialMode = offeredModes === "Walk-in" ? "Walk-in" : "Advance";
+  const supportsAdvance = offeredModes === "Both" || offeredModes === "Advance";
+  const supportsWalkIn  = offeredModes === "Both" || offeredModes === "Walk-in";
 
   const [form, setForm] = useState({
-    bookingMode: initialMode,
     // These three are pre-filled from the search criteria and rendered as
     // read-only fields below (the user already picked them upstream — no
     // reason to let them drift on the booking page).
@@ -75,10 +67,6 @@ const RestaurantBooking = () => {
     mealType: incoming.mealType && incoming.mealType !== "Any" ? incoming.mealType : "Dinner",
     occasion: "None",
     dietaryNotes: "",
-    // Defaulted to Cash (agent credit) per spec — the user must explicitly
-    // switch to Card to go through the online-payment modal.
-    paymentMode: "Cash",
-    advancePayment: "",
   });
 
   // Redirect back if user lands here directly without a restaurant context.
@@ -95,27 +83,27 @@ const RestaurantBooking = () => {
     const { name, value } = e.target;
     setForm((p) => ({ ...p, [name]: value }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
-    // Card flow → inform the user we're going to an online payment screen.
-    // We just show a modal for now; the actual gateway redirect is wired in
-    // when the payment integration lands.
-    if (name === "paymentMode" && value === "Card") {
-      setCardModalOpen(true);
-    }
   };
 
-  /** Returns an errors object, empty when the form is valid. */
+  /** Returns an errors object, empty when the form is valid.
+   *  Rate validation is gone — the operator sets the price later on the
+   *  booking list. Booking time is only required when the venue
+   *  doesn't accept walk-ins. */
   const validate = () => {
     const err = {};
-    const isAdvance = form.bookingMode === "Advance";
     if (!form.bookingDate) err.bookingDate = "Booking date is required";
-    // Time is required only for Advance bookings; Walk-ins are flexible.
-    if (isAdvance && !form.bookingTime) err.bookingTime = "Booking time is required";
-    // Enforce the venue's advance-booking lead time on the client too.
-    if (isAdvance && form.bookingDate && form.bookingTime) {
+    // Time is required only when the venue supports Advance bookings
+    // and not walk-ins. If it supports walk-ins, the agent can leave
+    // time blank — guest arrives anytime during open hours.
+    if (supportsAdvance && !supportsWalkIn && !form.bookingTime) {
+      err.bookingTime = "Booking time is required";
+    }
+    // Enforce the venue's advance-booking lead time when a time is set.
+    if (form.bookingDate && form.bookingTime && supportsAdvance) {
       const slot = new Date(`${form.bookingDate}T${form.bookingTime}`);
       const minHours = Number(restaurant?.advanceBookingMinHours) || 0;
       const earliest = new Date(Date.now() + minHours * 3600 * 1000);
-      if (!isNaN(slot.getTime()) && slot < earliest) {
+      if (!isNaN(slot.getTime()) && slot < earliest && minHours > 0) {
         const hhmm = `${String(earliest.getHours()).padStart(2, "0")}:${String(
           earliest.getMinutes()
         ).padStart(2, "0")}`;
@@ -133,13 +121,6 @@ const RestaurantBooking = () => {
       err.customerMobile = "Invalid mobile number";
     if (form.customerEmail && !/\S+@\S+\.\S+/.test(form.customerEmail))
       err.customerEmail = "Invalid email";
-    // Restaurants must have a per-person rate set on the registration page
-    // for the booking math to work. Without it, subTotal would be 0 and
-    // the agent credit-limit + invoice flow downstream would be broken.
-    if (!Number(restaurant?.pricePerPerson)) {
-      err._rate =
-        "This restaurant has no per-person rate configured. Ask the operator to set 'Rate Per Person' on the registration page.";
-    }
     return err;
   };
 
@@ -162,7 +143,6 @@ const RestaurantBooking = () => {
     customerName: "Customer Name",
     customerMobile: "Mobile",
     customerEmail: "Email",
-    _rate: "Per-Person Rate (set on restaurant registration)",
   };
 
   const handleSubmit = (e) => {
@@ -180,28 +160,6 @@ const RestaurantBooking = () => {
         first?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 0);
       return;
-    }
-    // Credit-limit guard — only for the Cash flow.
-    if (form.paymentMode === "Cash" && agentBalance != null) {
-      const { grandTotal } = computeTotals();
-      if (Number(grandTotal) > Number(agentBalance)) {
-        Swal.fire({
-          icon: "warning",
-          title: "Not enough credit limit",
-          html:
-            `<div class="text-start">` +
-            `Agent <strong>${form.agentName || ""}</strong> has only ` +
-            `<strong>₹ ${Number(agentBalance).toFixed(2)}</strong> credit ` +
-            `available, but this booking costs ` +
-            `<strong>₹ ${Number(grandTotal).toFixed(2)}</strong>.` +
-            `<br/><br/>` +
-            `Reduce the order, top up the agent's credit, or switch to ` +
-            `<strong>Card</strong> for an online payment.` +
-            `</div>`,
-          confirmButtonText: "OK",
-        });
-        return;
-      }
     }
     setSummaryOpen(true);
   };
@@ -232,49 +190,29 @@ const RestaurantBooking = () => {
     return { hhmm: `${hh}:${mm}`, date: earliest, sameDay: true };
   }, [form.bookingDate, restaurant?.advanceBookingMinHours]);
 
-  /**
-   * Totals are now driven by the restaurant's per-person rate (set on the
-   * registration page) and the member count picked on the search page —
-   * the old item-by-item subtotal disappeared when we replaced manual
-   * menu rows with menu-PDF uploads.
-   *
-   *   subTotal   = pricePerPerson × memberCount
-   *   taxAmount  = subTotal × taxPercent / 100
-   *   grandTotal = subTotal + taxAmount
-   */
-  const computeTotals = () => {
-    const rate = Number(restaurant?.pricePerPerson || 0);
-    const members = Number(form.memberCount || 0);
-    const subTotal = rate * members;
-    const taxPercent = Number(restaurant.taxPercent || 0);
-    const taxAmount = (subTotal * taxPercent) / 100;
-    const grandTotal = subTotal + taxAmount;
-    return { subTotal, taxPercent, taxAmount, grandTotal, rate, members };
-  };
-
-  /** Final commit — POST to backend, then redirect to bookings list. */
+  /** Final commit — POST to backend, then redirect to bookings list.
+   *  No rate / tax / totals are computed here anymore. The operator
+   *  enters the price later on the booking list. The backend sends
+   *  notification emails to the hotel/restaurant and the agent on save. */
   const confirmAndSave = async () => {
-    const { subTotal, taxPercent, taxAmount, grandTotal, rate } = computeTotals();
     setSaving(true);
     try {
       const payload = {
         restaurantId: restaurant.id,
         restaurantName: restaurant.restaurantName,
         ...form,
-        items: selectedItems.map((it) => ({
-          menuId: it.menuId,
-          menuName: it.menuName,
-          qty: it.qty,
-          price: it.price,
-          total: it.total,
-        })),
-        // Snapshot the per-person rate that drove subTotal — keeps the
-        // booking auditable if the restaurant's rate changes later.
-        pricePerPerson: rate,
-        subTotal,
-        taxPercent,
-        taxAmount,
-        totalAmount: grandTotal,
+        // Booking is created without a price; the operator adds the
+        // total in the booking list afterwards.
+        items: [],
+        pricePerPerson: 0,
+        subTotal: 0,
+        taxPercent: 0,
+        taxAmount: 0,
+        totalAmount: 0,
+        // Default status — backend should also flip to whichever its
+        // workflow expects.
+        bookingStatus: "Pending Approval",
+        paymentStatus: "Not Paid",
       };
 
       const res = await axiosInstance.post("/api/restaurant/booking/save", payload);
@@ -284,7 +222,13 @@ const RestaurantBooking = () => {
       await Swal.fire({
         icon: "success",
         title: "Booking Confirmed!",
-        html: `<div>Your booking number is <strong>${bookingNo}</strong></div>`,
+        html:
+          `<div>Booking number: <strong>${bookingNo}</strong></div>` +
+          `<div class="mt-2 small text-muted">` +
+          `A confirmation email has been sent to the restaurant ` +
+          `and to the agent (${form.agentName || "agent"}). ` +
+          `Add the price on the booking list once the restaurant confirms.` +
+          `</div>`,
         confirmButtonText: "View Bookings",
       });
       navigate("/booking-details/restaurant-booking-list");
@@ -319,14 +263,6 @@ const RestaurantBooking = () => {
               <FaArrowLeft className="me-1" /> Back
             </Button>
           </div>
-
-          {/* Surface the per-person-rate-missing error above the form so
-              the agent can act on it without scrolling. */}
-          {errors._rate && (
-            <Alert variant="warning" className="mb-3">
-              {errors._rate}
-            </Alert>
-          )}
 
           <Form onSubmit={handleSubmit}>
             <Row>
@@ -371,51 +307,43 @@ const RestaurantBooking = () => {
                 <Card className="mb-3 shadow-sm">
                   <Card.Header className="bg-white fw-semibold">Booking Details</Card.Header>
                   <Card.Body>
-                    {/* Booking mode picker — only renders the modes this restaurant offers. */}
+                    {/* Availability info — read-only. Only the modes the
+                        restaurant actually supports are shown; missing
+                        ones are simply omitted (no "not available"
+                        clutter on the page). */}
                     <Row className="g-3 mb-2">
                       <Col md={12}>
-                        <Form.Label className="fw-semibold">Booking Mode *</Form.Label>
-                        <div className="d-flex flex-wrap gap-3">
-                          {(offeredModes === "Both" || offeredModes === "Advance") && (
-                            <Form.Check
-                              type="radio"
-                              id="mode-advance"
-                              name="bookingMode"
-                              label={
-                                <span>
-                                  <strong>Advance Booking</strong>{" "}
-                                  <span className="text-muted small">
-                                    — reserved slot
-                                    {restaurant?.advanceBookingMinHours
-                                      ? ` (min ${restaurant.advanceBookingMinHours}h notice)`
-                                      : ""}
-                                  </span>
-                                </span>
-                              }
-                              value="Advance"
-                              checked={form.bookingMode === "Advance"}
-                              onChange={handleChange}
-                            />
+                        <Form.Label className="fw-semibold mb-2">Availability</Form.Label>
+                        <div className="d-flex flex-wrap gap-2">
+                          {supportsAdvance && (
+                            <Badge
+                              bg="success"
+                              className="px-3 py-2 border"
+                              style={{ fontSize: "0.85rem" }}
+                            >
+                              <FaCheckCircle className="me-1" />
+                              Advance Booking
+                              {restaurant?.advanceBookingMinHours
+                                ? ` (min ${restaurant.advanceBookingMinHours}h notice)`
+                                : ""}
+                            </Badge>
                           )}
-                          {(offeredModes === "Both" || offeredModes === "Walk-in") && (
-                            <Form.Check
-                              type="radio"
-                              id="mode-walkin"
-                              name="bookingMode"
-                              label={
-                                <span>
-                                  <strong>Free to Available</strong>{" "}
-                                  <span className="text-muted small">
-                                    — walk-in, no specific slot
-                                  </span>
-                                </span>
-                              }
-                              value="Walk-in"
-                              checked={form.bookingMode === "Walk-in"}
-                              onChange={handleChange}
-                            />
+                          {supportsWalkIn && (
+                            <Badge
+                              bg="info"
+                              className="px-3 py-2 border"
+                              style={{ fontSize: "0.85rem" }}
+                            >
+                              <FaCheckCircle className="me-1" />
+                              Free to Available (Walk-in)
+                            </Badge>
                           )}
                         </div>
+                        <Form.Text muted>
+                          The restaurant will be notified by email once you
+                          confirm — they'll send back a confirmation that
+                          the operator can mark in the bookings list.
+                        </Form.Text>
                       </Col>
                     </Row>
 
@@ -437,7 +365,7 @@ const RestaurantBooking = () => {
                       </Col>
                       <Col md={4}>
                         <Form.Label>
-                          Booking Time {form.bookingMode === "Advance" ? "*" : ""}
+                          Booking Time {supportsAdvance && !supportsWalkIn ? "*" : ""}
                         </Form.Label>
                         <Form.Control
                           type="time"
@@ -445,44 +373,40 @@ const RestaurantBooking = () => {
                           value={form.bookingTime}
                           onChange={handleChange}
                           isInvalid={!!errors.bookingTime}
-                          // When the booking date is today, refuse times
-                          // before now+leadHours at the browser-picker level
-                          // so the user can't even land on a slot that will
-                          // then fail validation. Skipped for Walk-in.
+                          // When the booking date is today and the venue
+                          // requires advance notice, refuse times before
+                          // now+leadHours so the user can't pick a slot
+                          // that will then fail validation.
                           min={
-                            form.bookingMode === "Advance" &&
-                            earliestSlot?.sameDay
+                            supportsAdvance && earliestSlot?.sameDay
                               ? earliestSlot.hhmm
                               : undefined
                           }
                           placeholder={
-                            form.bookingMode === "Walk-in" ? "Anytime during open hours" : ""
+                            supportsWalkIn && !supportsAdvance ? "Anytime during open hours" : ""
                           }
                         />
                         <Form.Control.Feedback type="invalid">
                           {errors.bookingTime}
                         </Form.Control.Feedback>
-                        {form.bookingMode === "Walk-in" ? (
-                          <Form.Text muted>
-                            Walk-in — guest can arrive any time during open hours.
-                          </Form.Text>
-                        ) : (
-                          <Form.Text muted className="d-block">
-                            {restaurant?.openTime && restaurant?.closeTime && (
-                              <>
-                                Open {String(restaurant.openTime).slice(0, 5)} –{" "}
-                                {String(restaurant.closeTime).slice(0, 5)}
-                                {earliestSlot?.sameDay && " · "}
-                              </>
-                            )}
-                            {earliestSlot?.sameDay && (
-                              <span className="text-danger">
-                                Earliest today: {earliestSlot.hhmm} (
-                                {Number(restaurant?.advanceBookingMinHours) || 0}h notice)
-                              </span>
-                            )}
-                          </Form.Text>
-                        )}
+                        <Form.Text muted className="d-block">
+                          {restaurant?.openTime && restaurant?.closeTime && (
+                            <>
+                              Open {String(restaurant.openTime).slice(0, 5)} –{" "}
+                              {String(restaurant.closeTime).slice(0, 5)}
+                              {earliestSlot?.sameDay && " · "}
+                            </>
+                          )}
+                          {supportsAdvance && earliestSlot?.sameDay && (
+                            <span className="text-danger">
+                              Earliest today: {earliestSlot.hhmm} (
+                              {Number(restaurant?.advanceBookingMinHours) || 0}h notice)
+                            </span>
+                          )}
+                          {supportsWalkIn && !supportsAdvance && (
+                            "Walk-in — guest can arrive any time during open hours."
+                          )}
+                        </Form.Text>
                       </Col>
                       <Col md={4}>
                         <Form.Label>Members *</Form.Label>
@@ -564,28 +488,9 @@ const RestaurantBooking = () => {
                         />
                         <Form.Control.Feedback type="invalid">{errors.customerEmail}</Form.Control.Feedback>
                       </Col>
-                      {/* Agent input removed — already shown in the order summary
-                          on the right side. */}
-                      <Col md={12}>
-                        <Form.Label>Payment Mode</Form.Label>
-                        <Form.Select
-                          name="paymentMode"
-                          value={form.paymentMode}
-                          onChange={handleChange}
-                        >
-                          {PAYMENT_MODES.map((p) => (
-                            <option key={p} value={p}>
-                              {p === "Cash"
-                                ? "Cash — settle against agent credit limit"
-                                : "Card — online payment"}
-                            </option>
-                          ))}
-                        </Form.Select>
-                        <Form.Text muted>
-                          Cash debits the agent's available balance; Card opens
-                          the online-payment screen.
-                        </Form.Text>
-                      </Col>
+                      {/* Payment mode removed — the booking is created
+                          without a price; the operator adds the rate
+                          later on the booking list. */}
                       <Col md={12}>
                         <Form.Label>Dietary Notes / Allergies</Form.Label>
                         <Form.Control
@@ -653,11 +558,10 @@ const RestaurantBooking = () => {
                 </Card>
               </Col>
 
-              {/* Sticky right column — RestaurantSummary + Review & Submit
-                  stay visible as the user scrolls the long form. The panel
-                  is capped to viewport height with overflow:auto so the
-                  Submit button is always reachable without overlapping the
-                  Copilot widget at the bottom-right of the page. */}
+              {/* Sticky right column — lightweight recap (no prices)
+                  and the Review & Submit button. RestaurantSummary
+                  (which showed rate/tax/total) is no longer used here
+                  because the operator sets the price on the list. */}
               <Col lg={4}>
                 <div
                   className="restaurant-booking-summary-sticky"
@@ -669,26 +573,37 @@ const RestaurantBooking = () => {
                     overflowY: "auto",
                   }}
                 >
-                  <RestaurantSummary
-                    restaurant={restaurant}
-                    bookingDate={form.bookingDate}
-                    bookingTime={form.bookingTime}
-                    memberCount={form.memberCount}
-                    customerName={form.customerName}
-                    agentName={form.agentName}
-                    items={selectedItems}
-                    taxPercent={restaurant.taxPercent}
-                  />
-                  {/* Show available agent balance just above the submit so the
-                      user always sees it without scrolling back up. */}
-                  {form.agentId && agentBalance != null && (
-                    <div className="mt-2 small text-end">
-                      Agent balance:{" "}
-                      <span className="fw-semibold text-danger">
-                        ₹ {Number(agentBalance).toFixed(2)}
-                      </span>
-                    </div>
-                  )}
+                  <Card className="shadow-sm">
+                    <Card.Header className="bg-warning text-dark fw-semibold">
+                      <FaUtensils className="me-2" /> Booking Recap
+                    </Card.Header>
+                    <Card.Body>
+                      <div className="fw-semibold">{restaurant.restaurantName}</div>
+                      <div className="small text-muted mb-3">{restaurant.place}</div>
+                      <div className="d-flex justify-content-between small mb-1">
+                        <span className="text-muted">Date</span>
+                        <span className="fw-semibold">{form.bookingDate || "—"}</span>
+                      </div>
+                      <div className="d-flex justify-content-between small mb-1">
+                        <span className="text-muted">Time</span>
+                        <span className="fw-semibold">
+                          {form.bookingTime || (supportsWalkIn ? "Anytime" : "—")}
+                        </span>
+                      </div>
+                      <div className="d-flex justify-content-between small mb-1">
+                        <span className="text-muted">Members</span>
+                        <span className="fw-semibold">{form.memberCount || 0}</span>
+                      </div>
+                      <div className="d-flex justify-content-between small mb-1">
+                        <span className="text-muted">Meal</span>
+                        <span className="fw-semibold">{form.mealType}</span>
+                      </div>
+                      <div className="d-flex justify-content-between small mb-1">
+                        <span className="text-muted">Agent</span>
+                        <span className="fw-semibold">{form.agentName || "—"}</span>
+                      </div>
+                    </Card.Body>
+                  </Card>
                   <Button
                     type="submit"
                     variant="primary"
@@ -706,35 +621,7 @@ const RestaurantBooking = () => {
         </div>
       </div>
 
-      {/* Online-payment modal — Card mode informs the user that an online
-          gateway redirect will happen on Confirm. (Gateway redirect is
-          wired in when the payment integration lands.) */}
-      <Modal
-        show={cardModalOpen}
-        onHide={() => setCardModalOpen(false)}
-        centered
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>Online Payment</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p>
-            You've selected <strong>Card</strong> as the payment mode.
-          </p>
-          <p>
-            On confirm, you'll be redirected to our secure online payment
-            gateway to complete the booking. The booking will remain in
-            <em> Not Paid </em> until the gateway confirms the transaction.
-          </p>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setCardModalOpen(false)}>
-            Continue
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Order summary confirm modal — final commit happens here.
+      {/* Confirm modal — no totals shown (price is added on the list).
        *  Validation has already passed by the time this opens. */}
       <Modal
         show={summaryOpen}
@@ -746,84 +633,37 @@ const RestaurantBooking = () => {
         <Modal.Header closeButton={!saving}>
           <Modal.Title>
             <FaCheckCircle className="text-success me-2" />
-            Order Summary
+            Confirm Booking
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {(() => {
-            const { subTotal, taxPercent, taxAmount, grandTotal } = computeTotals();
-            return (
-              <>
-                <Row className="g-2 mb-3">
-                  <Col md={6}><strong>Restaurant:</strong> {restaurant.restaurantName}</Col>
-                  <Col md={6}><strong>Place:</strong> {restaurant.place}</Col>
-                  <Col md={6}>
-                    <strong>Date / Time:</strong>{" "}
-                    {form.bookingDate}
-                    {form.bookingMode === "Walk-in"
-                      ? " (Walk-in — anytime)"
-                      : ` ${form.bookingTime}`}
-                  </Col>
-                  <Col md={6}><strong>Members:</strong> {form.memberCount}</Col>
-                  <Col md={6}>
-                    <strong>Booking Mode:</strong>{" "}
-                    {form.bookingMode === "Walk-in" ? "Free to Available" : "Advance"}
-                  </Col>
-                  <Col md={6}><strong>Meal Type:</strong> {form.mealType}</Col>
-                  <Col md={6}><strong>Seating:</strong> {form.seatingPreference}</Col>
-                  <Col md={6}>
-                    <strong>Customer:</strong> {form.customerName} ({form.customerMobile})
-                  </Col>
-                  <Col md={6}><strong>Agent:</strong> {form.agentName || "-"}</Col>
-                  <Col md={12}>
-                    <strong>Special Request:</strong> {form.specialRequest || "-"}
-                  </Col>
-                </Row>
-
-                <div className="fw-semibold mb-2">Selected Items</div>
-                {selectedItems.length === 0 ? (
-                  <Alert variant="light" className="mb-2 text-muted">
-                    No items pre-selected (guest will order at the restaurant).
-                  </Alert>
-                ) : (
-                  <Table size="sm" bordered>
-                    <thead className="table-light">
-                      <tr>
-                        <th>Item</th>
-                        <th className="text-end">Qty</th>
-                        <th className="text-end">Price</th>
-                        <th className="text-end">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedItems.map((it, i) => (
-                        <tr key={i}>
-                          <td>{it.menuName}</td>
-                          <td className="text-end">{it.qty}</td>
-                          <td className="text-end">₹ {Number(it.price).toFixed(2)}</td>
-                          <td className="text-end">₹ {Number(it.total).toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                )}
-
-                <div className="d-flex justify-content-between">
-                  <span>Sub Total</span>
-                  <span>₹ {subTotal.toFixed(2)}</span>
-                </div>
-                <div className="d-flex justify-content-between text-muted small">
-                  <span>Tax ({taxPercent || 0}%)</span>
-                  <span>₹ {taxAmount.toFixed(2)}</span>
-                </div>
-                <hr />
-                <div className="d-flex justify-content-between fs-5 fw-bold">
-                  <span>Total</span>
-                  <span className="text-success">₹ {grandTotal.toFixed(2)}</span>
-                </div>
-              </>
-            );
-          })()}
+          <Row className="g-2 mb-3">
+            <Col md={6}><strong>Restaurant:</strong> {restaurant.restaurantName}</Col>
+            <Col md={6}><strong>Place:</strong> {restaurant.place}</Col>
+            <Col md={6}>
+              <strong>Date / Time:</strong>{" "}
+              {form.bookingDate}
+              {form.bookingTime ? ` ${form.bookingTime}` : supportsWalkIn ? " (Walk-in — anytime)" : ""}
+            </Col>
+            <Col md={6}><strong>Members:</strong> {form.memberCount}</Col>
+            <Col md={6}><strong>Meal Type:</strong> {form.mealType}</Col>
+            <Col md={6}><strong>Seating:</strong> {form.seatingPreference}</Col>
+            <Col md={6}>
+              <strong>Customer:</strong> {form.customerName} ({form.customerMobile})
+            </Col>
+            <Col md={6}><strong>Agent:</strong> {form.agentName || "-"}</Col>
+            <Col md={12}>
+              <strong>Special Request:</strong> {form.specialRequest || "-"}
+            </Col>
+          </Row>
+          <Alert variant="info" className="mb-0 small">
+            <strong>What happens next?</strong>
+            <ul className="mb-0 mt-1">
+              <li>A confirmation email is sent to <strong>{restaurant.restaurantName}</strong>.</li>
+              <li>A copy is sent to the agent ({form.agentName || "—"}).</li>
+              <li>You can add / update the price on the bookings list.</li>
+            </ul>
+          </Alert>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="outline-secondary" disabled={saving} onClick={() => setSummaryOpen(false)}>

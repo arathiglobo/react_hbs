@@ -86,18 +86,27 @@ const HoneymoonBooking = () => {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Predefined add-on services for a honeymoon — agent ticks any that apply.
-  const DEFAULT_ADDONS = [
-    { key: "candleLightDinner", label: "Candle Light Dinner", price: 0 },
-    { key: "sunsetCruise", label: "Sunset Cruise", price: 0 },
-    { key: "couplesSpa", label: "Couples Spa", price: 0 },
-    { key: "privatePoolVilla", label: "Private Pool Villa Upgrade", price: 0 },
-    { key: "honeymoonCake", label: "Honeymoon Cake & Decoration", price: 0 },
-    { key: "airportTransfer", label: "Private Airport Transfer", price: 0 },
-  ];
-  const [addons, setAddons] = useState(
-    DEFAULT_ADDONS.map((a) => ({ ...a, checked: false }))
-  );
+  // Add-on services available with the booked package. Source of truth:
+  // the package itself (defined on Registration, priced on the Package
+  // Rates page). We only surface add-ons that have a non-zero rate —
+  // unpriced entries are treated as "not offered with this package" and
+  // simply omitted from the UI.
+  const buildAddonsFromList = (list) =>
+    (Array.isArray(list) ? list : [])
+      .map((a) => {
+        const label = String(a?.label || "").trim();
+        if (!label) return null;
+        const price = Number(a?.price) || 0;
+        if (price <= 0) return null; // skip unpriced
+        return {
+          key: String(a?.key || label.toLowerCase().replace(/[^a-z0-9]+/g, "-")),
+          label,
+          price,
+          checked: false,
+        };
+      })
+      .filter(Boolean);
+  const [addons, setAddons] = useState([]);
   // Free-form custom addons — agent can add any extra item with a label
   // and (optional) price; both are added on top of the package total.
   const [extraServices, setExtraServices] = useState([
@@ -111,6 +120,49 @@ const HoneymoonBooking = () => {
   const [rates, setRates] = useState([]);
   const [includedHotels, setIncludedHotels] = useState([]);
   const [selectedRate, setSelectedRate] = useState(pkg?.selectedRate || null);
+
+  // Pull the package's add-on services + rates. localStorage cache
+  // (written by Registration / Package Rates pages) wins because it
+  // always holds the latest rates the agent set; API is consulted as a
+  // backup. Only entries with a non-zero rate make it onto the booking
+  // form.
+  useEffect(() => {
+    if (!pkg?.id) return;
+    let cancelled = false;
+    (async () => {
+      // 1) localStorage cache — fastest + most up to date.
+      let storedAddOns = null;
+      try {
+        const raw = localStorage.getItem(`honeymoon_addons_${pkg.id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed?.addOns)) storedAddOns = parsed.addOns;
+        }
+      } catch {
+        /* ignore */
+      }
+      if (storedAddOns && storedAddOns.length) {
+        if (!cancelled) setAddons(buildAddonsFromList(storedAddOns));
+      }
+      // 2) Anything attached to `pkg` directly (search/list page).
+      if ((!storedAddOns || !storedAddOns.length) && Array.isArray(pkg.addOns) && pkg.addOns.length) {
+        if (!cancelled) setAddons(buildAddonsFromList(pkg.addOns));
+      }
+      // 3) Server is authoritative for the list, but only overrides when
+      //    we don't already have something newer locally.
+      try {
+        const r = await axiosInstance.get(`/api/honeymoon/${pkg.id}`);
+        if (!cancelled && Array.isArray(r?.data?.addOns) && (!storedAddOns || !storedAddOns.length)) {
+          setAddons(buildAddonsFromList(r.data.addOns));
+        }
+      } catch {
+        /* server might not have the field — that's fine */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pkg?.id]);
 
   useEffect(() => {
     if (!pkg) {
@@ -578,74 +630,83 @@ const HoneymoonBooking = () => {
                   </Card>
 
                   {/* Add-on Services card — checkboxes for common honeymoon
-                      addons, free-form rows for custom items, and Tourism
-                      Dirham. All three contribute to the grand total. */}
+                      addons (rates come from the package), free-form rows
+                      for custom items, and Tourism Dirham. All three
+                      contribute to the grand total. */}
                   <Card className="mb-3 shadow-sm">
-                    <Card.Header className="bg-white fw-semibold">
-                      Add-on Services
+                    <Card.Header className="bg-white fw-semibold d-flex align-items-center justify-content-between">
+                      <span>Add-on Services</span>
+                      <small className="text-muted fw-normal">
+                        Rates are set on the package — tick what the guest wants
+                      </small>
                     </Card.Header>
                     <Card.Body>
-                      <Row className="g-3">
-                        {addons.map((a, idx) => (
-                          <Col md={6} key={a.key}>
-                            <div className="d-flex align-items-center gap-2">
-                              <Form.Check
-                                type="checkbox"
-                                id={`hm-addon-${a.key}`}
-                                label={a.label}
-                                checked={a.checked}
-                                onChange={(e) =>
-                                  setAddons((prev) =>
-                                    prev.map((x, i) =>
-                                      i === idx
-                                        ? { ...x, checked: e.target.checked }
-                                        : x
-                                    )
-                                  )
-                                }
-                              />
-                              {/* Price for the selected add-on. Label and
-                                  placeholder are descriptive so the agent
-                                  knows what to enter (Issue 3). */}
-                              <Form.Control
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                placeholder={`Price for ${a.label} (₹)`}
-                                aria-label={`${a.label} price`}
-                                title={`Enter the price for ${a.label}`}
-                                value={a.price}
-                                disabled={!a.checked}
-                                onChange={(e) =>
-                                  setAddons((prev) =>
-                                    prev.map((x, i) =>
-                                      i === idx
-                                        ? { ...x, price: e.target.value }
-                                        : x
-                                    )
-                                  )
-                                }
-                                style={{ maxWidth: 180 }}
-                              />
-                            </div>
-                            {a.checked && (
-                              <Form.Text muted className="small">
-                                Enter the price (₹) for {a.label}. Adds on
-                                top of the package total.
-                              </Form.Text>
-                            )}
-                          </Col>
-                        ))}
-                      </Row>
+                      {/* Add-ons are populated from the package — the list
+                          only contains items the agent priced on the
+                          Package Rates page. If nothing was priced this
+                          section just shows an empty hint. */}
+                      {addons.length === 0 ? (
+                        <div className="text-muted small fst-italic">
+                          No add-on services available for this package.
+                        </div>
+                      ) : (
+                        <Row className="g-3">
+                          {addons.map((a, idx) => {
+                            const rate = Number(a.price) || 0;
+                            return (
+                              <Col md={6} key={a.key}>
+                                <div className="d-flex align-items-center justify-content-between gap-2 border rounded p-2">
+                                  <Form.Check
+                                    type="checkbox"
+                                    id={`hm-addon-${a.key}`}
+                                    label={
+                                      <span className="d-inline-flex flex-column">
+                                        <span className="fw-semibold">
+                                          {a.label}
+                                        </span>
+                                        <small className="text-muted">
+                                          Rate set by package
+                                        </small>
+                                      </span>
+                                    }
+                                    checked={a.checked}
+                                    onChange={(e) =>
+                                      setAddons((prev) =>
+                                        prev.map((x, i) =>
+                                          i === idx
+                                            ? { ...x, checked: e.target.checked }
+                                            : x
+                                        )
+                                      )
+                                    }
+                                  />
+                                  <Badge
+                                    bg="primary"
+                                    className="px-2 py-2"
+                                    style={{ minWidth: 90, textAlign: "right" }}
+                                  >
+                                    ₹ {rate.toLocaleString()}
+                                  </Badge>
+                                </div>
+                              </Col>
+                            );
+                          })}
+                        </Row>
+                      )}
 
                       <hr />
                       <div className="d-flex justify-content-between align-items-center mb-2">
-                        <strong>Additional Services</strong>
+                        <div>
+                          <strong>Additional Services</strong>
+                          <div className="text-muted small">
+                            Free-form notes — no extra charge added to the total.
+                          </div>
+                        </div>
                         <Button
                           size="sm"
                           variant="outline-success"
                           onClick={() =>
-                            setExtraServices((p) => [...p, { label: "", price: "" }])
+                            setExtraServices((p) => [...p, { label: "", price: 0 }])
                           }
                         >
                           + Add Service
@@ -653,7 +714,7 @@ const HoneymoonBooking = () => {
                       </div>
                       {extraServices.map((row, i) => (
                         <Row className="g-2 mb-2 align-items-center" key={i}>
-                          <Col md={7}>
+                          <Col md={11}>
                             <Form.Control
                               placeholder="Service name (e.g. Champagne welcome)"
                               value={row.label}
@@ -661,23 +722,6 @@ const HoneymoonBooking = () => {
                                 setExtraServices((p) =>
                                   p.map((x, idx) =>
                                     idx === i ? { ...x, label: e.target.value } : x
-                                  )
-                                )
-                              }
-                            />
-                          </Col>
-                          <Col md={4}>
-                            <Form.Control
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              placeholder="Price in ₹ (per service)"
-                              aria-label="Custom service price"
-                              value={row.price}
-                              onChange={(e) =>
-                                setExtraServices((p) =>
-                                  p.map((x, idx) =>
-                                    idx === i ? { ...x, price: e.target.value } : x
                                   )
                                 )
                               }

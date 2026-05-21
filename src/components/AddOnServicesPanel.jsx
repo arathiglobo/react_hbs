@@ -22,187 +22,153 @@ export const ADDON_SERVICES_STORAGE_KEY = "mypkg_addon_services";
  *   "time"     → time input
  *   "select"   → <select> with `options`
  */
-// Standard date + time pair appended to every service so the operator
-// can always specify when the service is needed. Some services need
-// these in addition to their own date/time fields (e.g. Meet & Greet
-// has arrival/departure times) — the extra `serviceDate` / `serviceTime`
-// represents the day/time the service itself is delivered.
-const DATETIME_FIELDS = [
-  { name: "serviceDate", label: "Service date", kind: "date" },
-  { name: "serviceTime", label: "Service time", kind: "time" },
-];
-
+// Canonical catalogue of add-on services for the Make-Your-Own-Package
+// v2 wizard. Each entry is rendered as its own wizard step:
+//   • a Yes/No question gates the step (No → empty save, skip to next)
+//   • when Yes is picked, the listed `fields` collect the details
+//
+// `kind` controls the rendered input:
+//   "text"     → single-line text
+//   "textarea" → multiline text
+//   "number"   → numeric input
+//   "date"     → date input
+//   "time"     → time input
+//   "select"   → <select> with `options: [{value,label}]`
+//   "radio"    → inline radio group with `options: [{value,label}]`
+//   "file"     → file picker (stores the chosen filename only — the
+//                 backend should accept the file separately via FormData)
 export const ADDON_SERVICES_CATALOG = [
   {
     key: "visa",
-    label: "Visa",
+    label: "Visa Details",
+    question: "Do you need visa assistance / want to capture visa details for this booking?",
     fields: [
-      { name: "adults",      label: "Adults",      kind: "number" },
-      { name: "adultRate",   label: "Adult rate",  kind: "number" },
-      { name: "children",    label: "Children",    kind: "number" },
-      { name: "childRate",   label: "Child rate",  kind: "number" },
-      { name: "nationality", label: "Nationality", kind: "text" },
-      ...DATETIME_FIELDS,
-      { name: "notes",       label: "Notes",       kind: "textarea" },
+      { name: "visaStatus", label: "Visa Status", kind: "select",
+        options: [
+          { value: "",                label: "Select status" },
+          { value: "Required",        label: "Required" },
+          { value: "Already Issued",  label: "Already Issued" },
+          { value: "On Arrival",      label: "On Arrival" },
+          { value: "Not Required",    label: "Not Required" },
+        ] },
+      { name: "visaType", label: "Visa Type", kind: "select",
+        options: [
+          { value: "",               label: "Select type" },
+          { value: "Tourist Visa",   label: "Tourist Visa" },
+          { value: "Business Visa",  label: "Business Visa" },
+          { value: "Transit Visa",   label: "Transit Visa" },
+          { value: "Student Visa",   label: "Student Visa" },
+        ] },
+      { name: "visaNumber",       label: "Visa Number",         kind: "text" },
+      { name: "visaExpiryDate",   label: "Visa Expiry Date",    kind: "date" },
+      { name: "countryIssuedFor", label: "Country Issued For",  kind: "text" },
+      { name: "passportNumber",   label: "Passport Number",     kind: "text" },
+      { name: "visaCopy",         label: "Visa Copy Upload",    kind: "file" },
+      { name: "passportCopy",     label: "Passport Upload (optional)", kind: "file" },
+      { name: "entryType", label: "Entry Type", kind: "select",
+        options: [
+          { value: "",                 label: "Select entry type" },
+          { value: "Single Entry",     label: "Single Entry" },
+          { value: "Double Entry",     label: "Double Entry" },
+          { value: "Multiple Entry",   label: "Multiple Entry" },
+        ] },
+      { name: "remarks", label: "Remarks", kind: "textarea" },
+      { name: "notes",   label: "Notes",   kind: "textarea" },
     ],
   },
   {
     key: "meetAndGreet",
     label: "Meet & Greet",
+    question: "Do you need a Meet & Greet service at the airport?",
     fields: [
-      { name: "arrivalFlight",   label: "Arrival flight",   kind: "text" },
-      { name: "arrivalTime",     label: "Arrival time",     kind: "time" },
-      { name: "departureFlight", label: "Departure flight", kind: "text" },
-      { name: "departureTime",   label: "Departure time",   kind: "time" },
-      { name: "pax",             label: "Pax",              kind: "number" },
-      ...DATETIME_FIELDS,
-      { name: "notes",           label: "Notes",            kind: "textarea" },
+      { name: "airportName",         label: "Airport Name",          kind: "text" },
+      { name: "passengerNameBoard",  label: "Passenger Name Board",  kind: "text" },
+      { name: "flightNumber",        label: "Flight Number",         kind: "text" },
+      { name: "arrivalTime",         label: "Arrival Time",          kind: "time" },
+      { name: "passengerCount",      label: "Passenger Count",       kind: "number" },
+      { name: "vipAssistance", label: "VIP Assistance", kind: "radio",
+        options: [
+          { value: "Yes", label: "Yes" },
+          { value: "No",  label: "No" },
+        ] },
+      { name: "specialInstructions", label: "Special Instructions",  kind: "textarea" },
     ],
   },
   {
-    key: "airportTransfer",
-    label: "Airport transfer (departure combo 10% off)",
+    key: "travelInsurance",
+    label: "Travel Insurance",
+    question: "Do you want to add travel insurance to this booking?",
     fields: [
-      { name: "arrivalFlight", label: "Arrival flight", kind: "text" },
-      { name: "arrivalTime",   label: "Arrival time",   kind: "time" },
-      { name: "departureCombo", label: "Departure combo", kind: "select",
+      { name: "insurancePlan", label: "Insurance Plan", kind: "select",
         options: [
-          { value: "no",  label: "No (no discount)" },
-          { value: "yes", label: "Yes (10% off)" },
+          { value: "",                  label: "Select plan" },
+          { value: "Medical",           label: "Medical" },
+          { value: "Trip Cancellation", label: "Trip Cancellation" },
+          { value: "Lost Baggage",      label: "Lost Baggage" },
+          { value: "Flight Delay",      label: "Flight Delay" },
         ] },
-      { name: "pickupHotel", label: "Pickup hotel", kind: "text" },
-      ...DATETIME_FIELDS,
-      { name: "notes",       label: "Notes",        kind: "textarea" },
+      { name: "coverageType",      label: "Coverage Type",      kind: "text" },
+      { name: "travelerCount",     label: "Traveler Count",     kind: "number" },
+      { name: "startDate",         label: "Start Date",         kind: "date" },
+      { name: "endDate",           label: "End Date",           kind: "date" },
+      { name: "medicalConditions", label: "Medical Conditions", kind: "textarea" },
+      { name: "emergencyContact",  label: "Emergency Contact",  kind: "text" },
     ],
   },
   {
-    key: "hotelAccommodation",
-    label: "Hotel Accommodation (clubbing cities = bigger discount)",
+    key: "simCard",
+    label: "SIM Card / eSIM",
+    question: "Do you need a SIM card or eSIM for the trip?",
     fields: [
-      { name: "preferredCategory", label: "Preferred category", kind: "select",
+      { name: "simType", label: "SIM Type", kind: "radio",
         options: [
-          { value: "",   label: "Any" },
-          { value: "3*", label: "3 Star" },
-          { value: "4*", label: "4 Star" },
-          { value: "5*", label: "5 Star" },
+          { value: "Physical SIM", label: "Physical SIM" },
+          { value: "eSIM",         label: "eSIM" },
         ] },
-      { name: "preferredHotels", label: "Preferred hotels",  kind: "text" },
-      { name: "mealPlan",        label: "Meal plan",         kind: "select",
+      { name: "destinationCountry", label: "Destination Country", kind: "text" },
+      { name: "dataPackage",        label: "Data Package",        kind: "text" },
+      { name: "validityDays",       label: "Validity (days)",     kind: "number" },
+      { name: "mobileNumber",       label: "Mobile Number",       kind: "text" },
+      { name: "deliveryMethod", label: "Delivery Method", kind: "select",
         options: [
-          { value: "",    label: "Any" },
-          { value: "RO",  label: "Room only" },
-          { value: "BB",  label: "Bed & Breakfast" },
-          { value: "HB",  label: "Half board" },
-          { value: "FB",  label: "Full board" },
-          { value: "AI",  label: "All inclusive" },
+          { value: "",                label: "Select delivery" },
+          { value: "Airport Pickup",  label: "Airport Pickup" },
+          { value: "Hotel Delivery",  label: "Hotel Delivery" },
+          { value: "Home Delivery",   label: "Home Delivery" },
         ] },
-      ...DATETIME_FIELDS,
+      { name: "pickupLocation",     label: "Pickup Location",     kind: "text" },
+    ],
+  },
+  {
+    key: "fastTrackImmigration",
+    label: "Fast Track Immigration",
+    question: "Do you need Fast Track Immigration assistance?",
+    fields: [
+      { name: "airport", label: "Airport", kind: "select",
+        options: [
+          { value: "",       label: "Select airport" },
+          { value: "DXB",    label: "DXB - Dubai International" },
+          { value: "AUH",    label: "AUH - Abu Dhabi International" },
+          { value: "SHJ",    label: "SHJ - Sharjah International" },
+          { value: "DWC",    label: "DWC - Al Maktoum International" },
+          { value: "Other",  label: "Other" },
+        ] },
+      { name: "direction", label: "Arrival / Departure", kind: "radio",
+        options: [
+          { value: "Arrival",   label: "Arrival" },
+          { value: "Departure", label: "Departure" },
+        ] },
+      { name: "passengerCount", label: "Passenger Count", kind: "number" },
+      { name: "flightNumber",   label: "Flight Number",   kind: "text" },
+      { name: "travelDate",     label: "Travel Date",     kind: "date" },
+      { name: "priorityLevel", label: "Priority Level", kind: "select",
+        options: [
+          { value: "",          label: "Select priority" },
+          { value: "Standard",  label: "Standard" },
+          { value: "Premium",   label: "Premium" },
+          { value: "VIP",       label: "VIP" },
+        ] },
       { name: "notes", label: "Notes", kind: "textarea" },
-    ],
-  },
-  {
-    key: "tours",
-    label: "Tours (list of tours)",
-    fields: [
-      { name: "tourNames", label: "Tour names", kind: "textarea" },
-      { name: "pax",       label: "Pax",        kind: "number" },
-      ...DATETIME_FIELDS,
-      { name: "notes",     label: "Notes",      kind: "textarea" },
-    ],
-  },
-  {
-    key: "restaurantsAndDinners",
-    label: "Restaurants & Dinners",
-    fields: [
-      { name: "restaurantNames", label: "Restaurant / dinner names", kind: "textarea" },
-      { name: "pax",             label: "Pax",                       kind: "number" },
-      ...DATETIME_FIELDS,
-      { name: "notes",           label: "Notes",                     kind: "textarea" },
-    ],
-  },
-  {
-    key: "optionalTours",
-    label: "Optional tours",
-    fields: [
-      { name: "tourNames", label: "Tour names", kind: "textarea" },
-      { name: "pax",       label: "Pax",        kind: "number" },
-      ...DATETIME_FIELDS,
-      { name: "notes",     label: "Notes",      kind: "textarea" },
-    ],
-  },
-  {
-    key: "yachtRental",
-    label: "Yacht Rental",
-    fields: [
-      { name: "durationHours", label: "Duration (hrs)", kind: "number" },
-      { name: "pax",           label: "Pax",            kind: "number" },
-      ...DATETIME_FIELDS,
-      { name: "notes",         label: "Notes",          kind: "textarea" },
-    ],
-  },
-  {
-    key: "stretchLimoRental",
-    label: "Stretch Limo Rental",
-    fields: [
-      { name: "durationHours", label: "Duration (hrs)", kind: "number" },
-      { name: "pax",           label: "Pax",            kind: "number" },
-      ...DATETIME_FIELDS,
-      { name: "notes",         label: "Notes",          kind: "textarea" },
-    ],
-  },
-  {
-    key: "scubaDiving",
-    label: "Scuba Diving",
-    fields: [
-      { name: "pax",     label: "Pax",   kind: "number" },
-      { name: "level",   label: "Level", kind: "select",
-        options: [
-          { value: "beginner",     label: "Beginner" },
-          { value: "intermediate", label: "Intermediate" },
-          { value: "advanced",     label: "Advanced" },
-        ] },
-      ...DATETIME_FIELDS,
-      { name: "notes", label: "Notes", kind: "textarea" },
-    ],
-  },
-  {
-    key: "jetSkiing",
-    label: "Jet Skiing",
-    fields: [
-      { name: "pax",            label: "Pax",            kind: "number" },
-      { name: "durationMinutes", label: "Duration (min)", kind: "number" },
-      ...DATETIME_FIELDS,
-      { name: "notes",          label: "Notes",          kind: "textarea" },
-    ],
-  },
-  {
-    key: "shoppingTour",
-    label: "Shopping Tour",
-    fields: [
-      { name: "pax",      label: "Pax",       kind: "number" },
-      { name: "areas",    label: "Areas / malls", kind: "text" },
-      ...DATETIME_FIELDS,
-      { name: "notes",    label: "Notes",     kind: "textarea" },
-    ],
-  },
-  {
-    key: "carWithDriver5h",
-    label: "Car with Driver — 5 hrs (half day)",
-    fields: [
-      { name: "pickup",  label: "Pickup", kind: "text" },
-      { name: "dropoff", label: "Dropoff", kind: "text" },
-      ...DATETIME_FIELDS,
-      { name: "notes",   label: "Notes",  kind: "textarea" },
-    ],
-  },
-  {
-    key: "carWithDriver10h",
-    label: "Car with Driver — 10 hrs (full day)",
-    fields: [
-      { name: "pickup",  label: "Pickup",  kind: "text" },
-      { name: "dropoff", label: "Dropoff", kind: "text" },
-      ...DATETIME_FIELDS,
-      { name: "notes",   label: "Notes",   kind: "textarea" },
     ],
   },
 ];
@@ -255,6 +221,200 @@ export const collectEnabledAddOnServices = () => {
   });
   return Object.keys(out).length > 0 ? out : null;
 };
+
+/**
+ * Single-service form — renders just one entry from
+ * ADDON_SERVICES_CATALOG as a Yes/No toggle plus its fields. Reads and
+ * writes the same sessionStorage key as <AddOnServicesPanel/>, so a
+ * wizard that splits each service into its own step stays in sync with
+ * any panel rendered elsewhere on the page.
+ */
+export function SingleAddOnService({ serviceKey }) {
+  const svc = useMemo(
+    () => ADDON_SERVICES_CATALOG.find((s) => s.key === serviceKey),
+    [serviceKey]
+  );
+  const [current, setCurrent] = useState(() => {
+    const all = readAddOnServices();
+    return all[serviceKey] || (svc ? blankService(svc) : { enabled: false });
+  });
+
+  // When the `serviceKey` prop changes (e.g. the parent reused this
+  // component instance across wizard steps without giving it a fresh
+  // `key`), re-pull the slot for the new service so the toggle + fields
+  // don't bleed the previous service's data into this step — and so
+  // typing here doesn't accidentally overwrite the new slot with the
+  // previous service's content.
+  useEffect(() => {
+    const all = readAddOnServices();
+    setCurrent(all[serviceKey] || (svc ? blankService(svc) : { enabled: false }));
+  }, [serviceKey, svc]);
+
+  // Re-sync when another component writes a fresh value to the shared
+  // sessionStorage key.
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === ADDON_SERVICES_STORAGE_KEY) {
+        const all = readAddOnServices();
+        setCurrent(all[serviceKey] || (svc ? blankService(svc) : { enabled: false }));
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [serviceKey, svc]);
+
+  const persist = (next) => {
+    setCurrent(next);
+    const all = readAddOnServices();
+    all[serviceKey] = next;
+    try {
+      sessionStorage.setItem(ADDON_SERVICES_STORAGE_KEY, JSON.stringify(all));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  if (!svc) {
+    return (
+      <div className="text-muted small fst-italic">
+        Unknown service: {serviceKey}
+      </div>
+    );
+  }
+
+  // Default question if a catalogue entry didn't set one.
+  const question = svc.question || `Do you need ${svc.label}?`;
+
+  return (
+    <Card className="shadow-sm border-0 rounded-4">
+      <Card.Body className="p-4">
+        <h5 className="fw-bold mb-1">{svc.label}</h5>
+        <div className="mb-3" style={{ color: "#4b5563", fontSize: "0.95rem" }}>
+          {question}
+        </div>
+
+        {/* Yes / No gate. Picking No clears the field state for this
+            service so stale data isn't shipped on save. */}
+        <div className="d-flex gap-3 mb-3">
+          <Form.Check
+            type="radio"
+            id={`addon-${svc.key}-yes`}
+            name={`addon-${svc.key}-gate`}
+            label={
+              <span className="fw-semibold" style={{ color: current.enabled ? "#16a34a" : undefined }}>
+                Yes
+              </span>
+            }
+            checked={current.enabled === true}
+            onChange={() => persist({ ...current, enabled: true })}
+          />
+          <Form.Check
+            type="radio"
+            id={`addon-${svc.key}-no`}
+            name={`addon-${svc.key}-gate`}
+            label={
+              <span className="fw-semibold" style={{ color: current.enabled === false ? "#6b7280" : undefined }}>
+                No
+              </span>
+            }
+            checked={current.enabled === false}
+            // Just flip the gate — keep typed-in field values so the
+            // operator doesn't lose work if they toggle Yes→No→Yes.
+            // collectEnabledAddOnServices() filters out disabled
+            // services at save-time, so the data never ships.
+            onChange={() => persist({ ...current, enabled: false })}
+          />
+        </div>
+
+        {current.enabled === true ? (
+          <Row className="g-3">
+            {svc.fields.map((f) => {
+              const value = current[f.name] || "";
+              const isWide = f.kind === "textarea" || f.kind === "file";
+              return (
+                <Col xs={12} md={isWide ? 12 : 6} key={f.name}>
+                  <Form.Label className="small text-muted fw-semibold mb-1">
+                    {f.label}
+                  </Form.Label>
+                  {f.kind === "textarea" ? (
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      value={value}
+                      onChange={(e) => persist({ ...current, [f.name]: e.target.value })}
+                    />
+                  ) : f.kind === "select" ? (
+                    <Form.Select
+                      value={value}
+                      onChange={(e) => persist({ ...current, [f.name]: e.target.value })}
+                    >
+                      {(f.options || []).map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  ) : f.kind === "radio" ? (
+                    <div className="d-flex flex-wrap gap-3 pt-1">
+                      {(f.options || []).map((o) => (
+                        <Form.Check
+                          key={o.value}
+                          type="radio"
+                          id={`addon-${svc.key}-${f.name}-${o.value}`}
+                          name={`addon-${svc.key}-${f.name}`}
+                          label={o.label}
+                          checked={value === o.value}
+                          onChange={() => persist({ ...current, [f.name]: o.value })}
+                        />
+                      ))}
+                    </div>
+                  ) : f.kind === "file" ? (
+                    <>
+                      <Form.Control
+                        type="file"
+                        onChange={(e) => {
+                          // sessionStorage can't hold a real File object;
+                          // we persist the chosen filename only. The
+                          // booking page can ask the operator to re-upload
+                          // when actually submitting to the backend.
+                          const file = e.target.files?.[0];
+                          persist({ ...current, [f.name]: file?.name || "" });
+                        }}
+                      />
+                      {value && (
+                        <small className="text-success d-block mt-1">
+                          ✓ Selected: <span className="fw-semibold">{value}</span>
+                        </small>
+                      )}
+                    </>
+                  ) : (
+                    <Form.Control
+                      type={f.kind}
+                      value={value}
+                      onChange={(e) => persist({ ...current, [f.name]: e.target.value })}
+                    />
+                  )}
+                </Col>
+              );
+            })}
+          </Row>
+        ) : current.enabled === false ? (
+          <div className="text-muted fst-italic small py-3 border-top pt-3">
+            <span className="fw-semibold text-secondary">Skipped.</span>{" "}
+            Click <span className="fw-semibold">Next →</span> to continue.
+          </div>
+        ) : (
+          <div className="text-muted fst-italic small py-3 border-top pt-3">
+            Pick <span className="fw-semibold text-success">Yes</span> to
+            capture the details, or{" "}
+            <span className="fw-semibold text-secondary">No</span> to skip
+            this service.
+          </div>
+        )}
+      </Card.Body>
+    </Card>
+  );
+}
 
 /**
  * Sticky right-rail panel. Place once on any page in the

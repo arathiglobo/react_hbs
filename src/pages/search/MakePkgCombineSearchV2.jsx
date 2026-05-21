@@ -5,8 +5,6 @@ import {
   Col,
   Form,
   Button,
-  Tabs,
-  Tab,
   Spinner,
   Pagination,
   Badge,
@@ -32,10 +30,15 @@ import {
   FaInfoCircle,
   FaShieldAlt,
   FaChevronDown,
-  FaMapMarkerAlt
+  FaMapMarkerAlt,
+  FaConciergeBell,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import {
+  SingleAddOnService,
+  ADDON_SERVICES_CATALOG,
+} from "../../components/AddOnServicesPanel";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { useLocation, useNavigate } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
@@ -209,6 +212,39 @@ function LazyImage({ src, alt, className }) {
 // ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
+// v2 prefetch — MakeUrOwnPackageV2 kicks off hotel/transfer/activity
+// searches in the background right after the criteria form is submitted
+// and stashes the mapped results in sessionStorage. We pick them up on
+// mount here so the operator only searches once. Each per-tab Search
+// button stays as a manual fallback.
+const PREFETCH_KEYS = {
+  criteria: "makePkgV2PrefetchCriteriaKey",
+  status: "makePkgV2PrefetchStatus",
+  hotel: "makePkgV2PrefetchHotel",
+  transfer: "makePkgV2PrefetchTransfer",
+  tour: "makePkgV2PrefetchTour",
+};
+
+const computeCriteriaKey = (c) => {
+  try {
+    return JSON.stringify({
+      travelDate: c?.travelDate || "",
+      agentId: c?.agent || "",
+      natId: c?.nationality?.value ?? "",
+      natCode: c?.nationality?.code ?? "",
+      dests: (c?.itinerary || []).map((it) => ({
+        v: it?.selectedDestination?.value ?? "",
+        n: it?.nights || 1,
+      })),
+      adults: c?.adults || 1,
+      children: c?.children || 0,
+      childAges: c?.childAges || [],
+    });
+  } catch {
+    return "";
+  }
+};
+
 // v2 helpers — read the service gates + visa-required choice from the
 // add-ons-first page. Kept inline so the legacy component isn't touched.
 const readV2Services = () => {
@@ -233,14 +269,22 @@ export default function MakePkgCombineSearchV2() {
   // corresponding tab so the operator only sees what the booking covers.
   const v2Services = readV2Services();
   const v2VisaRequired = readV2VisaRequired();
-  // Pick a sensible default tab — first one that's enabled.
-  const v2InitialTab = v2Services.hotel
-    ? "accommodation"
-    : v2Services.transfer
-    ? "transfer"
-    : v2Services.tour
-    ? "tours"
-    : "accommodation";
+  // Wizard steps — add-on services come first (one step per catalogue
+  // entry: Visa → Meet & Greet → Airport Transfer → ...), then the
+  // hotel / transfer / activity search steps (only the ones enabled by
+  // v2Services). The last step's Next button becomes "Proceed to Booking".
+  const wizardSteps = [
+    ...ADDON_SERVICES_CATALOG.map((svc) => ({
+      key: `addon-${svc.key}`,
+      label: svc.label,
+      Icon: FaConciergeBell,
+      type: "addon",
+      serviceKey: svc.key,
+    })),
+    v2Services.hotel    && { key: "accommodation", label: "Hotel",      Icon: FaHotel,     type: "search" },
+    v2Services.transfer && { key: "transfer",       label: "Transfer",   Icon: FaCar,       type: "search" },
+    v2Services.tour     && { key: "tours",          label: "Activities", Icon: FaTicketAlt, type: "search" },
+  ].filter(Boolean);
   const location = useLocation();
   // Pull search criteria from location.state first; fall back to the
   // sessionStorage snapshot written by MakeUrOwnPackageV2 / addons page
@@ -283,8 +327,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
       : destination?.label || ""
   );
   const [agentId, setAgentId] = useState(agent || "");
-  // v2: start on whichever tab is enabled by the add-ons-first selection.
-  const [activeTab, setActiveTab] = useState(v2InitialTab);
+  // v2: wizard step index — 0 = first enabled service.
+  const [currentStepIdx, setCurrentStepIdx] = useState(0);
+  const [isProceeding, setIsProceeding] = useState(false);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [rooms, setRooms] = useState([
     {
@@ -393,6 +438,110 @@ const [activeAccordion, setActiveAccordion] = useState({});
       window.removeEventListener("cartUpdated", checkHotelInCart);
     };
   }, [checkHotelInCart]);
+
+  // Hydrate from the v2 prefetch (started on the criteria form page) so
+  // the operator doesn't have to hit Search a second time on each tab.
+  // We compare a hash of the criteria so stale results from a previous
+  // submit are ignored; if the prefetch is still in flight we poll every
+  // 300 ms (up to 60 s) and the per-tab Search buttons stay available
+  // as a manual fallback.
+  useEffect(() => {
+    const storedKey = sessionStorage.getItem(PREFETCH_KEYS.criteria);
+    if (!storedKey) return;
+    const currentKey = computeCriteriaKey(searchCriteria);
+    if (storedKey !== currentKey) return;
+
+    const done = { hotel: false, transfer: false, tour: false };
+
+    const tryHydrate = () => {
+      if (!done.hotel && v2Services.hotel) {
+        try {
+          const raw = sessionStorage.getItem(PREFETCH_KEYS.hotel);
+          if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              setAllResults(arr);
+              setTotalElements(arr.length);
+              setTotalPages(Math.max(1, Math.ceil(arr.length / pageSize)));
+              setHasSearchResult(true);
+              setIsInitialResultsLoaded(true);
+              setPollStatus("COMPLETED");
+              setHasSearched(true);
+              setSearchId(null);
+              done.hotel = true;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!done.transfer && v2Services.transfer) {
+        try {
+          const raw = sessionStorage.getItem(PREFETCH_KEYS.transfer);
+          if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              setTransferResults(arr);
+              setHasTransferSearched(true);
+              done.transfer = true;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!done.tour && v2Services.tour) {
+        try {
+          const raw = sessionStorage.getItem(PREFETCH_KEYS.tour);
+          if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              setTourResults(arr);
+              setHasTourSearched(true);
+              done.tour = true;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    tryHydrate();
+
+    const isPending = () =>
+      (v2Services.hotel && !done.hotel) ||
+      (v2Services.transfer && !done.transfer) ||
+      (v2Services.tour && !done.tour);
+
+    const readStatuses = () => {
+      try {
+        return JSON.parse(sessionStorage.getItem(PREFETCH_KEYS.status) || "{}");
+      } catch {
+        return {};
+      }
+    };
+
+    const allTerminal = () => {
+      const s = readStatuses();
+      return ["hotel", "transfer", "tour"].every((k) => {
+        if (!v2Services[k]) return true;
+        if (done[k]) return true;
+        return s[k] === "error";
+      });
+    };
+
+    if (!isPending() || allTerminal()) return;
+
+    const startedAt = Date.now();
+    const interval = setInterval(() => {
+      tryHydrate();
+      if (!isPending() || allTerminal() || Date.now() - startedAt > 60_000) {
+        clearInterval(interval);
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, [pageSize]);
 
   const formatDateToDDMMYYYY = (dateString) => {
     if (!dateString) return "";
@@ -1347,38 +1496,11 @@ const [activeAccordion, setActiveAccordion] = useState({});
             <AgentBalanceDisplay agentId={agentId} />
           </div>
 
-          {/* v2: read-only summary of the selections made on the
-              /addons step. Anyone can click "Change" to go back. */}
-          <Card className="shadow-sm rounded-xl mb-3 border-primary border-2">
-            <Card.Body className="py-2 px-3 d-flex flex-wrap align-items-center gap-2">
-              <span className="fw-semibold me-2">Booking includes:</span>
-              {v2Services.hotel && (
-                <span className="badge bg-primary">Hotel</span>
-              )}
-              {v2Services.transfer && (
-                <span className="badge bg-info">Transfer</span>
-              )}
-              {v2Services.tour && (
-                <span className="badge bg-warning text-dark">Tours</span>
-              )}
-              <span
-                className={`badge bg-${v2VisaRequired === "YES" ? "danger" : "secondary"}`}
-              >
-                Visa: {v2VisaRequired}
-              </span>
-              <span className="ms-auto small">
-                <button
-                  type="button"
-                  className="btn btn-link btn-sm p-0"
-                  onClick={() =>
-                    navigate("/new-booking/make-your-own-package-v2/addons")
-                  }
-                >
-                  Change services
-                </button>
-              </span>
-            </Card.Body>
-          </Card>
+          {/* "Booking includes" summary + "Change services" link removed:
+              the wizard step indicator already shows the included
+              services, and the /addons page is no longer part of the
+              flow — services default to all-enabled and add-on
+              selection happens as the last wizard step. */}
 
           <Card className="shadow-sm rounded-xl mb-4">
             <Card.Body>
@@ -1414,111 +1536,107 @@ const [activeAccordion, setActiveAccordion] = useState({});
                 </div>
               </div>
 
-              <Tabs
-                activeKey={activeTab}
-                onSelect={(k) => setActiveTab(k)}
-                className="mb-3 nav-tabs-custom"
-              >
-                {/* ═══════════════════════════════════════
-                    ACCOMMODATION TAB — v2: disabled when services.hotel === false
-                ═══════════════════════════════════════ */}
-                <Tab
-                  eventKey="accommodation"
-                  disabled={!v2Services.hotel}
-                  title={
-                    <>
-                      <FaHotel className="me-2" /> Accommodation
-                      {!v2Services.hotel && <small className="ms-1 text-muted">(skipped)</small>}
-                    </>
-                  }
-                >
+              {/* ═══════════════════════════════════════
+                  WIZARD STEP INDICATOR — compact progress bar
+                  (too many steps to fit numbered circles)
+              ═══════════════════════════════════════ */}
+              {(() => {
+                const total = wizardSteps.length;
+                const idx = currentStepIdx;
+                const pct = total <= 1 ? 100 : Math.round(((idx + 1) / total) * 100);
+                const currentStep = wizardSteps[idx];
+                const nextStep = wizardSteps[idx + 1];
+                const CurrentIcon = currentStep?.Icon;
+                return (
+                  <div className="mb-4">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <div className="d-flex align-items-center gap-2">
+                        {CurrentIcon && (
+                          <span
+                            style={{
+                              width: 36, height: 36,
+                              borderRadius: "50%",
+                              background: "#6366f1",
+                              color: "#fff",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <CurrentIcon />
+                          </span>
+                        )}
+                        <div>
+                          <div className="small text-muted text-uppercase" style={{ letterSpacing: "0.05em", fontSize: "0.7rem" }}>
+                            Step {idx + 1} of {total}
+                          </div>
+                          <div className="fw-bold" style={{ fontSize: "1rem" }}>
+                            {currentStep?.label}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-end">
+                        <div className="small text-muted" style={{ fontSize: "0.7rem" }}>
+                          {nextStep ? "Up next" : "Final step"}
+                        </div>
+                        <div className="small fw-semibold" style={{ color: "#6366f1" }}>
+                          {nextStep ? nextStep.label : "Proceed to Booking"}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      height: 8,
+                      background: "#e9ecef",
+                      borderRadius: 999,
+                      overflow: "hidden",
+                    }}>
+                      <div style={{
+                        width: `${pct}%`,
+                        height: "100%",
+                        background: "linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)",
+                        borderRadius: 999,
+                        transition: "width 0.3s ease",
+                      }} />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ═══════════════════════════════════════
+                  STEP CONTENT
+              ═══════════════════════════════════════ */}
+
+              {/* ── ADD-ON SERVICE (one per catalogue entry) ──
+                  The `key` prop is critical: without it React reuses the
+                  same component instance across steps, the internal
+                  useState initializer doesn't re-run, and the old
+                  service's notes / toggle state bleed into every later
+                  step (and overwrite it on edit). Keying on serviceKey
+                  forces a clean unmount → mount when the user clicks
+                  Next, so each step starts from the correct slot in
+                  sessionStorage. */}
+              {wizardSteps[currentStepIdx]?.type === "addon" && (
+                <SingleAddOnService
+                  key={wizardSteps[currentStepIdx].serviceKey}
+                  serviceKey={wizardSteps[currentStepIdx].serviceKey}
+                />
+              )}
+
+              {/* ── HOTEL ── */}
+              {wizardSteps[currentStepIdx]?.key === "accommodation" && (
                   <Card className="border-0 shadow-sm">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Hotel Search</h5>
-                      <Form onSubmit={handleHotelSearchSubmit}>
-                        <Row className="g-3">
-                          <Col md={3}>
-                            <Form.Group>
-                              <Form.Label>Check In</Form.Label>
-                              <Form.Control
-                                type="date"
-                                value={checkIn}
-                                onChange={(e) => setCheckIn(e.target.value)}
-                              />
-                            </Form.Group>
-                          </Col>
-                          <Col md={3}>
-                            <Form.Group>
-                              <Form.Label>Check Out</Form.Label>
-                              <Form.Control
-                                type="date"
-                                value={checkOut}
-                                onChange={(e) => setCheckOut(e.target.value)}
-                                min={checkIn || undefined}
-                              />
-                            </Form.Group>
-                          </Col>
-                          <Col md={2}>
-                            <Form.Group>
-                              <Form.Label>Nights</Form.Label>
-                              <Form.Control
-                                type="number"
-                                min="1"
-                                value={nightsCount}
-                                onChange={(e) => setNightsCount(e.target.value)}
-                              />
-                            </Form.Group>
-                          </Col>
-                          <Col lg={4} md={6}>
-                            <Form.Label className="fw-semibold text-dark">
-                              👥 Rooms & Guests
-                            </Form.Label>
-                            <Button
-                              variant="outline-primary"
-                              className="w-100 text-start"
-                              type="button"
-                              onClick={() => setRoomsOpen(!roomsOpen)}
-                            >
-                              {adultCount} adults
-                              {childCount ? `, ${childCount} child` : ""} ·{" "}
-                              {rooms.length} room
-                              <span className="float-end">{roomsOpen ? "▴" : "▾"}</span>
-                            </Button>
-                          </Col>
-                        </Row>
+                      {/* Search form removed — the criteria submitted on the
+                          previous page already drives the hotel results, which
+                          are pre-fetched and hydrated on mount. */}
 
-                        <div className="text-center mt-4">
-                          <Button
-                            type="submit"
-                            variant="warning"
-                            className="px-4 py-2"
-                            disabled={isLoading}
-                          >
-                            {isLoading ? (
-                              <>
-                                <Spinner animation="border" size="sm" className="me-2" />
-                                Searching...
-                              </>
-                            ) : (
-                              <>
-                                <FaSearch className="me-2" />
-                                Search
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </Form>
-
-                      {/* ── Empty pre-search state ── */}
+                      {/* ── Loading-while-prefetch state ── */}
                       {!hasSearched && !hasSearchResult && (
                         <Card className="shadow-sm rounded-xl mt-4">
                           <Card.Body className="text-center text-muted py-5">
-                            <FaSearch className="display-4 text-muted mb-3" />
-                            <h4>Ready to Find Your Perfect Stay?</h4>
-                            <p>
-                              Use the search form above to discover amazing hotels
-                              and exclusive deals.
-                            </p>
+                            <Spinner animation="border" className="mb-3" />
+                            <h4>Loading hotel results…</h4>
+                            <p>Fetching availability for the criteria you submitted.</p>
                           </Card.Body>
                         </Card>
                       )}
@@ -2118,116 +2236,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
                       )}
                     </Card.Body>
                   </Card>
-                </Tab>
+              )}
 
-                {/* ═══════════════════════════════════════
-                    TRANSFER TAB
-                ═══════════════════════════════════════ */}
-                <Tab
-                  eventKey="transfer"
-                  disabled={!v2Services.transfer}
-                  title={
-                    <>
-                      <FaCar className="me-2" /> Transfer
-                      {!v2Services.transfer && <small className="ms-1 text-muted">(skipped)</small>}
-                    </>
-                  }
-                >
+              {/* ── TRANSFER ── */}
+              {wizardSteps[currentStepIdx]?.key === "transfer" && (
                   <Card className="border-0 shadow-sm rounded-4">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Transfer Search</h5>
-                      <Form onSubmit={handleTransferSearchSubmit}>
-                        <Row className="g-3">
-                          <Col md={2}>
-                            <Form.Label>Pickup Date</Form.Label>
-                            <Form.Control
-                              type="date"
-                              value={transferPickupDate}
-                              onChange={(e) => setTransferPickupDate(e.target.value)}
-                              min={new Date().toISOString().split("T")[0]}
-                            />
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Dropoff Date</Form.Label>
-                            <Form.Control
-                              type="date"
-                              value={transferDropoffDate}
-                              onChange={(e) => setTransferDropoffDate(e.target.value)}
-                              min={transferPickupDate || undefined}
-                            />
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Adults</Form.Label>
-                            <Form.Select
-                              value={transferAdults}
-                              onChange={(e) =>
-                                setTransferAdults(parseInt(e.target.value) || 1)
-                              }
-                            >
-                              {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Children</Form.Label>
-                            <Form.Select
-                              value={transferChildren}
-                              onChange={(e) =>
-                                setTransferChildren(parseInt(e.target.value) || 0)
-                              }
-                            >
-                              {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Col>
-                          {transferChildren > 0 && (
-                            <Col md={4}>
-                              <Form.Label className="mb-2">Child Ages</Form.Label>
-                              <Row className="g-2">
-                                {transferChildAges.map((age, index) => (
-                                  <Col key={index} md={3} sm={4} xs={6}>
-                                    <Form.Control
-                                      type="number"
-                                      min="0"
-                                      max="17"
-                                      placeholder={`Child ${index + 1} age`}
-                                      value={age}
-                                      onChange={(e) =>
-                                        handleTransferChildAgeChange(index, e.target.value)
-                                      }
-                                    />
-                                  </Col>
-                                ))}
-                              </Row>
-                            </Col>
-                          )}
-                          <Col md={3} className="d-flex align-items-end cab-search">
-                            <Button
-                              variant="warning"
-                              className="w-100 py-2"
-                              type="submit"
-                              disabled={transferLoading}
-                            >
-                              {transferLoading ? (
-                                <>
-                                  <Spinner animation="border" size="sm" className="me-2" />
-                                  Searching...
-                                </>
-                              ) : (
-                                <>
-                                  <FaSearch className="me-2" /> Search
-                                </>
-                              )}
-                            </Button>
-                          </Col>
-                        </Row>
-                      </Form>
+                      {/* Search form removed — transfers are pre-fetched
+                          with the criteria from the previous page. */}
 
                       {transferLoading && (
                         <Card className="shadow-sm rounded-xl mb-4 mt-4">
@@ -2249,11 +2265,8 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
                       {!hasTransferSearched && !transferLoading && (
                         <div className="text-center text-muted mt-5">
-                          <FaCar className="fs-1 mb-3 text-secondary" />
-                          <h6>
-                            No transfer results yet. Run a search to view available
-                            transfers.
-                          </h6>
+                          <Spinner animation="border" className="mb-3" />
+                          <h6>Loading available transfers…</h6>
                         </div>
                       )}
 
@@ -2455,107 +2468,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
                       )}
                     </Card.Body>
                   </Card>
-                </Tab>
+              )}
 
-                {/* ═══════════════════════════════════════
-                    TOURS & ACTIVITIES TAB
-                ═══════════════════════════════════════ */}
-                <Tab
-                  eventKey="tours"
-                  disabled={!v2Services.tour}
-                  title={
-                    <>
-                      <FaTicketAlt className="me-2" /> Tours & Activities
-                      {!v2Services.tour && <small className="ms-1 text-muted">(skipped)</small>}
-                    </>
-                  }
-                >
+              {/* ── TOURS & ACTIVITIES ── */}
+              {wizardSteps[currentStepIdx]?.key === "tours" && (
                   <Card className="border-0 shadow-sm rounded-4">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Activities Search</h5>
-                      <Form onSubmit={handleTourSearchSubmit}>
-                        <Row className="g-3">
-                          <Col md={2}>
-                            <Form.Label>Tour Date</Form.Label>
-                            <Form.Control
-                              type="date"
-                              value={tourDate}
-                              onChange={(e) => setTourDate(e.target.value)}
-                              min={new Date().toISOString().split("T")[0]}
-                            />
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Adults</Form.Label>
-                            <Form.Select
-                              value={tourAdults}
-                              onChange={(e) =>
-                                setTourAdults(parseInt(e.target.value) || 1)
-                              }
-                            >
-                              {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Children</Form.Label>
-                            <Form.Select
-                              value={tourChildren}
-                              onChange={(e) =>
-                                setTourChildren(parseInt(e.target.value) || 0)
-                              }
-                            >
-                              {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Col>
-                          {tourChildren > 0 && (
-                            <Col md={4}>
-                              <Form.Label className="mb-2">Child Ages</Form.Label>
-                              <Row className="g-2">
-                                {tourChildAges.map((age, index) => (
-                                  <Col key={index} md={3} sm={4} xs={6}>
-                                    <Form.Control
-                                      type="number"
-                                      min="0"
-                                      max="17"
-                                      placeholder={`Child ${index + 1} age`}
-                                      value={age}
-                                      onChange={(e) =>
-                                        handleTourChildAgeChange(index, e.target.value)
-                                      }
-                                    />
-                                  </Col>
-                                ))}
-                              </Row>
-                            </Col>
-                          )}
-                          <Col md={3} className="d-flex align-items-end activity-search">
-                            <Button
-                              variant="warning"
-                              className="w-100 py-2"
-                              type="submit"
-                              disabled={tourLoading}
-                            >
-                              {tourLoading ? (
-                                <>
-                                  <Spinner animation="border" size="sm" className="me-2" />
-                                  Searching...
-                                </>
-                              ) : (
-                                <>
-                                  <FaSearch className="me-2" /> Search
-                                </>
-                              )}
-                            </Button>
-                          </Col>
-                        </Row>
-                      </Form>
+                      {/* Search form removed — activities are pre-fetched
+                          with the criteria from the previous page. */}
 
                       {tourLoading && (
                         <Card className="shadow-sm rounded-xl mb-4 mt-4">
@@ -2577,10 +2497,8 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
                       {!hasTourSearched && !tourLoading && (
                         <div className="text-center text-muted mt-5">
-                          <FaTicketAlt className="fs-1 mb-3 text-secondary" />
-                          <h6>
-                            No activities yet. Run a search to view available activities.
-                          </h6>
+                          <Spinner animation="border" className="mb-3" />
+                          <h6>Loading available activities…</h6>
                         </div>
                       )}
 
@@ -2793,8 +2711,92 @@ const [activeAccordion, setActiveAccordion] = useState({});
                       )}
                     </Card.Body>
                   </Card>
-                </Tab>
-              </Tabs>
+              )}
+
+              {/* (Old "Add-ons" monolithic step removed — each service is
+                  now its own wizard step before the search steps.) */}
+
+              {/* ═══════════════════════════════════════
+                  WIZARD NAVIGATION BUTTONS
+              ═══════════════════════════════════════ */}
+              <div className="d-flex justify-content-between mt-4">
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setCurrentStepIdx((i) => Math.max(0, i - 1))}
+                  disabled={currentStepIdx === 0}
+                >
+                  ← Back
+                </Button>
+                <Button
+                  style={{ background: "#6366f1", borderColor: "#6366f1", minWidth: 180 }}
+                  disabled={isProceeding}
+                  onClick={async () => {
+                    if (currentStepIdx < wizardSteps.length - 1) {
+                      setCurrentStepIdx((i) => i + 1);
+                      return;
+                    }
+                    // Last step → fetch the server-side cart, stash it
+                    // in sessionStorage (the booking page reads from
+                    // `makePkgCartData`), then navigate. Without this
+                    // the booking page sees no cart and bounces back to
+                    // the legacy entry route.
+                    setIsProceeding(true);
+                    try {
+                      const proceedAgentId =
+                        sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+                        localStorage.getItem("makeYourOwnPackageAgentId") ||
+                        agent ||
+                        agentId ||
+                        "";
+                      if (!proceedAgentId) {
+                        toast.error("Select an agent before proceeding to checkout.");
+                        return;
+                      }
+                      const res = await axiosInstance.post(
+                        `/api/makeYourOwnPackageV2/cart/fetch?userId=${encodeURIComponent(proceedAgentId)}`
+                      );
+                      const cart = Array.isArray(res.data) ? res.data : [];
+                      if (cart.length === 0) {
+                        toast.error(
+                          "Your cart is empty. Add at least one hotel / transfer / activity before proceeding."
+                        );
+                        return;
+                      }
+                      if (v2Services.hotel && !cart.some((it) => !!it.hotel)) {
+                        toast.error(
+                          "Please add a hotel to your package before proceeding."
+                        );
+                        return;
+                      }
+                      sessionStorage.setItem(
+                        "makePkgCartData",
+                        JSON.stringify(cart)
+                      );
+                      sessionStorage.setItem("makePkgAgentId", String(proceedAgentId));
+                      navigate(
+                        "/new-booking/make-your-own-package-v2/booking-page",
+                        { state: searchCriteria }
+                      );
+                    } catch (err) {
+                      console.error("Proceed to booking failed:", err);
+                      toast.error("Failed to load cart data. Please try again.");
+                    } finally {
+                      setIsProceeding(false);
+                    }
+                  }}
+                >
+                  {currentStepIdx < wizardSteps.length - 1 ? (
+                    "Next →"
+                  ) : isProceeding ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Loading cart…
+                    </>
+                  ) : (
+                    "Proceed to Booking →"
+                  )}
+                </Button>
+              </div>
             </Card.Body>
           </Card>
 

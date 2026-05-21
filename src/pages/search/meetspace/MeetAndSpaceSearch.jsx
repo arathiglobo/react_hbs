@@ -17,7 +17,7 @@
  *
  * Backend: POST /api/meet-and-space/search
  */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Row,
   Col,
@@ -107,12 +107,62 @@ export default function MeetAndSpaceSearch() {
   const [nationalities, setNationalities] = useState([]);
   const [isNationalityLoading, setIsNationalityLoading] = useState(false);
 
+  // Destination — searchable dropdown sourced from /api/province. Same
+  // pattern as DayStaySearch + HotelSearch.
+  const [selectedDestination, setSelectedDestination] = useState(null);
+  const [destinationOptions, setDestinationOptions] = useState([]);
+  const [isDestinationLoading, setIsDestinationLoading] = useState(false);
+  const destDebounceRef = useRef(null);
+  const debouncedDestinationSearch = (searchText = "") => {
+    if (destDebounceRef.current) clearTimeout(destDebounceRef.current);
+    destDebounceRef.current = setTimeout(async () => {
+      if (!searchText || searchText.length < 2) {
+        // Reset to popular list when the user clears their query.
+        try {
+          setIsDestinationLoading(true);
+          const r = await axiosInstance.get("/api/province?limit=50");
+          const rows = Array.isArray(r.data) ? r.data : [];
+          setDestinationOptions(
+            rows.map((c) => ({
+              value: c.id,
+              label: `${c.stateName}${c.country ? `, ${c.country}` : ""}`,
+              countryId: c.countryId,
+            }))
+          );
+        } catch {
+          setDestinationOptions([]);
+        } finally {
+          setIsDestinationLoading(false);
+        }
+        return;
+      }
+      setIsDestinationLoading(true);
+      try {
+        const r = await axiosInstance.get(
+          `/api/province?search=${encodeURIComponent(searchText)}`
+        );
+        const rows = Array.isArray(r.data) ? r.data : [];
+        setDestinationOptions(
+          rows.slice(0, 50).map((c) => ({
+            value: c.id,
+            label: `${c.stateName}${c.country ? `, ${c.country}` : ""}`,
+            countryId: c.countryId,
+          }))
+        );
+      } catch {
+        setDestinationOptions([]);
+      } finally {
+        setIsDestinationLoading(false);
+      }
+    }, 300);
+  };
+
   // ── results state ────────────────────────────────────────────────────
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // ── load agent + nationality lists once ──────────────────────────────
+  // ── load agent + nationality + popular-destinations lists once ──────
   useEffect(() => {
     axiosInstance
       .get("/api/agent")
@@ -133,6 +183,24 @@ export default function MeetAndSpaceSearch() {
       )
       .catch(() => setNationalities([]))
       .finally(() => setIsNationalityLoading(false));
+
+    // Popular destinations — used until the user types something into the
+    // destination dropdown.
+    setIsDestinationLoading(true);
+    axiosInstance
+      .get("/api/province?limit=50")
+      .then((res) => {
+        const rows = Array.isArray(res.data) ? res.data : [];
+        setDestinationOptions(
+          rows.map((c) => ({
+            value: c.id,
+            label: `${c.stateName}${c.country ? `, ${c.country}` : ""}`,
+            countryId: c.countryId,
+          }))
+        );
+      })
+      .catch(() => setDestinationOptions([]))
+      .finally(() => setIsDestinationLoading(false));
   }, []);
 
   // ── fetch agent balance whenever the picked agent id changes ─────────
@@ -171,6 +239,7 @@ export default function MeetAndSpaceSearch() {
     const e = {};
     if (!agent) e.agent = "Agent is required";
     if (!selectedNationality) e.nationality = "Nationality is required";
+    if (!selectedDestination) e.destination = "Destination is required";
     if (!bookingDate) e.bookingDate = "Booking date is required";
     if (!startTime) e.startTime = "Start time is required";
     if (!endTime) e.endTime = "End time is required";
@@ -197,6 +266,10 @@ export default function MeetAndSpaceSearch() {
         layout: layout || null,
         keyword: keyword || null,
         ratePlan,
+        // New: scope results to the picked destination city.
+        destinationCityId: selectedDestination?.value || null,
+        destinationCountryId: selectedDestination?.countryId || null,
+        destinationName: selectedDestination?.label || null,
       });
       setResults(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
@@ -335,6 +408,47 @@ export default function MeetAndSpaceSearch() {
                       {errors.nationality && (
                         <div className="text-danger small mt-1">
                           {errors.nationality}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* Destination — searchable dropdown wired to /api/province.
+                      Scopes the meeting-space results to a city / province. */}
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaMapMarkerAlt className="me-2 text-primary" />
+                        Destination
+                      </Form.Label>
+                      <Select
+                        options={destinationOptions}
+                        value={selectedDestination}
+                        onChange={(option) => {
+                          setSelectedDestination(option);
+                          if (option) clearError("destination");
+                        }}
+                        onInputChange={(value, action) => {
+                          if (action?.action === "input-change") {
+                            debouncedDestinationSearch(value);
+                          }
+                        }}
+                        isLoading={isDestinationLoading}
+                        placeholder="Where do you want to go?"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={selectStyles}
+                        noOptionsMessage={() =>
+                          isDestinationLoading
+                            ? "Searching destinations…"
+                            : "Type at least 2 characters"
+                        }
+                      />
+                      {errors.destination && (
+                        <div className="text-danger small mt-1">
+                          {errors.destination}
                         </div>
                       )}
                     </Form.Group>

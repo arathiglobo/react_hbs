@@ -1422,7 +1422,207 @@ const MakePkgBookingPageV2 = () => {
 
   return (
     <div className="hotel-booking-container make-pkg-booking-container">
-      
+
+      {/* ── Booking page visual overhaul ──
+          One injected stylesheet that modernises every existing card,
+          accordion, form input, table and button on this page. Targets
+          existing classes so no JSX needs to change — pure UI polish. */}
+      <style>{`
+        .make-pkg-booking-container .content-wrapper {
+          background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+          min-height: 100vh;
+        }
+        .make-pkg-booking-container h4,
+        .make-pkg-booking-container h5,
+        .make-pkg-booking-container h6 {
+          color: #1f2937;
+          letter-spacing: -0.01em;
+        }
+
+        /* ── Accordion (the main form container) ───────────────────── */
+        .booking-accordion .accordion-item {
+          border: 1px solid #e5e7eb !important;
+          border-radius: 16px !important;
+          overflow: hidden;
+          background: #ffffff;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+          margin-bottom: 14px !important;
+          transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        .booking-accordion .accordion-item:hover {
+          box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+        }
+        .booking-accordion .accordion-header { margin: 0; }
+        .booking-accordion .accordion-button {
+          background: #ffffff !important;
+          border: none !important;
+          padding: 18px 22px !important;
+          font-weight: 600 !important;
+          color: #1f2937 !important;
+          box-shadow: none !important;
+          font-size: 1rem;
+        }
+        .booking-accordion .accordion-button:not(.collapsed) {
+          background: linear-gradient(135deg, #f5f7ff 0%, #faf5ff 100%) !important;
+          color: #4f46e5 !important;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        .booking-accordion .accordion-button:not(.collapsed) h5,
+        .booking-accordion .accordion-button:not(.collapsed) h6,
+        .booking-accordion .accordion-button:not(.collapsed) svg {
+          color: #4f46e5 !important;
+        }
+        .booking-accordion .accordion-button:focus { box-shadow: none !important; }
+        .booking-accordion .accordion-button::after {
+          background-size: 1rem;
+          opacity: 0.6;
+          transition: transform 0.25s ease;
+        }
+        .booking-accordion .accordion-body {
+          padding: 22px !important;
+          background: #ffffff;
+        }
+
+        /* ── Form inputs ───────────────────────────────────────────── */
+        .make-pkg-booking-container .form-control,
+        .make-pkg-booking-container .form-select {
+          border: 1.5px solid #e5e7eb;
+          border-radius: 10px;
+          padding: 9px 13px;
+          font-size: 0.92rem;
+          background-color: #ffffff;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .make-pkg-booking-container .form-control:hover,
+        .make-pkg-booking-container .form-select:hover {
+          border-color: #cbd5e1;
+        }
+        .make-pkg-booking-container .form-control:focus,
+        .make-pkg-booking-container .form-select:focus {
+          border-color: #818cf8;
+          box-shadow: 0 0 0 4px rgba(99,102,241,0.10);
+          outline: none;
+        }
+        .make-pkg-booking-container .form-control.is-invalid,
+        .make-pkg-booking-container .form-select.is-invalid {
+          border-color: #ef4444;
+        }
+        .make-pkg-booking-container .form-label {
+          font-weight: 600;
+          font-size: 0.74rem;
+          color: #4b5563;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: 6px;
+        }
+        .make-pkg-booking-container .form-check-input:checked {
+          background-color: #6366f1;
+          border-color: #6366f1;
+        }
+        .make-pkg-booking-container .input-group-text {
+          background: #f9fafb;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 10px;
+          color: #6b7280;
+        }
+
+        /* ── Tables ────────────────────────────────────────────────── */
+        .make-pkg-booking-container .table {
+          border-collapse: separate;
+          border-spacing: 0;
+          border-radius: 12px;
+          overflow: hidden;
+          background: #ffffff;
+        }
+        .make-pkg-booking-container .table thead th {
+          background: linear-gradient(135deg, #f5f7ff 0%, #faf5ff 100%);
+          color: #4b5563;
+          font-weight: 600;
+          font-size: 0.74rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          border-bottom: 1px solid #e5e7eb;
+          padding: 14px 12px;
+          vertical-align: middle;
+        }
+        .make-pkg-booking-container .table tbody td {
+          padding: 14px 12px;
+          vertical-align: middle;
+          border-color: #f1f5f9;
+          background: #ffffff;
+        }
+        .make-pkg-booking-container .table tbody tr:hover td {
+          background: #fafbff;
+        }
+
+        /* ── Nested cards inside accordion bodies ─────────────────── */
+        .make-pkg-booking-container .accordion-body .card {
+          border: 1px solid #e5e7eb !important;
+          border-radius: 12px !important;
+          box-shadow: none !important;
+          background: #fafbff;
+        }
+        .make-pkg-booking-container .accordion-body .card .card-header {
+          background: transparent !important;
+          border-bottom: 1px solid #eef0f4 !important;
+          font-weight: 600;
+          color: #1f2937;
+        }
+
+        /* ── Buttons ───────────────────────────────────────────────── */
+        .make-pkg-booking-container .btn:not(.btn-link) {
+          border-radius: 10px;
+          font-weight: 500;
+          transition: transform 0.1s ease, box-shadow 0.15s ease;
+        }
+        .make-pkg-booking-container .btn-primary {
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          border: none;
+        }
+        .make-pkg-booking-container .btn-primary:hover,
+        .make-pkg-booking-container .btn-primary:focus {
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          box-shadow: 0 4px 12px rgba(99,102,241,0.25);
+        }
+        .make-pkg-booking-container .btn-outline-primary {
+          color: #6366f1;
+          border-color: #6366f1;
+        }
+        .make-pkg-booking-container .btn-outline-primary:hover {
+          background: #6366f1;
+          border-color: #6366f1;
+        }
+
+        /* ── Badges ────────────────────────────────────────────────── */
+        .make-pkg-booking-container .badge {
+          font-weight: 600;
+          padding: 5px 10px;
+          border-radius: 999px;
+          letter-spacing: 0.01em;
+        }
+
+        /* ── Itinerary day boxes ───────────────────────────────────── */
+        .make-pkg-booking-container .itinerary-day-box {
+          background: linear-gradient(135deg, #f5f7ff 0%, #faf5ff 100%);
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          padding: 16px 18px;
+        }
+        .make-pkg-booking-container .itinerary-plus-btn {
+          width: 34px; height: 34px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        /* ── Validation error text ─────────────────────────────────── */
+        .make-pkg-booking-container .invalid-feedback,
+        .make-pkg-booking-container .text-danger {
+          font-size: 0.78rem;
+        }
+      `}</style>
+
       <div className="main-content">
         <TopBar />
         <Sidebar />
@@ -1433,83 +1633,97 @@ const MakePkgBookingPageV2 = () => {
                 agentId={sessionStorage.getItem("makePkgAgentId")}
               />
             </div>
-            {/* ── Booking Summary card (HotelBookingPage-style) ──
-                Mirrors the layout of the standard hotel booking summary
-                so the operator sees a consistent breakdown:
-                   Base prices  ▶ Tourism Dirham ▶ Final totals.
-                TD is always rolled into the displayed numbers — so the
-                Selling / Total figures shown here equal what the
-                booking POST will save. */}
+
+            {/* ── Top header strip: back arrow + title + step pill ── */}
+            <div className="d-flex align-items-center justify-content-between mb-3">
+              <div className="d-flex align-items-center">
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="btn btn-link p-0 me-3"
+                  style={{ color: "#1f2937", fontSize: "1.4rem", textDecoration: "none" }}
+                  aria-label="Back"
+                >
+                  ‹
+                </button>
+                <h3 className="fw-bold m-0" style={{ color: "#111827", letterSpacing: "-0.01em" }}>
+                  Make Your Own Package
+                </h3>
+              </div>
+            </div>
+
+            {/* ── Inline wizard step indicator (image-style: clean, flat) ── */}
             {(() => {
-              const tdNum =
-                tourismDirham !== "" && !isNaN(Number(tourismDirham))
-                  ? Number(tourismDirham)
-                  : 0;
-              const sellingWithTd = sellingPrice + tdNum;
-              const totalWithTd = totalPrice + tdNum;
+              const steps = [
+                { label: "Accommodation" },
+                { label: "Transfers" },
+                { label: "Tours & Activities" },
+                { label: "Add-on Services" },
+                { label: "Summary & Payment" },
+              ];
+              const currentIdx = steps.length - 1; // booking page = last step
               return (
-                <Card className="shadow-sm border-0 rounded-4 mb-3">
-                  <Card.Body className="p-3">
-                    <div className="d-flex justify-content-between align-items-center mb-2">
-                      <h4 className="mb-0 fw-bold text-primary d-flex align-items-center">
-                        <FaHotel className="me-2" />
-                        Confirm Booking
-                      </h4>
-                      <Badge
-                        bg="success-subtle"
-                        text="success"
-                        className="px-3 py-2"
-                        style={{ fontSize: "0.85rem" }}
-                      >
-                        Grand Total: AED {totalWithTd.toFixed(2)}
-                      </Badge>
-                    </div>
-                    <div className="px-2">
-                      <Row className="g-2">
-                        <Col md={3}>
-                          <div className="border rounded p-2 h-100">
-                            <div className="text-muted small">Selling Price</div>
-                            <div className="fw-bold text-dark">
-                              AED {sellingPrice.toFixed(2)}
-                            </div>
+                <div className="d-flex align-items-center mb-4 px-1">
+                  {steps.map((step, idx) => {
+                    const done = idx < currentIdx;
+                    const active = idx === currentIdx;
+                    return (
+                      <React.Fragment key={step.label}>
+                        <div className="d-flex align-items-center" style={{ flexShrink: 0 }}>
+                          <div
+                            style={{
+                              width: 28, height: 28,
+                              borderRadius: "50%",
+                              background: done ? "#22c55e" : active ? "#3b82f6" : "#ffffff",
+                              color: done || active ? "#fff" : "#9ca3af",
+                              border: done || active ? "none" : "1.5px solid #d1d5db",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontWeight: 600,
+                              fontSize: "0.8rem",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {done ? "✓" : idx + 1}
                           </div>
-                        </Col>
-                        <Col md={3}>
-                          <div className="border rounded p-2 h-100">
-                            <div className="text-muted small">Total Price</div>
-                            <div className="fw-bold text-dark">
-                              AED {totalPrice.toFixed(2)}
-                            </div>
-                          </div>
-                        </Col>
-                        <Col md={3}>
-                          <div className="border rounded p-2 h-100">
-                            <div className="text-muted small">Tourism Dirham</div>
-                            <div className="fw-bold text-primary">
-                              {tdNum > 0 ? `+ AED ${tdNum.toFixed(2)}` : "—"}
-                            </div>
-                          </div>
-                        </Col>
-                        <Col md={3}>
-                          <div className="border rounded p-2 h-100 bg-success bg-opacity-10">
-                            <div className="text-muted small">Final Selling</div>
-                            <div className="fw-bold text-success">
-                              AED {sellingWithTd.toFixed(2)}
-                            </div>
-                            <div className="text-muted x-small mt-1">
-                              Total billable: AED {totalWithTd.toFixed(2)}
-                            </div>
-                          </div>
-                        </Col>
-                      </Row>
-                    </div>
-                  </Card.Body>
-                </Card>
+                          <span
+                            style={{
+                              marginLeft: 8,
+                              fontSize: "0.88rem",
+                              fontWeight: active ? 600 : 500,
+                              color: done ? "#1f2937" : active ? "#1f2937" : "#9ca3af",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {step.label}
+                          </span>
+                        </div>
+                        {idx < steps.length - 1 && (
+                          <div
+                            style={{
+                              flex: 1,
+                              height: 1,
+                              background: idx < currentIdx ? "#22c55e" : "#e5e7eb",
+                              margin: "0 12px",
+                            }}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
               );
             })()}
 
+            {/* (Old "Confirm Booking" totals card removed — the same
+                breakdown now lives in the sticky Package Summary
+                sidebar on the right so the operator always sees it
+                while filling the form, instead of needing to scroll
+                back to the top.) */}
+
             <Row>
-              <Col lg={12}>
+              <Col lg={8}>
                 {/* v2: default-open the two sections the operator
                     actually has to fill out — Guest Details (5) and
                     Add-Ons (6). The cart-line accordions
@@ -2968,31 +3182,257 @@ const MakePkgBookingPageV2 = () => {
                   </Accordion.Item>
                 </Accordion>
               </Col>
+
+              {/* ── Right-side Package Summary sidebar (image-style) ── */}
+              <Col lg={4}>
+                <div style={{ position: "sticky", top: 90 }}>
+                  <Card
+                    className="border-0 rounded-3"
+                    style={{
+                      background: "#ffffff",
+                      boxShadow: "0 1px 4px rgba(15, 23, 42, 0.06)",
+                      border: "1px solid #e5e7eb",
+                    }}
+                  >
+                    <Card.Body className="px-4 pt-4 pb-3">
+                      <div className="d-flex justify-content-between align-items-center mb-3">
+                        <h5 className="fw-bold m-0" style={{ color: "#111827", letterSpacing: "-0.01em", fontSize: "1.05rem" }}>
+                          Package Summary
+                        </h5>
+                        <button
+                          type="button"
+                          className="btn btn-link p-0 fw-semibold"
+                          style={{
+                            color: "#3b82f6",
+                            textDecoration: "none",
+                            fontSize: "0.85rem",
+                          }}
+                          onClick={() => navigate(-1)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                      <div style={{ maxHeight: "50vh", overflowY: "auto", marginLeft: -4, marginRight: -4 }}>
+                        {(() => {
+                          const hotels    = cartData.filter((it) => it.hotel);
+                          const transfers = cartData.filter((it) => it.cab);
+                          const activities = cartData.filter((it) => it.activity);
+                          const addons = (() => {
+                            try {
+                              const all = readAddOnServices();
+                              return Object.entries(all || {})
+                                .filter(([, v]) => v && v.enabled)
+                                .map(([k]) => {
+                                  const meta = ADDON_SERVICES_CATALOG.find((s) => s.key === k);
+                                  return meta ? meta.label : k;
+                                });
+                            } catch {
+                              return [];
+                            }
+                          })();
+                          const SummaryRow = ({ Icon, iconBg, iconColor, title, lines, price, muted }) => (
+                            <div
+                              className="d-flex align-items-start"
+                              style={{ gap: 12, padding: "14px 4px" }}
+                            >
+                              <span
+                                style={{
+                                  width: 34, height: 34, borderRadius: 8,
+                                  background: iconBg,
+                                  color: iconColor,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  flexShrink: 0,
+                                  fontSize: "0.9rem",
+                                }}
+                              >
+                                <Icon />
+                              </span>
+                              <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                                <div
+                                  className="fw-bold"
+                                  style={{ fontSize: "0.92rem", color: "#111827", marginBottom: 2 }}
+                                >
+                                  {title}
+                                </div>
+                                {lines.length > 0 ? (
+                                  lines.map((line, i) => (
+                                    <div
+                                      key={i}
+                                      style={{
+                                        fontSize: "0.78rem",
+                                        color: "#6b7280",
+                                        lineHeight: 1.45,
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                      }}
+                                      title={line}
+                                    >
+                                      {line}
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
+                                    Not Selected
+                                  </div>
+                                )}
+                              </div>
+                              <div
+                                className="fw-bold text-end"
+                                style={{
+                                  fontSize: "0.92rem",
+                                  color: muted ? "#9ca3af" : "#111827",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {price}
+                              </div>
+                            </div>
+                          );
+                          return (
+                            <>
+                              <SummaryRow
+                                Icon={FaHotel}
+                                iconBg="#eef2ff"
+                                iconColor="#6366f1"
+                                title="Accommodation"
+                                lines={hotels.map((it) => it.hotel?.hotelName || it.hotel?.name || "Hotel")}
+                                price={
+                                  hotels.length > 0
+                                    ? `AED ${hotels.reduce((s, it) => s + Number(it.hotel?.totalRate || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                                    : "—"
+                                }
+                                muted={hotels.length === 0}
+                              />
+                              <SummaryRow
+                                Icon={FaCar}
+                                iconBg="#ecfdf5"
+                                iconColor="#059669"
+                                title="Transfers"
+                                lines={transfers.map((it) => it.cab?.cabName || it.cab?.cabname || "Transfer")}
+                                price={
+                                  transfers.length > 0
+                                    ? `AED ${transfers.reduce((s, it) => s + Number(it.cab?.totalRate || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                                    : "—"
+                                }
+                                muted={transfers.length === 0}
+                              />
+                              <SummaryRow
+                                Icon={FaTicketAlt}
+                                iconBg="#fef3c7"
+                                iconColor="#d97706"
+                                title="Tours & Activities"
+                                lines={activities.map((it) => it.activity?.activityName || it.activity?.activityname || "Activity")}
+                                price={
+                                  activities.length > 0
+                                    ? `AED ${activities.reduce((s, it) => s + Number(it.activity?.totalRate || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                                    : "—"
+                                }
+                                muted={activities.length === 0}
+                              />
+                              <SummaryRow
+                                Icon={FaPlus}
+                                iconBg="#fce7f3"
+                                iconColor="#db2777"
+                                title="Add-on Services"
+                                lines={addons.length > 0 ? addons : []}
+                                price={addons.length > 0 ? `${addons.length} on` : "AED 0"}
+                                muted={addons.length === 0}
+                              />
+                            </>
+                          );
+                        })()}
+                      </div>
+                      {(() => {
+                        const tdNum =
+                          tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                            ? Number(tourismDirham)
+                            : 0;
+                        const totalWithTd = totalPrice + tdNum;
+                        return (
+                          <>
+                            <div
+                              className="d-flex justify-content-between align-items-center pt-3 mt-2"
+                              style={{ borderTop: "1px solid #e5e7eb" }}
+                            >
+                              <div>
+                                <div
+                                  className="fw-bold"
+                                  style={{ color: "#111827", fontSize: "0.95rem" }}
+                                >
+                                  Total Package Price
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: 2 }}>
+                                  (All prices are in AED)
+                                </div>
+                              </div>
+                              <div
+                                className="fw-bold"
+                                style={{ fontSize: "1.3rem", color: "#111827" }}
+                              >
+                                AED {totalWithTd.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                              </div>
+                            </div>
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                className="btn btn-link p-0 fw-semibold"
+                                style={{
+                                  color: "#3b82f6",
+                                  textDecoration: "none",
+                                  fontSize: "0.85rem",
+                                }}
+                              >
+                                View Price Breakup
+                              </button>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </Card.Body>
+                  </Card>
+                </div>
+              </Col>
             </Row>
 
-            {/* Action Buttons at the end of page */}
+            {/* ── Bottom action bar (image-style) ── */}
             <Row className="mt-4">
               <Col lg={12}>
-                <div className="d-flex gap-2 justify-content-end">
-                  <Button
+                <div className="d-flex justify-content-between align-items-center">
+                  <button
                     type="button"
-                    variant="danger"
-                    size="lg"
-                    className="btn-booking btn-booking-danger"
                     onClick={() => navigate(-1)}
+                    className="btn fw-semibold d-flex align-items-center"
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #d1d5db",
+                      color: "#374151",
+                      padding: "9px 22px",
+                      borderRadius: 10,
+                      fontSize: "0.95rem",
+                    }}
                   >
-                    Cancel
-                  </Button>
-                  <Button
+                    ‹ Back
+                  </button>
+                  <button
                     type="button"
-                    variant="primary"
-                    size="lg"
-                    className="btn-booking btn-booking-primary"
                     onClick={handleSubmit}
+                    className="btn fw-semibold d-flex align-items-center"
+                    style={{
+                      background: "#111827",
+                      border: "none",
+                      color: "#ffffff",
+                      padding: "11px 26px",
+                      borderRadius: 10,
+                      fontSize: "0.95rem",
+                      boxShadow: "0 2px 6px rgba(17,24,39,0.18)",
+                    }}
                   >
-                    <FaCheckCircle className="me-2" />
-                    Book
-                  </Button>
+                    Confirm Booking
+                    <span className="ms-2">›</span>
+                  </button>
                 </div>
               </Col>
             </Row>

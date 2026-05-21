@@ -9,6 +9,7 @@ import {
   Row,
   Col,
   Spinner,
+  InputGroup,
 } from "react-bootstrap";
 import {
   FaArrowLeft,
@@ -16,6 +17,8 @@ import {
   FaTrash,
   FaEdit,
   FaEye,
+  FaSave,
+  FaGift,
 } from "react-icons/fa";
 import Select from "react-select";
 import { toast } from "react-hot-toast";
@@ -84,15 +87,74 @@ const HoneyMoonPackageRates = () => {
   const placeDebounceRef = useRef({});
   const hotelDebounceRef = useRef(null);
 
+  // ── Add-on service rates ──────────────────────────────────────────
+  // Names are defined on the Registration page; this section lets the
+  // agent set per-add-on prices. The Booking page filters by `price > 0`
+  // so blank rates simply hide the add-on at booking time.
+  // Shape: [{ key, label, price }]. Mirrored to
+  // `localStorage[honeymoon_addons_<packageId>]` so the Booking page can
+  // pick them up even if the backend hasn't been extended to round-trip
+  // the `addOns` field on `/api/honeymoon/{id}`.
+  const [addOnRates, setAddOnRates] = useState([]);
+  const [savingAddOnRates, setSavingAddOnRates] = useState(false);
+
   // ─────────────────────────────────────────────
   // Load package + countries + hotels + rates
   // ─────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    // localStorage cache for add-on rates is read up front so the section
+    // still hydrates even if the API call below fails (e.g. backend down).
+    let storedAddOns = null;
+    try {
+      const raw = localStorage.getItem(`honeymoon_addons_${packageId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed?.addOns)) storedAddOns = parsed.addOns;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const hydrateAddOnRates = (serverList) => {
+      // Merge: server labels are authoritative when present, localStorage
+      // prices fill in where the server doesn't echo a price.
+      const baseList = (serverList && serverList.length)
+        ? serverList
+        : (storedAddOns || []);
+      const storedByKey = new Map(
+        (storedAddOns || []).map((a) => [a.key, a])
+      );
+      const normalised = baseList
+        .map((a) => {
+          const label = String(a?.label || "").trim();
+          if (!label) return null;
+          const key = String(a?.key || "").trim() || label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+          const stored = storedByKey.get(key);
+          const price = Number(
+            a?.price != null && a.price !== "" ? a.price : stored?.price
+          ) || 0;
+          return { key, label, price };
+        })
+        .filter(Boolean);
+      if (!cancelled) setAddOnRates(normalised);
+    };
+
+    // Hydrate from localStorage immediately so the section is populated
+    // even before (or in spite of) the API call resolving.
+    hydrateAddOnRates(null);
+
     (async () => {
       try {
         const r = await axiosInstance.get(`/api/honeymoon/${packageId}`);
-        if (!cancelled) setPkg(r.data);
+        if (cancelled) return;
+        setPkg(r.data);
+        // Re-hydrate with server data — server `addOns` overrides the
+        // localStorage fallback when present.
+        const serverAddOns = Array.isArray(r.data?.addOns) ? r.data.addOns : null;
+        if (serverAddOns && serverAddOns.length) {
+          hydrateAddOnRates(serverAddOns);
+        }
       } catch {
         toast.error("Failed to load package");
       }
@@ -309,6 +371,47 @@ const HoneyMoonPackageRates = () => {
     }
   };
 
+  // Save the add-on rates list. Persists to localStorage (always works)
+  // and best-effort PATCHes the package so the server can store the
+  // rates too. The Booking page reads localStorage first then API.
+  const saveAddOnRates = async () => {
+    setSavingAddOnRates(true);
+    const payloadList = addOnRates.map((a) => ({
+      key: a.key,
+      label: a.label,
+      price: Number(a.price) || 0,
+    }));
+    try {
+      localStorage.setItem(
+        `honeymoon_addons_${packageId}`,
+        JSON.stringify({ addOns: payloadList })
+      );
+    } catch {
+      /* ignore — quota / private mode */
+    }
+    // Best-effort: try to update the package so the server stores the
+    // rates too. The package PUT expects FormData with a `data` field;
+    // we merge the existing package payload and ship it back.
+    try {
+      const fd = new FormData();
+      // The existing package was loaded into `pkg`; mirror back the
+      // fields that the registration endpoint accepts plus our addOns.
+      const data = {
+        ...(pkg || {}),
+        addOns: payloadList,
+      };
+      // Strip server-only properties that PUT doesn't want.
+      delete data.images;
+      delete data.itinerary;
+      fd.append("data", JSON.stringify(data));
+      await axiosInstance.put(`/api/honeymoon/${packageId}`, fd);
+    } catch {
+      // Backend may not support the field yet — localStorage still has it.
+    }
+    setSavingAddOnRates(false);
+    toast.success("Add-on rates saved");
+  };
+
   const handleDelete = async (row) => {
     const c = await Swal.fire({
       title: "Delete this rate?",
@@ -356,6 +459,87 @@ const HoneyMoonPackageRates = () => {
               </Button>
             </div>
           </div>
+
+          {/* ── Add-on Service Rates ──
+              The list of add-ons comes from the Registration page; this
+              section is where the agent sets the per-booking price for
+              each. Leave a rate blank/0 to hide that add-on from the
+              Booking page. */}
+          <Card className="shadow-sm mb-3">
+            <Card.Header className="bg-white d-flex justify-content-between align-items-center">
+              <div className="d-flex align-items-center">
+                <FaGift className="me-2 text-danger" />
+                <span className="fw-semibold">Add-on Service Rates</span>
+              </div>
+              <Button
+                size="sm"
+                variant="success"
+                disabled={savingAddOnRates || addOnRates.length === 0}
+                onClick={saveAddOnRates}
+              >
+                {savingAddOnRates ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-1" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <FaSave className="me-1" /> Save Rates
+                  </>
+                )}
+              </Button>
+            </Card.Header>
+            <Card.Body>
+              {addOnRates.length === 0 ? (
+                <div className="text-muted text-center py-3">
+                  No add-on services defined for this package.
+                  {" "}
+                  <Button
+                    variant="link"
+                    className="p-0 align-baseline"
+                    onClick={() => navigate(`/honeymoon/edit/${packageId}`)}
+                  >
+                    Edit the package
+                  </Button>
+                  {" "}to add some.
+                </div>
+              ) : (
+                <Row className="g-3">
+                  {addOnRates.map((a, idx) => (
+                    <Col md={6} key={a.key}>
+                      <Form.Label className="mb-1 fw-semibold">
+                        {a.label}
+                      </Form.Label>
+                      <InputGroup>
+                        <InputGroup.Text>
+                          {pkg?.currency || "INR"}
+                        </InputGroup.Text>
+                        <Form.Control
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          placeholder="0.00"
+                          value={a.price}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setAddOnRates((prev) =>
+                              prev.map((x, i) =>
+                                i === idx ? { ...x, price: v } : x
+                              )
+                            );
+                          }}
+                          aria-label={`Rate for ${a.label}`}
+                        />
+                      </InputGroup>
+                      <Form.Text muted>
+                        Leave blank or 0 to hide this add-on at booking time.
+                      </Form.Text>
+                    </Col>
+                  ))}
+                </Row>
+              )}
+            </Card.Body>
+          </Card>
 
           <Card className="shadow-sm">
             <Card.Body>

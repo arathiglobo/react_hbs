@@ -233,25 +233,19 @@ export default function Sidebar() {
         { label: "Last Minute Booking", to: "/new-booking/last-minute-booking" },
         { label: "Long Stay Booking", to: "/new-booking/long-stay" },
         { label: "Day Stay Check-In", to: "/new-booking/day-stay" },
-        {
-          label: "Make Your Own Package",
-          to: "/new-booking/make-your-own-package",
-        },
+        // {
+        //   label: "Make Your Own Package",
+        //   to: "/new-booking/make-your-own-package",
+        // },
         {
           // Parallel v2 flow: add-on services are picked FIRST (visa,
           // transfer, tour, etc.). The next page's tabs / cart options
           // are gated by what's selected here. The legacy entry above
           // is left unchanged so anyone who prefers it can keep using it.
-          label: "Make Your Own Package (v2 — Add-Ons First)",
+          label: "Make Your Own Package",
           to: "/new-booking/make-your-own-package-v2",
         },
-        {
-          // v3 — one criteria → one search → unified inventory page with
-          // multi-select per module. No Redis cart; selection is
-          // forwarded straight to the booking page.
-          label: "Make Your Own Package (Unified)",
-          to: "/new-booking/make-your-own-package-v3",
-        },
+        
         { label: "Package Booking", to: "/new-booking/package-search" },
         { label: "Cab Booking", to: "/new-booking/cab" },
         { label: "Scheffer Driver and Limousine Booking", to: "/new-booking/scheffer-driver" },
