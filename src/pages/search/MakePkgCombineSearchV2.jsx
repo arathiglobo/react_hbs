@@ -378,6 +378,33 @@ const [activeAccordion, setActiveAccordion] = useState({});
   const [transferPickupDate, setTransferPickupDate] = useState(travelDate || "");
   const [transferDropoffDate, setTransferDropoffDate] = useState("");
 
+  // ── Cab lookup (pickup / dropoff zones) ──
+  // Single set of selections applied to every cab added in this session.
+  // Persisted to sessionStorage so the booking page can stamp them onto
+  // each cab DTO before sending the booking save payload.
+  const [cabLookupOptions, setCabLookupOptions] = useState([]);
+  const [cabLookupLoading, setCabLookupLoading] = useState(false);
+  const [transferPickupZone, setTransferPickupZone] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("makePkgV2TransferPickup");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [transferDropoffZone, setTransferDropoffZone] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("makePkgV2TransferDropoff");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [transferZoneErrors, setTransferZoneErrors] = useState({
+    pickup: "",
+    dropoff: "",
+  });
+
   // Tours and Activities search state
   const [tourResults, setTourResults] = useState([]);
   const [tourLoading, setTourLoading] = useState(false);
@@ -598,6 +625,93 @@ const [activeAccordion, setActiveAccordion] = useState({});
       sessionStorage.setItem("makePkgTravelDate", travelDate);
     }
   }, [travelDate]);
+
+  // Fetch the cab pickup / dropoff lookup once when the Transfer step
+  // becomes active. Filtered to the destination the operator selected
+  // on the criteria form so only places under that destination (zones,
+  // hotels, airports) are shown. We dedupe by checking if options are
+  // already loaded.
+  useEffect(() => {
+    const isTransferStep =
+      wizardSteps[currentStepIdx]?.key === "transfer";
+    if (!isTransferStep) return;
+    if (cabLookupOptions.length > 0 || cabLookupLoading) return;
+
+    const destinationIds = (Array.isArray(itinerary) ? itinerary : [])
+      .map((it) => it?.selectedDestination?.value)
+      .filter((v) => v !== undefined && v !== null && v !== "");
+    const primaryDestinationId =
+      destinationIds[0] ?? destination?.value ?? "";
+
+    if (!primaryDestinationId) {
+      // No destination selected on the criteria form → nothing to filter on.
+      return;
+    }
+
+    let cancelled = false;
+    setCabLookupLoading(true);
+    axiosInstance
+      .get(
+        `/api/cab-search/lookup-by-destination?destinationId=${encodeURIComponent(
+          primaryDestinationId
+        )}&destinationIds=${encodeURIComponent(destinationIds.join(","))}&search=&limit=20`
+      )
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data || {};
+        const groups = [
+          { label: "Zones", items: Array.isArray(data.zones) ? data.zones : [] },
+          { label: "Hotels", items: Array.isArray(data.hotels) ? data.hotels : [] },
+          { label: "Airports", items: Array.isArray(data.airports) ? data.airports : [] },
+        ];
+        const grouped = groups
+          .filter((g) => g.items.length > 0)
+          .map((g) => ({
+            label: g.label,
+            options: g.items.map((it) => ({
+              value: `${it.source}-${it.id}`,
+              label: it.name,
+              subtitle: it.subtitle,
+              raw: it,
+            })),
+          }));
+        setCabLookupOptions(grouped);
+      })
+      .catch((err) => {
+        console.error("Failed to load cab lookup:", err);
+        toast.error("Failed to load pickup/dropoff options.");
+      })
+      .finally(() => {
+        if (!cancelled) setCabLookupLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStepIdx]);
+
+  // Persist selections so the booking page can stamp them onto cab DTOs.
+  useEffect(() => {
+    if (transferPickupZone) {
+      sessionStorage.setItem(
+        "makePkgV2TransferPickup",
+        JSON.stringify(transferPickupZone)
+      );
+    } else {
+      sessionStorage.removeItem("makePkgV2TransferPickup");
+    }
+  }, [transferPickupZone]);
+
+  useEffect(() => {
+    if (transferDropoffZone) {
+      sessionStorage.setItem(
+        "makePkgV2TransferDropoff",
+        JSON.stringify(transferDropoffZone)
+      );
+    } else {
+      sessionStorage.removeItem("makePkgV2TransferDropoff");
+    }
+  }, [transferDropoffZone]);
 
   useEffect(() => {
     if (transferChildren > 0) {
@@ -1398,6 +1512,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
       toast.error("Select a nationality before adding to cart.");
       return;
     }
+    if (!transferPickupZone || !transferDropoffZone) {
+      setTransferZoneErrors({
+        pickup: transferPickupZone ? "" : "Please select a pickup location.",
+        dropoff: transferDropoffZone ? "" : "Please select a dropoff location.",
+      });
+      toast.error("Please select both pickup and dropoff before adding to cart.");
+      return;
+    }
 
     const rate =
       cabDetail.types === "SIC" ? cabDetail.sicRate || 0 : cabDetail.privateRate || 0;
@@ -1414,10 +1536,21 @@ const [activeAccordion, setActiveAccordion] = useState({});
         ? cabDetail.totalRate
         : totalRateWithoutMrk;
 
+    const pickupZoneRaw = transferPickupZone?.raw || null;
+    const dropoffZoneRaw = transferDropoffZone?.raw || null;
+
     const payload = {
       pickupDate: pickupDateValue,
       dropoffDate: dropoffDateValue || pickupDateValue,
       nativeCountryId: String(nationality.value),
+      pickupZone: pickupZoneRaw,
+      dropoffZone: dropoffZoneRaw,
+      pickupSource: pickupZoneRaw?.source || null,
+      pickupId: pickupZoneRaw?.id ?? null,
+      pickupName: pickupZoneRaw?.name || null,
+      dropoffSource: dropoffZoneRaw?.source || null,
+      dropoffId: dropoffZoneRaw?.id ?? null,
+      dropoffName: dropoffZoneRaw?.name || null,
       childAge:
         Array.isArray(transferChildAges) && transferChildAges.length > 0
           ? transferChildAges.map((age) => parseInt(age) || 0)
@@ -2275,6 +2408,97 @@ const [activeAccordion, setActiveAccordion] = useState({});
                           <h6 className="fw-bold mb-3">
                             Transfer Results ({transferResults.length})
                           </h6>
+
+                          {/* ── Pickup / Dropoff selectors ──
+                              Single set applied to every cab added in
+                              this session; persisted to sessionStorage
+                              and stamped onto each cab DTO at booking
+                              save time. */}
+                          <Card className="mb-4 shadow-sm" style={{ borderRadius: "12px" }}>
+                            <Card.Body>
+                              <Row className="g-3">
+                                <Col md={6}>
+                                  <Form.Label className="fw-semibold">
+                                    Pickup <span className="text-danger">*</span>
+                                  </Form.Label>
+                                  <Select
+                                    classNamePrefix="rs"
+                                    isClearable
+                                    isLoading={cabLookupLoading}
+                                    options={cabLookupOptions}
+                                    value={transferPickupZone}
+                                    placeholder="Select pickup location"
+                                    onChange={(opt) => {
+                                      setTransferPickupZone(opt);
+                                      setTransferZoneErrors((e) => ({ ...e, pickup: "" }));
+                                    }}
+                                    formatOptionLabel={(opt) => (
+                                      <div>
+                                        <div>{opt.label}</div>
+                                        {opt.subtitle && (
+                                          <small className="text-muted">{opt.subtitle}</small>
+                                        )}
+                                      </div>
+                                    )}
+                                    menuPortalTarget={document.body}
+                                    menuPosition="fixed"
+                                    styles={{
+                                      menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                      menu: (base) => ({ ...base, zIndex: 9999 }),
+                                    }}
+                                    noOptionsMessage={() =>
+                                      cabLookupLoading ? "Loading…" : "No locations found"
+                                    }
+                                  />
+                                  {transferZoneErrors.pickup && (
+                                    <div className="text-danger small mt-1">
+                                      {transferZoneErrors.pickup}
+                                    </div>
+                                  )}
+                                </Col>
+                                <Col md={6}>
+                                  <Form.Label className="fw-semibold">
+                                    Dropoff <span className="text-danger">*</span>
+                                  </Form.Label>
+                                  <Select
+                                    classNamePrefix="rs"
+                                    isClearable
+                                    isLoading={cabLookupLoading}
+                                    options={cabLookupOptions}
+                                    value={transferDropoffZone}
+                                    placeholder="Select dropoff location"
+                                    onChange={(opt) => {
+                                      setTransferDropoffZone(opt);
+                                      setTransferZoneErrors((e) => ({ ...e, dropoff: "" }));
+                                    }}
+                                    formatOptionLabel={(opt) => (
+                                      <div>
+                                        <div>{opt.label}</div>
+                                        {opt.subtitle && (
+                                          <small className="text-muted">{opt.subtitle}</small>
+                                        )}
+                                      </div>
+                                    )}
+                                    menuPortalTarget={document.body}
+                                    menuPosition="fixed"
+                                    styles={{
+                                      menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                      menu: (base) => ({ ...base, zIndex: 9999 }),
+                                    }}
+                                    noOptionsMessage={() =>
+                                      cabLookupLoading ? "Loading…" : "No locations found"
+                                    }
+                                  />
+                                  {transferZoneErrors.dropoff && (
+                                    <div className="text-danger small mt-1">
+                                      {transferZoneErrors.dropoff}
+                                    </div>
+                                  )}
+                                </Col>
+                              </Row>
+                            </Card.Body>
+                          </Card>
+
                           <Row className="g-4">
                             {transferResults.map((cab) => (
                               <Col key={cab.cabid} lg={10} xl={9} className="mx-auto">
@@ -2731,6 +2955,20 @@ const [activeAccordion, setActiveAccordion] = useState({});
                   style={{ background: "#6366f1", borderColor: "#6366f1", minWidth: 180 }}
                   disabled={isProceeding}
                   onClick={async () => {
+                    // ── Transfer step: pickup + dropoff are required
+                    // before leaving this step (whether moving to the
+                    // next wizard step or proceeding to booking).
+                    if (wizardSteps[currentStepIdx]?.key === "transfer") {
+                      const nextErrors = {
+                        pickup: transferPickupZone ? "" : "Please select a pickup location.",
+                        dropoff: transferDropoffZone ? "" : "Please select a dropoff location.",
+                      };
+                      if (nextErrors.pickup || nextErrors.dropoff) {
+                        setTransferZoneErrors(nextErrors);
+                        toast.error("Please select both pickup and dropoff.");
+                        return;
+                      }
+                    }
                     if (currentStepIdx < wizardSteps.length - 1) {
                       setCurrentStepIdx((i) => i + 1);
                       return;

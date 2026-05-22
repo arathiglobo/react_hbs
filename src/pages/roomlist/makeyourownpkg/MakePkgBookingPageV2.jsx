@@ -767,11 +767,6 @@ const MakePkgBookingPageV2 = () => {
       errors.primaryGuest_emailId = "Please enter a valid email address";
       hasErrors = true;
     }
-    if (!primaryGuest.lpo || primaryGuest.lpo.trim() === "") {
-      errors.primaryGuest_lpo = "LPO is required";
-      hasErrors = true;
-    }
-
     // Validate hotel room guest details
    const hotels = getHotels();
     if (hotels.length > 0) {
@@ -1210,6 +1205,14 @@ const MakePkgBookingPageV2 = () => {
             driverName: transferDetail.driverName || cab.driverName || "",
             driverContact:
               transferDetail.driverContact || cab.driverContact || "",
+            pickupZone: cab.pickupZone || null,
+            dropoffZone: cab.dropoffZone || null,
+            pickupSource: cab.pickupSource || null,
+            pickupId: cab.pickupId ?? null,
+            pickupName: cab.pickupName || null,
+            dropoffSource: cab.dropoffSource || null,
+            dropoffId: cab.dropoffId ?? null,
+            dropoffName: cab.dropoffName || null,
           };
         }),
         customBookingItinearyDTO: (function () {
@@ -1406,18 +1409,51 @@ const MakePkgBookingPageV2 = () => {
             };
           }),
         cabs: Array.isArray(cartData)
-          ? cartData
-              .filter((it) => it && it.cab)
-              .map((it, idx) => {
-                const cab = it.cab || {};
-                const td = transferDetails[idx] || {};
-                return {
-                  ...cab,
-                  transporter: td.transporterName || cab.transporter || "",
-                  driverName: td.driverName || cab.driverName || "",
-                  driverContact: td.driverContact || cab.driverContact || "",
-                };
-              })
+          ? (() => {
+              // Pickup / dropoff zones picked on the search page are stored
+              // in sessionStorage and stamped onto every cab DTO here so
+              // the backend receives them inside the cab object.
+              let pickupZone = null;
+              let dropoffZone = null;
+              try {
+                const p = sessionStorage.getItem("makePkgV2TransferPickup");
+                pickupZone = p ? JSON.parse(p) : null;
+              } catch {
+                pickupZone = null;
+              }
+              try {
+                const d = sessionStorage.getItem("makePkgV2TransferDropoff");
+                dropoffZone = d ? JSON.parse(d) : null;
+              } catch {
+                dropoffZone = null;
+              }
+              return cartData
+                .filter((it) => it && it.cab)
+                .map((it, idx) => {
+                  const cab = it.cab || {};
+                  const td = transferDetails[idx] || {};
+                  return {
+                    ...cab,
+                    transporter: td.transporterName || cab.transporter || "",
+                    driverName: td.driverName || cab.driverName || "",
+                    driverContact: td.driverContact || cab.driverContact || "",
+                    pickupZone: cab.pickupZone || pickupZone,
+                    dropoffZone: cab.dropoffZone || dropoffZone,
+                    pickupSource:
+                      cab.pickupSource || pickupZone?.source || null,
+                    pickupId:
+                      cab.pickupId ?? pickupZone?.id ?? null,
+                    pickupName:
+                      cab.pickupName || pickupZone?.name || null,
+                    dropoffSource:
+                      cab.dropoffSource || dropoffZone?.source || null,
+                    dropoffId:
+                      cab.dropoffId ?? dropoffZone?.id ?? null,
+                    dropoffName:
+                      cab.dropoffName || dropoffZone?.name || null,
+                  };
+                });
+            })()
           : [],
         activities: Array.isArray(cartData)
           ? cartData
@@ -3065,23 +3101,6 @@ const MakePkgBookingPageV2 = () => {
                               }
                             />
                           </Col>
-                          <Col md={4}>
-                            <Form.Label>
-                              LPO <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Control
-                              type="text"
-                              value={primaryGuest.lpo}
-                              onChange={(e) =>
-                                handlePrimaryGuestChange("lpo", e.target.value)
-                              }
-                              isInvalid={!!validationErrors.primaryGuest_lpo}
-                              required
-                            />
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.primaryGuest_lpo}
-                            </Form.Control.Feedback>
-                          </Col>
                         </Row>
                       </Form>
                     </Accordion.Body>
@@ -3559,17 +3578,6 @@ const MakePkgBookingPageV2 = () => {
                         {primaryGuest.contactNumber}
                       </div>
                     </div>
-                    <div className="mb-2">
-                      <small
-                        className="text-muted d-block mb-1"
-                        style={{ fontSize: "0.75rem", fontWeight: "500" }}
-                      >
-                        LPO Number
-                      </small>
-                      <div style={{ fontSize: "0.9375rem", color: "#495057" }}>
-                        {primaryGuest.lpo || "N/A"}
-                      </div>
-                    </div>
                   </Col>
                   {primaryGuest.passportNumber && (
                     <Col md={12}>
@@ -3858,160 +3866,159 @@ const MakePkgBookingPageV2 = () => {
               )}
             </div>
 
-            {/* Price Summary Section */}
-            <div
-              className="p-4 rounded"
-              style={{
-                backgroundColor: "#f8f9fa",
-                border: "2px solid #0d6efd",
-              }}
-            >
-              <h6
-                className="mb-3 fw-bold"
-                style={{ fontSize: "1rem", color: "#212529" }}
-              >
-                Price Summary
-              </h6>
-
-              <div className="mb-3">
-                <div className="d-flex justify-content-between align-items-center mb-2">
-                  <span style={{ fontSize: "0.9375rem", color: "#495057" }}>
-                    Subtotal (Selling Price)
-                  </span>
-                  <strong style={{ fontSize: "1.125rem", color: "#198754" }}>
-                    AED {(
-                      sellingPrice +
-                      (tourismDirham !== "" && !isNaN(Number(tourismDirham))
-                        ? Number(tourismDirham)
-                        : 0)
-                    ).toFixed(2)}
-                  </strong>
-                </div>
-                <div className="d-flex justify-content-between align-items-center">
-                  <span style={{ fontSize: "0.9375rem", color: "#495057" }}>
-                    Subtotal (Without Markup)
-                  </span>
-                  <strong style={{ fontSize: "1.125rem", color: "#0d6efd" }}>
-                    AED {(
-                      totalPrice +
-                      (tourismDirham !== "" && !isNaN(Number(tourismDirham))
-                        ? Number(tourismDirham)
-                        : 0)
-                    ).toFixed(2)}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="mb-3 pt-3 border-top">
-                <label
-                  className="form-label fw-semibold"
-                  style={{ fontSize: "0.875rem" }}
-                >
-                  Tourism Dirham
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="form-control"
-                  placeholder="0.00"
-                  value={tourismDirham}
-                  onChange={(e) => setTourismDirham(e.target.value)}
-                />
-                <small className="text-muted">
-                  Optional — added to both subtotals above.
-                </small>
-              </div>
-
-              {/* v2 Add-Ons summary — each enabled service expanded
-                  with the field-level details the operator captured on
-                  /addons. Visa is just one of the catalogue entries, so
-                  no separate "Visa Required" row is needed up top. */}
-              {(() => {
-                let svcMap = {};
-                try {
-                  svcMap = JSON.parse(
-                    sessionStorage.getItem("mypkg_addon_services") || "{}"
-                  );
-                } catch {
-                  svcMap = {};
-                }
-                const enabled = ADDON_SERVICES_CATALOG.filter(
-                  (svc) => svcMap[svc.key]?.enabled
-                );
-                if (enabled.length === 0) return null;
-                return (
-                  <div className="pt-3 mt-3 border-top">
-                    <h6
-                      className="mb-2 fw-semibold"
-                      style={{ fontSize: "0.875rem", color: "#495057" }}
-                    >
-                      Addons
-                    </h6>
-                    <div className="d-flex flex-column gap-2">
-                      {enabled.map((svc) => {
-                        const data = svcMap[svc.key] || {};
-                        const filled = (svc.fields || []).filter((f) => {
-                          const v = data[f.name];
-                          return v !== undefined && v !== "" && v !== null;
-                        });
-                        return (
-                          <div
-                            key={svc.key}
-                            className="p-2 rounded border bg-light"
-                            style={{ fontSize: "0.8125rem" }}
-                          >
-                            <div className="fw-semibold text-success mb-1">
-                              {svc.label}
-                            </div>
-                            {filled.length === 0 ? (
-                              <span className="text-muted fst-italic">
-                                Enabled (no extra details captured)
-                              </span>
-                            ) : (
-                              <div className="d-flex flex-column gap-1">
-                                {filled.map((f) => (
-                                  <div
-                                    key={f.name}
-                                    className="d-flex justify-content-between"
-                                  >
-                                    <span className="text-muted">
-                                      {f.label}
-                                    </span>
-                                    <span>{String(data[f.name])}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+            {/* Price Summary — mirrors HotelBookingPage.jsx: a Selling
+                Price card (admin-only style), a Total Price card, and a
+                Rate Split panel showing how Selling + TD = Total. */}
+            {(() => {
+              const tdAmount =
+                tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                  ? Number(tourismDirham)
+                  : 0;
+              const sellingWithTd = sellingPrice + tdAmount;
+              const totalWithTd = totalPrice + tdAmount;
+              const formatAed = (n) =>
+                `AED ${Number(n || 0).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}`;
+              return (
+                <>
+                  <div className="p-3 rounded bg-white shadow-sm mt-2 border">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <h6 className="mb-0 text-muted">Selling Price</h6>
+                      <h5 className="mb-0 text-success fw-bold">
+                        {formatAed(sellingWithTd)}
+                      </h5>
                     </div>
                   </div>
-                );
-              })()}
 
-              <div
-                className="mt-3 pt-3 border-top d-flex justify-content-between align-items-center"
-                style={{ borderColor: "#0d6efd !important" }}
-              >
-                <span
-                  className="fw-bold"
-                  style={{ fontSize: "1.125rem", color: "#212529" }}
-                >
-                  Total Amount
-                </span>
-                <span
-                  className="fw-bold"
-                  style={{
-                    fontSize: "1.5rem",
-                    color: "#0d6efd",
-                  }}
-                >
-                  AED {sellingPrice.toFixed(2)}
-                </span>
-              </div>
-            </div>
+                  <div
+                    className="p-3 rounded text-white text-center mt-2"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #198754 0%, #0d6efd 100%)",
+                    }}
+                  >
+                    <h6 className="mb-0 fw-bold">Total Price</h6>
+                    <h4 className="mb-0">{formatAed(totalWithTd)}</h4>
+                  </div>
+
+                  <div className="mt-3 mb-3">
+                    <label
+                      className="form-label fw-semibold"
+                      style={{ fontSize: "0.875rem" }}
+                    >
+                      Tourism Dirham
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="form-control"
+                      placeholder="0.00"
+                      value={tourismDirham}
+                      onChange={(e) => setTourismDirham(e.target.value)}
+                    />
+                    <small className="text-muted">
+                      Optional — added to Selling Price and Total Price.
+                    </small>
+                  </div>
+
+                  <div className="mt-3 p-3 bg-white border rounded">
+                    <h6 className="fw-bold mb-2">Rate Split</h6>
+                    <div className="d-flex justify-content-between">
+                      <span>Selling Price</span>
+                      <span>{formatAed(sellingPrice)}</span>
+                    </div>
+                    <div className="d-flex justify-content-between">
+                      <span>Total Price (without markup)</span>
+                      <span>{formatAed(totalPrice)}</span>
+                    </div>
+                    <div className="d-flex justify-content-between">
+                      <span>Tourism Dirhams</span>
+                      <span>{formatAed(tdAmount)}</span>
+                    </div>
+                    <hr className="my-2" />
+                    <div className="d-flex justify-content-between fw-bold text-success">
+                      <span>Selling + TD</span>
+                      <span>{formatAed(sellingWithTd)}</span>
+                    </div>
+                    <div className="d-flex justify-content-between fw-bold text-primary">
+                      <span>Total + TD</span>
+                      <span>{formatAed(totalWithTd)}</span>
+                    </div>
+                  </div>
+
+                  {/* v2 Add-Ons summary — each enabled service expanded
+                      with the field-level details the operator captured. */}
+                  {(() => {
+                    let svcMap = {};
+                    try {
+                      svcMap = JSON.parse(
+                        sessionStorage.getItem("mypkg_addon_services") || "{}"
+                      );
+                    } catch {
+                      svcMap = {};
+                    }
+                    const enabled = ADDON_SERVICES_CATALOG.filter(
+                      (svc) => svcMap[svc.key]?.enabled
+                    );
+                    if (enabled.length === 0) return null;
+                    return (
+                      <div className="mt-3 p-3 bg-white border rounded">
+                        <h6 className="fw-bold mb-2">Add-on Services</h6>
+                        <div className="d-flex flex-column gap-2">
+                          {enabled.map((svc) => {
+                            const data = svcMap[svc.key] || {};
+                            const filled = (svc.fields || []).filter((f) => {
+                              const v = data[f.name];
+                              return v !== undefined && v !== "" && v !== null;
+                            });
+                            return (
+                              <div
+                                key={svc.key}
+                                className="p-2 rounded border bg-light"
+                                style={{ fontSize: "0.8125rem" }}
+                              >
+                                <div className="fw-semibold text-success mb-1">
+                                  {svc.label}
+                                </div>
+                                {filled.length === 0 ? (
+                                  <span className="text-muted fst-italic">
+                                    Enabled (no extra details captured)
+                                  </span>
+                                ) : (
+                                  <div className="d-flex flex-column gap-1">
+                                    {filled.map((f) => (
+                                      <div
+                                        key={f.name}
+                                        className="d-flex justify-content-between"
+                                      >
+                                        <span className="text-muted">
+                                          {f.label}
+                                        </span>
+                                        <span>{String(data[f.name])}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="mt-4 text-center">
+                    <p className="text-muted small mb-0">
+                      Please review the booking details carefully before
+                      confirming.
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </Modal.Body>
         <Modal.Footer
