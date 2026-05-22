@@ -19,79 +19,70 @@ const PaxInformation = ({
   onFinish,
   packageData,
   totalPrice,
+  // When set, the submit button performs an amendment (PUT) on the
+  // existing booking instead of creating a new one (POST).
+  editingBookingId,
 }) => {
   const navigate = useNavigate();
   const [showSummary, setShowSummary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tourismDirham, setTourismDirham] = useState("");
 
+  // The standalone Contact card has been removed — the first traveller IS
+  // the contact. Their email + mobile are captured directly on that row
+  // and reused as the booking's primary contact at submission time.
   const [localData, setLocalData] = useState(
     bookingData.paxInfo || {
-      contactTitle: "Mr",
-      contactName: "",
-      contactEmail: "",
-      contactMobile: "",
       travellers: [],
     },
   );
 
+  // The package category defines the MAX number of adults and children the
+  // user may enter. They start with only the primary (lead) adult and may
+  // opt in to enter more via the "Add extra adult" / "Add extra child"
+  // buttons — they are not forced to fill every seat the category allows.
+  const maxAdults = Number(searchParams.adultCount) || 1;
+  const maxChildren = Number(searchParams.childCount) || 0;
+
+  const currentAdults = localData.travellers.filter((t) => t.type === "Adult").length;
+  const currentChildren = localData.travellers.filter((t) => t.type === "Child").length;
+  const canAddAdult = currentAdults < maxAdults;
+  const canAddChild = currentChildren < maxChildren;
+
+  const makeTraveller = (type) => ({
+    type,
+    id: `${type.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    title: "Mr",
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    email: "",
+    mobile: "",
+  });
+
+  // Initialize / reconcile traveller list when the page mounts or the
+  // category caps change.
+  //   • No travellers yet → seed with one primary Adult.
+  //   • Caps reduced (e.g. user went back and picked a smaller category) →
+  //     trim extras but always keep the lead Adult.
   useEffect(() => {
-    const adults = Number(searchParams.adultCount) || 1;
-    const children = Number(searchParams.childCount) || 0;
-
-    // Only initialize if photographers list is empty or doesn't match counts
-    if (localData.travellers.length !== adults + children) {
-      const list = [];
-      for (let i = 1; i <= adults; i++)
-        list.push({
-          type: "Adult",
-          id: `adult-${i}`,
-          title: "Mr",
-          firstName: "",
-          middleName: "",
-          lastName: "",
-        });
-      for (let i = 1; i <= children; i++)
-        list.push({
-          type: "Child",
-          id: `child-${i}`,
-          title: "Mr",
-          firstName: "",
-          middleName: "",
-          lastName: "",
-        });
-
-      setLocalData((prev) => ({ ...prev, travellers: list }));
+    if (!localData.travellers || localData.travellers.length === 0) {
+      const seeded = { ...localData, travellers: [makeTraveller("Adult")] };
+      setLocalData(seeded);
+      updateData({ ...bookingData, paxInfo: seeded });
+      return;
     }
-  }, [searchParams]);
-
-  const handleContactChange = (field, value) => {
-    let updatedTravellers = [...localData.travellers];
-
-    // Automatically sync contact info to the first traveller
-    if (updatedTravellers.length > 0) {
-      if (field === "contactTitle") {
-        updatedTravellers[0] = { ...updatedTravellers[0], title: value };
-      } else if (field === "contactName") {
-        const nameParts = value.trim().split(/\s+/);
-        const firstName = nameParts[0] || "";
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
-        updatedTravellers[0] = {
-          ...updatedTravellers[0],
-          firstName: firstName,
-          lastName: lastName,
-        };
-      }
+    const adults = localData.travellers.filter((t) => t.type === "Adult");
+    const children = localData.travellers.filter((t) => t.type === "Child");
+    if (adults.length > maxAdults || children.length > maxChildren) {
+      const trimmedAdults = adults.slice(0, Math.max(1, maxAdults));
+      const trimmedChildren = children.slice(0, maxChildren);
+      const merged = [...trimmedAdults, ...trimmedChildren];
+      const updated = { ...localData, travellers: merged };
+      setLocalData(updated);
+      updateData({ ...bookingData, paxInfo: updated });
     }
-
-    const updated = {
-      ...localData,
-      [field]: value,
-      travellers: updatedTravellers,
-    };
-    setLocalData(updated);
-    updateData({ ...bookingData, paxInfo: updated });
-  };
+  }, [maxAdults, maxChildren]);
 
   const handleTravellerChange = (index, field, value) => {
     const updatedTravellers = [...localData.travellers];
@@ -101,16 +92,46 @@ const PaxInformation = ({
     updateData({ ...bookingData, paxInfo: updated });
   };
 
+  const addExtraTraveller = (type) => {
+    if (type === "Adult" && !canAddAdult) return;
+    if (type === "Child" && !canAddChild) return;
+    // Keep adults before children so the primary stays first and child rows
+    // appear after the adult rows in the UI.
+    const adults = localData.travellers.filter((t) => t.type === "Adult");
+    const children = localData.travellers.filter((t) => t.type === "Child");
+    const newRow = makeTraveller(type);
+    const merged = type === "Adult"
+      ? [...adults, newRow, ...children]
+      : [...adults, ...children, newRow];
+    const updated = { ...localData, travellers: merged };
+    setLocalData(updated);
+    updateData({ ...bookingData, paxInfo: updated });
+  };
+
+  const removeTraveller = (index) => {
+    // Primary (index 0) cannot be removed — always required as the contact.
+    if (index === 0) return;
+    const newList = localData.travellers.filter((_, i) => i !== index);
+    const updated = { ...localData, travellers: newList };
+    setLocalData(updated);
+    updateData({ ...bookingData, paxInfo: updated });
+  };
+
+  const primary = localData.travellers && localData.travellers[0];
+
   const validatePaxData = () => {
-    if (
-      !localData.contactName ||
-      !localData.contactEmail ||
-      !localData.contactMobile
-    ) {
-      toast.error("Please fill in all contact information.");
+    if (!primary) {
+      toast.error("No travellers configured.");
       return false;
     }
-
+    if (!primary.firstName || !primary.lastName) {
+      toast.error("Please fill the lead traveller's first and last name.");
+      return false;
+    }
+    if (!primary.email || !primary.mobile) {
+      toast.error("Please fill the lead traveller's email and mobile (contact info).");
+      return false;
+    }
     const incompleteTraveller = localData.travellers.find(
       (t) => !t.firstName || !t.lastName,
     );
@@ -118,7 +139,6 @@ const PaxInformation = ({
       toast.error("Please fill in first and last names for all travellers.");
       return false;
     }
-
     return true;
   };
 
@@ -140,18 +160,26 @@ const PaxInformation = ({
           tourismDirham !== "" && !isNaN(Number(tourismDirham))
             ? Number(tourismDirham)
             : null,
+        // counts now reflect the actual entered travellers, not the
+        // category cap — the user can opt to enter fewer than the package
+        // allows.
         counts: {
-          adultCount: Number(searchParams.adultCount),
-          childCount: Number(searchParams.childCount),
-          infantCount: Number(searchParams.infantCount),
+          adultCount: currentAdults,
+          childCount: currentChildren,
+          infantCount: Number(searchParams.infantCount) || 0,
           childAge: searchParams.childAge,
           infantAge: searchParams.infantAge,
         },
+        // Contact info is now derived from the first (lead) traveller —
+        // the standalone Contact card was removed from the UI.
         contactInfo: {
-          title: localData.contactTitle,
-          name: localData.contactName,
-          email: localData.contactEmail,
-          mobile: localData.contactMobile,
+          title: primary?.title || "Mr",
+          name: [primary?.firstName, primary?.middleName, primary?.lastName]
+            .filter(Boolean)
+            .join(" ")
+            .trim(),
+          email: primary?.email || "",
+          mobile: primary?.mobile || "",
         },
         travellers: localData.travellers,
         selections: {
@@ -168,14 +196,24 @@ const PaxInformation = ({
 
       console.log("Final Booking Payload:", payload);
 
-      const response = await axiosInstance.post(
-        "/api/v1/package-booking/book",
-        payload,
-      );
+      // Amendment path uses PUT against /booking/{id}; create path stays
+      // on POST /book. Both return { status: "success", ... } on OK.
+      const response = editingBookingId
+        ? await axiosInstance.put(
+            `/api/v1/package-booking/booking/${editingBookingId}`,
+            payload,
+          )
+        : await axiosInstance.post(
+            "/api/v1/package-booking/book",
+            payload,
+          );
 
       if (response.data?.status === "success") {
         toast.success(
-          response.data.message || "Booking confirmed successfully!",
+          response.data.message ||
+            (editingBookingId
+              ? "Booking amended successfully!"
+              : "Booking confirmed successfully!"),
         );
         setShowSummary(false);
         navigate("/booking-details/package-booking-list");
@@ -208,65 +246,40 @@ const PaxInformation = ({
 
   return (
     <div className="tab-pane-active">
-      {/* Contact info */}
-      <p className="tab-section-title">Contact information</p>
-      <div className="pax-card mb-2">
-        <Row className="g-3">
-          <Col md={1}>
-            <Form.Group>
-              <Form.Label className="booking-field-label">Title</Form.Label>
-              {titleSelect(localData.contactTitle, (v) =>
-                handleContactChange("contactTitle", v),
-              )}
-            </Form.Group>
-          </Col>
-          <Col md={3}>
-            <Form.Group>
-              <Form.Label className="booking-field-label">Name</Form.Label>
-              <Form.Control
-                placeholder="Full name"
-                value={localData.contactName}
-                onChange={(e) =>
-                  handleContactChange("contactName", e.target.value)
-                }
-              />
-            </Form.Group>
-          </Col>
-          <Col md={4}>
-            <Form.Group>
-              <Form.Label className="booking-field-label">Email</Form.Label>
-              <Form.Control
-                type="email"
-                placeholder="email@example.com"
-                value={localData.contactEmail}
-                onChange={(e) =>
-                  handleContactChange("contactEmail", e.target.value)
-                }
-              />
-            </Form.Group>
-          </Col>
-          <Col md={4}>
-            <Form.Group>
-              <Form.Label className="booking-field-label">Mobile</Form.Label>
-              <Form.Control
-                placeholder="+971 ..."
-                value={localData.contactMobile}
-                onChange={(e) =>
-                  handleContactChange("contactMobile", e.target.value)
-                }
-              />
-            </Form.Group>
-          </Col>
-        </Row>
-      </div>
-
-      {/* Travellers */}
+      {/* Travellers — the first (lead) traveller doubles as the booking's
+          contact. Extras (additional adults / children) are opt-in via the
+          buttons below this list and are capped at the package category's
+          configured adults / children counts. */}
       <p className="tab-section-title">Traveller information</p>
-      {localData.travellers.map((pax, index) => (
+      {localData.travellers.map((pax, index) => {
+        // Numbering within type so extras read "Adult 2", "Child 2" etc.
+        const sameTypeBefore = localData.travellers
+          .slice(0, index)
+          .filter((t) => t.type === pax.type).length;
+        return (
         <div key={pax.id} className="pax-card">
-          <span className="pax-type-badge">
-            {pax.type} {index + 1}
-          </span>
+          <div className="d-flex justify-content-between align-items-center mb-1">
+            <span className="pax-type-badge">
+              {pax.type} {sameTypeBefore + 1}
+              {index === 0 && (
+                <span
+                  className="ms-2 badge bg-primary"
+                  style={{ fontSize: "0.65rem" }}
+                >
+                  Primary contact
+                </span>
+              )}
+            </span>
+            {index > 0 && (
+              <Button
+                variant="outline-danger"
+                size="sm"
+                onClick={() => removeTraveller(index)}
+              >
+                Remove
+              </Button>
+            )}
+          </div>
           <Row className="g-3">
             <Col md={1}>
               <Form.Group>
@@ -316,8 +329,87 @@ const PaxInformation = ({
               </Form.Group>
             </Col>
           </Row>
+          {/* Only show email + mobile for the lead traveller (acts as contact). */}
+          {index === 0 && (
+            <Row className="g-3 mt-1">
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label className="booking-field-label">
+                    Email <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    type="email"
+                    placeholder="email@example.com"
+                    value={pax.email || ""}
+                    onChange={(e) =>
+                      handleTravellerChange(index, "email", e.target.value)
+                    }
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label className="booking-field-label">
+                    Mobile <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    placeholder="+971 ..."
+                    value={pax.mobile || ""}
+                    onChange={(e) =>
+                      handleTravellerChange(index, "mobile", e.target.value)
+                    }
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+          )}
         </div>
-      ))}
+        );
+      })}
+
+      {/* Add-extra controls — only render a button when the category allows
+          more of that type. Both buttons disable themselves when the user
+          has already reached the cap. */}
+      {(maxAdults > 1 || maxChildren > 0) && (
+        <div className="d-flex flex-wrap gap-2 mt-2">
+          {maxAdults > 1 && (
+            <Button
+              variant="outline-primary"
+              size="sm"
+              onClick={() => addExtraTraveller("Adult")}
+              disabled={!canAddAdult}
+              title={
+                canAddAdult
+                  ? `Add another adult (max ${maxAdults})`
+                  : `Maximum ${maxAdults} adult${maxAdults === 1 ? "" : "s"} for this package category`
+              }
+            >
+              + Add extra adult{" "}
+              <span className="text-muted">
+                ({currentAdults}/{maxAdults})
+              </span>
+            </Button>
+          )}
+          {maxChildren > 0 && (
+            <Button
+              variant="outline-primary"
+              size="sm"
+              onClick={() => addExtraTraveller("Child")}
+              disabled={!canAddChild}
+              title={
+                canAddChild
+                  ? `Add a child (max ${maxChildren})`
+                  : `Maximum ${maxChildren} child${maxChildren === 1 ? "" : "ren"} for this package category`
+              }
+            >
+              + Add extra child{" "}
+              <span className="text-muted">
+                ({currentChildren}/{maxChildren})
+              </span>
+            </Button>
+          )}
+        </div>
+      )}
 
       <hr className="tab-nav-divider" />
       <div className="d-flex justify-content-between mt-3">
@@ -330,7 +422,7 @@ const PaxInformation = ({
             if (validatePaxData()) setShowSummary(true);
           }}
         >
-          Confirm booking →
+          {editingBookingId ? "Save amendment →" : "Confirm booking →"}
         </button>
       </div>
 
@@ -369,8 +461,7 @@ const PaxInformation = ({
                 <Col sm={3}>
                   <p className="mb-1 text-muted small">Passengers</p>
                   <p className="fw-semibold mb-0">
-                    {searchParams.adultCount} Adult, {searchParams.childCount}{" "}
-                    Child
+                    {currentAdults} Adult, {currentChildren} Child
                   </p>
                 </Col>
               </Row>
@@ -450,8 +541,10 @@ const PaxInformation = ({
             </h6>
             <div className="summary-card p-3 bg-white rounded shadow-sm border">
               <p className="mb-2">
-                <strong>Contact:</strong> {localData.contactName} (
-                {localData.contactEmail})
+                <strong>Contact:</strong>{" "}
+                {primary
+                  ? `${[primary.firstName, primary.lastName].filter(Boolean).join(" ")} (${primary.email || "-"})`
+                  : "-"}
               </p>
               <p className="mb-0 text-muted small">
                 <strong>Travellers:</strong>{" "}
@@ -483,7 +576,8 @@ const PaxInformation = ({
               "Processing..."
             ) : (
               <>
-                <FaCheckCircle className="me-2" /> Submit Booking
+                <FaCheckCircle className="me-2" />{" "}
+                {editingBookingId ? "Save Amendment" : "Submit Booking"}
               </>
             )}
           </Button>

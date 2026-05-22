@@ -915,6 +915,24 @@ function ResultsWithFilters({ results, searchContext }) {
 
 // Single hotel card — extracted so it can be reused / kept readable.
 function HotelCard({ hotel: h, onViewRooms }) {
+  // Rates saved in the DB already include the admin markup (it is pre-applied
+  // on the contract rate form). Return the cheapest base rate directly.
+  const getCheapestMarkedUpRate = (hotel) => {
+    if (!hotel.rooms || hotel.rooms.length === 0) {
+      return hotel.fromRate;
+    }
+    let minRate = null;
+    hotel.rooms.forEach((r) => {
+      const base = Number(r.lastMinuteRate || 0);
+      if (minRate === null || base < minRate) {
+        minRate = base;
+      }
+    });
+    return minRate;
+  };
+
+  const displayFromRate = getCheapestMarkedUpRate(h);
+
   return (
     <div
       style={{
@@ -1010,8 +1028,8 @@ function HotelCard({ hotel: h, onViewRooms }) {
               }}
             >
               <div style={{ fontSize: "1.1rem", fontWeight: 600, color: "#333" }}>
-                {h.fromRate != null
-                  ? `AED ${Number(h.fromRate).toLocaleString()}`
+                {displayFromRate != null
+                  ? `AED ${Number(displayFromRate).toLocaleString()}`
                   : "Price on request"}
               </div>
               <Button size="sm" variant="primary" onClick={onViewRooms}>

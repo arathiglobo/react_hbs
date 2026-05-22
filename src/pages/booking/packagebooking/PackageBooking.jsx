@@ -22,11 +22,18 @@ const PackageBooking = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { agentId, destinationCountryId } = location.state || {};
+  const { agentId, destinationCountryId, mode, bookingId } =
+    location.state || {};
+  const isEditMode = mode === "edit" && bookingId;
 
   const [currentStep, setCurrentStep] = useState(1);
   const [packageData, setPackageData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Set when the page is opened in amendment mode so the submit step
+  // chooses PUT over POST.
+  const [editingBookingId, setEditingBookingId] = useState(
+    isEditMode ? bookingId : null
+  );
 
   const [bookingData, setBookingData] = useState({
     searchParams: {
@@ -51,11 +58,9 @@ const PackageBooking = () => {
       cabPrice: 0,
       activityPrice: 0,
     },
+    // Contact card was removed — the first traveller is the primary contact
+    // and their email + mobile are captured directly on the traveller row.
     paxInfo: {
-      contactTitle: "Mr",
-      contactName: "",
-      contactEmail: "",
-      contactMobile: "",
       travellers: [],
     },
   });
@@ -77,6 +82,76 @@ const PackageBooking = () => {
     };
     if (id) fetchPackageDetails();
   }, [id]);
+
+  // Edit mode — fetch the existing booking and hydrate state so the user
+  // can amend any tab and submit via PUT. Runs once on mount.
+  useEffect(() => {
+    if (!isEditMode || !bookingId) return;
+    const loadExistingBooking = async () => {
+      try {
+        const res = await axiosInstance.get(
+          `/api/v1/package-booking/booking/${bookingId}`
+        );
+        const b = res.data;
+        if (!b) return;
+
+        // Map back into the shape the tabs expect. Names / shapes mirror
+        // what is sent in handleSubmitBooking() so a round-trip works.
+        setBookingData((prev) => ({
+          ...prev,
+          searchParams: {
+            ...prev.searchParams,
+            packageId: b.packageId || prev.searchParams.packageId,
+            travelDate: b.travelDate || prev.searchParams.travelDate,
+            packageCategory: b.packageCategory || "",
+            nativeCountry: b.nativeCountry || "",
+            agentId: b.agentId || prev.searchParams.agentId,
+            destinationCountryId:
+              b.destinationCountryId || prev.searchParams.destinationCountryId,
+            destinationCityId: b.destinationCityId || "",
+            adultCount: b.counts?.adultCount ?? 1,
+            childCount: b.counts?.childCount ?? 0,
+            infantCount: b.counts?.infantCount ?? 0,
+            childAge: b.counts?.childAge || "",
+            infantAge: b.counts?.infantAge || "",
+          },
+          selections: {
+            ...prev.selections,
+            selectedHotels: (b.selections?.hotels || []).map((h) => ({
+              hotelId: h.hotelId,
+              hotelName: h.hotelName,
+              totalRateWithMarkup: h.selectedRate,
+              currencyCode: h.currency,
+            })),
+            hotelPrice: (b.selections?.hotels || []).reduce(
+              (sum, h) => sum + Number(h.selectedRate || 0),
+              0
+            ),
+            cabPrice: Number(b.selections?.cab?.selectedRate || 0),
+            activityPrice: Number(b.selections?.activity?.selectedRate || 0),
+          },
+          paxInfo: {
+            travellers: (b.travellers || []).map((t, i) => ({
+              type: t.type || (i === 0 ? "Adult" : "Adult"),
+              id: `${(t.type || "adult").toLowerCase()}-${i}-${Date.now()}`,
+              title: t.title || "Mr",
+              firstName: t.firstName || "",
+              middleName: t.middleName || "",
+              lastName: t.lastName || "",
+              // Email + mobile aren't on the per-traveller payload — pull
+              // them from the booking-level contactInfo for the first row.
+              email: i === 0 ? b.contactInfo?.email || "" : "",
+              mobile: i === 0 ? b.contactInfo?.mobile || "" : "",
+            })),
+          },
+        }));
+      } catch (err) {
+        console.error("Edit-mode load failed:", err);
+        toast.error("Failed to load booking for amendment");
+      }
+    };
+    loadExistingBooking();
+  }, [isEditMode, bookingId]);
 
   useEffect(() => {
     const baseRate = Number(packageData?.rate) || 0;
@@ -114,14 +189,15 @@ const PackageBooking = () => {
     switch (currentStep) {
       case 1: return <BasicDetails data={bookingData.searchParams} updateData={updateSearchParams} onNext={() => setCurrentStep(2)} />;
       case 2: return <HotelsTab searchParams={bookingData.searchParams} bookingData={bookingData.selections} updateData={updateSelections} onPrev={() => setCurrentStep(1)} onNext={() => setCurrentStep(3)} />;
-      case 3: return <PaxInformation 
-                        searchParams={bookingData.searchParams} 
-                        bookingData={bookingData} 
-                        updateData={setBookingData} 
-                        onPrev={() => setCurrentStep(2)} 
-                        onFinish={handleFinish} 
-                        packageData={packageData} 
-                        totalPrice={totalPrice} 
+      case 3: return <PaxInformation
+                        searchParams={bookingData.searchParams}
+                        bookingData={bookingData}
+                        updateData={setBookingData}
+                        onPrev={() => setCurrentStep(2)}
+                        onFinish={handleFinish}
+                        packageData={packageData}
+                        totalPrice={totalPrice}
+                        editingBookingId={editingBookingId}
                       />;
       default: return null;
     }
@@ -157,7 +233,9 @@ const PackageBooking = () => {
             <Link to="/new-booking/package-search" className="back-link mb-2 d-inline-flex">
               <FaChevronLeft size={10} /> Back to search
             </Link>
-            <h1 className="page-title mb-0">Package Booking</h1>
+            <h1 className="page-title mb-0">
+              {editingBookingId ? "Amend Package Booking" : "Package Booking"}
+            </h1>
           </div>
 
           <Row className="g-4 align-items-start">

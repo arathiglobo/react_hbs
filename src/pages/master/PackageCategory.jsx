@@ -13,6 +13,12 @@ export default function PackageCategory() {
   const [editing, setEditing] = useState(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  // ─ Optional occupancy fields — empty string = "not specified". They
+  //   round-trip as null to the backend when blank.
+  const [adults, setAdults] = useState("");
+  const [children, setChildren] = useState("");
+  const [childAge, setChildAge] = useState("");
+  const [occupancy, setOccupancy] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
@@ -67,6 +73,10 @@ export default function PackageCategory() {
     setEditing(null);
     setName("");
     setCode("");
+    setAdults("");
+    setChildren("");
+    setChildAge("");
+    setOccupancy("");
     setError("");
     setErrors({});
     setShowModal(true);
@@ -76,6 +86,11 @@ export default function PackageCategory() {
     setEditing(item);
     setName(item.name || "");
     setCode(item.code || "");
+    setAdults(item.adults === null || item.adults === undefined ? "" : String(item.adults));
+    setChildren(item.children === null || item.children === undefined ? "" : String(item.children));
+    setChildAge(item.childAge || "");
+    // occupancy is numeric — `|| ""` would discard 0, so use a strict null check.
+    setOccupancy(item.occupancy === null || item.occupancy === undefined ? "" : String(item.occupancy));
     setError("");
     setErrors({});
     setShowModal(true);
@@ -97,6 +112,12 @@ export default function PackageCategory() {
         {
           name: name.trim(),
           code: code.trim(),
+          // Send null when blank so the backend column stays NULL rather
+          // than storing the string "" or NaN.
+          adults: adults === "" ? null : Number(adults),
+          children: children === "" ? null : Number(children),
+          childAge: childAge.trim() || null,
+          occupancy: occupancy === "" ? null : Number(occupancy),
         }
       );
 
@@ -120,6 +141,10 @@ export default function PackageCategory() {
     setEditing(null);
     setName("");
     setCode("");
+    setAdults("");
+    setChildren("");
+    setChildAge("");
+    setOccupancy("");
     setError("");
     setErrors({});
   };
@@ -178,9 +203,13 @@ export default function PackageCategory() {
 
     try {
       setIsLoading(true);
-      const packageCategoryPayload = { 
+      const packageCategoryPayload = {
         name: name.trim(),
-        code: code.trim()
+        code: code.trim(),
+        adults: adults === "" ? null : Number(adults),
+        children: children === "" ? null : Number(children),
+        childAge: childAge.trim() || null,
+        occupancy: occupancy === "" ? null : Number(occupancy),
       };
       const packageCategorySaveRes = await axiosInstance.post(
         "/api/packageCategory/save",
@@ -294,6 +323,10 @@ export default function PackageCategory() {
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Package Category Name</th>
                     <th>Code</th>
+                    <th style={{ width: 90 }}>Adults</th>
+                    <th style={{ width: 90 }}>Children</th>
+                    <th>Child Age</th>
+                    <th>Occupancy</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
                 </thead>
@@ -303,6 +336,10 @@ export default function PackageCategory() {
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.name}</td>
                       <td>{item.code}</td>
+                      <td>{item.adults ?? "-"}</td>
+                      <td>{item.children ?? "-"}</td>
+                      <td>{item.childAge || "-"}</td>
+                      <td>{item.occupancy ?? "-"}</td>
                       <td>
                         <div className="d-flex gap-2">
                           <FaEdit
@@ -323,7 +360,7 @@ export default function PackageCategory() {
                   ))}
                   {isLoading && (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={8} className="text-center text-muted py-4">
                         <div
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -336,7 +373,7 @@ export default function PackageCategory() {
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={8} className="text-center text-muted py-4">
                         No package categories found.
                       </td>
                     </tr>
@@ -424,6 +461,50 @@ export default function PackageCategory() {
                     </Form.Control.Feedback>
                   )}
                 </Form.Group>
+
+                {/* ─ Optional occupancy fields ─────────────────────── */}
+                <div className="row">
+                  <Form.Group className="mb-3 col-md-6">
+                    <Form.Label>Adults</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      value={adults}
+                      onChange={(e) => setAdults(e.target.value)}
+                      placeholder="e.g. 2"
+                    />
+                  </Form.Group>
+                  <Form.Group className="mb-3 col-md-6">
+                    <Form.Label>Children</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      value={children}
+                      onChange={(e) => setChildren(e.target.value)}
+                      placeholder="e.g. 1"
+                    />
+                  </Form.Group>
+                  <Form.Group className="mb-3 col-md-6">
+                    <Form.Label>Child Age</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={childAge}
+                      onChange={(e) => setChildAge(e.target.value)}
+                      placeholder="e.g. 3-12 years"
+                      maxLength={100}
+                    />
+                  </Form.Group>
+                  <Form.Group className="mb-3 col-md-6">
+                    <Form.Label>Occupancy</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      value={occupancy}
+                      onChange={(e) => setOccupancy(e.target.value)}
+                      placeholder="e.g. 2"
+                    />
+                  </Form.Group>
+                </div>
 
                 {error && (
                   <div className="alert alert-danger" role="alert">

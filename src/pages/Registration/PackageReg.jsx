@@ -498,8 +498,13 @@ const PackageReg = () => {
       formDataPayload.append(`packageItinearyDTOList[${index}].heading`, itinerary.heading || "");
       formDataPayload.append(`packageItinearyDTOList[${index}].placeId`, itinerary.placeId);
       formDataPayload.append(`packageItinearyDTOList[${index}].dayActivities`, itinerary.dayActivities || "");
-      if (itinerary.packageItinearyImage) {
-        formDataPayload.append(`packageItinearyDTOList[${index}].packageItinearyImage`, itinerary.packageItinearyImage);
+      // Only append the binary if the local state holds an actual File object.
+      // String values represent an already-uploaded image path that the backend
+      // already knows about — sending it again as a file would fail binding.
+      // Backend DTO field is `MultipartFile packageItinearyImageFile` (matches
+      // the same `packageImageFile` pattern used for the main package image).
+      if (itinerary.packageItinearyImage && typeof itinerary.packageItinearyImage !== "string") {
+        formDataPayload.append(`packageItinearyDTOList[${index}].packageItinearyImageFile`, itinerary.packageItinearyImage);
       }
     });
 
@@ -1289,8 +1294,77 @@ const PackageReg = () => {
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
+              {/*
+                Cross-tab validation summary — visible regardless of which
+                tab the user is on. The original UI only rendered the
+                "itinerary" / "others" error messages inside their own tab
+                panels, so a user clicking Create from the Basic Details
+                tab saw nothing and thought the form was silently broken.
+                This block surfaces *all* validation errors at the top.
+              */}
+              {Object.keys(validationErrors).some((k) => validationErrors[k]) && (
+                <div className="alert alert-danger mb-3" role="alert">
+                  <div className="fw-semibold mb-1">
+                    <i className="fas fa-exclamation-triangle me-2"></i>
+                    Please fix the following before saving:
+                  </div>
+                  <ul className="mb-0 ps-3">
+                    {validationErrors.packageName && (
+                      <li><strong>Basic Details:</strong> {validationErrors.packageName}</li>
+                    )}
+                    {validationErrors.packageCode && (
+                      <li><strong>Basic Details:</strong> {validationErrors.packageCode}</li>
+                    )}
+                    {validationErrors.packageBasicRate && (
+                      <li><strong>Basic Details:</strong> {validationErrors.packageBasicRate}</li>
+                    )}
+                    {validationErrors.currencyId && (
+                      <li><strong>Basic Details:</strong> {validationErrors.currencyId}</li>
+                    )}
+                    {validationErrors.packageType && (
+                      <li><strong>Basic Details:</strong> {validationErrors.packageType}</li>
+                    )}
+                    {validationErrors.packageCategory && (
+                      <li><strong>Basic Details:</strong> {validationErrors.packageCategory}</li>
+                    )}
+                    {validationErrors.countryId && (
+                      <li><strong>Basic Details:</strong> {validationErrors.countryId}</li>
+                    )}
+                    {validationErrors.placeId && (
+                      <li><strong>Basic Details:</strong> {validationErrors.placeId}</li>
+                    )}
+                    {validationErrors.noOfNights && (
+                      <li><strong>Basic Details:</strong> {validationErrors.noOfNights}</li>
+                    )}
+                    {validationErrors.itinerary && (
+                      <li>{validationErrors.itinerary}</li>
+                    )}
+                    {validationErrors.others && (
+                      <li><strong>Others tab:</strong> {validationErrors.others}</li>
+                    )}
+                  </ul>
+                </div>
+              )}
               <Tabs defaultActiveKey="basic" id="package-tabs" className="mb-3">
-                <Tab eventKey="basic" title="Basic Details">
+                <Tab
+                  eventKey="basic"
+                  title={
+                    <span>
+                      Basic Details
+                      {(validationErrors.packageName ||
+                        validationErrors.packageCode ||
+                        validationErrors.packageBasicRate ||
+                        validationErrors.currencyId ||
+                        validationErrors.packageType ||
+                        validationErrors.packageCategory ||
+                        validationErrors.countryId ||
+                        validationErrors.placeId ||
+                        validationErrors.noOfNights) && (
+                        <span className="text-danger ms-1" title="Has errors">!</span>
+                      )}
+                    </span>
+                  }
+                >
                   <Form onSubmit={handleSave}>
                     <Row>
                       <Col md={6}>
@@ -1549,7 +1623,24 @@ const PackageReg = () => {
                                         }}
                                       >
                                         <div className="d-flex align-items-center justify-content-between">
-                                          <span>{pkgCat.name}</span>
+                                          <div className="d-flex flex-column">
+                                            <span>{pkgCat.name}</span>
+                                            {/* Detail line — only renders when at least one of the
+                                                optional fields was set on the master record. */}
+                                            {(pkgCat.adults != null || pkgCat.children != null || pkgCat.childAge || pkgCat.occupancy != null) && (
+                                              <small className="text-muted">
+                                                {pkgCat.adults != null && <>{pkgCat.adults} Adult{pkgCat.adults === 1 ? "" : "s"}</>}
+                                                {pkgCat.adults != null && pkgCat.children != null && " + "}
+                                                {pkgCat.children != null && <>{pkgCat.children} Child{pkgCat.children === 1 ? "" : "ren"}</>}
+                                                {pkgCat.childAge && (
+                                                  <> {(pkgCat.adults != null || pkgCat.children != null) ? "•" : ""} Child Age: {pkgCat.childAge}</>
+                                                )}
+                                                {pkgCat.occupancy != null && (
+                                                  <> {(pkgCat.adults != null || pkgCat.children != null || pkgCat.childAge) ? "•" : ""} Occupancy: {pkgCat.occupancy}</>
+                                                )}
+                                              </small>
+                                            )}
+                                          </div>
                                           {isSelected && (
                                             <span className="text-primary">✓</span>
                                           )}
@@ -1591,6 +1682,35 @@ const PackageReg = () => {
                                   return category ? category.name : `ID: ${id}`;
                                 }).join(", ")}
                               </small>
+                              {/* Category detail summary for each selected category. Only renders
+                                  rows for categories that actually have any of the optional fields
+                                  configured on the master record — keeps the UI clean for legacy
+                                  categories. */}
+                              {(() => {
+                                const detailed = formData.packageCategory
+                                  .map(id => packageCategories.find(cat => cat.packageCategoryId === id))
+                                  .filter(cat => cat && (cat.adults != null || cat.children != null || cat.childAge || cat.occupancy != null));
+                                if (detailed.length === 0) return null;
+                                return (
+                                  <div className="mt-2 p-2 border rounded bg-light">
+                                    <div className="fw-semibold small mb-1">Category Details</div>
+                                    {detailed.map(cat => (
+                                      <div key={cat.packageCategoryId} className="small text-muted">
+                                        <strong>{cat.name}:</strong>{" "}
+                                        {cat.adults != null && <>{cat.adults} Adult{cat.adults === 1 ? "" : "s"}</>}
+                                        {cat.adults != null && cat.children != null && " + "}
+                                        {cat.children != null && <>{cat.children} Child{cat.children === 1 ? "" : "ren"}</>}
+                                        {cat.childAge && (
+                                          <> {(cat.adults != null || cat.children != null) ? "•" : ""} Child Age: {cat.childAge}</>
+                                        )}
+                                        {cat.occupancy != null && (
+                                          <> {(cat.adults != null || cat.children != null || cat.childAge) ? "•" : ""} Occupancy: {cat.occupancy}</>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           )}
                         </Form.Group>
@@ -1846,13 +1966,17 @@ const PackageReg = () => {
                   </Form>
                 </Tab>
 
-                <Tab eventKey="itinerary" title="Itinerary">
-                  {validationErrors.itinerary && (
-                    <div className="alert alert-danger mb-3">
-                      <i className="fas fa-exclamation-triangle me-2"></i>
-                      {validationErrors.itinerary}
-                    </div>
-                  )}
+                <Tab
+                  eventKey="itinerary"
+                  title={
+                    <span>
+                      Itinerary
+                      {validationErrors.itinerary && (
+                        <span className="text-danger ms-1" title="Has errors">!</span>
+                      )}
+                    </span>
+                  }
+                >
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h6>Itinerary Details</h6>
                     <Button
@@ -2018,7 +2142,17 @@ const PackageReg = () => {
                   ))}
                 </Tab>
 
-                <Tab eventKey="others" title="Others">
+                <Tab
+                  eventKey="others"
+                  title={
+                    <span>
+                      Others
+                      {validationErrors.others && (
+                        <span className="text-danger ms-1" title="Has errors">!</span>
+                      )}
+                    </span>
+                  }
+                >
                   {validationErrors.others && (
                     <div className="alert alert-danger mb-3">
                       <i className="fas fa-exclamation-triangle me-2"></i>

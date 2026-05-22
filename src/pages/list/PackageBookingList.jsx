@@ -29,6 +29,10 @@ import {
   FaClipboardList,
   FaTrash,
   FaExclamationCircle,
+  FaFileAlt,
+  FaEnvelope,
+  FaDownload,
+  FaEdit,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -70,6 +74,16 @@ const PackageBookingList = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Voucher modal state — opens on the voucher icon. Renders the PDF inline
+  // in an iframe (popup-blocker-proof, attachment-disposition-proof) and
+  // also exposes a Download button + an Email-to-recipient form.
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [voucherBooking, setVoucherBooking] = useState(null);
+  const [voucherEmail, setVoucherEmail] = useState("");
+  const [isSendingVoucher, setIsSendingVoucher] = useState(false);
+  const [voucherBlobUrl, setVoucherBlobUrl] = useState("");
+  const [isLoadingVoucherPdf, setIsLoadingVoucherPdf] = useState(false);
 
   // Map status to type parameter
   const getTypeParam = (status) => {
@@ -401,6 +415,142 @@ const PackageBookingList = () => {
     }
   };
 
+  // ── Amendment / Edit handler ───────────────────────────────────────
+  // Navigate to the booking page in edit mode. The page detects the
+  // bookingId in location.state and pre-loads the existing booking.
+  const handleEditClick = (booking) => {
+    if (!booking) return;
+    const bookingId = booking.bookingId || booking.id;
+    const packageId = booking.packageId;
+    if (!packageId) {
+      toast.error("Cannot amend — package id missing on booking row");
+      return;
+    }
+    navigate(`/new-booking/package-booking/${packageId}`, {
+      state: {
+        mode: "edit",
+        bookingId,
+        agentId: booking.agentId || null,
+        destinationCountryId: booking.destinationCountryId || null,
+      },
+    });
+  };
+
+  // ── Voucher handlers ───────────────────────────────────────────────
+
+  /** Fetch the PDF as a blob and build a same-origin Object URL the iframe
+   *  can render. Keeps us safe from popup blockers and from the backend's
+   *  `Content-Disposition: attachment` header (which would otherwise force a
+   *  download instead of an inline preview). */
+  const loadVoucherPdf = async (booking) => {
+    const bookingId = booking?.bookingId || booking?.id;
+    if (!bookingId) return;
+    setIsLoadingVoucherPdf(true);
+    try {
+      const response = await axiosInstance.get(
+        `/api/v1/package-booking/generate-pdf/${bookingId}`,
+        { responseType: "blob" }
+      );
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      setVoucherBlobUrl(url);
+    } catch (err) {
+      console.error("Voucher load failed:", err);
+      toast.error("Failed to load voucher PDF");
+    } finally {
+      setIsLoadingVoucherPdf(false);
+    }
+  };
+
+  const openVoucher = (booking) => {
+    setVoucherBooking(booking);
+    // Pre-fill the recipient with the booking's contact email when present.
+    setVoucherEmail(booking.contactEmail || booking.email || "");
+    setVoucherBlobUrl("");
+    setShowVoucherModal(true);
+    loadVoucherPdf(booking);
+  };
+
+  const closeVoucher = () => {
+    if (isSendingVoucher) return;
+    setShowVoucherModal(false);
+    setVoucherBooking(null);
+    setVoucherEmail("");
+    if (voucherBlobUrl) {
+      window.URL.revokeObjectURL(voucherBlobUrl);
+    }
+    setVoucherBlobUrl("");
+  };
+
+  /** Force a save-to-disk of the current voucher PDF. Reuses the cached
+   *  blob URL when available so we don't hit the backend twice. */
+  const handleDownloadVoucher = async () => {
+    if (!voucherBooking) return;
+    const bookingId = voucherBooking.bookingId || voucherBooking.id;
+    if (!bookingId) {
+      toast.error("Booking ID not found");
+      return;
+    }
+    try {
+      let url = voucherBlobUrl;
+      if (!url) {
+        const response = await axiosInstance.get(
+          `/api/v1/package-booking/generate-pdf/${bookingId}`,
+          { responseType: "blob" }
+        );
+        const blob = new Blob([response.data], { type: "application/pdf" });
+        url = window.URL.createObjectURL(blob);
+        setVoucherBlobUrl(url);
+      }
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `PackageBooking_${bookingId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      console.error("Voucher download failed:", err);
+      toast.error("Failed to download voucher");
+    }
+  };
+
+  const handleSendVoucherEmail = async () => {
+    if (!voucherBooking) return;
+    const bookingId = voucherBooking.bookingId || voucherBooking.id;
+    if (!bookingId) {
+      toast.error("Booking ID not found");
+      return;
+    }
+    const trimmed = (voucherEmail || "").trim();
+    if (!trimmed) {
+      toast.error("Please enter a recipient email");
+      return;
+    }
+    // Basic email shape check.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    try {
+      setIsSendingVoucher(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/send-voucher/${bookingId}`,
+        { email: trimmed }
+      );
+      if (res.data?.status === "success") {
+        toast.success(res.data.message || "Voucher emailed");
+        closeVoucher();
+      } else {
+        toast.error(res.data?.message || "Failed to send voucher");
+      }
+    } catch (err) {
+      console.error("Voucher email failed:", err);
+      toast.error(err.response?.data?.message || "Failed to send voucher");
+    } finally {
+      setIsSendingVoucher(false);
+    }
+  };
+
   const displayStart = paginatedBookings.length > 0 ? (page - 1) * perPage + 1 : 0;
   const displayEnd = Math.min(page * perPage, totalElements);
 
@@ -565,6 +715,23 @@ const PackageBookingList = () => {
                                       onClick={() => handleViewDetails(booking)}
                                       title="View Details"
                                     />
+                                    {/* Amend / edit — only for active bookings. */}
+                                    {status !== "cancelled" && (
+                                      <FaEdit
+                                        style={{ cursor: "pointer", fontSize: "14px", color: "#6c5ce7" }}
+                                        onClick={() => handleEditClick(booking)}
+                                        title="Amend Booking"
+                                      />
+                                    )}
+                                    {/* Voucher action — opens a modal with
+                                        inline PDF preview + Download + Email PDF. */}
+                                    {status !== "cancelled" && (
+                                      <FaFileAlt
+                                        style={{ cursor: "pointer", fontSize: "14px", color: "#198754" }}
+                                        onClick={() => openVoucher(booking)}
+                                        title="Voucher"
+                                      />
+                                    )}
                                     {status !== "cancelled" && (
                                       <FaTrash
                                         style={{ cursor: "pointer", fontSize: "14px", color: "#dc3545" }}
@@ -1091,6 +1258,108 @@ const PackageBookingList = () => {
               </>
             ) : (
               "Yes, Cancel"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Voucher Modal */}
+      <Modal
+        show={showVoucherModal}
+        onHide={closeVoucher}
+        centered
+        size="xl"
+        backdrop="static"
+        keyboard={!isSendingVoucher}
+      >
+        <Modal.Header closeButton={!isSendingVoucher} className="bg-dark text-white border-0">
+          <Modal.Title className="d-flex align-items-center gap-2">
+            <FaFileAlt className="text-success" />
+            <span className="fw-bold">Booking Voucher</span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {voucherBooking && (
+            <div className="mb-3 d-flex justify-content-between align-items-start flex-wrap gap-2">
+              <div className="text-muted small">
+                <div className="fw-bold text-dark">{voucherBooking.confirmationCode}</div>
+                <div>{voucherBooking.packageName}</div>
+              </div>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={handleDownloadVoucher}
+                disabled={isLoadingVoucherPdf}
+              >
+                <FaDownload className="me-2" /> Download PDF
+              </Button>
+            </div>
+          )}
+
+          {/* Inline PDF preview — uses an Object URL so the iframe loads
+              same-origin even though the underlying endpoint sends an
+              attachment Content-Disposition. */}
+          <div
+            className="border rounded mb-3"
+            style={{ background: "#f8fafc", minHeight: "520px" }}
+          >
+            {isLoadingVoucherPdf && (
+              <div className="text-center text-muted py-5">
+                <Spinner animation="border" size="sm" className="me-2" />
+                Loading voucher PDF...
+              </div>
+            )}
+            {!isLoadingVoucherPdf && voucherBlobUrl && (
+              <iframe
+                src={voucherBlobUrl}
+                title="Package Booking Voucher"
+                style={{ width: "100%", height: "520px", border: "none" }}
+              />
+            )}
+            {!isLoadingVoucherPdf && !voucherBlobUrl && (
+              <div className="text-center text-muted py-5">
+                Voucher preview unavailable. Try Download or Send Email below.
+              </div>
+            )}
+          </div>
+
+          <Form.Group className="mb-2">
+            <Form.Label className="fw-semibold">Send voucher by email</Form.Label>
+            <InputGroup>
+              <InputGroup.Text>
+                <FaEnvelope />
+              </InputGroup.Text>
+              <Form.Control
+                type="email"
+                placeholder="recipient@example.com"
+                value={voucherEmail}
+                onChange={(e) => setVoucherEmail(e.target.value)}
+                disabled={isSendingVoucher}
+              />
+            </InputGroup>
+            <Form.Text className="text-muted">
+              The voucher PDF will be attached to the email.
+            </Form.Text>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button variant="secondary" onClick={closeVoucher} disabled={isSendingVoucher}>
+            Close
+          </Button>
+          <Button
+            variant="success"
+            onClick={handleSendVoucherEmail}
+            disabled={isSendingVoucher || !voucherEmail.trim()}
+          >
+            {isSendingVoucher ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Sending...
+              </>
+            ) : (
+              <>
+                <FaEnvelope className="me-2" /> Send Email
+              </>
             )}
           </Button>
         </Modal.Footer>

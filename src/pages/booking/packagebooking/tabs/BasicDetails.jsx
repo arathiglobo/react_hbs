@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Row, Col, Form } from "react-bootstrap";
 import AsyncSelect from "react-select/async";
 import axiosInstance from "../../../../components/AxiosInstance";
-import { FaMinus, FaPlus } from "react-icons/fa";
 
 const BasicDetails = ({ data, updateData, onNext }) => {
   const [localData, setLocalData] = useState(data);
@@ -25,6 +24,33 @@ const BasicDetails = ({ data, updateData, onNext }) => {
     setLocalData(data);
   }, [data]);
 
+  // Resolve the selected category (master row) so we can display its
+  // occupancy template and propagate the counts upward.
+  const selectedCategory = useMemo(() => {
+    if (!localData.packageCategory) return null;
+    return (
+      categories.find(
+        (c) => String(c.packageCategoryId) === String(localData.packageCategory)
+      ) || null
+    );
+  }, [categories, localData.packageCategory]);
+
+  // Whenever the selected category changes, push its adult/child/childAge/
+  // occupancy into the shared booking state so downstream tabs (Pax Info,
+  // Order summary, submission payload) keep working unchanged.
+  useEffect(() => {
+    if (!selectedCategory) return;
+    const updated = {
+      ...localData,
+      adultCount: selectedCategory.adults != null ? selectedCategory.adults : (localData.adultCount || 1),
+      childCount: selectedCategory.children != null ? selectedCategory.children : (localData.childCount || 0),
+      childAge: selectedCategory.childAge != null ? selectedCategory.childAge : (localData.childAge || ""),
+      occupancy: selectedCategory.occupancy != null ? selectedCategory.occupancy : (localData.occupancy ?? null),
+    };
+    setLocalData(updated);
+    updateData(updated);
+  }, [selectedCategory]);
+
   const loadPassportOptions = async (inputValue) => {
     try {
       const response = await axiosInstance.get(
@@ -37,15 +63,6 @@ const BasicDetails = ({ data, updateData, onNext }) => {
     } catch {
       return [];
     }
-  };
-
-  const handleCounter = (field, delta) => {
-    setLocalData((prev) => {
-      const newValue = Math.max(0, (prev[field] || 0) + delta);
-      const updated = { ...prev, [field]: newValue };
-      updateData(updated);
-      return updated;
-    });
   };
 
   const handleChange = (field, value) => {
@@ -124,42 +141,48 @@ const BasicDetails = ({ data, updateData, onNext }) => {
         </Col>
       </Row>
 
-      <p className="tab-section-title">Passengers</p>
-      <Row className="g-2 mb-3">
-        <Col md={4}>
-          <Form.Label className="booking-field-label">Adults</Form.Label>
-          <div className="counter-box">
-            <button
-              className="counter-btn"
-              onClick={() => handleCounter("adultCount", -1)}
-              disabled={(localData.adultCount || 1) <= 1}
-            >
-              <FaMinus size={11} />
-            </button>
-            <span className="counter-value">{localData.adultCount || 1}</span>
-            <button className="counter-btn" onClick={() => handleCounter("adultCount", 1)}>
-              <FaPlus size={11} />
-            </button>
-          </div>
-        </Col>
-
-        <Col md={4}>
-          <Form.Label className="booking-field-label">Children</Form.Label>
-          <div className="counter-box">
-            <button
-              className="counter-btn"
-              onClick={() => handleCounter("childCount", -1)}
-              disabled={(localData.childCount || 0) <= 0}
-            >
-              <FaMinus size={11} />
-            </button>
-            <span className="counter-value">{localData.childCount || 0}</span>
-            <button className="counter-btn" onClick={() => handleCounter("childCount", 1)}>
-              <FaPlus size={11} />
-            </button>
-          </div>
-        </Col>
-      </Row>
+      {/* Passenger counts + occupancy are derived from the selected package
+          category — they are no longer editable here. If no category is
+          selected yet we show a friendly hint instead of stale defaults. */}
+      <p className="tab-section-title">Package category details</p>
+      {selectedCategory ? (
+        <div
+          className="mb-3 p-3 rounded"
+          style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}
+        >
+          <Row className="g-3">
+            <Col md={3}>
+              <div className="booking-field-label">Adults</div>
+              <div className="fw-semibold" style={{ fontSize: "1rem" }}>
+                {selectedCategory.adults != null ? selectedCategory.adults : "-"}
+              </div>
+            </Col>
+            <Col md={3}>
+              <div className="booking-field-label">Children</div>
+              <div className="fw-semibold" style={{ fontSize: "1rem" }}>
+                {selectedCategory.children != null ? selectedCategory.children : "-"}
+              </div>
+            </Col>
+            <Col md={3}>
+              <div className="booking-field-label">Child Age</div>
+              <div className="fw-semibold" style={{ fontSize: "1rem" }}>
+                {selectedCategory.childAge || "-"}
+              </div>
+            </Col>
+            <Col md={3}>
+              <div className="booking-field-label">Occupancy</div>
+              <div className="fw-semibold" style={{ fontSize: "1rem" }}>
+                {selectedCategory.occupancy != null ? selectedCategory.occupancy : "-"}
+              </div>
+            </Col>
+          </Row>
+        </div>
+      ) : (
+        <div className="mb-3 text-muted small">
+          Select a package category above to see its adult / child / age /
+          occupancy configuration.
+        </div>
+      )}
 
       <hr className="tab-nav-divider" />
       <div className="d-flex justify-content-end mt-3">

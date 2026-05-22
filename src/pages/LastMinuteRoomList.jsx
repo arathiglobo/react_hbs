@@ -73,6 +73,12 @@ const formatPrice = (price) =>
     currency: "AED",
   }).format(price || 0);
 
+// Rates saved in the DB already include the admin markup (it is pre-applied
+// on the contract rate form). Return the base rate as-is to avoid double-applying.
+const applyMarkup = (baseRate, _markupPct) => {
+  return Number(baseRate || 0);
+};
+
 const renderStars = (rating) =>
   Array.from({ length: rating || 0 }, (_, i) => (
     <FaStar key={i} className="text-warning" />
@@ -345,9 +351,10 @@ export default function LastMinuteRoomList() {
                     const eventKey = String(index);
                     const isActive = activeAccordion === eventKey;
                     const minRate = Math.min(
-                      ...cat.rates.map((r) => Number(r.lastMinuteRate || 0))
-                    );
-                    return (
+                      ...cat.rates.map((r) =>
+                        applyMarkup(r.lastMinuteRate, r.markup)
+                      )
+                    );return (
                       <Accordion.Item
                         eventKey={eventKey}
                         key={eventKey}
@@ -410,7 +417,7 @@ export default function LastMinuteRoomList() {
 
                                       <div className="rate-pricing text-center py-2">
                                         <div className="current-price">
-                                          {formatPrice(rate.lastMinuteRate)}
+                                          {formatPrice(applyMarkup(rate.lastMinuteRate, rate.markup))}
                                         </div>
                                         {rate.normalContractRate != null && (
                                           <div className="original-price text-decoration-line-through">
@@ -440,7 +447,7 @@ export default function LastMinuteRoomList() {
                                           Number(rate.adultRate) > 0 && (
                                             <div className="feature-item">
                                               <FaUsers className="me-2 text-muted" />
-                                              Extra Adult: <strong>{formatPrice(rate.adultRate)}</strong>{" "}
+                                              Extra Adult: <strong>{formatPrice(applyMarkup(rate.adultRate, rate.markup))}</strong>{" "}
                                               <span className="text-muted">/ night</span>
                                             </div>
                                           )}
@@ -448,7 +455,7 @@ export default function LastMinuteRoomList() {
                                           Number(rate.childRate) > 0 && (
                                             <div className="feature-item">
                                               <FaUsers className="me-2 text-muted" />
-                                              Child: <strong>{formatPrice(rate.childRate)}</strong>{" "}
+                                              Child: <strong>{formatPrice(applyMarkup(rate.childRate, rate.markup))}</strong>{" "}
                                               <span className="text-muted">/ night</span>
                                             </div>
                                           )}
@@ -456,7 +463,7 @@ export default function LastMinuteRoomList() {
                                           <FaMoneyBillWave className="me-2 text-muted" />
                                           Total ({results.nights} nt):{" "}
                                           <strong>
-                                            {formatPrice(rate.totalPriceForStay)}
+                                            {formatPrice(applyMarkup(rate.totalPriceForStay, rate.markup))}
                                           </strong>
                                         </div>
                                       </div>
@@ -502,7 +509,7 @@ export default function LastMinuteRoomList() {
                                       </div>
                                       <div className="text-end px-4 border-start border-end" style={{ minWidth: "220px" }}>
                                         <div className="fs-5 fw-bold text-primary">
-                                          {formatPrice(rate.lastMinuteRate)}
+                                          {formatPrice(applyMarkup(rate.lastMinuteRate, rate.markup))}
                                         </div>
                                         {rate.savingsPercent != null && (
                                           <Badge bg="success" className="mt-1">
@@ -510,17 +517,17 @@ export default function LastMinuteRoomList() {
                                           </Badge>
                                         )}
                                         <div className="text-muted small">
-                                          Total: {formatPrice(rate.totalPriceForStay)}
+                                          Total: {formatPrice(applyMarkup(rate.totalPriceForStay, rate.markup))}
                                         </div>
                                         <div className="small text-muted">per night</div>
                                         {rate.adultRate != null && Number(rate.adultRate) > 0 && (
                                           <div className="small text-muted">
-                                            Extra Adult: {formatPrice(rate.adultRate)}/nt
+                                            Extra Adult: {formatPrice(applyMarkup(rate.adultRate, rate.markup))}/nt
                                           </div>
                                         )}
                                         {rate.childRate != null && Number(rate.childRate) > 0 && (
                                           <div className="small text-muted">
-                                            Child: {formatPrice(rate.childRate)}/nt
+                                            Child: {formatPrice(applyMarkup(rate.childRate, rate.markup))}/nt
                                           </div>
                                         )}
                                       </div>

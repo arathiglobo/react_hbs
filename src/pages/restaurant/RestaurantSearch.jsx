@@ -302,7 +302,7 @@ const RestaurantSearch = () => {
       }, 100);
       // Hold the spinner visible for ~3s on the very first search so the
       // user sees the progress card before results appear.
-      await new Promise((r) => setTimeout(r, 3000));
+     // await new Promise((r) => setTimeout(r, 3000));
     }
 
     try {

@@ -65,6 +65,12 @@ const formatPrice = (price) =>
     price || 0
   );
 
+// Rates saved in the DB already include the admin markup (it is pre-applied
+// on the contract rate form). Return the base rate as-is to avoid double-applying.
+const applyMarkup = (baseRate, _markupPct) => {
+  return Number(baseRate || 0);
+};
+
 export default function LastMinuteBookingForm() {
   const navigate = useNavigate();
   const { state } = useLocation();
@@ -124,9 +130,10 @@ export default function LastMinuteBookingForm() {
   const [showSummaryModal, setShowSummaryModal] = useState(false);
 
   // ── Total price computed from per-night × nights × roomCount + extras ──
-  const perNight = Number(ctx?.room?.lastMinuteRate || 0);
-  const adultRate = Number(ctx?.room?.adultRate || 0);
-  const childRate = Number(ctx?.room?.childRate || 0);
+  const markupPct = ctx?.room?.markup || 0;
+  const perNight = applyMarkup(ctx?.room?.lastMinuteRate || 0, markupPct);
+  const adultRate = applyMarkup(ctx?.room?.adultRate || 0, markupPct);
+  const childRate = applyMarkup(ctx?.room?.childRate || 0, markupPct);
   const nights = Number(ctx?.nights || 1);
   const totalRoomCount = rooms.length;
   const { totalPrice, extraAdults, totalChildren } = useMemo(() => {

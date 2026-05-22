@@ -57,6 +57,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
     roomRates: [],
     isLive: true,
     checkInWindowDays: 2,
+    markup: "",
   });
 
   const [markets, setMarkets] = useState([]);
@@ -200,6 +201,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
             })),
             isLive: !!e.isLive,
             checkInWindowDays: e.checkInWindowDays != null ? Number(e.checkInWindowDays) : 2,
+            markup: e.markup ?? "",
           });
         } else {
           // CREATE mode: pre-fill cells from suggestions
@@ -298,6 +300,13 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
         r.hotelRoomtypeId === String(typeId)
     )?.[field] ?? "";
 
+  // Safely parse the markup text field — handles "", ".", NaN without crashing.
+  const parseMarkup = (val) => {
+    if (!val || val === ".") return 0;
+    const n = parseFloat(val);
+    return isNaN(n) ? 0 : n;
+  };
+
   // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {
     const errs = {};
@@ -319,12 +328,17 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
       errs.roomRates = "Please enter at least one rate.";
     }
 
-    // Client-side 10% check (server is source of truth, this is just instant feedback)
+    // Client-side rate check incorporating markup percentage as a discount off normal rate
+    const discountPct = (formData.markup === "" || formData.markup === undefined || formData.markup === null) ? 10 : parseMarkup(formData.markup);
+    const maxAllowedFactor = 1.0 - discountPct / 100.0;
     formData.roomRates.forEach((r, i) => {
       const key = `${r.hotelRoomcategoryId}|${r.hotelRoomtypeId}|${r.ocuppancytypeId}`;
       const s = suggestions[key];
-      if (s?.maxAllowedRate != null && Number(r.rate) > s.maxAllowedRate + 0.001) {
-        errs[`rate_${i}`] = `Rate ${r.rate} exceeds 10%-off cap (max ${s.maxAllowedRate}).`;
+      if (s?.normalRate != null) {
+        const maxRate = Math.round(s.normalRate * maxAllowedFactor * 100) / 100;
+        if (Number(r.rate) > maxRate + 0.001) {
+          errs[`rate_${i}`] = `Rate ${r.rate} exceeds cap (max ${maxRate.toFixed(2)}).`;
+        }
       }
     });
     return errs;
@@ -371,6 +385,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
       allDays,
       isLive: formData.isLive,
       checkInWindowDays: Number(formData.checkInWindowDays) || 2,
+      markup: formData.markup,
       contractRateValidityDTO: formData.validityList.map((v) => ({
         validityFrom: v.validityFrom ? `${v.validityFrom}:00` : null,
         validityTo: v.validityTo ? `${v.validityTo}:00` : null,
@@ -511,12 +526,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
 
                     <Col md={3}>
                       <Form.Group>
-                        <Form.Label>
-                          Check-in Window (Days)
-                          <small className="text-muted ms-1">
-                            — booking page calendar opens for this many days from today
-                          </small>
-                        </Form.Label>
+                        <Form.Label>Check-in Window (Days)</Form.Label>
                         <Form.Control
                           type="number"
                           min="1"
@@ -528,6 +538,49 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                             const n =
                               raw === "" ? "" : Math.max(1, Math.min(30, Number(raw) || 1));
                             setFormData({ ...formData, checkInWindowDays: n });
+                          }}
+                        />
+                        <Form.Text className="text-muted" style={{ fontSize: "0.75rem" }}>
+                          — booking page calendar opens for this many days from today
+                        </Form.Text>
+                      </Form.Group>
+                    </Col>
+
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Markup Percentage</Form.Label>
+                        <Form.Control
+                          type="text"
+                          name="markup"
+                          placeholder="Enter markup percentage"
+                          value={formData.markup}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            // Treat markup % as a discount % off the normal rate.
+                            // If empty, defaults to 10%.
+                            const discountPct = (val === "" || val === undefined || val === null) ? 10 : parseMarkup(val);
+                            const maxAllowedFactor = 1.0 - discountPct / 100.0;
+                            
+                            // Recalculate room rates dynamically based on the normal rates from suggestions
+                            const updatedRates = formData.roomRates.map((r) => {
+                              const key = `${r.hotelRoomcategoryId}|${r.hotelRoomtypeId}|${r.ocuppancytypeId}`;
+                              const s = suggestions[key];
+                              if (s) {
+                                return {
+                                  ...r,
+                                  rate: s.normalRate != null ? Math.round(s.normalRate * maxAllowedFactor * 100) / 100 : r.rate,
+                                  adultRate: s.normalAdultRate != null ? Math.round(s.normalAdultRate * maxAllowedFactor * 100) / 100 : r.adultRate,
+                                  childRate: s.normalChildRate != null ? Math.round(s.normalChildRate * maxAllowedFactor * 100) / 100 : r.childRate,
+                                };
+                              }
+                              return r;
+                            });
+                            
+                            setFormData((f) => ({
+                              ...f,
+                              markup: val,
+                              roomRates: updatedRates,
+                            }));
                           }}
                         />
                       </Form.Group>
@@ -626,7 +679,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                   {/* Room Rate Section — auto-populated, with normal-rate hint */}
                   <Card className="p-3 bg-light border-0 rounded-3">
                     <h6 className="fw-bold mb-3 text-primary">
-                      Last Minute Rate Details (auto-populated · 10% off normal)
+                      Last Minute Rate Details (auto-populated · {((formData.markup === "" || formData.markup === undefined || formData.markup === null) ? 10 : parseMarkup(formData.markup))}% off normal)
                     </h6>
                     {validationErrors.roomRates && (
                       <div className="alert alert-danger mb-3">{validationErrors.roomRates}</div>
@@ -648,13 +701,13 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                               }
                             />
                           </div>
-
+ 
                           <Table bordered hover responsive size="sm">
                             <thead className="table-light">
                               <tr>
                                 <th>Occupancy</th>
                                 <th>Room Type</th>
-                                <th>Rate <small className="text-muted">(normal → -10%)</small></th>
+                                <th>Rate <small className="text-muted">(normal → -{((formData.markup === "" || formData.markup === undefined || formData.markup === null) ? 10 : parseMarkup(formData.markup))}%)</small></th>
                                 <th>Extra Adult</th>
                                 <th>Extra Child</th>
                               </tr>
@@ -665,17 +718,37 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                                   room.roomTypeDetailsDTOs.map((rt) => {
                                     const key = `${room.hotelRoomcategoryId}|${rt.roomTypeId}|${occ.id}`;
                                     const s = suggestions[key];
+                                    const discountPct = (formData.markup === "" || formData.markup === undefined || formData.markup === null) ? 10 : parseMarkup(formData.markup);
+                                    const maxAllowedFactor = 1.0 - discountPct / 100.0;
                                     return (
                                       <tr key={`${occ.id}-${rt.roomTypeId}`}>
                                         <td>{occ.occupanyType}</td>
                                         <td>{rt.roomTypeName}</td>
                                         {[
-                                          { field: "rate", normal: s?.normalRate, max: s?.maxAllowedRate },
-                                          { field: "adultRate", normal: s?.normalAdultRate, max: s?.suggestedAdultRate },
-                                          { field: "childRate", normal: s?.normalChildRate, max: s?.suggestedChildRate },
-                                        ].map(({ field, normal, max }) => {
+                                          {
+                                            field: "rate",
+                                            normal: s?.normalRate,
+                                            maxVal: s?.normalRate != null
+                                              ? Math.round(s.normalRate * maxAllowedFactor * 100) / 100
+                                              : undefined,
+                                          },
+                                          {
+                                            field: "adultRate",
+                                            normal: s?.normalAdultRate,
+                                            maxVal: s?.normalAdultRate != null
+                                              ? Math.round(s.normalAdultRate * maxAllowedFactor * 100) / 100
+                                              : undefined,
+                                          },
+                                          {
+                                            field: "childRate",
+                                            normal: s?.normalChildRate,
+                                            maxVal: s?.normalChildRate != null
+                                              ? Math.round(s.normalChildRate * maxAllowedFactor * 100) / 100
+                                              : undefined,
+                                          },
+                                        ].map(({ field, normal, maxVal }) => {
                                           const currentVal = cellValue(room.hotelRoomcategoryId, occ.id, rt.roomTypeId, field);
-                                          const exceedsMax = max != null && Number(currentVal) > max;
+                                          const exceedsMax = maxVal != null && Number(currentVal) > maxVal;
                                           return (
                                           <td key={field} style={{ minWidth: 130 }}>
                                             {normal == null ? (
@@ -699,7 +772,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                                                 <Form.Control
                                                   type="number"
                                                   min="0"
-                                                  max={max != null ? max : undefined}
+                                                  max={maxVal != null ? maxVal : undefined}
                                                   step="0.01"
                                                   value={currentVal}
                                                   isInvalid={exceedsMax}
@@ -708,8 +781,8 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                                                     const cleaned =
                                                       raw === "" ? "" : String(Number(raw));
                                                     const capped =
-                                                      max != null && Number(cleaned) > max
-                                                        ? String(max)
+                                                      maxVal != null && Number(cleaned) > maxVal
+                                                        ? String(maxVal)
                                                         : cleaned;
                                                     handleRateChange(
                                                       room.hotelRoomcategoryId,
@@ -724,7 +797,9 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                                                   <Badge bg="light" text="dark" className="me-1">
                                                     Normal: {Number(normal).toFixed(2)}
                                                   </Badge>
-                                                  <Badge bg="success">Max: {Number(max).toFixed(2)}</Badge>
+                                                  <Badge bg="success">
+                                                    Max: {maxVal != null ? Number(maxVal).toFixed(2) : "—"}
+                                                  </Badge>
                                                 </div>
                                               </>
                                             )}
