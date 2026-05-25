@@ -50,11 +50,91 @@ const _fieldLabel = (svcKey, fieldName) => {
   return f ? f.label : fieldName;
 };
 
+// ── Status taxonomy (Make Your Own Package V2 booking list) ──────
+// The backend stores the canonical status string on
+// `mypkg_v2_booking.booking_status` plus an `is_cancelled` boolean.
+// We surface a fuller set of tabs here to match the operator's
+// mental model. `match(b)` is the per-tab predicate: it consumes a
+// booking-list row exactly as the backend returns it and decides
+// whether the row belongs in this tab.
+//
+// Status string comparison is case-insensitive — older bookings may
+// have been saved with "Confirmed" / "CONFIRMED" / "confirmed". The
+// "Upcoming" tab includes any non-cancelled booking whose tourDate is
+// today or later. "Completed" is non-cancelled + past tourDate, OR a
+// row already stamped "Completed" by ops. Tabs other than All /
+// Cancelled / Upcoming / Completed filter purely on the status string.
+const _isToday0 = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+const _statusEq = (s, target) =>
+  String(s || "").trim().toLowerCase() === target.toLowerCase();
+const STATUS_TABS = [
+  { key: "all", label: "All", match: () => true },
+  {
+    key: "upcoming",
+    label: "Upcoming",
+    match: (b) => {
+      if (b.isCancelled) return false;
+      if (!b.tourDate) return true; // no tour date → treat as upcoming
+      const t = new Date(b.tourDate);
+      if (Number.isNaN(t.getTime())) return true;
+      t.setHours(0, 0, 0, 0);
+      return t.getTime() >= _isToday0().getTime();
+    },
+  },
+  {
+    key: "completed",
+    label: "Completed",
+    match: (b) => {
+      if (b.isCancelled) return false;
+      if (_statusEq(b.bookingStatus, "Completed")) return true;
+      if (!b.tourDate) return false;
+      const t = new Date(b.tourDate);
+      if (Number.isNaN(t.getTime())) return false;
+      t.setHours(0, 0, 0, 0);
+      return t.getTime() < _isToday0().getTime();
+    },
+  },
+  {
+    key: "cancelled",
+    label: "Cancelled",
+    match: (b) =>
+      !!b.isCancelled || _statusEq(b.bookingStatus, "Cancelled"),
+  },
+  {
+    key: "onrequest",
+    label: "On Request",
+    match: (b) =>
+      !b.isCancelled && _statusEq(b.bookingStatus, "On Request"),
+  },
+  {
+    key: "reconfirmed",
+    label: "Reconfirmed",
+    match: (b) =>
+      !b.isCancelled && _statusEq(b.bookingStatus, "Reconfirmed"),
+  },
+  {
+    key: "invoiced",
+    label: "Invoiced",
+    match: (b) =>
+      !b.isCancelled && _statusEq(b.bookingStatus, "Invoiced"),
+  },
+  {
+    key: "failed",
+    label: "Failed",
+    match: (b) =>
+      !b.isCancelled && _statusEq(b.bookingStatus, "Failed"),
+  },
+];
+
 const MakeYourOwnPackageV2BookingList = () => {
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all"); // all | upcoming | cancelled
+  const [status, setStatus] = useState("all"); // see STATUS_TABS
 
   // Details modal
   const [showDetails, setShowDetails] = useState(false);
@@ -108,9 +188,9 @@ const MakeYourOwnPackageV2BookingList = () => {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const tab = STATUS_TABS.find((t) => t.key === status) || STATUS_TABS[0];
     return rows.filter((b) => {
-      if (status === "upcoming" && b.isCancelled) return false;
-      if (status === "cancelled" && !b.isCancelled) return false;
+      if (!tab.match(b)) return false;
       if (!q) return true;
       const blob = [
         b.bookingCode,
@@ -119,6 +199,7 @@ const MakeYourOwnPackageV2BookingList = () => {
         b.customerEmail,
         b.customerPhone,
         b.agentName,
+        b.bookingStatus,
       ]
         .filter(Boolean)
         .join(" ")
@@ -126,6 +207,16 @@ const MakeYourOwnPackageV2BookingList = () => {
       return blob.includes(q);
     });
   }, [rows, status, search]);
+
+  // Per-tab counts — computed once per `rows` change. Search does not
+  // affect counts (matches the convention of similar list pages).
+  const tabCounts = useMemo(() => {
+    const out = {};
+    STATUS_TABS.forEach((t) => {
+      out[t.key] = rows.filter((b) => t.match(b)).length;
+    });
+    return out;
+  }, [rows]);
 
   // ── actions ────────────────────────────────────────────────────────
   // Eye-icon → re-fetch the booking by ID so the modal always shows
@@ -295,23 +386,13 @@ const MakeYourOwnPackageV2BookingList = () => {
               <Card.Body>
                 <h6 className="fw-bold text-secondary mb-2">Booking Types</h6>
                 <Row className="g-2">
-                  {[
-                    { key: "all", label: `All (${rows.length})` },
-                    {
-                      key: "upcoming",
-                      label: `Upcoming (${rows.filter((b) => !b.isCancelled).length})`,
-                    },
-                    {
-                      key: "cancelled",
-                      label: `Cancelled (${rows.filter((b) => b.isCancelled).length})`,
-                    },
-                  ].map((t) => (
-                    <Col xs={6} md={4} lg={2} key={t.key}>
+                  {STATUS_TABS.map((t) => (
+                    <Col xs={6} md={4} lg={3} xl={2} key={t.key}>
                       <Form.Check
                         type="radio"
                         name="bookingType"
                         id={`bt-${t.key}`}
-                        label={t.label}
+                        label={`${t.label} (${tabCounts[t.key] || 0})`}
                         checked={status === t.key}
                         onChange={() => setStatus(t.key)}
                       />
@@ -401,13 +482,25 @@ const MakeYourOwnPackageV2BookingList = () => {
                             ₹ {Number(b.totalPrice || 0).toLocaleString()}
                           </td>
                           <td>
-                            {b.isCancelled ? (
-                              <Badge bg="danger">Cancelled</Badge>
-                            ) : (
-                              <Badge bg="success">
-                                {b.bookingStatus || "Confirmed"}
-                              </Badge>
-                            )}
+                            {(() => {
+                              // Status badge — colour-coded so an ops
+                              // user can scan the table at a glance.
+                              if (b.isCancelled) {
+                                return <Badge bg="danger">Cancelled</Badge>;
+                              }
+                              const s = String(b.bookingStatus || "Confirmed").trim();
+                              const map = {
+                                confirmed: "success",
+                                completed: "secondary",
+                                "on request": "warning",
+                                reconfirmed: "info",
+                                invoiced: "primary",
+                                failed: "dark",
+                                cancelled: "danger",
+                              };
+                              const variant = map[s.toLowerCase()] || "success";
+                              return <Badge bg={variant}>{s}</Badge>;
+                            })()}
                           </td>
                           <td>
                             <div className="d-flex align-items-center gap-3">
@@ -515,6 +608,38 @@ const MakeYourOwnPackageV2BookingList = () => {
                 </Col>
               </Row>
 
+              {/* Pre-booking acceptance audit — mirrors the
+                  accepted_terms / accepted_cancellation /accepted_at
+                  columns persisted on mypkg_v2_booking when the customer
+                  ticked the policy modal before the Order Summary. */}
+              <h6 className="fw-bold border-bottom pb-1 mb-2">
+                Policy Acceptance
+              </h6>
+              <Row className="g-2 mb-3">
+                <Col md={6}>
+                  <strong>Terms &amp; Conditions:</strong>{" "}
+                  {selected.acceptedTerms ? (
+                    <Badge bg="success">Accepted</Badge>
+                  ) : (
+                    <Badge bg="secondary">Not recorded</Badge>
+                  )}
+                </Col>
+                <Col md={6}>
+                  <strong>Cancellation Policies:</strong>{" "}
+                  {selected.acceptedCancellation ? (
+                    <Badge bg="success">Accepted</Badge>
+                  ) : (
+                    <Badge bg="secondary">Not recorded</Badge>
+                  )}
+                </Col>
+                <Col md={12}>
+                  <strong>Accepted On:</strong>{" "}
+                  {selected.acceptedAt
+                    ? new Date(selected.acceptedAt).toLocaleString()
+                    : "—"}
+                </Col>
+              </Row>
+
               {/* Booking summary */}
               <h6 className="fw-bold border-bottom pb-1 mb-2">
                 Booking Summary
@@ -531,13 +656,22 @@ const MakeYourOwnPackageV2BookingList = () => {
                 </Col>
                 <Col md={6}>
                   <strong>Status:</strong>{" "}
-                  {selected.isCancelled ? (
-                    <Badge bg="danger">Cancelled</Badge>
-                  ) : (
-                    <Badge bg="success">
-                      {selected.bookingStatus || "Confirmed"}
-                    </Badge>
-                  )}
+                  {(() => {
+                    if (selected.isCancelled) {
+                      return <Badge bg="danger">Cancelled</Badge>;
+                    }
+                    const s = String(selected.bookingStatus || "Confirmed").trim();
+                    const map = {
+                      confirmed: "success",
+                      completed: "secondary",
+                      "on request": "warning",
+                      reconfirmed: "info",
+                      invoiced: "primary",
+                      failed: "dark",
+                      cancelled: "danger",
+                    };
+                    return <Badge bg={map[s.toLowerCase()] || "success"}>{s}</Badge>;
+                  })()}
                 </Col>
                 <Col md={6}>
                   <strong>Payment Mode:</strong> {selected.paymentMode || "—"}

@@ -135,6 +135,22 @@ const CabRates = () => {
     },
   ]);
 
+  // ── Terms & Conditions / Cancellation Policies state ──────────────
+  // Two independent dynamic lists, edited as rows in the modal and sent
+  // back to the API as `termsAndConditions` / `cancellationPolicies`
+  // arrays of strings on the CabRateDTO. Empty rows are filtered out at
+  // save-time (backend also defends).
+  const newPolicyRow = (id) => ({ id, value: "" });
+  const [termsRows, setTermsRows] = useState([newPolicyRow(1)]);
+  const [cancellationRows, setCancellationRows] = useState([newPolicyRow(1)]);
+
+  const addPolicyRow = (setter) =>
+    setter((prev) => [...prev, newPolicyRow(Date.now())]);
+  const removePolicyRow = (setter, id) =>
+    setter((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev));
+  const updatePolicyRow = (setter, id, value) =>
+    setter((prev) => prev.map((r) => (r.id === id ? { ...r, value } : r)));
+
   const openCreate = () => {
     setEditing(null);
     setIsViewMode(false);
@@ -169,6 +185,9 @@ const CabRates = () => {
         validityTo: "",
       },
     ]);
+    // Reset T&C / cancellation rows
+    setTermsRows([newPolicyRow(1)]);
+    setCancellationRows([newPolicyRow(1)]);
   };
 
   // ── Rate Grid helpers (per-grid: transfers + carRental) ───────────────
@@ -343,6 +362,15 @@ const CabRates = () => {
             ? parseFloat(row.privatePerPax)
             : null,
       })),
+      // T&C / Cancellation rows — drop blanks; backend stores via
+      // @ElementCollection on CabRates. Optional fields — sending []
+      // (or omitting them entirely) keeps existing behaviour intact.
+      termsAndConditions: termsRows
+        .map((r) => (r.value || "").trim())
+        .filter((v) => v.length > 0),
+      cancellationPolicies: cancellationRows
+        .map((r) => (r.value || "").trim())
+        .filter((v) => v.length > 0),
     };
     return payload;
   };
@@ -583,6 +611,21 @@ const CabRates = () => {
 
     // Split incoming rate details by travelType into the two grids.
     populateGridsFromRateDetails(rate.cabRateDetailsDTOList);
+
+    // T&C / Cancellation — seed from the loaded rate. Falls back to a
+    // single empty row so the operator can immediately start typing.
+    populatePolicyRowsFromRate(rate);
+  };
+
+  // Map the server's list-of-strings policy fields back into the local
+  // editable row shape (`{id, value}`). Empty input → one blank row.
+  const populatePolicyRowsFromRate = (rate) => {
+    const seed = (list) =>
+      Array.isArray(list) && list.length > 0
+        ? list.map((v, i) => ({ id: i + 1, value: String(v ?? "") }))
+        : [newPolicyRow(1)];
+    setTermsRows(seed(rate?.termsAndConditions));
+    setCancellationRows(seed(rate?.cancellationPolicies));
   };
 
   // Helper: map a server-side cabRateDetailsDTOList into transfer rows.
@@ -653,6 +696,9 @@ const CabRates = () => {
     
     // Populate rate grid - mapping API structure
     populateGridsFromRateDetails(rate.cabRateDetailsDTOList);
+
+    // T&C / Cancellation — view mode reuses the same seed helper.
+    populatePolicyRowsFromRate(rate);
   };
 
   // Delete cab rate
@@ -1259,6 +1305,110 @@ const CabRates = () => {
                 </div>
 
                 {/* Car Rental rate grid removed from CabRates — handled in Scheffer/Lumousin pages */}
+
+                {/* ── Terms & Conditions ────────────────────────────────
+                    Dynamic list of free-form sentences saved per rate.
+                    Shown service-wise on the Make-Your-Own-Package
+                    booking confirmation modal. Empty rows are dropped
+                    at save-time (frontend + backend defend). */}
+                <div className="border-top pt-3 mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="text-muted mb-0">Terms &amp; Conditions</h6>
+                    {!isViewMode && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => addPolicyRow(setTermsRows)}
+                        title="Add Terms &amp; Conditions"
+                      >
+                        <FaPlus className="me-2" />
+                        Add
+                      </Button>
+                    )}
+                  </div>
+                  {termsRows.map((row, idx) => (
+                    <Row key={row.id} className="mb-2">
+                      <Col md={10}>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={row.value}
+                          placeholder={`Term ${idx + 1} — e.g. "Driver waiting time is 30 mins"`}
+                          onChange={(e) =>
+                            updatePolicyRow(setTermsRows, row.id, e.target.value)
+                          }
+                          disabled={isViewMode}
+                        />
+                      </Col>
+                      {!isViewMode && (
+                        <Col md={2}>
+                          <div className="d-flex gap-1">
+                            {termsRows.length > 1 && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => removePolicyRow(setTermsRows, row.id)}
+                                title="Remove"
+                              >
+                                <FaTrash size={10} />
+                              </Button>
+                            )}
+                          </div>
+                        </Col>
+                      )}
+                    </Row>
+                  ))}
+                </div>
+
+                {/* ── Cancellation Policies ───────────────────────────── */}
+                <div className="border-top pt-3 mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="text-muted mb-0">Cancellation Policies</h6>
+                    {!isViewMode && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => addPolicyRow(setCancellationRows)}
+                        title="Add Cancellation Policy"
+                      >
+                        <FaPlus className="me-2" />
+                        Add
+                      </Button>
+                    )}
+                  </div>
+                  {cancellationRows.map((row, idx) => (
+                    <Row key={row.id} className="mb-2">
+                      <Col md={10}>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={row.value}
+                          placeholder={`Policy ${idx + 1} — e.g. "Free cancellation before 24 hours"`}
+                          onChange={(e) =>
+                            updatePolicyRow(setCancellationRows, row.id, e.target.value)
+                          }
+                          disabled={isViewMode}
+                        />
+                      </Col>
+                      {!isViewMode && (
+                        <Col md={2}>
+                          <div className="d-flex gap-1">
+                            {cancellationRows.length > 1 && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => removePolicyRow(setCancellationRows, row.id)}
+                                title="Remove"
+                              >
+                                <FaTrash size={10} />
+                              </Button>
+                            )}
+                          </div>
+                        </Col>
+                      )}
+                    </Row>
+                  ))}
+                </div>
               </Form>
             </Modal.Body>
             <Modal.Footer>

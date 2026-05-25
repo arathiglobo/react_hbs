@@ -756,8 +756,10 @@ const HotelBookingPage = () => {
                                         <option value="">SELECT</option>
                                         <option value="Mr">Mr</option>
                                         <option value="Mrs">Mrs</option>
+                                        <option value="Ms">Miss</option>
                                         <option value="Ms">Ms</option>
                                         <option value="Dr">Master</option>
+                                        <option value="Dr">Dr</option>
                                       </Form.Select>
                                       {validationErrors[
                                         `room_${roomIndex}_guest_${guestIndex}_salutation`
@@ -1636,7 +1638,29 @@ const HotelBookingPage = () => {
                         </div>
                       </div>
 
-                      <div className="mt-4 text-center">
+                      <div className="mt-3 p-2 bg-white border rounded d-flex align-items-center">
+                        <span
+                          className="me-2 d-inline-flex align-items-center justify-content-center"
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: "50%",
+                            background: "#16a34a",
+                            color: "#fff",
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            lineHeight: 1,
+                          }}
+                          aria-hidden="true"
+                        >
+                          ✓
+                        </span>
+                        <span className="small text-dark">
+                          Hotel policies and terms &amp; conditions accepted
+                        </span>
+                      </div>
+
+                      <div className="mt-3 text-center">
                         <p className="text-muted small mb-0">
                           Please review the booking details carefully before
                           confirming.

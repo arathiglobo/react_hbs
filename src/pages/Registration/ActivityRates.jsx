@@ -221,6 +221,13 @@ const ActivityRates = () => {
   const [settingsActivityRateId, setSettingsActivityRateId] = useState(null);
   const [inclusions, setInclusions]                 = useState([{ id: 1, value: "" }]);
   const [termsAndConditions, setTermsAndConditions] = useState([{ id: 1, value: "" }]);
+  // Cancellation Policy rows — saved through the same /api/activityRate/
+  // inclutionAndTerms/save endpoint with type=3. Surfaced on the Make
+  // Your Own Package booking-confirmation modal alongside hotel + cab
+  // cancellation policies. Optional — admins can leave the section
+  // empty and the booking page just doesn't render an entry for this
+  // activity in its Cancellation Policies accordion.
+  const [cancellationPolicies, setCancellationPolicies] = useState([{ id: 1, value: "" }]);
   const [settingsLoading, setSettingsLoading]       = useState(false);
   const [settingsFetching, setSettingsFetching]     = useState(false);
   const [editing, setEditing]                       = useState(null);
@@ -761,21 +768,46 @@ const ActivityRates = () => {
       if (Array.isArray(r.data) && r.data.length > 0) {
         const inc  = r.data.filter(x=>x.type===1).map((x,i)=>({id:i+1,value:x.data||""}));
         const trms = r.data.filter(x=>x.type===2).map((x,i)=>({id:i+1,value:x.data||""}));
+        // type=3 is the new Cancellation Policy bucket. Activity rows
+        // pre-dating this feature won't have any type=3 entries and the
+        // list defaults to one empty row, identical to T&C behaviour.
+        const cans = r.data.filter(x=>x.type===3).map((x,i)=>({id:i+1,value:x.data||""}));
         setInclusions(inc.length>0 ? inc : [{id:1,value:""}]);
         setTermsAndConditions(trms.length>0 ? trms : [{id:1,value:""}]);
-      } else { setInclusions([{id:1,value:""}]); setTermsAndConditions([{id:1,value:""}]); }
-    } catch { setInclusions([{id:1,value:""}]); setTermsAndConditions([{id:1,value:""}]); }
+        setCancellationPolicies(cans.length>0 ? cans : [{id:1,value:""}]);
+      } else {
+        setInclusions([{id:1,value:""}]);
+        setTermsAndConditions([{id:1,value:""}]);
+        setCancellationPolicies([{id:1,value:""}]);
+      }
+    } catch {
+      setInclusions([{id:1,value:""}]);
+      setTermsAndConditions([{id:1,value:""}]);
+      setCancellationPolicies([{id:1,value:""}]);
+    }
     finally { setSettingsFetching(false); }
   };
-  const handleCloseSettings = () => { setShowSettingsModal(false); setSettingsActivityRateId(null); setInclusions([{id:1,value:""}]); setTermsAndConditions([{id:1,value:""}]); };
+  const handleCloseSettings = () => {
+    setShowSettingsModal(false);
+    setSettingsActivityRateId(null);
+    setInclusions([{id:1,value:""}]);
+    setTermsAndConditions([{id:1,value:""}]);
+    setCancellationPolicies([{id:1,value:""}]);
+  };
   const handleSaveSettings = async () => {
     if (inclusions.some(x=>!x.value.trim()))        { toast.error("Fill all inclusion fields"); return; }
     if (termsAndConditions.some(x=>!x.value.trim())) { toast.error("Fill all T&C fields"); return; }
+    // Cancellation rows are OPTIONAL — empty rows are simply dropped on
+    // the way to the backend. Only the non-empty ones get persisted, so
+    // an admin who hasn't filled in cancellation yet can still save the
+    // form without a validation error. (The booking page falls back to
+    // hiding the section gracefully when no row is configured.)
     try {
       setSettingsLoading(true);
       await axiosInstance.post("/api/activityRate/inclutionAndTerms/save", [
         ...inclusions.filter(x=>x.value.trim()).map(x=>({ activityRateId:String(settingsActivityRateId), data:x.value.trim(), type:1 })),
         ...termsAndConditions.filter(x=>x.value.trim()).map(x=>({ activityRateId:String(settingsActivityRateId), data:x.value.trim(), type:2 })),
+        ...cancellationPolicies.filter(x=>x.value.trim()).map(x=>({ activityRateId:String(settingsActivityRateId), data:x.value.trim(), type:3 })),
       ]);
       toast.success("Settings saved!"); handleCloseSettings();
     } catch (err) { toast.error(err.response?.data?.message||"Failed"); }
@@ -1393,6 +1425,43 @@ const ActivityRates = () => {
                     </div>
                   ))}
                 </Form.Group>
+
+                {/* ── Cancellation Policy ──────────────────────────────
+                    Optional rows. Saved with type=3 through the same
+                    /api/activityRate/inclutionAndTerms/save endpoint and
+                    surfaced on the Make-Your-Own-Package booking-page
+                    policy modal under the Cancellation Policies section.
+                    Mirrors the Inclusions / T&C UX exactly — dynamic
+                    add / remove rows. Label is NOT marked required
+                    (asterisk omitted) so admins can leave it blank when
+                    the rate has no cancellation rules yet. */}
+                <Form.Group className="mb-4">
+                  <div className="d-flex align-items-center mb-2">
+                    <Form.Label className="mb-0 me-2" style={{ color:"#0d6efd", fontWeight:"bold" }}>
+                      CANCELLATION POLICY
+                    </Form.Label>
+                    <Button variant="success" size="sm"
+                      style={{ width:32,height:32,borderRadius:"50%",padding:0,display:"flex",alignItems:"center",justifyContent:"center",minWidth:32 }}
+                      onClick={()=>setCancellationPolicies(p=>[...p,{id:Math.max(...p.map(x=>x.id),0)+1,value:""}])}>
+                      <FaPlus size={18} style={{ color:"white" }}/>
+                    </Button>
+                  </div>
+                  {cancellationPolicies.map(can=>(
+                    <div key={can.id} className="d-flex align-items-start mb-2">
+                      <Form.Control as="textarea" rows={3} className="me-2"
+                        placeholder="Enter cancellation policy (e.g. Free cancellation up to 24 hours before activity)…"
+                        value={can.value}
+                        onChange={e=>setCancellationPolicies(p=>p.map(x=>x.id===can.id?{...x,value:e.target.value}:x))}/>
+                      {cancellationPolicies.length > 1 && (
+                        <Button variant="danger" size="sm"
+                          style={{ width:32,height:32,borderRadius:"50%",padding:0,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,minWidth:32 }}
+                          onClick={()=>setCancellationPolicies(p=>p.filter(x=>x.id!==can.id))}>
+                          <FaTimes size={18} style={{ color:"white" }}/>
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </Form.Group>
               </>)}
             </Modal.Body>
             <Modal.Footer style={{ borderTop:"none", padding:"15px 20px" }}>
@@ -1401,7 +1470,7 @@ const ActivityRates = () => {
                 {settingsLoading ? <><span className="spinner-border spinner-border-sm me-2"/>Saving…</> : <>Create <i className="fas fa-arrow-right ms-2"/></>}
               </Button>
               <Button variant="primary" style={{ minWidth:100 }} disabled={settingsLoading||settingsFetching}
-                onClick={()=>{ setInclusions([{id:1,value:""}]); setTermsAndConditions([{id:1,value:""}]); }}>
+                onClick={()=>{ setInclusions([{id:1,value:""}]); setTermsAndConditions([{id:1,value:""}]); setCancellationPolicies([{id:1,value:""}]); }}>
                 Reset <i className="fas fa-redo ms-2"/>
               </Button>
             </Modal.Footer>

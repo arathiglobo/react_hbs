@@ -140,6 +140,33 @@ const MakePkgBookingPageV2 = () => {
   // Order summary modal state
   const [showOrderSummaryModal, setShowOrderSummaryModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Pre-Order-Summary policy modal — shown FIRST when the operator clicks
+  // the page's "Confirm Booking" button. T&C + Cancellation Policies render
+  // service-wise here, with two mandatory global checkboxes; ticking both
+  // and clicking "Continue to Order Summary" advances to the Order Summary
+  // modal. Closes/cancels return the operator to the booking page with no
+  // state change. The acceptance flags ride along with the v2 save payload
+  // so the audit columns on mypkg_v2_booking are populated.
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+
+  // ── Service policies (Make Your Own Package V2) ──────────────────
+  // Service-wise Terms & Conditions and Cancellation Policies displayed
+  // inside the order summary modal. Keyed by item id within each bucket
+  // ({ hotel:{ [hotelId]: {terms:[], cancellations:[]} }, cab: {...},
+  //   activity:{ [activityId]: {terms:[]} } }). Fetched lazily when the
+  // confirmation modal opens — the booking-page mount and all other
+  // existing flows are unaffected.
+  const [servicePolicies, setServicePolicies] = useState({
+    hotel: {},
+    cab: {},
+    activity: {},
+  });
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+  // Two global acceptance checkboxes — the user must tick both before
+  // the "Confirm Booking" button is enabled. Reset whenever the order
+  // summary modal closes so they have to re-tick on every confirmation.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedCancellations, setAcceptedCancellations] = useState(false);
 
   // Initialize guest details for rooms
   const initializeRoomGuests = (cartItems) => {
@@ -519,6 +546,235 @@ const MakePkgBookingPageV2 = () => {
     fetchItineraryDetails();
   }, []);
 
+  // ── Fetch service-wise policies when the confirmation modal opens ──
+  // Hotel:   GET /api/hotels/{hotelId}/terms-and-conditions-package  (new endpoint)
+  //          GET /api/hotels/{hotelId}/policies               (existing)
+  // Cab:     GET /api/cabRates/cab/{cabId}/policies           (new endpoint)
+  // Activity:GET /api/activityRate/inclutionAndTerms/{id}     (existing — type=2 only)
+  //
+  // Only fired when the modal flips open AND only for cart items that
+  // are actually in the cart, so unselected services never appear and
+  // never trigger network calls. Failures fall back to empty arrays so
+  // the user can still tick acceptance and proceed.
+  useEffect(() => {
+    if (!showPolicyModal) {
+      // Re-arm acceptance gates whenever the policy modal closes (either
+      // because the operator cancelled or because they continued to the
+      // Order Summary). Re-opening the modal forces a fresh tick of both
+      // checkboxes, and a follow-on save attempt without going through
+      // the modal again still has the in-memory acceptance flags set —
+      // we only reset when re-entering the policy step or cancelling.
+      // (`proceedFromPolicyModal` sets showPolicyModal=false before this
+      //  runs, so the values it just set get cleared; that's by design —
+      //  we re-set them in the v2 payload from the modal acceptance, see
+      //  `confirmBooking`).
+      // ↑ Actually we need to PRESERVE the accepted state into the Order
+      // Summary step so the v2 payload sees true. So: only clear on
+      // CANCEL (modal explicitly closed without proceeding). We model
+      // that with a small ref-like indicator: if proceedFromPolicyModal
+      // ran, it sets showOrderSummaryModal=true immediately — so the
+      // safest reset is to bind to *both* modals being closed.
+      if (!showOrderSummaryModal) {
+        setAcceptedTerms(false);
+        setAcceptedCancellations(false);
+      }
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      setPoliciesLoading(true);
+      try {
+        const next = { hotel: {}, cab: {}, activity: {} };
+
+        // Hotel IDs in cart
+        const hotelIds = Array.from(
+          new Set(
+            (cartData || [])
+              .filter((it) => it && it.hotel)
+              .map((it) => it.hotel?.hotelId)
+              .filter((v) => v !== undefined && v !== null && v !== "")
+              .map((v) => String(v))
+          )
+        );
+        // Cab IDs in cart
+        const cabIds = Array.from(
+          new Set(
+            (cartData || [])
+              .filter((it) => it && it.cab)
+              .map((it) => it.cab?.cabId)
+              .filter((v) => v !== undefined && v !== null && v !== "")
+              .map((v) => String(v))
+          )
+        );
+        // Activity IDs (these are actually activityRate IDs — see
+        // TripServiceImpl line 1094, the FE field naming is legacy).
+        const activityIds = Array.from(
+          new Set(
+            (cartData || [])
+              .filter((it) => it && it.activity)
+              .map((it) => it.activity?.activityId)
+              .filter((v) => v !== undefined && v !== null && v !== "")
+              .map((v) => String(v))
+          )
+        );
+
+        await Promise.all([
+          // Hotels — terms + cancellation are two separate endpoints.
+          ...hotelIds.map(async (hotelId) => {
+            const slot = { terms: [], cancellations: [] };
+            try {
+              const tcRes = await axiosInstance.get(
+                `/api/hotels/${hotelId}/terms-and-conditions-package`
+              );
+              slot.terms = Array.isArray(tcRes.data)
+                ? tcRes.data
+                    .map((r) => (r && (r.description || r.text)) || "")
+                    .filter((s) => typeof s === "string" && s.trim().length > 0)
+                : [];
+            } catch (e) {
+              slot.terms = [];
+            }
+            try {
+              const polRes = await axiosInstance.get(
+                `/api/hotels/${hotelId}/policies`
+              );
+              // Backend returns:
+              //   { hotelId, policies: { cancellationPolicy: [...],
+              //                          amendmentPolicy: [...],
+              //                          childPolicy: [...] },
+              //     message, success }
+              // — note the nested `policies` wrapper and the SINGULAR field
+              // names. The earlier code read `cancellationPolicies` off the
+              // top level, which is why nothing rendered. Each entry is a
+              // policy DTO with a `policyText` (or `text` / `description`
+              // on legacy responses); fall through to date+value as a last
+              // resort so a partially-filled row still surfaces something
+              // useful instead of an empty bullet. Amendment + child
+              // policies are also added — operators want the full picture
+              // alongside cancellation, and they share the same UX gate.
+              const pol = polRes?.data?.policies || {};
+              const cancellation = Array.isArray(pol.cancellationPolicy)
+                ? pol.cancellationPolicy
+                : [];
+              const amendment = Array.isArray(pol.amendmentPolicy)
+                ? pol.amendmentPolicy
+                : [];
+              const child = Array.isArray(pol.childPolicy) ? pol.childPolicy : [];
+
+              const toText = (p, kind) => {
+                if (typeof p === "string") return p;
+                if (!p || typeof p !== "object") return "";
+                const text = p.policyText || p.text || p.description || "";
+                if (text && text.trim().length > 0) return text.trim();
+                // Synthesise a readable line from the dated row when
+                // policyText was never set on the backend side.
+                const parts = [];
+                if (kind) parts.push(kind);
+                if (p.fromDate && p.toDate) {
+                  parts.push(`from ${p.fromDate} to ${p.toDate}`);
+                } else if (p.fromDate) {
+                  parts.push(`from ${p.fromDate}`);
+                }
+                if (p.value != null) {
+                  parts.push(
+                    `${p.value}${p.percentOrAmount === "PERCENT" ? "%" : ""}`
+                  );
+                }
+                return parts.join(" — ");
+              };
+
+              const cancellationLines = cancellation
+                .map((p) => toText(p, "Cancellation charge"))
+                .filter((s) => typeof s === "string" && s.trim().length > 0);
+              const amendmentLines = amendment
+                .map((p) => toText(p, "Amendment charge"))
+                .filter((s) => typeof s === "string" && s.trim().length > 0);
+              const childLines = child
+                .map((p) => toText(p, "Child policy"))
+                .filter((s) => typeof s === "string" && s.trim().length > 0);
+
+              // Cancellation section on the modal aggregates all three
+              // policy categories — operators view them as one bucket of
+              // "what happens after booking" rules. De-dup on the way in.
+              const merged = [];
+              const seen = new Set();
+              [...cancellationLines, ...amendmentLines, ...childLines].forEach(
+                (line) => {
+                  const key = line.toLowerCase();
+                  if (!seen.has(key)) {
+                    seen.add(key);
+                    merged.push(line);
+                  }
+                }
+              );
+              slot.cancellations = merged;
+            } catch (e) {
+              slot.cancellations = [];
+            }
+            next.hotel[hotelId] = slot;
+          }),
+          // Cabs — single endpoint returns both lists.
+          ...cabIds.map(async (cabId) => {
+            const slot = { terms: [], cancellations: [] };
+            try {
+              const res = await axiosInstance.get(
+                `/api/cabRates/cab/${cabId}/policies`
+              );
+              const terms = res?.data?.termsAndConditions || [];
+              const cancellations = res?.data?.cancellationPolicies || [];
+              slot.terms = Array.isArray(terms)
+                ? terms.filter((s) => typeof s === "string" && s.trim().length > 0)
+                : [];
+              slot.cancellations = Array.isArray(cancellations)
+                ? cancellations.filter(
+                    (s) => typeof s === "string" && s.trim().length > 0
+                  )
+                : [];
+            } catch (e) {
+              /* keep empty */
+            }
+            next.cab[cabId] = slot;
+          }),
+          // Activities — existing endpoint stores three row types
+          // distinguished by `type`:
+          //   1 = Inclusions (not shown on the booking modal)
+          //   2 = Terms & Conditions
+          //   3 = Cancellation Policy (new — added on the activity-rates
+          //       page in this iteration; saves through the same /save
+          //       endpoint with type=3)
+          ...activityIds.map(async (activityId) => {
+            const slot = { terms: [], cancellations: [] };
+            try {
+              const res = await axiosInstance.get(
+                `/api/activityRate/inclutionAndTerms/${activityId}`
+              );
+              const rows = Array.isArray(res?.data) ? res.data : [];
+              slot.terms = rows
+                .filter((r) => r && Number(r.type) === 2)
+                .map((r) => String(r.data || "").trim())
+                .filter((s) => s.length > 0);
+              slot.cancellations = rows
+                .filter((r) => r && Number(r.type) === 3)
+                .map((r) => String(r.data || "").trim())
+                .filter((s) => s.length > 0);
+            } catch (e) {
+              /* keep empty */
+            }
+            next.activity[activityId] = slot;
+          }),
+        ]);
+
+        if (!cancelled) setServicePolicies(next);
+      } finally {
+        if (!cancelled) setPoliciesLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [showPolicyModal, showOrderSummaryModal, cartData]);
+
   // Filter itinerary list based on search term
   useEffect(() => {
     if (itinerarySearchTerm.trim().length >= 4) {
@@ -864,7 +1120,25 @@ const MakePkgBookingPageV2 = () => {
     // Clear validation errors before submission
     setValidationErrors({});
 
-    // Show order summary modal
+    // Show the pre-summary policy modal first. The Order Summary only
+    // opens after the operator ticks both global acceptance checkboxes
+    // (see `proceedFromPolicyModal` below) — there's no longer a path
+    // from this button straight to the Order Summary.
+    setShowPolicyModal(true);
+  };
+
+  // Hand-off from the pre-summary policy modal → Order Summary modal.
+  // Called when the operator clicks "Continue to Order Summary". The
+  // disabled state on that button + a belt-and-braces guard here both
+  // refuse to advance until both acceptance gates are ticked.
+  const proceedFromPolicyModal = () => {
+    if (!acceptedTerms || !acceptedCancellations) {
+      toast.error(
+        "Please accept the Terms & Conditions and Cancellation Policies to continue."
+      );
+      return;
+    }
+    setShowPolicyModal(false);
     setShowOrderSummaryModal(true);
   };
 
@@ -1353,6 +1627,14 @@ const MakePkgBookingPageV2 = () => {
         tourismDirham: bookingPayload.tourismDirham || null,
         paymentMode: null,
         visaRequired: v2VisaRequired,
+        // Acceptance audit — recorded on the pre-summary policy modal.
+        // Backend persists both flags + an acceptedAt timestamp on
+        // mypkg_v2_booking.accepted_terms / accepted_cancellation /
+        // accepted_at so the booking-details view can show the audit.
+        // The Order Summary modal can only open when both flags are
+        // true, so confirmed bookings will always carry true here.
+        acceptedTermsAndConditions: !!acceptedTerms,
+        acceptedCancellationPolicies: !!acceptedCancellations,
         serviceFlags: (() => {
           try {
             return JSON.parse(
@@ -4010,6 +4292,99 @@ const MakePkgBookingPageV2 = () => {
                     );
                   })()}
 
+                  {/* ── Accepted-policies indicator ────────────────────
+                      Order Summary no longer carries the T&C / Cancellation
+                      content or the acceptance checkboxes — those live on
+                      the dedicated pre-summary policy modal (see
+                      `showPolicyModal`). The Order Summary now just shows
+                      a confirmation badge so the operator knows what's
+                      already been ticked. */}
+                  <Card className="mt-4 shadow-sm rounded-3" style={{ borderLeft: "4px solid #16a34a" }}>
+                    <Card.Body className="d-flex align-items-start gap-3">
+                      <FaCheckCircle size={22} className="text-success mt-1" />
+                      <div className="small">
+                        <div className="fw-semibold text-success mb-1">
+                          Terms &amp; Conditions and Cancellation Policies accepted
+                        </div>
+                        <div className="text-muted">
+                          The customer has reviewed and accepted both policy
+                          sections. This acceptance will be saved with the
+                          booking for the audit trail.
+                        </div>
+                      </div>
+                    </Card.Body>
+                  </Card>
+
+                  {/* Legacy IIFE — kept to preserve outer brace balance,
+                      but neutralised. The full T&C / cancellation
+                      accordions and the two checkboxes now live in the
+                      pre-summary policy modal. */}
+                  {(() => {
+                    const hotelsInCart = (cartData || []).filter((it) => it && it.hotel);
+                    const cabsInCart = (cartData || []).filter((it) => it && it.cab);
+                    const activitiesInCart = (cartData || []).filter(
+                      (it) => it && it.activity
+                    );
+
+                    const renderList = (items) =>
+                      items.length > 0 ? (
+                        <ul className="mb-0 ps-3 small">
+                          {items.map((t, i) => (
+                            <li key={i} style={{ whiteSpace: "pre-wrap" }}>
+                              {t}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-muted small fst-italic">
+                          No policies available.
+                        </div>
+                      );
+
+                    const hotelTerms = (hotel) =>
+                      servicePolicies.hotel[String(hotel?.hotelId)]?.terms || [];
+                    const hotelCancel = (hotel) =>
+                      servicePolicies.hotel[String(hotel?.hotelId)]?.cancellations ||
+                      [];
+                    const cabTerms = (cab) =>
+                      servicePolicies.cab[String(cab?.cabId)]?.terms || [];
+                    const cabCancel = (cab) =>
+                      servicePolicies.cab[String(cab?.cabId)]?.cancellations || [];
+                    const activityTerms = (activity) =>
+                      servicePolicies.activity[String(activity?.activityId)]?.terms ||
+                      [];
+
+                    // ── Build the two sections only if any service has
+                    // non-empty content for that section; otherwise the
+                    // section header doesn't render (clean UI). The
+                    // global checkboxes always render though, so the
+                    // operator can't bypass acceptance gating even if
+                    // a hotel/cab/activity has no policies on file.
+                    const anyTermsContent =
+                      hotelsInCart.some((it) => hotelTerms(it.hotel).length > 0) ||
+                      cabsInCart.some((it) => cabTerms(it.cab).length > 0) ||
+                      activitiesInCart.some(
+                        (it) => activityTerms(it.activity).length > 0
+                      );
+                    const anyCancellationContent =
+                      hotelsInCart.some(
+                        (it) => hotelCancel(it.hotel).length > 0
+                      ) ||
+                      cabsInCart.some((it) => cabCancel(it.cab).length > 0);
+
+                    // All policy display + acceptance UI has moved to the
+                    // pre-summary policy modal (see further down — modal is
+                    // rendered with `show={showPolicyModal}`). The variables
+                    // and helpers above stay in scope only for the modal's
+                    // own JSX, which reuses the same lookup functions.
+                    void anyTermsContent; void anyCancellationContent;
+                    void hotelTerms; void hotelCancel;
+                    void cabTerms; void cabCancel; void activityTerms;
+                    void renderList; void hotelsInCart; void cabsInCart;
+                    void activitiesInCart;
+                    return null;
+                  })()}
+
                   <div className="mt-4 text-center">
                     <p className="text-muted small mb-0">
                       Please review the booking details carefully before
@@ -4041,8 +4416,24 @@ const MakePkgBookingPageV2 = () => {
           </Button>
           <Button
             variant="primary"
-            onClick={confirmBooking}
-            disabled={isSubmitting}
+            onClick={() => {
+              // Belt-and-braces: even if the disabled gate is bypassed
+              // (browser dev tools, stale state, etc.), refuse to submit
+              // until both global acceptance checkboxes are ticked.
+              if (!acceptedTerms || !acceptedCancellations) {
+                toast.error(
+                  "Please accept the Terms & Conditions and Cancellation Policies before confirming."
+                );
+                return;
+              }
+              confirmBooking();
+            }}
+            disabled={isSubmitting || !acceptedTerms || !acceptedCancellations}
+            title={
+              !acceptedTerms || !acceptedCancellations
+                ? "Tick both acceptance checkboxes to enable booking confirmation."
+                : undefined
+            }
             style={{
               minWidth: "160px",
               fontWeight: "600",
@@ -4060,6 +4451,294 @@ const MakePkgBookingPageV2 = () => {
                 Confirm Booking
               </>
             )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ════════════════════════════════════════════════════════════
+          PRE-ORDER-SUMMARY POLICY MODAL
+          ────────────────────────────────────────────────────────────
+          Shown the moment the operator clicks the booking page's
+          "Confirm Booking" button — the Order Summary modal only opens
+          afterwards, via `proceedFromPolicyModal()`. T&C + Cancellation
+          Policies render service-wise (one accordion per hotel / cab /
+          activity in the cart). Two global checkboxes gate the
+          "Continue to Order Summary" button; cancelling returns the
+          operator to the booking page with no booking saved.
+          Acceptance flags propagate through into the booking-save
+          payload (acceptedTermsAndConditions / acceptedCancellationPolicies)
+          and ultimately land on the mypkg_v2_booking.accepted_* audit
+          columns.
+      ════════════════════════════════════════════════════════════ */}
+      <Modal
+        show={showPolicyModal}
+        onHide={() => !isSubmitting && setShowPolicyModal(false)}
+        size="lg"
+        centered
+        scrollable
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header
+          closeButton
+          style={{
+            background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+            color: "white",
+            border: "none",
+          }}
+        >
+          <Modal.Title className="fw-bold d-flex align-items-center gap-2">
+            <FaCheckCircle />
+            Review &amp; Accept Policies
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ background: "#f8f9fa" }}>
+          <div className="text-muted small mb-3">
+            Please review the Terms &amp; Conditions and Cancellation
+            Policies for every service in this booking. You must accept
+            both before continuing to the Order Summary.
+          </div>
+          {(() => {
+            const hotelsInCart = (cartData || []).filter((it) => it && it.hotel);
+            const cabsInCart = (cartData || []).filter((it) => it && it.cab);
+            const activitiesInCart = (cartData || []).filter(
+              (it) => it && it.activity
+            );
+            const renderList = (items) =>
+              items.length > 0 ? (
+                <ul className="mb-0 ps-3 small">
+                  {items.map((t, i) => (
+                    <li key={i} style={{ whiteSpace: "pre-wrap" }}>
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-muted small fst-italic">
+                  No policies available.
+                </div>
+              );
+            const hotelT = (h) =>
+              servicePolicies.hotel[String(h?.hotelId)]?.terms || [];
+            const hotelC = (h) =>
+              servicePolicies.hotel[String(h?.hotelId)]?.cancellations || [];
+            const cabT = (c) =>
+              servicePolicies.cab[String(c?.cabId)]?.terms || [];
+            const cabC = (c) =>
+              servicePolicies.cab[String(c?.cabId)]?.cancellations || [];
+            const actT = (a) =>
+              servicePolicies.activity[String(a?.activityId)]?.terms || [];
+            const actC = (a) =>
+              servicePolicies.activity[String(a?.activityId)]?.cancellations || [];
+
+            const anyT =
+              hotelsInCart.some((it) => hotelT(it.hotel).length > 0) ||
+              cabsInCart.some((it) => cabT(it.cab).length > 0) ||
+              activitiesInCart.some((it) => actT(it.activity).length > 0);
+            const anyC =
+              hotelsInCart.some((it) => hotelC(it.hotel).length > 0) ||
+              cabsInCart.some((it) => cabC(it.cab).length > 0) ||
+              activitiesInCart.some((it) => actC(it.activity).length > 0);
+
+            return (
+              <>
+                {policiesLoading && (
+                  <div className="text-muted small d-flex align-items-center gap-2 mb-3">
+                    <Spinner animation="border" size="sm" />
+                    Loading policies…
+                  </div>
+                )}
+
+                {/* Terms & Conditions */}
+                <Card className="mb-3 shadow-sm rounded-3">
+                  <Card.Body>
+                    <h6 className="fw-bold mb-3">Terms &amp; Conditions</h6>
+                    {!anyT && !policiesLoading && (
+                      <div className="text-muted small fst-italic">
+                        No Terms &amp; Conditions configured for the
+                        services in this booking. Please confirm with
+                        the provider before proceeding.
+                      </div>
+                    )}
+                    {anyT && (
+                      <Accordion alwaysOpen flush>
+                        {hotelsInCart.map((it, idx) => {
+                          const list = hotelT(it.hotel);
+                          if (list.length === 0) return null;
+                          return (
+                            <Accordion.Item
+                              key={`pm-h-t-${idx}`}
+                              eventKey={`pm-h-t-${idx}`}
+                            >
+                              <Accordion.Header>
+                                <FaHotel className="me-2 text-primary" />
+                                Hotel — {it.hotel?.hotelName || "Hotel"}
+                              </Accordion.Header>
+                              <Accordion.Body>{renderList(list)}</Accordion.Body>
+                            </Accordion.Item>
+                          );
+                        })}
+                        {cabsInCart.map((it, idx) => {
+                          const list = cabT(it.cab);
+                          if (list.length === 0) return null;
+                          return (
+                            <Accordion.Item
+                              key={`pm-c-t-${idx}`}
+                              eventKey={`pm-c-t-${idx}`}
+                            >
+                              <Accordion.Header>
+                                <FaCar className="me-2 text-primary" />
+                                Cab — {it.cab?.cabName || "Cab"}
+                              </Accordion.Header>
+                              <Accordion.Body>{renderList(list)}</Accordion.Body>
+                            </Accordion.Item>
+                          );
+                        })}
+                        {activitiesInCart.map((it, idx) => {
+                          const list = actT(it.activity);
+                          if (list.length === 0) return null;
+                          return (
+                            <Accordion.Item
+                              key={`pm-a-t-${idx}`}
+                              eventKey={`pm-a-t-${idx}`}
+                            >
+                              <Accordion.Header>
+                                <FaTicketAlt className="me-2 text-primary" />
+                                Activity —{" "}
+                                {it.activity?.activityName || "Activity"}
+                              </Accordion.Header>
+                              <Accordion.Body>{renderList(list)}</Accordion.Body>
+                            </Accordion.Item>
+                          );
+                        })}
+                      </Accordion>
+                    )}
+                  </Card.Body>
+                </Card>
+
+                {/* Cancellation Policies */}
+                <Card className="mb-3 shadow-sm rounded-3">
+                  <Card.Body>
+                    <h6 className="fw-bold mb-3">Cancellation Policies</h6>
+                    {!anyC && !policiesLoading && (
+                      <div className="text-muted small fst-italic">
+                        No Cancellation Policies configured for the
+                        services in this booking. Please confirm with
+                        the provider before proceeding.
+                      </div>
+                    )}
+                    {anyC && (
+                      <Accordion alwaysOpen flush>
+                        {hotelsInCart.map((it, idx) => {
+                          const list = hotelC(it.hotel);
+                          if (list.length === 0) return null;
+                          return (
+                            <Accordion.Item
+                              key={`pm-h-c-${idx}`}
+                              eventKey={`pm-h-c-${idx}`}
+                            >
+                              <Accordion.Header>
+                                <FaHotel className="me-2 text-primary" />
+                                Hotel — {it.hotel?.hotelName || "Hotel"}
+                              </Accordion.Header>
+                              <Accordion.Body>{renderList(list)}</Accordion.Body>
+                            </Accordion.Item>
+                          );
+                        })}
+                        {cabsInCart.map((it, idx) => {
+                          const list = cabC(it.cab);
+                          if (list.length === 0) return null;
+                          return (
+                            <Accordion.Item
+                              key={`pm-c-c-${idx}`}
+                              eventKey={`pm-c-c-${idx}`}
+                            >
+                              <Accordion.Header>
+                                <FaCar className="me-2 text-primary" />
+                                Cab — {it.cab?.cabName || "Cab"}
+                              </Accordion.Header>
+                              <Accordion.Body>{renderList(list)}</Accordion.Body>
+                            </Accordion.Item>
+                          );
+                        })}
+                        {activitiesInCart.map((it, idx) => {
+                          const list = actC(it.activity);
+                          if (list.length === 0) return null;
+                          return (
+                            <Accordion.Item
+                              key={`pm-a-c-${idx}`}
+                              eventKey={`pm-a-c-${idx}`}
+                            >
+                              <Accordion.Header>
+                                <FaTicketAlt className="me-2 text-primary" />
+                                Activity —{" "}
+                                {it.activity?.activityName || "Activity"}
+                              </Accordion.Header>
+                              <Accordion.Body>{renderList(list)}</Accordion.Body>
+                            </Accordion.Item>
+                          );
+                        })}
+                      </Accordion>
+                    )}
+                  </Card.Body>
+                </Card>
+
+                {/* Acceptance gates */}
+                <Card className="mb-1 shadow-sm rounded-3" style={{ borderLeft: "4px solid #6366f1" }}>
+                  <Card.Body>
+                    <Form.Check
+                      type="checkbox"
+                      id="myop-policy-modal-terms"
+                      className="mb-2"
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      label={
+                        <span>
+                          I have read and accept the{" "}
+                          <span className="fw-semibold">Terms &amp; Conditions</span>{" "}
+                          for all services in this booking.
+                        </span>
+                      }
+                    />
+                    <Form.Check
+                      type="checkbox"
+                      id="myop-policy-modal-cancellation"
+                      checked={acceptedCancellations}
+                      onChange={(e) => setAcceptedCancellations(e.target.checked)}
+                      label={
+                        <span>
+                          I have read and accept the{" "}
+                          <span className="fw-semibold">Cancellation Policies</span>{" "}
+                          for all services in this booking.
+                        </span>
+                      }
+                    />
+                  </Card.Body>
+                </Card>
+              </>
+            );
+          })()}
+        </Modal.Body>
+        <Modal.Footer style={{ justifyContent: "space-between" }}>
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowPolicyModal(false)}
+            style={{ minWidth: 120, fontWeight: 500 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={proceedFromPolicyModal}
+            disabled={!acceptedTerms || !acceptedCancellations}
+            title={
+              !acceptedTerms || !acceptedCancellations
+                ? "Tick both acceptance checkboxes to continue."
+                : undefined
+            }
+            style={{ minWidth: 220, fontWeight: 600 }}
+          >
+            Continue to Order Summary →
           </Button>
         </Modal.Footer>
       </Modal>

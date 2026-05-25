@@ -5,8 +5,6 @@ import {
   Col,
   Form,
   Button,
-  Tabs,
-  Tab,
   Spinner,
   Pagination,
   Badge,
@@ -32,10 +30,17 @@ import {
   FaInfoCircle,
   FaShieldAlt,
   FaChevronDown,
-  FaMapMarkerAlt
+  FaMapMarkerAlt,
+  FaConciergeBell,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import {
+  SingleAddOnService,
+  ADDON_SERVICES_CATALOG,
+  ADDON_SERVICES_STORAGE_KEY,
+  readAddOnServices,
+} from "../../components/AddOnServicesPanel";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { useLocation, useNavigate } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
@@ -207,11 +212,295 @@ function LazyImage({ src, alt, className }) {
 }
 
 // ─────────────────────────────────────────────
+// Sample / demo cab data (UI testing only)
+// ─────────────────────────────────────────────
+// Used by the "Load Sample Cabs" button on the Transfer step — only
+// kicks in when the operator explicitly clicks it, so real searches are
+// untouched. The shape matches what /api/makeYourOwnPackageV2/getTransfer
+// Inhouse returns after frontend mapping, so the cab-list UI and the
+// existing handleAddTransferToCart payload builder both work without
+// any further changes. cabid values are prefixed `demo-` so they're
+// easy to spot in the Redis cart / DB if a tester accidentally proceeds.
+const SAMPLE_TRANSFER_RESULTS = [
+  {
+    cabid: "demo-sedan-001",
+    cabname: "Toyota Camry (Sedan)",
+    cabdetails: "Comfortable 4-seater sedan — A/C, luggage space for 2 large bags.",
+    cabpic: "https://b2b.choosenfly.com/assets/details/profilepic/hotel/cab-sedan.jpg",
+    noOfCabs: 1,
+    searchCabDetailsDTO: [
+      {
+        types: "PRIVATE",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 180,
+        sicRate: 0,
+        totalRate: 180,
+        totalRateWithoutMrk: 165,
+        travelType: "1",
+        dropDetails: "1",
+        paxDetails: "3",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+      {
+        types: "SIC",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 0,
+        sicRate: 75,
+        totalRate: 75,
+        totalRateWithoutMrk: 65,
+        travelType: "1",
+        dropDetails: "2",
+        paxDetails: "3",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+    ],
+  },
+  {
+    cabid: "demo-suv-002",
+    cabname: "Toyota Land Cruiser (SUV)",
+    cabdetails: "Premium 6-seater SUV — A/C, leather seats, ample luggage.",
+    cabpic: "https://b2b.choosenfly.com/assets/details/profilepic/hotel/cab-suv.jpg",
+    noOfCabs: 1,
+    searchCabDetailsDTO: [
+      {
+        types: "PRIVATE",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 350,
+        sicRate: 0,
+        totalRate: 350,
+        totalRateWithoutMrk: 320,
+        travelType: "1",
+        dropDetails: "1",
+        paxDetails: "5",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+    ],
+  },
+  {
+    cabid: "demo-van-003",
+    cabname: "Toyota Hiace (Van)",
+    cabdetails: "Spacious 12-seater van — A/C, perfect for families / groups.",
+    cabpic: "https://b2b.choosenfly.com/assets/details/profilepic/hotel/cab-van.jpg",
+    noOfCabs: 1,
+    searchCabDetailsDTO: [
+      {
+        types: "PRIVATE",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 450,
+        sicRate: 0,
+        totalRate: 450,
+        totalRateWithoutMrk: 410,
+        travelType: "1",
+        dropDetails: "1",
+        paxDetails: "11",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+      {
+        types: "SIC",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 0,
+        sicRate: 60,
+        totalRate: 60,
+        totalRateWithoutMrk: 50,
+        travelType: "1",
+        dropDetails: "2",
+        paxDetails: "11",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+    ],
+  },
+];
+
+// ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
-export default function MakePkgCombineSearch() {
+// v2 prefetch — MakeUrOwnPackageV2 kicks off hotel/transfer/activity
+// searches in the background right after the criteria form is submitted
+// and stashes the mapped results in sessionStorage. We pick them up on
+// mount here so the operator only searches once. Each per-tab Search
+// button stays as a manual fallback.
+const PREFETCH_KEYS = {
+  criteria: "makePkgV2PrefetchCriteriaKey",
+  status: "makePkgV2PrefetchStatus",
+  hotel: "makePkgV2PrefetchHotel",
+  transfer: "makePkgV2PrefetchTransfer",
+  tour: "makePkgV2PrefetchTour",
+};
+
+const computeCriteriaKey = (c) => {
+  try {
+    return JSON.stringify({
+      travelDate: c?.travelDate || "",
+      agentId: c?.agent || "",
+      natId: c?.nationality?.value ?? "",
+      natCode: c?.nationality?.code ?? "",
+      dests: (c?.itinerary || []).map((it) => ({
+        v: it?.selectedDestination?.value ?? "",
+        n: it?.nights || 1,
+      })),
+      adults: c?.adults || 1,
+      children: c?.children || 0,
+      childAges: c?.childAges || [],
+    });
+  } catch {
+    return "";
+  }
+};
+
+// v2 helpers — read the service gates + visa-required choice from the
+// add-ons-first page. Kept inline so the legacy component isn't touched.
+const readV2Services = () => {
+  try {
+    const raw = sessionStorage.getItem("makePkgV2Services");
+    if (!raw) return { hotel: true, transfer: true, tour: true };
+    return { hotel: true, transfer: true, tour: true, ...JSON.parse(raw) };
+  } catch {
+    return { hotel: true, transfer: true, tour: true };
+  }
+};
+const readV2VisaRequired = () => {
+  try {
+    return sessionStorage.getItem("makePkgV2VisaRequired") === "YES" ? "YES" : "NO";
+  } catch {
+    return "NO";
+  }
+};
+
+export default function MakePkgCombineSearchV2() {
+  const v2VisaRequired = readV2VisaRequired();
+
+  // ── Service gates + add-on flags ─────────────────────────────────
+  // Both are component state so the new Step 0 (Select Services) can
+  // flip them on/off and the wizard re-derives its step list. Mirrored
+  // to the same sessionStorage keys the rest of the flow (booking page,
+  // TopBar, AddOnServicesPanel) already reads from — payload / save
+  // behaviour stays identical.
+  const [v2Services, setV2Services] = useState(() => {
+    const s = readV2Services();
+    return { ...s, hotel: true };
+  });
+  const [addonFlags, setAddonFlags] = useState(() => {
+    const all = readAddOnServices();
+    const out = {};
+    ADDON_SERVICES_CATALOG.forEach((svc) => {
+      out[svc.key] = !!all[svc.key]?.enabled;
+    });
+    return out;
+  });
+
+  // Persist gate flags whenever the operator flips one (booking page
+  // reads `makePkgV2Services` on save). Hotel stays mandatory ON.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        "makePkgV2Services",
+        JSON.stringify({ ...v2Services, hotel: true })
+      );
+    } catch {
+      /* private mode / quota — non-fatal */
+    }
+  }, [v2Services]);
+
+  // Flip an optional gate (transfer / tour). Hotel is mandatory and the
+  // toggle is locked in the UI, but guard here too.
+  const toggleServiceGate = useCallback((gateKey, value) => {
+    if (gateKey === "hotel") return;
+    setV2Services((prev) => ({ ...prev, [gateKey]: !!value, hotel: true }));
+  }, []);
+
+  // Flip an add-on service. Mirrors the change into the canonical
+  // `mypkg_addon_services` blob that <SingleAddOnService/>, the booking
+  // page, and the side panels all read — so the per-service detail step
+  // picks up the gate the operator just set without re-prompting.
+  const toggleAddonService = useCallback((addonKey, value) => {
+    setAddonFlags((prev) => ({ ...prev, [addonKey]: !!value }));
+    try {
+      const all = readAddOnServices();
+      const svc = ADDON_SERVICES_CATALOG.find((s) => s.key === addonKey);
+      const blank = svc
+        ? (() => {
+            const f = {};
+            (svc.fields || []).forEach((x) => { f[x.name] = ""; });
+            return f;
+          })()
+        : {};
+      all[addonKey] = { ...blank, ...(all[addonKey] || {}), enabled: !!value };
+      sessionStorage.setItem(ADDON_SERVICES_STORAGE_KEY, JSON.stringify(all));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Wizard steps — Step 0 is the new "Select Services" picker; every
+  // following step is gated by the corresponding flag, so disabled
+  // services never get a detail page and never trigger validation.
+  // Order: selection → addons (catalogue order) → hotel → cab → tours.
+  // Hotel must come before Cab and Activities because the existing
+  // hasHotelInCart gate disables the "Add to cart" buttons on Cab and
+  // Activity rows until a hotel is in the cart — so the operator needs
+  // to land on the Hotel step first.
+  const wizardSteps = useMemo(() => {
+    const steps = [
+      {
+        key: "service-select",
+        label: "Select Services",
+        Icon: FaConciergeBell,
+        type: "select",
+      },
+      ...ADDON_SERVICES_CATALOG
+        .filter((svc) => addonFlags[svc.key])
+        .map((svc) => ({
+          key: `addon-${svc.key}`,
+          label: svc.label,
+          Icon: FaConciergeBell,
+          type: "addon",
+          serviceKey: svc.key,
+        })),
+    ];
+    if (v2Services.hotel) {
+      steps.push({ key: "accommodation", label: "Hotel", Icon: FaHotel, type: "search" });
+    }
+    if (v2Services.transfer) {
+      steps.push({ key: "transfer", label: "Transfer", Icon: FaCar, type: "search" });
+    }
+    if (v2Services.tour) {
+      steps.push({ key: "tours", label: "Activities", Icon: FaTicketAlt, type: "search" });
+    }
+    return steps;
+  }, [v2Services, addonFlags]);
   const location = useLocation();
-  const searchCriteria = location.state;
+  // Pull search criteria from location.state first; fall back to the
+  // sessionStorage snapshot written by MakeUrOwnPackageV2 / addons page
+  // so destination + nationality survive a refresh of the search page.
+  // Without this the hotel search payload would ship empty cityId /
+  // countryId / nationalityId / nationalityCode after any page reload.
+  const searchCriteria = (() => {
+    if (location.state && Object.keys(location.state).length > 0) {
+      return location.state;
+    }
+    try {
+      const raw = sessionStorage.getItem("makePkgV2Criteria");
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+    return {};
+  })();
   const {
     travelDate,
     agent,
@@ -236,7 +525,37 @@ const [activeAccordion, setActiveAccordion] = useState({});
       : destination?.label || ""
   );
   const [agentId, setAgentId] = useState(agent || "");
-  const [activeTab, setActiveTab] = useState("accommodation");
+  // v2: wizard step index — 0 = the new "Select Services" picker.
+  const [currentStepIdx, setCurrentStepIdx] = useState(0);
+
+  // If the operator went Back and disabled a service whose detail step
+  // was at the current index, clamp so we don't render a missing step.
+  useEffect(() => {
+    if (currentStepIdx >= wizardSteps.length) {
+      setCurrentStepIdx(Math.max(0, wizardSteps.length - 1));
+    }
+  }, [wizardSteps.length, currentStepIdx]);
+
+  // <SingleAddOnService/> can flip an addon's gate from inside its own
+  // step (the Yes/No radio writes to mypkg_addon_services). Re-pull the
+  // canonical gates on every navigation tick so the Step 0 toggles and
+  // the wizardSteps memo stay in sync with what was just clicked.
+  useEffect(() => {
+    const all = readAddOnServices();
+    setAddonFlags((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      ADDON_SERVICES_CATALOG.forEach((svc) => {
+        const enabled = !!all[svc.key]?.enabled;
+        if (next[svc.key] !== enabled) {
+          next[svc.key] = enabled;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [currentStepIdx]);
+  const [isProceeding, setIsProceeding] = useState(false);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [rooms, setRooms] = useState([
     {
@@ -285,6 +604,33 @@ const [activeAccordion, setActiveAccordion] = useState({});
   const [transferPickupDate, setTransferPickupDate] = useState(travelDate || "");
   const [transferDropoffDate, setTransferDropoffDate] = useState("");
 
+  // ── Cab lookup (pickup / dropoff zones) ──
+  // Single set of selections applied to every cab added in this session.
+  // Persisted to sessionStorage so the booking page can stamp them onto
+  // each cab DTO before sending the booking save payload.
+  const [cabLookupOptions, setCabLookupOptions] = useState([]);
+  const [cabLookupLoading, setCabLookupLoading] = useState(false);
+  const [transferPickupZone, setTransferPickupZone] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("makePkgV2TransferPickup");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [transferDropoffZone, setTransferDropoffZone] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("makePkgV2TransferDropoff");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [transferZoneErrors, setTransferZoneErrors] = useState({
+    pickup: "",
+    dropoff: "",
+  });
+
   // Tours and Activities search state
   const [tourResults, setTourResults] = useState([]);
   const [tourLoading, setTourLoading] = useState(false);
@@ -297,7 +643,11 @@ const [activeAccordion, setActiveAccordion] = useState({});
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [addingActivityId, setAddingActivityId] = useState(null);
   const [addingTransferId, setAddingTransferId] = useState(null);
-  const [hasHotelInCart, setHasHotelInCart] = useState(false);
+  // In v2, the "must add a hotel first" gate is lifted when the booking
+  // doesn't include a hotel (services.hotel === false). We achieve that
+  // by initialising the flag to true in that case; the existing
+  // Redis-refresh logic still runs and just overwrites it harmlessly.
+  const [hasHotelInCart, setHasHotelInCart] = useState(!v2Services.hotel);
 
   const checkHotelInCart = useCallback(async () => {
     const currentAgentId =
@@ -308,25 +658,29 @@ const [activeAccordion, setActiveAccordion] = useState({});
       "";
 
     if (!currentAgentId) {
-      setHasHotelInCart(false);
+      // v2: when this booking doesn't include a hotel, the gate stays open.
+      setHasHotelInCart(!v2Services.hotel);
       return;
     }
 
     try {
       const response = await axiosInstance.post(
-        `/api/makeYourOwnPackage/fetchDataFromRedis?userId=${encodeURIComponent(
+        `/api/makeYourOwnPackageV2/cart/fetch?userId=${encodeURIComponent(
           currentAgentId
         )}`
       );
       if (Array.isArray(response.data)) {
         const hotelExists = response.data.some((item) => !!item.hotel);
-        setHasHotelInCart(hotelExists);
+        // v2: if the booking doesn't include a hotel, the gate is always open.
+        setHasHotelInCart(hotelExists || !v2Services.hotel);
       } else {
-        setHasHotelInCart(false);
+        // v2: when this booking doesn't include a hotel, the gate stays open.
+      setHasHotelInCart(!v2Services.hotel);
       }
     } catch (err) {
       console.error("Error checking hotel in cart:", err);
-      setHasHotelInCart(false);
+      // v2: when this booking doesn't include a hotel, the gate stays open.
+      setHasHotelInCart(!v2Services.hotel);
     }
   }, [agent, agentId]);
 
@@ -337,6 +691,110 @@ const [activeAccordion, setActiveAccordion] = useState({});
       window.removeEventListener("cartUpdated", checkHotelInCart);
     };
   }, [checkHotelInCart]);
+
+  // Hydrate from the v2 prefetch (started on the criteria form page) so
+  // the operator doesn't have to hit Search a second time on each tab.
+  // We compare a hash of the criteria so stale results from a previous
+  // submit are ignored; if the prefetch is still in flight we poll every
+  // 300 ms (up to 60 s) and the per-tab Search buttons stay available
+  // as a manual fallback.
+  useEffect(() => {
+    const storedKey = sessionStorage.getItem(PREFETCH_KEYS.criteria);
+    if (!storedKey) return;
+    const currentKey = computeCriteriaKey(searchCriteria);
+    if (storedKey !== currentKey) return;
+
+    const done = { hotel: false, transfer: false, tour: false };
+
+    const tryHydrate = () => {
+      if (!done.hotel && v2Services.hotel) {
+        try {
+          const raw = sessionStorage.getItem(PREFETCH_KEYS.hotel);
+          if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              setAllResults(arr);
+              setTotalElements(arr.length);
+              setTotalPages(Math.max(1, Math.ceil(arr.length / pageSize)));
+              setHasSearchResult(true);
+              setIsInitialResultsLoaded(true);
+              setPollStatus("COMPLETED");
+              setHasSearched(true);
+              setSearchId(null);
+              done.hotel = true;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!done.transfer && v2Services.transfer) {
+        try {
+          const raw = sessionStorage.getItem(PREFETCH_KEYS.transfer);
+          if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              setTransferResults(arr);
+              setHasTransferSearched(true);
+              done.transfer = true;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!done.tour && v2Services.tour) {
+        try {
+          const raw = sessionStorage.getItem(PREFETCH_KEYS.tour);
+          if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              setTourResults(arr);
+              setHasTourSearched(true);
+              done.tour = true;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    tryHydrate();
+
+    const isPending = () =>
+      (v2Services.hotel && !done.hotel) ||
+      (v2Services.transfer && !done.transfer) ||
+      (v2Services.tour && !done.tour);
+
+    const readStatuses = () => {
+      try {
+        return JSON.parse(sessionStorage.getItem(PREFETCH_KEYS.status) || "{}");
+      } catch {
+        return {};
+      }
+    };
+
+    const allTerminal = () => {
+      const s = readStatuses();
+      return ["hotel", "transfer", "tour"].every((k) => {
+        if (!v2Services[k]) return true;
+        if (done[k]) return true;
+        return s[k] === "error";
+      });
+    };
+
+    if (!isPending() || allTerminal()) return;
+
+    const startedAt = Date.now();
+    const interval = setInterval(() => {
+      tryHydrate();
+      if (!isPending() || allTerminal() || Date.now() - startedAt > 60_000) {
+        clearInterval(interval);
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, [pageSize]);
 
   const formatDateToDDMMYYYY = (dateString) => {
     if (!dateString) return "";
@@ -393,6 +851,93 @@ const [activeAccordion, setActiveAccordion] = useState({});
       sessionStorage.setItem("makePkgTravelDate", travelDate);
     }
   }, [travelDate]);
+
+  // Fetch the cab pickup / dropoff lookup once when the Transfer step
+  // becomes active. Filtered to the destination the operator selected
+  // on the criteria form so only places under that destination (zones,
+  // hotels, airports) are shown. We dedupe by checking if options are
+  // already loaded.
+  useEffect(() => {
+    const isTransferStep =
+      wizardSteps[currentStepIdx]?.key === "transfer";
+    if (!isTransferStep) return;
+    if (cabLookupOptions.length > 0 || cabLookupLoading) return;
+
+    const destinationIds = (Array.isArray(itinerary) ? itinerary : [])
+      .map((it) => it?.selectedDestination?.value)
+      .filter((v) => v !== undefined && v !== null && v !== "");
+    const primaryDestinationId =
+      destinationIds[0] ?? destination?.value ?? "";
+
+    if (!primaryDestinationId) {
+      // No destination selected on the criteria form → nothing to filter on.
+      return;
+    }
+
+    let cancelled = false;
+    setCabLookupLoading(true);
+    axiosInstance
+      .get(
+        `/api/cab-search/lookup-by-destination?destinationId=${encodeURIComponent(
+          primaryDestinationId
+        )}&destinationIds=${encodeURIComponent(destinationIds.join(","))}&search=&limit=20`
+      )
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data || {};
+        const groups = [
+          { label: "Zones", items: Array.isArray(data.zones) ? data.zones : [] },
+          { label: "Hotels", items: Array.isArray(data.hotels) ? data.hotels : [] },
+          { label: "Airports", items: Array.isArray(data.airports) ? data.airports : [] },
+        ];
+        const grouped = groups
+          .filter((g) => g.items.length > 0)
+          .map((g) => ({
+            label: g.label,
+            options: g.items.map((it) => ({
+              value: `${it.source}-${it.id}`,
+              label: it.name,
+              subtitle: it.subtitle,
+              raw: it,
+            })),
+          }));
+        setCabLookupOptions(grouped);
+      })
+      .catch((err) => {
+        console.error("Failed to load cab lookup:", err);
+        toast.error("Failed to load pickup/dropoff options.");
+      })
+      .finally(() => {
+        if (!cancelled) setCabLookupLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStepIdx]);
+
+  // Persist selections so the booking page can stamp them onto cab DTOs.
+  useEffect(() => {
+    if (transferPickupZone) {
+      sessionStorage.setItem(
+        "makePkgV2TransferPickup",
+        JSON.stringify(transferPickupZone)
+      );
+    } else {
+      sessionStorage.removeItem("makePkgV2TransferPickup");
+    }
+  }, [transferPickupZone]);
+
+  useEffect(() => {
+    if (transferDropoffZone) {
+      sessionStorage.setItem(
+        "makePkgV2TransferDropoff",
+        JSON.stringify(transferDropoffZone)
+      );
+    } else {
+      sessionStorage.removeItem("makePkgV2TransferDropoff");
+    }
+  }, [transferDropoffZone]);
 
   useEffect(() => {
     if (transferChildren > 0) {
@@ -612,14 +1157,33 @@ const [activeAccordion, setActiveAccordion] = useState({});
     setCompletedChannels(new Set());
 
     try {
-      const nationalityId = nationality?.value || "";
+      // Fall back to itinerary[0] if `destination` somehow ended up null
+      // (e.g. came back from cart with a partially-populated state). This
+      // keeps the hotel-search payload populated.
+      const dest =
+        destination ||
+        (itinerary && itinerary.length > 0
+          ? itinerary[0]?.selectedDestination
+          : null) ||
+        {};
+
+      const nationalityId = nationality?.value != null
+        ? String(nationality.value)
+        : "";
       const nationalityCode = nationality?.code || "";
-      const destinationCityId = destination?.value || "";
-      const destinationCountryId = destination?.countryId || "";
-      
-      const destinationCityIds = itinerary && itinerary.length > 0
-        ? itinerary.map(item => String(item.selectedDestination?.value)).filter(id => id && id !== "undefined")
-        : [String(destination?.value)].filter(id => id && id !== "undefined");
+      const destinationCityId = dest?.value != null ? String(dest.value) : "";
+      const destinationCountryId =
+        dest?.countryId != null ? String(dest.countryId) : "";
+
+      const destinationCityIds =
+        itinerary && itinerary.length > 0
+          ? itinerary
+              .map((item) => item.selectedDestination?.value)
+              .filter((id) => id != null && id !== "")
+              .map(String)
+          : destinationCityId
+            ? [destinationCityId]
+            : [];
 
       const noOfRooms = String(rooms.length);
 
@@ -653,7 +1217,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
       };
 
       const searchRes = await axiosInstance.post(
-        "/api/makeYourOwnPackageHotel/search",
+        "/api/makeYourOwnPackageV2/hotel/search",
         searchPayloadReq
       );
 
@@ -766,7 +1330,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
       };
 
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/getActivityInhouse",
+        "/api/makeYourOwnPackageV2/getActivityInhouse",
         activityPayload
       );
 
@@ -951,10 +1515,15 @@ const [activeAccordion, setActiveAccordion] = useState({});
       };
 
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackageHotel/saveHotelDetailsToCart",
+        "/api/makeYourOwnPackageV2/cart/addHotel",
         cartItem
       );
-      if (response.data && response.data.success !== false) {
+      // v2 endpoint returns { status: "SUCCESS", cartItemId, type }.
+      if (
+        response.data?.status === "SUCCESS" ||
+        response.data === "1" ||
+        response.data === 1
+      ) {
         toast.success("Room added to cart successfully!");
         window.dispatchEvent(new CustomEvent("cartUpdated"));
       } else {
@@ -1059,10 +1628,17 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
     try {
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/saveActivityDetailsToCart",
+        "/api/makeYourOwnPackageV2/cart/addActivity",
         payload
       );
-      if (response.data === "1" || response.data === 1) {
+      // v2 add-to-cart returns { status: "SUCCESS", cartItemId, type }.
+      // Accept either the v2 shape or the legacy "1" string so this code
+      // works for both flows if the endpoint is ever swapped.
+      if (
+        response.data?.status === "SUCCESS" ||
+        response.data === "1" ||
+        response.data === 1
+      ) {
         toast.success("Activity added to cart successfully.");
         window.dispatchEvent(new Event("cartUpdated"));
       } else {
@@ -1110,7 +1686,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
       };
 
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/getTransferInhouse",
+        "/api/makeYourOwnPackageV2/getTransferInhouse",
         transferPayload
       );
 
@@ -1162,6 +1738,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
       toast.error("Select a nationality before adding to cart.");
       return;
     }
+    if (!transferPickupZone || !transferDropoffZone) {
+      setTransferZoneErrors({
+        pickup: transferPickupZone ? "" : "Please select a pickup location.",
+        dropoff: transferDropoffZone ? "" : "Please select a dropoff location.",
+      });
+      toast.error("Please select both pickup and dropoff before adding to cart.");
+      return;
+    }
 
     const rate =
       cabDetail.types === "SIC" ? cabDetail.sicRate || 0 : cabDetail.privateRate || 0;
@@ -1178,10 +1762,21 @@ const [activeAccordion, setActiveAccordion] = useState({});
         ? cabDetail.totalRate
         : totalRateWithoutMrk;
 
+    const pickupZoneRaw = transferPickupZone?.raw || null;
+    const dropoffZoneRaw = transferDropoffZone?.raw || null;
+
     const payload = {
       pickupDate: pickupDateValue,
       dropoffDate: dropoffDateValue || pickupDateValue,
       nativeCountryId: String(nationality.value),
+      pickupZone: pickupZoneRaw,
+      dropoffZone: dropoffZoneRaw,
+      pickupSource: pickupZoneRaw?.source || null,
+      pickupId: pickupZoneRaw?.id ?? null,
+      pickupName: pickupZoneRaw?.name || null,
+      dropoffSource: dropoffZoneRaw?.source || null,
+      dropoffId: dropoffZoneRaw?.id ?? null,
+      dropoffName: dropoffZoneRaw?.name || null,
       childAge:
         Array.isArray(transferChildAges) && transferChildAges.length > 0
           ? transferChildAges.map((age) => parseInt(age) || 0)
@@ -1213,13 +1808,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
     try {
       const response = await axiosInstance.post(
-        "/api/makeYourOwnPackage/saveCabDetailsToCart",
+        "/api/makeYourOwnPackageV2/cart/addCab",
         payload
       );
+      // v2 endpoint returns { status: "SUCCESS", cartItemId, type }.
       if (
+        response.data?.status === "SUCCESS" ||
         response.data === "1" ||
-        response.data === 1 ||
-        (response.data && response.data.success !== false)
+        response.data === 1
       ) {
         toast.success("Transfer added to cart successfully.");
         window.dispatchEvent(new Event("cartUpdated"));
@@ -1258,6 +1854,13 @@ const [activeAccordion, setActiveAccordion] = useState({});
           <div className="d-flex justify-content-end mb-2">
             <AgentBalanceDisplay agentId={agentId} />
           </div>
+
+          {/* "Booking includes" summary + "Change services" link removed:
+              the wizard step indicator already shows the included
+              services, and the /addons page is no longer part of the
+              flow — services default to all-enabled and add-on
+              selection happens as the last wizard step. */}
+
           <Card className="shadow-sm rounded-xl mb-4">
             <Card.Body>
               <div className="mb-4">
@@ -1292,109 +1895,223 @@ const [activeAccordion, setActiveAccordion] = useState({});
                 </div>
               </div>
 
-              <Tabs
-                activeKey={activeTab}
-                onSelect={(k) => setActiveTab(k)}
-                className="mb-3 nav-tabs-custom"
-              >
-                {/* ═══════════════════════════════════════
-                    ACCOMMODATION TAB
-                ═══════════════════════════════════════ */}
-                <Tab
-                  eventKey="accommodation"
-                  title={
-                    <>
-                      <FaHotel className="me-2" /> Accommodation
-                    </>
-                  }
-                >
+              {/* ═══════════════════════════════════════
+                  WIZARD STEP INDICATOR — compact progress bar
+                  (too many steps to fit numbered circles)
+              ═══════════════════════════════════════ */}
+              {(() => {
+                const total = wizardSteps.length;
+                const idx = currentStepIdx;
+                const pct = total <= 1 ? 100 : Math.round(((idx + 1) / total) * 100);
+                const currentStep = wizardSteps[idx];
+                const nextStep = wizardSteps[idx + 1];
+                const CurrentIcon = currentStep?.Icon;
+                return (
+                  <div className="mb-4">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <div className="d-flex align-items-center gap-2">
+                        {CurrentIcon && (
+                          <span
+                            style={{
+                              width: 36, height: 36,
+                              borderRadius: "50%",
+                              background: "#6366f1",
+                              color: "#fff",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <CurrentIcon />
+                          </span>
+                        )}
+                        <div>
+                          <div className="small text-muted text-uppercase" style={{ letterSpacing: "0.05em", fontSize: "0.7rem" }}>
+                            Step {idx + 1} of {total}
+                          </div>
+                          <div className="fw-bold" style={{ fontSize: "1rem" }}>
+                            {currentStep?.label}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-end">
+                        <div className="small text-muted" style={{ fontSize: "0.7rem" }}>
+                          {nextStep ? "Up next" : "Final step"}
+                        </div>
+                        <div className="small fw-semibold" style={{ color: "#6366f1" }}>
+                          {nextStep ? nextStep.label : "Proceed to Booking"}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      height: 8,
+                      background: "#e9ecef",
+                      borderRadius: 999,
+                      overflow: "hidden",
+                    }}>
+                      <div style={{
+                        width: `${pct}%`,
+                        height: "100%",
+                        background: "linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)",
+                        borderRadius: 999,
+                        transition: "width 0.3s ease",
+                      }} />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ═══════════════════════════════════════
+                  STEP CONTENT
+              ═══════════════════════════════════════ */}
+
+              {/* ── SERVICE SELECTION (Step 0) ──
+                  Single picker page — every optional service has a
+                  toggle, hotel is locked ON. Only enabled services
+                  produce follow-up wizard steps; toggling something OFF
+                  here also strips its step (and disabled services don't
+                  trigger validation or contribute to the payload). The
+                  operator can come back to this step at any time to add
+                  more services without losing data already typed into
+                  the detail steps — addon field values are preserved
+                  across Yes→No→Yes toggles. */}
+              {wizardSteps[currentStepIdx]?.type === "select" && (
+                <Card className="border-0 shadow-sm rounded-4">
+                  <Card.Body className="p-4">
+                    <h5 className="fw-bold mb-1">Choose services for this booking</h5>
+                    <div className="text-muted mb-4" style={{ fontSize: "0.95rem" }}>
+                      Pick the services you want to include. You can come
+                      back to this step anytime to enable more — already
+                      entered details will not be lost.
+                    </div>
+                    <Row className="g-3">
+                      {(() => {
+                        const rows = [
+                          {
+                            key: "hotel",
+                            label: "Hotel",
+                            description: "Hotel accommodation for the trip.",
+                            Icon: FaHotel,
+                            checked: true,
+                            mandatory: true,
+                          },
+                          ...ADDON_SERVICES_CATALOG.map((svc) => ({
+                            key: `addon:${svc.key}`,
+                            addonKey: svc.key,
+                            label: svc.label,
+                            description: svc.question || `Add ${svc.label} to this booking.`,
+                            Icon: FaConciergeBell,
+                            checked: !!addonFlags[svc.key],
+                          })),
+                          {
+                            key: "transfer",
+                            label: "Cab / Transfer",
+                            description: "Airport, inter-city or hourly transfers.",
+                            Icon: FaCar,
+                            checked: !!v2Services.transfer,
+                          },
+                          {
+                            key: "tour",
+                            label: "Tours & Activities",
+                            description: "Sightseeing, day trips, attractions.",
+                            Icon: FaTicketAlt,
+                            checked: !!v2Services.tour,
+                          },
+                        ];
+                        return rows.map((row) => {
+                          const RowIcon = row.Icon;
+                          return (
+                            <Col xs={12} md={6} key={row.key}>
+                              <div
+                                className="d-flex align-items-start border rounded-3 p-3 h-100"
+                                style={{
+                                  background: row.checked ? "#f8f7ff" : "#ffffff",
+                                  borderColor: row.checked ? "#c7d2fe" : "#e5e7eb",
+                                  transition: "background 0.15s ease, border-color 0.15s ease",
+                                }}
+                              >
+                                <span
+                                  className="me-3 d-inline-flex align-items-center justify-content-center"
+                                  style={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: "50%",
+                                    background: row.checked ? "#6366f1" : "#e5e7eb",
+                                    color: row.checked ? "#fff" : "#6b7280",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <RowIcon />
+                                </span>
+                                <div className="flex-grow-1 me-2">
+                                  <div className="d-flex align-items-center gap-2">
+                                    <span className="fw-semibold">{row.label}</span>
+                                    {row.mandatory && (
+                                      <Badge bg="warning" text="dark" className="text-uppercase" style={{ fontSize: "0.65rem" }}>
+                                        Mandatory
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="small text-muted mt-1">{row.description}</div>
+                                </div>
+                                <Form.Check
+                                  type="switch"
+                                  id={`svc-select-${row.key}`}
+                                  checked={row.checked}
+                                  disabled={row.mandatory}
+                                  onChange={(e) => {
+                                    if (row.mandatory) return;
+                                    if (row.addonKey) {
+                                      toggleAddonService(row.addonKey, e.target.checked);
+                                    } else if (row.key === "transfer" || row.key === "tour") {
+                                      toggleServiceGate(row.key, e.target.checked);
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </Col>
+                          );
+                        });
+                      })()}
+                    </Row>
+                    <div className="text-muted small mt-3 fst-italic">
+                      Hotel is mandatory and is always included in the package.
+                    </div>
+                  </Card.Body>
+                </Card>
+              )}
+
+              {/* ── ADD-ON SERVICE (one per catalogue entry) ──
+                  The `key` prop is critical: without it React reuses the
+                  same component instance across steps, the internal
+                  useState initializer doesn't re-run, and the old
+                  service's notes / toggle state bleed into every later
+                  step (and overwrite it on edit). Keying on serviceKey
+                  forces a clean unmount → mount when the user clicks
+                  Next, so each step starts from the correct slot in
+                  sessionStorage. */}
+              {wizardSteps[currentStepIdx]?.type === "addon" && (
+                <SingleAddOnService
+                  key={wizardSteps[currentStepIdx].serviceKey}
+                  serviceKey={wizardSteps[currentStepIdx].serviceKey}
+                />
+              )}
+
+              {/* ── HOTEL ── */}
+              {wizardSteps[currentStepIdx]?.key === "accommodation" && (
                   <Card className="border-0 shadow-sm">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Hotel Search</h5>
-                      <Form onSubmit={handleHotelSearchSubmit}>
-                        <Row className="g-3">
-                          <Col md={3}>
-                            <Form.Group>
-                              <Form.Label>Check In</Form.Label>
-                              <Form.Control
-                                type="date"
-                                value={checkIn}
-                                onChange={(e) => setCheckIn(e.target.value)}
-                              />
-                            </Form.Group>
-                          </Col>
-                          <Col md={3}>
-                            <Form.Group>
-                              <Form.Label>Check Out</Form.Label>
-                              <Form.Control
-                                type="date"
-                                value={checkOut}
-                                onChange={(e) => setCheckOut(e.target.value)}
-                                min={checkIn || undefined}
-                              />
-                            </Form.Group>
-                          </Col>
-                          <Col md={2}>
-                            <Form.Group>
-                              <Form.Label>Nights</Form.Label>
-                              <Form.Control
-                                type="number"
-                                min="1"
-                                value={nightsCount}
-                                onChange={(e) => setNightsCount(e.target.value)}
-                              />
-                            </Form.Group>
-                          </Col>
-                          <Col lg={4} md={6}>
-                            <Form.Label className="fw-semibold text-dark">
-                              👥 Rooms & Guests
-                            </Form.Label>
-                            <Button
-                              variant="outline-primary"
-                              className="w-100 text-start"
-                              type="button"
-                              onClick={() => setRoomsOpen(!roomsOpen)}
-                            >
-                              {adultCount} adults
-                              {childCount ? `, ${childCount} child` : ""} ·{" "}
-                              {rooms.length} room
-                              <span className="float-end">{roomsOpen ? "▴" : "▾"}</span>
-                            </Button>
-                          </Col>
-                        </Row>
+                      {/* Search form removed — the criteria submitted on the
+                          previous page already drives the hotel results, which
+                          are pre-fetched and hydrated on mount. */}
 
-                        <div className="text-center mt-4">
-                          <Button
-                            type="submit"
-                            variant="warning"
-                            className="px-4 py-2"
-                            disabled={isLoading}
-                          >
-                            {isLoading ? (
-                              <>
-                                <Spinner animation="border" size="sm" className="me-2" />
-                                Searching...
-                              </>
-                            ) : (
-                              <>
-                                <FaSearch className="me-2" />
-                                Search
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </Form>
-
-                      {/* ── Empty pre-search state ── */}
+                      {/* ── Loading-while-prefetch state ── */}
                       {!hasSearched && !hasSearchResult && (
                         <Card className="shadow-sm rounded-xl mt-4">
                           <Card.Body className="text-center text-muted py-5">
-                            <FaSearch className="display-4 text-muted mb-3" />
-                            <h4>Ready to Find Your Perfect Stay?</h4>
-                            <p>
-                              Use the search form above to discover amazing hotels
-                              and exclusive deals.
-                            </p>
+                            <Spinner animation="border" className="mb-3" />
+                            <h4>Loading hotel results…</h4>
+                            <p>Fetching availability for the criteria you submitted.</p>
                           </Card.Body>
                         </Card>
                       )}
@@ -1994,114 +2711,127 @@ const [activeAccordion, setActiveAccordion] = useState({});
                       )}
                     </Card.Body>
                   </Card>
-                </Tab>
+              )}
 
-                {/* ═══════════════════════════════════════
-                    TRANSFER TAB
-                ═══════════════════════════════════════ */}
-                <Tab
-                  eventKey="transfer"
-                  title={
-                    <>
-                      <FaCar className="me-2" /> Transfer
-                    </>
-                  }
-                >
+              {/* ── TRANSFER ── */}
+              {wizardSteps[currentStepIdx]?.key === "transfer" && (
                   <Card className="border-0 shadow-sm rounded-4">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Transfer Search</h5>
-                      <Form onSubmit={handleTransferSearchSubmit}>
-                        <Row className="g-3">
-                          <Col md={2}>
-                            <Form.Label>Pickup Date</Form.Label>
-                            <Form.Control
-                              type="date"
-                              value={transferPickupDate}
-                              onChange={(e) => setTransferPickupDate(e.target.value)}
-                              min={new Date().toISOString().split("T")[0]}
-                            />
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Dropoff Date</Form.Label>
-                            <Form.Control
-                              type="date"
-                              value={transferDropoffDate}
-                              onChange={(e) => setTransferDropoffDate(e.target.value)}
-                              min={transferPickupDate || undefined}
-                            />
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Adults</Form.Label>
-                            <Form.Select
-                              value={transferAdults}
-                              onChange={(e) =>
-                                setTransferAdults(parseInt(e.target.value) || 1)
-                              }
-                            >
-                              {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Children</Form.Label>
-                            <Form.Select
-                              value={transferChildren}
-                              onChange={(e) =>
-                                setTransferChildren(parseInt(e.target.value) || 0)
-                              }
-                            >
-                              {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Col>
-                          {transferChildren > 0 && (
-                            <Col md={4}>
-                              <Form.Label className="mb-2">Child Ages</Form.Label>
-                              <Row className="g-2">
-                                {transferChildAges.map((age, index) => (
-                                  <Col key={index} md={3} sm={4} xs={6}>
-                                    <Form.Control
-                                      type="number"
-                                      min="0"
-                                      max="17"
-                                      placeholder={`Child ${index + 1} age`}
-                                      value={age}
-                                      onChange={(e) =>
-                                        handleTransferChildAgeChange(index, e.target.value)
-                                      }
-                                    />
-                                  </Col>
-                                ))}
-                              </Row>
-                            </Col>
-                          )}
-                          <Col md={3} className="d-flex align-items-end cab-search">
-                            <Button
-                              variant="warning"
-                              className="w-100 py-2"
-                              type="submit"
-                              disabled={transferLoading}
-                            >
-                              {transferLoading ? (
-                                <>
-                                  <Spinner animation="border" size="sm" className="me-2" />
-                                  Searching...
-                                </>
-                              ) : (
-                                <>
-                                  <FaSearch className="me-2" /> Search
-                                </>
+                      {/* ── Pickup / Dropoff selectors ──
+                          Always visible on the transfer step (even when the
+                          cab list comes back empty) — the operator needs
+                          them to satisfy the wizard's pickup+dropoff
+                          requirement, and they're populated independently
+                          from the cab list (via /cab-search/lookup-by-
+                          destination). Selections persist to sessionStorage
+                          and are stamped onto each cab DTO at booking save.
+                          Pairs with a manual "Search Transfers" button so
+                          the operator can retry the search after picking
+                          locations / when the prefetch returned empty. */}
+                      <Card className="mb-4 shadow-sm" style={{ borderRadius: "12px" }}>
+                        <Card.Body>
+                          <Row className="g-3 align-items-end">
+                            <Col md={5}>
+                              <Form.Label className="fw-semibold">
+                                Pickup <span className="text-danger">*</span>
+                              </Form.Label>
+                              <Select
+                                classNamePrefix="rs"
+                                isClearable
+                                isLoading={cabLookupLoading}
+                                options={cabLookupOptions}
+                                value={transferPickupZone}
+                                placeholder="Select pickup location"
+                                onChange={(opt) => {
+                                  setTransferPickupZone(opt);
+                                  setTransferZoneErrors((e) => ({ ...e, pickup: "" }));
+                                }}
+                                formatOptionLabel={(opt) => (
+                                  <div>
+                                    <div>{opt.label}</div>
+                                    {opt.subtitle && (
+                                      <small className="text-muted">{opt.subtitle}</small>
+                                    )}
+                                  </div>
+                                )}
+                                menuPortalTarget={document.body}
+                                menuPosition="fixed"
+                                styles={{
+                                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                  menu: (base) => ({ ...base, zIndex: 9999 }),
+                                }}
+                                noOptionsMessage={() =>
+                                  cabLookupLoading ? "Loading…" : "No locations found"
+                                }
+                              />
+                              {transferZoneErrors.pickup && (
+                                <div className="text-danger small mt-1">
+                                  {transferZoneErrors.pickup}
+                                </div>
                               )}
-                            </Button>
-                          </Col>
-                        </Row>
-                      </Form>
+                            </Col>
+                            <Col md={5}>
+                              <Form.Label className="fw-semibold">
+                                Dropoff <span className="text-danger">*</span>
+                              </Form.Label>
+                              <Select
+                                classNamePrefix="rs"
+                                isClearable
+                                isLoading={cabLookupLoading}
+                                options={cabLookupOptions}
+                                value={transferDropoffZone}
+                                placeholder="Select dropoff location"
+                                onChange={(opt) => {
+                                  setTransferDropoffZone(opt);
+                                  setTransferZoneErrors((e) => ({ ...e, dropoff: "" }));
+                                }}
+                                formatOptionLabel={(opt) => (
+                                  <div>
+                                    <div>{opt.label}</div>
+                                    {opt.subtitle && (
+                                      <small className="text-muted">{opt.subtitle}</small>
+                                    )}
+                                  </div>
+                                )}
+                                menuPortalTarget={document.body}
+                                menuPosition="fixed"
+                                styles={{
+                                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                  menu: (base) => ({ ...base, zIndex: 9999 }),
+                                }}
+                                noOptionsMessage={() =>
+                                  cabLookupLoading ? "Loading…" : "No locations found"
+                                }
+                              />
+                              {transferZoneErrors.dropoff && (
+                                <div className="text-danger small mt-1">
+                                  {transferZoneErrors.dropoff}
+                                </div>
+                              )}
+                            </Col>
+                            <Col md={2} className="d-grid">
+                              <Button
+                                variant="primary"
+                                onClick={handleTransferSearchSubmit}
+                                disabled={transferLoading}
+                                title="Re-run the transfer search with the current criteria"
+                              >
+                                {transferLoading ? (
+                                  <>
+                                    <Spinner animation="border" size="sm" className="me-2" />
+                                    Searching…
+                                  </>
+                                ) : (
+                                  <>
+                                    <FaSearch className="me-2" />
+                                    Search
+                                  </>
+                                )}
+                              </Button>
+                            </Col>
+                          </Row>
+                        </Card.Body>
+                      </Card>
 
                       {transferLoading && (
                         <Card className="shadow-sm rounded-xl mb-4 mt-4">
@@ -2123,11 +2853,8 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
                       {!hasTransferSearched && !transferLoading && (
                         <div className="text-center text-muted mt-5">
-                          <FaCar className="fs-1 mb-3 text-secondary" />
-                          <h6>
-                            No transfer results yet. Run a search to view available
-                            transfers.
-                          </h6>
+                          <Spinner animation="border" className="mb-3" />
+                          <h6>Loading available transfers…</h6>
                         </div>
                       )}
 
@@ -2136,6 +2863,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                           <h6 className="fw-bold mb-3">
                             Transfer Results ({transferResults.length})
                           </h6>
+
                           <Row className="g-4">
                             {transferResults.map((cab) => (
                               <Col key={cab.cabid} lg={10} xl={9} className="mx-auto">
@@ -2325,109 +3053,36 @@ const [activeAccordion, setActiveAccordion] = useState({});
                           <p className="small">
                             Please try different dates or contact support.
                           </p>
+                          {/* UI-test helper — populates the cab list with a
+                              handful of demo cars so the operator can step
+                              through the rest of the wizard end-to-end while
+                              the inhouse cab catalogue is being seeded.
+                              Click-only; nothing fires automatically. */}
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => {
+                              setTransferResults(SAMPLE_TRANSFER_RESULTS);
+                              toast.success(
+                                "Loaded sample cabs for UI testing. These are demo entries — replace with a real search before booking a live customer."
+                              );
+                            }}
+                          >
+                            Load Sample Cabs (Demo)
+                          </Button>
                         </div>
                       )}
                     </Card.Body>
                   </Card>
-                </Tab>
+              )}
 
-                {/* ═══════════════════════════════════════
-                    TOURS & ACTIVITIES TAB
-                ═══════════════════════════════════════ */}
-                <Tab
-                  eventKey="tours"
-                  title={
-                    <>
-                      <FaTicketAlt className="me-2" /> Tours & Activities
-                    </>
-                  }
-                >
+              {/* ── TOURS & ACTIVITIES ── */}
+              {wizardSteps[currentStepIdx]?.key === "tours" && (
                   <Card className="border-0 shadow-sm rounded-4">
                     <Card.Body>
-                      <h5 className="fw-bold text-primary mb-3">Activities Search</h5>
-                      <Form onSubmit={handleTourSearchSubmit}>
-                        <Row className="g-3">
-                          <Col md={2}>
-                            <Form.Label>Tour Date</Form.Label>
-                            <Form.Control
-                              type="date"
-                              value={tourDate}
-                              onChange={(e) => setTourDate(e.target.value)}
-                              min={new Date().toISOString().split("T")[0]}
-                            />
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Adults</Form.Label>
-                            <Form.Select
-                              value={tourAdults}
-                              onChange={(e) =>
-                                setTourAdults(parseInt(e.target.value) || 1)
-                              }
-                            >
-                              {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Col>
-                          <Col md={2}>
-                            <Form.Label>Children</Form.Label>
-                            <Form.Select
-                              value={tourChildren}
-                              onChange={(e) =>
-                                setTourChildren(parseInt(e.target.value) || 0)
-                              }
-                            >
-                              {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Col>
-                          {tourChildren > 0 && (
-                            <Col md={4}>
-                              <Form.Label className="mb-2">Child Ages</Form.Label>
-                              <Row className="g-2">
-                                {tourChildAges.map((age, index) => (
-                                  <Col key={index} md={3} sm={4} xs={6}>
-                                    <Form.Control
-                                      type="number"
-                                      min="0"
-                                      max="17"
-                                      placeholder={`Child ${index + 1} age`}
-                                      value={age}
-                                      onChange={(e) =>
-                                        handleTourChildAgeChange(index, e.target.value)
-                                      }
-                                    />
-                                  </Col>
-                                ))}
-                              </Row>
-                            </Col>
-                          )}
-                          <Col md={3} className="d-flex align-items-end activity-search">
-                            <Button
-                              variant="warning"
-                              className="w-100 py-2"
-                              type="submit"
-                              disabled={tourLoading}
-                            >
-                              {tourLoading ? (
-                                <>
-                                  <Spinner animation="border" size="sm" className="me-2" />
-                                  Searching...
-                                </>
-                              ) : (
-                                <>
-                                  <FaSearch className="me-2" /> Search
-                                </>
-                              )}
-                            </Button>
-                          </Col>
-                        </Row>
-                      </Form>
+                      {/* Search form removed — activities are pre-fetched
+                          with the criteria from the previous page. */}
 
                       {tourLoading && (
                         <Card className="shadow-sm rounded-xl mb-4 mt-4">
@@ -2449,10 +3104,8 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
                       {!hasTourSearched && !tourLoading && (
                         <div className="text-center text-muted mt-5">
-                          <FaTicketAlt className="fs-1 mb-3 text-secondary" />
-                          <h6>
-                            No activities yet. Run a search to view available activities.
-                          </h6>
+                          <Spinner animation="border" className="mb-3" />
+                          <h6>Loading available activities…</h6>
                         </div>
                       )}
 
@@ -2665,8 +3318,106 @@ const [activeAccordion, setActiveAccordion] = useState({});
                       )}
                     </Card.Body>
                   </Card>
-                </Tab>
-              </Tabs>
+              )}
+
+              {/* (Old "Add-ons" monolithic step removed — each service is
+                  now its own wizard step before the search steps.) */}
+
+              {/* ═══════════════════════════════════════
+                  WIZARD NAVIGATION BUTTONS
+              ═══════════════════════════════════════ */}
+              <div className="d-flex justify-content-between mt-4">
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setCurrentStepIdx((i) => Math.max(0, i - 1))}
+                  disabled={currentStepIdx === 0}
+                >
+                  ← Back
+                </Button>
+                <Button
+                  style={{ background: "#6366f1", borderColor: "#6366f1", minWidth: 180 }}
+                  disabled={isProceeding}
+                  onClick={async () => {
+                    // ── Transfer step: pickup + dropoff are required
+                    // before leaving this step (whether moving to the
+                    // next wizard step or proceeding to booking).
+                    if (wizardSteps[currentStepIdx]?.key === "transfer") {
+                      const nextErrors = {
+                        pickup: transferPickupZone ? "" : "Please select a pickup location.",
+                        dropoff: transferDropoffZone ? "" : "Please select a dropoff location.",
+                      };
+                      if (nextErrors.pickup || nextErrors.dropoff) {
+                        setTransferZoneErrors(nextErrors);
+                        toast.error("Please select both pickup and dropoff.");
+                        return;
+                      }
+                    }
+                    if (currentStepIdx < wizardSteps.length - 1) {
+                      setCurrentStepIdx((i) => i + 1);
+                      return;
+                    }
+                    // Last step → fetch the server-side cart, stash it
+                    // in sessionStorage (the booking page reads from
+                    // `makePkgCartData`), then navigate. Without this
+                    // the booking page sees no cart and bounces back to
+                    // the legacy entry route.
+                    setIsProceeding(true);
+                    try {
+                      const proceedAgentId =
+                        sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+                        localStorage.getItem("makeYourOwnPackageAgentId") ||
+                        agent ||
+                        agentId ||
+                        "";
+                      if (!proceedAgentId) {
+                        toast.error("Select an agent before proceeding to checkout.");
+                        return;
+                      }
+                      const res = await axiosInstance.post(
+                        `/api/makeYourOwnPackageV2/cart/fetch?userId=${encodeURIComponent(proceedAgentId)}`
+                      );
+                      const cart = Array.isArray(res.data) ? res.data : [];
+                      if (cart.length === 0) {
+                        toast.error(
+                          "Your cart is empty. Add at least one hotel / transfer / activity before proceeding."
+                        );
+                        return;
+                      }
+                      if (v2Services.hotel && !cart.some((it) => !!it.hotel)) {
+                        toast.error(
+                          "Please add a hotel to your package before proceeding."
+                        );
+                        return;
+                      }
+                      sessionStorage.setItem(
+                        "makePkgCartData",
+                        JSON.stringify(cart)
+                      );
+                      sessionStorage.setItem("makePkgAgentId", String(proceedAgentId));
+                      navigate(
+                        "/new-booking/make-your-own-package-v2/booking-page",
+                        { state: searchCriteria }
+                      );
+                    } catch (err) {
+                      console.error("Proceed to booking failed:", err);
+                      toast.error("Failed to load cart data. Please try again.");
+                    } finally {
+                      setIsProceeding(false);
+                    }
+                  }}
+                >
+                  {currentStepIdx < wizardSteps.length - 1 ? (
+                    "Next →"
+                  ) : isProceeding ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Loading cart…
+                    </>
+                  ) : (
+                    "Proceed to Booking →"
+                  )}
+                </Button>
+              </div>
             </Card.Body>
           </Card>
 
