@@ -10,6 +10,7 @@ import {
   Spinner,
   Alert,
   Modal,
+  Form,
 } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
@@ -68,6 +69,13 @@ const RoomList = () => {
   const [policyList, setPolicyList] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
   const [agentBalance, setAgentBalance] = useState(null);
+  // Filter state
+  const [refundFilter, setRefundFilter] = useState({
+    refundable: false,
+    nonRefundable: false,
+  });
+  const [roomTypeOptions, setRoomTypeOptions] = useState([]);
+  const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
   // console.log("currentActiveRole::", activeUserRole);
@@ -452,6 +460,54 @@ const RoomList = () => {
     fetchInhousePolicyDetails();
   }, [roomData]);
 
+  // Fetch room types for the filter sidebar
+  useEffect(() => {
+    let cancelled = false;
+    axiosInstance
+      .get("/api/roomType?page=0&limit=10")
+      .then((res) => {
+        if (cancelled) return;
+        const list = Array.isArray(res?.data)
+          ? res.data
+          : Array.isArray(res?.data?.content)
+          ? res.data.content
+          : [];
+        setRoomTypeOptions(list);
+      })
+      .catch(() => {
+        if (!cancelled) setRoomTypeOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleRoomType = (name) => {
+    setSelectedRoomTypes((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+    );
+  };
+
+  const matchesFilters = (rate) => {
+    const isNonRefundable =
+      String(rate.nonRefundable).toLowerCase() === "true";
+    if (refundFilter.refundable && refundFilter.nonRefundable) {
+      // both checked → no narrowing on refundability
+    } else if (refundFilter.refundable && isNonRefundable) {
+      return false;
+    } else if (refundFilter.nonRefundable && !isNonRefundable) {
+      return false;
+    }
+    if (selectedRoomTypes.length > 0) {
+      const mp = String(rate.mealPlan || "").toLowerCase();
+      const hit = selectedRoomTypes.some(
+        (name) => name && mp === String(name).toLowerCase(),
+      );
+      if (!hit) return false;
+    }
+    return true;
+  };
+
   if (loading) {
     return (
      <div className="min-vh-100 bg-light d-flex flex-column">
@@ -558,17 +614,25 @@ const RoomList = () => {
           className="content-wrapper"
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
-            {/* Agent available balance — top-right indicator */}
-            {agentBalance != null && (
-              <div
-                className="d-flex justify-content-end mb-2"
-                style={{ fontSize: "0.95rem" }}
+            {/* Top toolbar: Back to Search + agent balance */}
+            <div className="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() => navigate("/new-booking/hotel")}
+                className="back-to-search-btn"
               >
-                <span className="fw-bold" style={{ color: "#dc3545" }}>
+                ← Back to Search
+              </Button>
+              {agentBalance != null && (
+                <span
+                  className="fw-bold"
+                  style={{ color: "#dc3545", fontSize: "0.95rem" }}
+                >
                   Available Balance: {Number(agentBalance).toFixed(2)}
                 </span>
-              </div>
-            )}
+              )}
+            </div>
             {/* Loader Modal */}
             <Modal
               show={loadingRate}
@@ -656,15 +720,6 @@ const RoomList = () => {
                             </small>
                           </div>
                         </div>
-                        <div className="mt-3">
-                          <Button
-                            variant="outline-primary"
-                            size="sm"
-                            onClick={() => navigate(-1)}
-                          >
-                            Back to Search
-                          </Button>
-                        </div>
                       </div>
                     </div>
                   </Col>
@@ -692,14 +747,44 @@ const RoomList = () => {
                               {payload.checkOutDate || hotel.checkOutDate}
                             </span>
                           </div>
-                          <div className="d-flex justify-content-between mb-2">
-                            <span>
-                              <FaUsers className="text-muted me-2" />
-                              Guests:
-                            </span>
-                            <span className="fw-semibold">
-                              {hotel.guestBreakdown}
-                            </span>
+                          <div className="mb-2">
+                            <div className="d-flex justify-content-between">
+                              <span>
+                                <FaUsers className="text-muted me-2" />
+                                Guests:
+                              </span>
+                              {Array.isArray(payload.rooms) &&
+                                payload.rooms.length <= 1 && (
+                                  <span className="fw-semibold">
+                                    {hotel.guestBreakdown}
+                                  </span>
+                                )}
+                            </div>
+                            {Array.isArray(payload.rooms) &&
+                              payload.rooms.length > 1 && (
+                                <div className="mt-1 ps-4 guest-breakdown-list">
+                                  {payload.rooms.map((r, i) => {
+                                    const a = r.adults || 0;
+                                    const c = r.children || 0;
+                                    const parts = [];
+                                    if (a) parts.push(`${a} adult${a > 1 ? "s" : ""}`);
+                                    if (c) parts.push(`${c} child${c > 1 ? "ren" : ""}`);
+                                    return (
+                                      <div
+                                        key={i}
+                                        className="d-flex justify-content-between small"
+                                      >
+                                        <span className="text-muted">
+                                          Room {i + 1}:
+                                        </span>
+                                        <span className="fw-semibold">
+                                          {parts.join(", ") || "—"}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                           </div>
                           <div className="d-flex justify-content-between">
                             <span>
@@ -738,7 +823,7 @@ const RoomList = () => {
                     className="d-flex align-items-center gap-2"
                     size="sm"
                   >
-                    <span className="fs-5" style={{ lineHeight: 1 }}>⊞</span> 
+                    <span className="fs-5" style={{ lineHeight: 1 }}>⊞</span>
                   </Button>
                   <Button
                     variant={viewMode === "list" ? "primary" : "outline-primary"}
@@ -746,11 +831,86 @@ const RoomList = () => {
                     className="d-flex align-items-center gap-2"
                     size="sm"
                   >
-                    <span className="fs-5" style={{ lineHeight: 1 }}>☰</span> 
+                    <span className="fs-5" style={{ lineHeight: 1 }}>☰</span>
                   </Button>
                 </div>
               </div>
 
+              <Row className="g-3">
+                <Col lg={3} md={4}>
+                  <Card className="room-filters-card">
+                    <Card.Body className="p-3">
+                      <h6 className="filter-title mb-3">Filters</h6>
+
+                      <div className="filter-group mb-3">
+                        <div className="filter-group-label">Refund Policy</div>
+                        <Form.Check
+                          type="checkbox"
+                          id="filter-refundable"
+                          label="Refundable"
+                          checked={refundFilter.refundable}
+                          onChange={(e) =>
+                            setRefundFilter((p) => ({
+                              ...p,
+                              refundable: e.target.checked,
+                            }))
+                          }
+                        />
+                        <Form.Check
+                          type="checkbox"
+                          id="filter-nonrefundable"
+                          label="Non Refundable"
+                          checked={refundFilter.nonRefundable}
+                          onChange={(e) =>
+                            setRefundFilter((p) => ({
+                              ...p,
+                              nonRefundable: e.target.checked,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="filter-group">
+                        <div className="filter-group-label">Room Type</div>
+                        {roomTypeOptions.length === 0 ? (
+                          <div className="text-muted small">No options</div>
+                        ) : (
+                          roomTypeOptions.map((rt) => (
+                            <Form.Check
+                              key={rt.roomtypeId ?? rt.code ?? rt.name}
+                              type="checkbox"
+                              id={`filter-rt-${rt.roomtypeId ?? rt.code ?? rt.name}`}
+                              label={rt.name}
+                              checked={selectedRoomTypes.includes(rt.name)}
+                              onChange={() => toggleRoomType(rt.name)}
+                            />
+                          ))
+                        )}
+                      </div>
+
+                      {(refundFilter.refundable ||
+                        refundFilter.nonRefundable ||
+                        selectedRoomTypes.length > 0) && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 mt-2"
+                          onClick={() => {
+                            setRefundFilter({
+                              refundable: false,
+                              nonRefundable: false,
+                            });
+                            setSelectedRoomTypes([]);
+                          }}
+                        >
+                          Clear filters
+                        </Button>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+
+                <Col lg={9} md={8}>
               <Accordion
                 activeKey={activeAccordion}
                 onSelect={(key) => setActiveAccordion(key)}
@@ -758,6 +918,10 @@ const RoomList = () => {
                 {hotel.roomCategories.map((category, index) => {
                   const eventKey = index.toString();
                   const isActive = activeAccordion === eventKey;
+                  const filteredRates = (category.availableRates || []).filter(
+                    matchesFilters,
+                  );
+                  if (filteredRates.length === 0) return null;
 
                   return (
                     <Accordion.Item
@@ -784,15 +948,15 @@ const RoomList = () => {
                                 From{" "}
                                 {formatPrice(
                                   Math.min(
-                                    ...category.availableRates.map(
+                                    ...filteredRates.map(
                                       (rate) => rate.rate,
                                     ),
                                   ),
                                 )}
                               </div>
                               <div className="rates-count small text-muted">
-                                {category.availableRates.length} rate
-                                {category.availableRates.length !== 1
+                                {filteredRates.length} rate
+                                {filteredRates.length !== 1
                                   ? "s"
                                   : ""}{" "}
                                 available
@@ -810,7 +974,7 @@ const RoomList = () => {
 
                       <Accordion.Body className="room-rates-section">
                         <Row>
-                          {category.availableRates.map((rate, rateIndex) => (
+                          {filteredRates.map((rate, rateIndex) => (
                             <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-2">
                               <Card className="rate-card h-100 shadow-sm">
                                 {viewMode === "grid" ? (
@@ -949,7 +1113,18 @@ const RoomList = () => {
                     </Accordion.Item>
                   );
                 })}
+                {hotel.roomCategories.every(
+                  (c) =>
+                    (c.availableRates || []).filter(matchesFilters).length ===
+                    0,
+                ) && (
+                  <Alert variant="info" className="mb-0">
+                    No rates match the selected filters.
+                  </Alert>
+                )}
               </Accordion>
+                </Col>
+              </Row>
             </div>
 
             {/* Additional Information Section */}

@@ -662,3 +662,37 @@
 .room-rates-section::-webkit-scrollbar-thumb:hover {
   background: #20c997;
 }
+/* Room list filter sidebar */
+.room-filters-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  position: sticky;
+  top: 16px;
+}
+.room-filters-card .filter-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid #eef0f4;
+  padding-bottom: 6px;
+}
+.room-filters-card .filter-group-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.room-filters-card .form-check {
+  font-size: 0.86rem;
+  margin-bottom: 4px;
+}
+.guest-breakdown-list .text-muted {
+  color: #6b7280 !important;
+}
+.back-to-search-btn {
+  border-radius: 8px;
+  font-weight: 600;
+}

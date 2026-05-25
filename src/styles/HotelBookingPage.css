@@ -305,3 +305,76 @@
 }
 
 
+
+/* Right sticky booking summary column */
+.hbp-sticky-summary {
+  position: sticky;
+  top: 84px;
+}
+@media (max-width: 991px) {
+  .hbp-sticky-summary {
+    position: static;
+  }
+}
+
+.hbp-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px dashed #eef0f4;
+  font-size: 0.86rem;
+}
+.hbp-summary-row:last-child {
+  border-bottom: none;
+}
+.hbp-summary-label {
+  color: #4b5563;
+  font-weight: 500;
+}
+.hbp-summary-value {
+  color: #111827;
+  font-weight: 600;
+}
+.hbp-price-card .card-header {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Guest Details accordion — make it look obviously like an accordion */
+.guest-details-accordion .accordion-item {
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.guest-details-accordion .accordion-button {
+  background: #eef2ff !important;
+  color: #1e3a8a !important;
+  font-weight: 600;
+  box-shadow: none !important;
+}
+.guest-details-accordion .accordion-button:not(.collapsed) {
+  background: #c7d2fe !important;
+  color: #1e3a8a !important;
+}
+.guest-details-accordion .accordion-button::after {
+  filter: invert(20%) sepia(85%) saturate(2500%) hue-rotate(220deg);
+}
+.guest-details-accordion .accordion-header h6 {
+  color: #1e3a8a;
+}
+
+/* Action bar pinned under the booking summary on the right */
+.hbp-action-bar {
+  position: sticky;
+  bottom: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  z-index: 5;
+}
+.hbp-action-bar .btn { min-height: 38px; }
+.terms-content { line-height: 1.4; }
+.policy-block h6 { font-size: 0.9rem; }

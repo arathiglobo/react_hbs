@@ -70,6 +70,12 @@ const HotelBookingPage = () => {
   const [specialRequests, setSpecialRequests] = useState([]);
   const [bookingConfirmation, setBookingConfirmation] =
     useState("Book & Voucher");
+  // Policy + T&C consent flow
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [policyData, setPolicyData] = useState(null);
+  const [termsAndConditions, setTermsAndConditions] = useState("");
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
 
   // Fetch employees list
   useEffect(() => {
@@ -97,7 +103,8 @@ const HotelBookingPage = () => {
     axiosInstance
       .get(`/api/agent-credit-limit/agent/${aId}`)
       .then((res) => {
-        if (!cancelled) setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
+        if (!cancelled)
+          setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
       })
       .catch(() => {
         if (!cancelled) setAgentAvailableBalance(null);
@@ -285,13 +292,82 @@ const HotelBookingPage = () => {
   //   Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24))
   // );
 
+  // Step 1 in confirm flow: validate, fetch policies + T&C, show consent modal.
+  const openPolicyConsent = async () => {
+    const { errors, hasErrors } = validateForm();
+    if (hasErrors) {
+      setValidationErrors(errors);
+      toast.error("Please fill in all required fields correctly.");
+      return;
+    }
+    setValidationErrors({});
+
+    const hotelId = bookingData?.selectedRate?.hotelId;
+    if (!hotelId) {
+      toast.error("Hotel reference missing — cannot fetch policies.");
+      return;
+    }
+
+    setPolicyAccepted(false);
+    setShowPolicyModal(true);
+    setPoliciesLoading(true);
+    try {
+      const [policiesRes, termsRes] = await Promise.allSettled([
+        axiosInstance.get(`/api/hotels/${hotelId}/policies`),
+        axiosInstance.get(`/api/hotels/${hotelId}/terms-and-conditions`),
+      ]);
+
+      if (policiesRes.status === "fulfilled") {
+        setPolicyData(policiesRes.value?.data || null);
+      } else {
+        setPolicyData(null);
+      }
+
+      if (termsRes.status === "fulfilled") {
+        const d = termsRes.value?.data;
+        // Accept multiple shapes:
+        //  - List<{description}>   ← current backend
+        //  - List of plain strings
+        //  - Plain string
+        //  - { termsAndConditions } / { data } / { message }
+        let tc = "";
+        if (Array.isArray(d)) {
+          tc = d
+            .map((row) =>
+              typeof row === "string" ? row : row?.description || "",
+            )
+            .filter(Boolean)
+            .join("\n\n");
+        } else if (typeof d === "string") {
+          tc = d;
+        } else {
+          tc =
+            d?.termsAndConditions ||
+            d?.terms ||
+            d?.data ||
+            d?.message ||
+            "";
+        }
+        setTermsAndConditions(tc);
+      } else {
+        setTermsAndConditions("");
+      }
+    } catch (err) {
+      console.error("policies/T&C fetch error", err);
+    } finally {
+      setPoliciesLoading(false);
+    }
+  };
+
+  // Step 2: user accepted policies → build payload + show order summary modal.
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
 
     const { errors, hasErrors } = validateForm();
 
     if (hasErrors) {
       setValidationErrors(errors);
+      toast.error("Please fill in all required fields correctly.");
       return;
     }
 
@@ -567,39 +643,574 @@ const HotelBookingPage = () => {
         <Sidebar />
         <main className="content-wrapper py-4">
           <Container fluid="xl">
-            {/* Booking Summary */}
-            <Row>
-              <Col>
-                <Card className="shadow-lg rounded-xl mb-3 booking-summary-card border-0 overflow-hidden">
-                  <Card.Header className="bg-gradient-secondary text-black py-2 rounded-top">
-                    <div className="d-flex justify-content-between align-items-center">
-                      <h4 className="mb-0 d-flex align-items-center">
-                        <FaHotel className="me-1 fs-4" /> Booking Summary
-                      </h4>
-                      {agentAvailableBalance != null && (
-                        <span
-                          className="fw-bold"
-                          style={{ color: "#dc3545", fontSize: "0.95rem" }}
+            {agentAvailableBalance != null && (
+              <div className="d-flex justify-content-end mb-2">
+                <span
+                  className="fw-bold"
+                  style={{ color: "#dc3545", fontSize: "0.95rem" }}
+                >
+                  Available Balance: {Number(agentAvailableBalance).toFixed(2)}
+                </span>
+              </div>
+            )}
+            {/* Guest Details Section */}
+            <Form onSubmit={(e) => { e.preventDefault(); openPolicyConsent(); }}>
+              <Row className="g-3">
+                <Col lg={8} className="hbp-left-col">
+                  {/* {Object.keys(validationErrors).length > 0 && (
+                <Alert variant="danger" className="mb-3 d-flex align-items-center">
+                  <strong className="me-2">✕</strong>
+                  <div>
+                    <Alert.Heading className="mb-0">
+                      Please fix the validation errors
+                    </Alert.Heading>
+                  </div>
+                </Alert>
+              )} */}
+                  <Card className="mb-2 shadow-sm border-0">
+                    <Card.Header className="bg-light py-2">
+                      <div className="d-flex align-items-center">
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => navigate("/room-list")}
+                          className="me-3"
                         >
-                          Available Balance:{" "}
-                          {Number(agentAvailableBalance).toFixed(2)}
-                        </span>
+                          ← Back
+                        </Button>
+
+                        <h5 className="mb-0 fw-bold text-dark">
+                          Guest Details
+                        </h5>
+                      </div>
+                    </Card.Header>
+                    <Card.Body className="p-0">
+                      <Accordion
+                        alwaysOpen
+                        defaultActiveKey={rooms.map((_, i) => i.toString())}
+                        className="guest-details-accordion"
+                      >
+                        {rooms.map((room, roomIndex) => (
+                          <Accordion.Item
+                            key={roomIndex}
+                            eventKey={roomIndex.toString()}
+                            className="mb-3 guest-room-item"
+                          >
+                            <Accordion.Header className="bg-primary text-white">
+                              <h6 className="mb-0 fw-bold w-100 d-flex flex-wrap align-items-center gap-2">
+                                <span>
+                                  Room {roomIndex + 1} -{" "}
+                                  {selectedRate.roomCategory}
+                                </span>
+                                {selectedRate?.mealPlan && (
+                                  <Badge
+                                    bg="light"
+                                    text="dark"
+                                    className="ms-2"
+                                  >
+                                    <FaUtensils className="me-1" />
+                                    {selectedRate.mealPlan}
+                                  </Badge>
+                                )}
+                              </h6>
+                            </Accordion.Header>
+                            <Accordion.Body className="p-4">
+                              {room.guests.map((guest, guestIndex) => (
+                                <div
+                                  key={guestIndex}
+                                  className="guest-row mb-3"
+                                >
+                                  <Row className="align-items-center g-2">
+                                    <Col md={2}>
+                                      <span className="fw-semibold text-muted">
+                                        {guest.isChild
+                                          ? `Child ${
+                                              guestIndex - room.adults + 1
+                                            } (Age: ${
+                                              room.childAges[
+                                                guestIndex - room.adults
+                                              ]
+                                            })`
+                                          : `Adult ${guestIndex + 1}`}{" "}
+                                        *
+                                      </span>
+                                    </Col>
+                                    <Col md={2}>
+                                      <Form.Select
+                                        value={guest.salutation}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            roomIndex,
+                                            guestIndex,
+                                            "salutation",
+                                            e.target.value,
+                                          )
+                                        }
+                                        className="form-control-sm"
+                                        isInvalid={
+                                          !!validationErrors[
+                                            `room_${roomIndex}_guest_${guestIndex}_salutation`
+                                          ]
+                                        }
+                                      >
+                                        <option value="">SELECT</option>
+                                        <option value="Mr">Mr</option>
+                                        <option value="Mrs">Mrs</option>
+                                        <option value="Ms">Ms</option>
+                                        <option value="Dr">Master</option>
+                                      </Form.Select>
+                                      {validationErrors[
+                                        `room_${roomIndex}_guest_${guestIndex}_salutation`
+                                      ] && (
+                                        <Form.Control.Feedback type="invalid">
+                                          {
+                                            validationErrors[
+                                              `room_${roomIndex}_guest_${guestIndex}_salutation`
+                                            ]
+                                          }
+                                        </Form.Control.Feedback>
+                                      )}
+                                    </Col>
+                                    <Col md={3}>
+                                      <Form.Control
+                                        type="text"
+                                        placeholder="First Name *"
+                                        value={guest.firstName}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            roomIndex,
+                                            guestIndex,
+                                            "firstName",
+                                            e.target.value,
+                                          )
+                                        }
+                                        className="form-control-sm"
+                                        isInvalid={
+                                          !!validationErrors[
+                                            `room_${roomIndex}_guest_${guestIndex}_firstName`
+                                          ]
+                                        }
+                                      />
+                                      {validationErrors[
+                                        `room_${roomIndex}_guest_${guestIndex}_firstName`
+                                      ] && (
+                                        <Form.Control.Feedback type="invalid">
+                                          {
+                                            validationErrors[
+                                              `room_${roomIndex}_guest_${guestIndex}_firstName`
+                                            ]
+                                          }
+                                        </Form.Control.Feedback>
+                                      )}
+                                    </Col>
+                                    <Col md={3}>
+                                      <Form.Control
+                                        type="text"
+                                        placeholder="Last Name *"
+                                        value={guest.lastName}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            roomIndex,
+                                            guestIndex,
+                                            "lastName",
+                                            e.target.value,
+                                          )
+                                        }
+                                        className="form-control-sm"
+                                        isInvalid={
+                                          !!validationErrors[
+                                            `room_${roomIndex}_guest_${guestIndex}_lastName`
+                                          ]
+                                        }
+                                      />
+                                      {validationErrors[
+                                        `room_${roomIndex}_guest_${guestIndex}_lastName`
+                                      ] && (
+                                        <Form.Control.Feedback type="invalid">
+                                          {
+                                            validationErrors[
+                                              `room_${roomIndex}_guest_${guestIndex}_lastName`
+                                            ]
+                                          }
+                                        </Form.Control.Feedback>
+                                      )}
+                                    </Col>
+                                    <Col md={2}>
+                                      <Form.Select
+                                        value={guest.gender}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            roomIndex,
+                                            guestIndex,
+                                            "gender",
+                                            e.target.value,
+                                          )
+                                        }
+                                        className="form-control-sm"
+                                        isInvalid={
+                                          !!validationErrors[
+                                            `room_${roomIndex}_guest_${guestIndex}_gender`
+                                          ]
+                                        }
+                                      >
+                                        <option value="">Gender</option>
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                        <option value="Other">Other</option>
+                                      </Form.Select>
+                                      {validationErrors[
+                                        `room_${roomIndex}_guest_${guestIndex}_gender`
+                                      ] && (
+                                        <Form.Control.Feedback type="invalid">
+                                          {
+                                            validationErrors[
+                                              `room_${roomIndex}_guest_${guestIndex}_gender`
+                                            ]
+                                          }
+                                        </Form.Control.Feedback>
+                                      )}
+                                    </Col>
+                                  </Row>
+                                  {guestIndex < room.guests.length - 1 && (
+                                    <hr className="my-3" />
+                                  )}
+                                </div>
+                              ))}
+                            </Accordion.Body>
+                          </Accordion.Item>
+                        ))}
+                      </Accordion>
+                    </Card.Body>
+                  </Card>
+
+                  {/* Primary Guest */}
+                  <Card className="p-4 mb-4 shadow-sm border-0">
+                    <h5 className="mb-3 fw-bold">Lead Passenger</h5>
+                    <Row className="g-3">
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Salutation
+                          </Form.Label>
+                          <Form.Select
+                            value={primaryGuest.salutation}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange(
+                                "salutation",
+                                e.target.value,
+                              )
+                            }
+                            isInvalid={!!validationErrors.salutation}
+                          >
+                            <option value="">Select</option>
+                            <option value="Mr">Mr</option>
+                            <option value="Mrs">Mrs</option>
+                            <option value="Ms">Ms</option>
+                            <option value="Dr">Dr</option>
+                          </Form.Select>
+                          {validationErrors.salutation && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.salutation}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>First Name
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.firstName}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange(
+                                "firstName",
+                                e.target.value,
+                              )
+                            }
+                            isInvalid={!!validationErrors.firstName}
+                            required
+                          />
+                          {validationErrors.firstName && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.firstName}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Middle Name</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.middleName}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange(
+                                "middleName",
+                                e.target.value,
+                              )
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Last Name
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.lastName}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange(
+                                "lastName",
+                                e.target.value,
+                              )
+                            }
+                            isInvalid={!!validationErrors.lastName}
+                            required
+                          />
+                          {validationErrors.lastName && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.lastName}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Email
+                          </Form.Label>
+                          <Form.Control
+                            type="email"
+                            value={primaryGuest.email}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("email", e.target.value)
+                            }
+                            isInvalid={!!validationErrors.email}
+                            required
+                          />
+                          {validationErrors.email && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.email}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Phone
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.phone}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("phone", e.target.value)
+                            }
+                            isInvalid={!!validationErrors.phone}
+                            required
+                          />
+                          {validationErrors.phone && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.phone}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Passport No</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.passportNo}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange(
+                                "passportNo",
+                                e.target.value,
+                              )
+                            }
+                            required
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Agent LPO
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.agentLpo}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange(
+                                "agentLpo",
+                                e.target.value,
+                              )
+                            }
+                            isInvalid={!!validationErrors.agentLpo}
+                            required
+                          />
+                          {validationErrors.agentLpo && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.agentLpo}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card>
+
+                  {/* Remarks & Requests */}
+                  <Card className="p-4 mb-2 shadow-sm border-0">
+                    <h5 className="mb-3 fw-bold">Remarks & Special Requests</h5>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Tourism Dirhams (AED)</Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={tourismDirhams}
+                            onChange={(e) => setTourismDirhams(e.target.value)}
+                            placeholder="0"
+                            min="0"
+                            step="0.01"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Remarks</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            placeholder="Any remarks..."
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={12}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Special Request</Form.Label>
+                          <div className="special-request-grid">
+                            {SPECIAL_REQUEST_OPTIONS.map((request) => (
+                              <Form.Check
+                                key={request}
+                                type="checkbox"
+                                id={`special-request-${request.replace(/[^a-zA-Z0-9]/g, "-")}`}
+                                label={request}
+                                checked={specialRequests.includes(request)}
+                                onChange={() =>
+                                  handleSpecialRequestToggle(request)
+                                }
+                                className="mb-2 special-request-check"
+                              />
+                            ))}
+                          </div>
+                        </Form.Group>
+                      </Col>
+                      {selectedRate?.roomStatus !== "On Request" && (
+                        <Col md={12}>
+                          <Form.Group className="mb-3">
+                            <Form.Label className="mb-2 fw-semibold">
+                              Are you sure to continue booking?
+                            </Form.Label>
+                            <div className="d-flex gap-4 mt-2">
+                              <Form.Check
+                                type="radio"
+                                id="book-voucher"
+                                name="bookingConfirmation"
+                                label="Book & Voucher"
+                                value="Book & Voucher"
+                                checked={
+                                  bookingConfirmation === "Book & Voucher"
+                                }
+                                onChange={(e) =>
+                                  setBookingConfirmation(e.target.value)
+                                }
+                                className="mb-2"
+                              />
+                              <Form.Check
+                                type="radio"
+                                id="book-now-voucher-later"
+                                name="bookingConfirmation"
+                                label="Book Now & Voucher later"
+                                value="Book Now & Voucher later"
+                                checked={
+                                  bookingConfirmation ===
+                                  "Book Now & Voucher later"
+                                }
+                                onChange={(e) =>
+                                  setBookingConfirmation(e.target.value)
+                                }
+                              />
+                            </div>
+                          </Form.Group>
+                        </Col>
                       )}
-                    </div>
-                  </Card.Header>
-                  <Card.Body className="p-4 bg-light">
-                    <Row className="gy-4">
-                      <Col md={6} lg={4}>
-                        <div className="hotel-info-card p-3 bg-white rounded shadow-sm h-100">
-                          <h5 className="fw-bold text-primary mb-3">
+                    </Row>
+                  </Card>
+
+                  {/* Booking Done By Section */}
+                  <Card className="p-4 mb-4 shadow-sm border-0 bg-light">
+                    <h6 className="mb-3 fw-bold text-primary d-flex align-items-center">
+                      <FaUserTie className="me-2" /> Booking Done By
+                    </h6>
+                    <Row>
+                      <Col md={4}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold">
+                            Employee
+                          </Form.Label>
+                          <Form.Select
+                            value={primaryGuest.employeeId}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange(
+                                "employeeId",
+                                e.target.value,
+                              )
+                            }
+                            className="form-control"
+                          >
+                            <option value="">Select Employee</option>
+                            {employees.map((employee) => (
+                              <option
+                                key={employee.employeeId}
+                                value={employee.employeeId}
+                              >
+                                {employee.firstName} {employee.lastName}
+                              </option>
+                            ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card>
+
+                </Col>
+
+                {/* Right sticky column — Booking Summary + Price */}
+                <Col lg={4} className="hbp-right-col">
+                  <div className="hbp-sticky-summary">
+                    <Card className="shadow-sm rounded-3 mb-3 booking-summary-card border-0 overflow-hidden">
+                      <Card.Header className="bg-primary text-white py-2 rounded-top">
+                        <h6 className="mb-0 d-flex align-items-center">
+                          <FaHotel className="me-2" /> Booking Summary
+                        </h6>
+                      </Card.Header>
+                      <Card.Body className="p-3">
+                        <div className="mb-3">
+                          <div className="fw-bold text-primary mb-1">
                             {hotelStaticData.hotelName}
-                          </h5>
-                          <p className="text-muted mb-2 d-flex align-items-start">
-                            <i className="bi bi-geo-alt-fill me-2 mt-1 text-primary"></i>
+                          </div>
+                          <div className="text-muted small mb-2">
                             {hotelStaticData.address}
-                          </p>
-                          <div className="d-flex align-items-center mb-2">
-                            <span className="badge bg-warning text-dark me-2">
+                          </div>
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <span className="badge bg-warning text-dark">
                               ⭐ {hotelStaticData.starRating} Star
                             </span>
                             {selectedRate?.nonRefundable !== undefined &&
@@ -611,569 +1222,290 @@ const HotelBookingPage = () => {
                               )}
                           </div>
                         </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">
+
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaCalendarAlt className="me-2 text-primary" />
                             Check-in
-                          </h6>
-                          <p className="mb-0 fw-semibold text-dark">
+                          </div>
+                          <div className="hbp-summary-value">
                             {formatDateTime(payload.checkInDate)}
-                          </p>
+                          </div>
                         </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaCalendarAlt className="me-2 text-primary" />
                             Check-out
-                          </h6>
-                          <p className="mb-0 fw-semibold text-dark">
+                          </div>
+                          <div className="hbp-summary-value">
                             {formatDateTime(payload.checkOutDate)}
-                          </p>
+                          </div>
                         </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaUsers className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Guests</h6>
-                          <div className="text-start">
+                        <div className="hbp-summary-row align-items-start">
+                          <div className="hbp-summary-label">
+                            <FaUsers className="me-2 text-primary" />
+                            Guests
+                          </div>
+                          <div className="hbp-summary-value text-end">
                             {payload.rooms.map((room, i) => (
-                              <div key={i} className="mb-1">
-                                <small className="fw-semibold text-dark">
-                                  Room {i + 1}: {room.adults} Adults
-                                  {room.children
-                                    ? `, ${room.children} Children`
-                                    : ""}
-                                </small>
+                              <div key={i} className="small">
+                                Room {i + 1}: {room.adults} Adult
+                                {room.adults > 1 ? "s" : ""}
+                                {room.children
+                                  ? `, ${room.children} Child${
+                                      room.children > 1 ? "ren" : ""
+                                    }`
+                                  : ""}
                               </div>
                             ))}
                           </div>
                         </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaUtensils className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaUtensils className="me-2 text-primary" />
                             Meal Plan
-                          </h6>
-                          <p className="mb-0 fw-semibold text-dark">
+                          </div>
+                          <div className="hbp-summary-value">
                             {selectedRate.mealPlan}
-                          </p>
+                          </div>
                         </div>
-                      </Col>
-                    </Row>
-                    <hr className="my-4" />
+                      </Card.Body>
+                    </Card>
 
-                    {/* ✅ Show Selling Price only if ADMIN */}
-                    {activeUserRole === "ADMIN" && (
-                      <div className="pricing-section p-3 bg-white rounded shadow-sm mb-3">
-                        <div className="d-flex justify-content-between align-items-center">
-                          <h5 className="mb-0 text-muted">Selling Price</h5>
-                          <h4 className="mb-0 text-success fw-bold">
+                    <Card className="shadow-sm rounded-3 border-0 hbp-price-card">
+                      <Card.Header className="bg-light py-2">
+                        <h6 className="mb-0 fw-bold">Price Details</h6>
+                      </Card.Header>
+                      <Card.Body className="p-3">
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">Selling Price</div>
+                          <div className="hbp-summary-value">
+                            {formatPrice(
+                              selectedRate?.roomRateBasedOnRoomCount || 0,
+                            )}
+                          </div>
+                        </div>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            Tourism Dirhams
+                          </div>
+                          <div className="hbp-summary-value">
+                            {formatPrice(tourismDirhamsAmount)}
+                          </div>
+                        </div>
+                        <hr className="my-2" />
+                        <div className="hbp-summary-row fw-bold">
+                          <div className="hbp-summary-label text-danger">
+                            New Total
+                          </div>
+                          <div className="hbp-summary-value text-danger">
                             {formatPrice(sellingPriceWithTd)}
-                          </h4>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                        {activeUserRole === "ADMIN" && (
+                          <div className="hbp-summary-row mt-2">
+                            <div className="hbp-summary-label text-muted small">
+                              Total (incl. markup)
+                            </div>
+                            <div className="hbp-summary-value text-success fw-bold">
+                              {formatPrice(totalPriceWithTd)}
+                            </div>
+                          </div>
+                        )}
+                      </Card.Body>
+                    </Card>
 
-                    <div className="pricing-section p-3 bg-gradient-success text-white rounded shadow-sm">
-                      <div className="d-flex justify-content-between align-items-center">
-                        <h5 className="mb-0">Total Price</h5>
-                        <h4 className="mb-0 fw-bold">{formatPrice(totalPriceWithTd)}</h4>
+                    <div className="hbp-action-bar mt-3 d-flex gap-2">
+                      <Button
+                        variant="outline-secondary"
+                        onClick={() => navigate(-1)}
+                        className="flex-grow-1"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        variant="primary"
+                        type="button"
+                        onClick={openPolicyConsent}
+                        className="flex-grow-1"
+                      >
+                        Confirm Booking
+                      </Button>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+
+              {/* ✅ Policies + T&C Consent Modal (step before order summary) */}
+              <Modal
+                show={showPolicyModal}
+                onHide={() => setShowPolicyModal(false)}
+                centered
+                backdrop="static"
+                size="lg"
+                scrollable
+              >
+                <Modal.Header
+                  closeButton
+                  className="bg-primary text-white py-2"
+                  style={{ borderBottom: "none" }}
+                >
+                  <Modal.Title className="fw-semibold d-flex align-items-center">
+                    <FaHotel className="me-2" />
+                    Hotel Policies &amp; Terms
+                  </Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="bg-light">
+                  {policiesLoading ? (
+                    <div className="text-center py-5">
+                      <div className="spinner-border text-primary" />
+                      <div className="mt-3 text-muted">
+                        Fetching hotel policies &amp; terms...
                       </div>
                     </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
+                  ) : (
+                    <>
+                      {/* Cancellation Policy */}
+                      <div className="policy-block mb-3 p-3 rounded bg-white shadow-sm">
+                        <h6 className="text-danger mb-2 fw-bold">
+                          Cancellation Policy
+                        </h6>
+                        {policyData?.policies?.cancellationPolicy?.length ? (
+                          policyData.policies.cancellationPolicy.map(
+                            (p, idx) => (
+                              <div key={idx} className="mb-2">
+                                <div className="small text-dark">
+                                  {p.policyText || "—"}
+                                </div>
+                                {(p.fromDate || p.toDate) && (
+                                  <div className="text-muted small">
+                                    Valid:{" "}
+                                    {p.fromDate
+                                      ? new Date(p.fromDate).toLocaleDateString()
+                                      : "—"}
+                                    {" – "}
+                                    {p.toDate
+                                      ? new Date(p.toDate).toLocaleDateString()
+                                      : "—"}
+                                  </div>
+                                )}
+                              </div>
+                            ),
+                          )
+                        ) : (
+                          <div className="text-muted small">
+                            No cancellation policy specified.
+                          </div>
+                        )}
+                      </div>
 
-            {/* Guest Details Section */}
-            <Form onSubmit={handleSubmit}>
-              {/* {Object.keys(validationErrors).length > 0 && (
-                <Alert variant="danger" className="mb-3 d-flex align-items-center">
-                  <strong className="me-2">✕</strong>
-                  <div>
-                    <Alert.Heading className="mb-0">
-                      Please fix the validation errors
-                    </Alert.Heading>
-                  </div>
-                </Alert>
-              )} */}
-              <Card className="mb-2 shadow-sm border-0">
-                <Card.Header className="bg-light text-center py-3">
-                  <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
-                </Card.Header>
-                <Card.Body className="p-0">
-                  <Accordion defaultActiveKey="0">
-                    {rooms.map((room, roomIndex) => (
-                      <Accordion.Item
-                        key={roomIndex}
-                        eventKey={roomIndex.toString()}
-                        className="mb-3"
-                      >
-                        <Accordion.Header className="bg-primary text-white">
-                          <h6 className="mb-0 fw-bold">
-                            Room {roomIndex + 1} - {selectedRate.roomCategory}
-                          </h6>
-                        </Accordion.Header>
-                        <Accordion.Body className="p-4">
-                          {room.guests.map((guest, guestIndex) => (
-                            <div key={guestIndex} className="guest-row mb-3">
-                              <Row className="align-items-center g-2">
-                                <Col md={2}>
-                                  <span className="fw-semibold text-muted">
-                                    {guest.isChild
-                                      ? `Child ${
-                                          guestIndex - room.adults + 1
-                                        } (Age: ${
-                                          room.childAges[
-                                            guestIndex - room.adults
-                                          ]
-                                        })`
-                                      : `Adult ${guestIndex + 1}`}{" "}
-                                    *
-                                  </span>
-                                </Col>
-                                <Col md={2}>
-                                  <Form.Select
-                                    value={guest.salutation}
-                                    onChange={(e) =>
-                                      handleGuestChange(
-                                        roomIndex,
-                                        guestIndex,
-                                        "salutation",
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="form-control-sm"
-                                    isInvalid={
-                                      !!validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_salutation`
-                                      ]
-                                    }
-                                  >
-                                    <option value="">SELECT</option>
-                                    <option value="Mr">Mr</option>
-                                    <option value="Mrs">Mrs</option>
-                                    <option value="Ms">Ms</option>
-                                    <option value="Dr">Master</option>
-                                  </Form.Select>
-                                  {validationErrors[
-                                    `room_${roomIndex}_guest_${guestIndex}_salutation`
-                                  ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrors[
-                                          `room_${roomIndex}_guest_${guestIndex}_salutation`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
-                                </Col>
-                                <Col md={3}>
-                                  <Form.Control
-                                    type="text"
-                                    placeholder="First Name *"
-                                    value={guest.firstName}
-                                    onChange={(e) =>
-                                      handleGuestChange(
-                                        roomIndex,
-                                        guestIndex,
-                                        "firstName",
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="form-control-sm"
-                                    isInvalid={
-                                      !!validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_firstName`
-                                      ]
-                                    }
-                                  />
-                                  {validationErrors[
-                                    `room_${roomIndex}_guest_${guestIndex}_firstName`
-                                  ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrors[
-                                          `room_${roomIndex}_guest_${guestIndex}_firstName`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
-                                </Col>
-                                <Col md={3}>
-                                  <Form.Control
-                                    type="text"
-                                    placeholder="Last Name *"
-                                    value={guest.lastName}
-                                    onChange={(e) =>
-                                      handleGuestChange(
-                                        roomIndex,
-                                        guestIndex,
-                                        "lastName",
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="form-control-sm"
-                                    isInvalid={
-                                      !!validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_lastName`
-                                      ]
-                                    }
-                                  />
-                                  {validationErrors[
-                                    `room_${roomIndex}_guest_${guestIndex}_lastName`
-                                  ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrors[
-                                          `room_${roomIndex}_guest_${guestIndex}_lastName`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
-                                </Col>
-                                <Col md={2}>
-                                  <Form.Select
-                                    value={guest.gender}
-                                    onChange={(e) =>
-                                      handleGuestChange(
-                                        roomIndex,
-                                        guestIndex,
-                                        "gender",
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="form-control-sm"
-                                    isInvalid={
-                                      !!validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_gender`
-                                      ]
-                                    }
-                                  >
-                                    <option value="">Gender</option>
-                                    <option value="Male">Male</option>
-                                    <option value="Female">Female</option>
-                                    <option value="Other">Other</option>
-                                  </Form.Select>
-                                  {validationErrors[
-                                    `room_${roomIndex}_guest_${guestIndex}_gender`
-                                  ] && (
-                                    <Form.Control.Feedback type="invalid">
-                                      {
-                                        validationErrors[
-                                          `room_${roomIndex}_guest_${guestIndex}_gender`
-                                        ]
-                                      }
-                                    </Form.Control.Feedback>
-                                  )}
-                                </Col>
-                              </Row>
-                              {guestIndex < room.guests.length - 1 && (
-                                <hr className="my-3" />
+                      {/* Amendment Policy */}
+                      <div className="policy-block mb-3 p-3 rounded bg-white shadow-sm">
+                        <h6 className="text-warning mb-2 fw-bold">
+                          Amendment Policy
+                        </h6>
+                        {policyData?.policies?.amendmentPolicy?.length ? (
+                          policyData.policies.amendmentPolicy.map((p, idx) => (
+                            <div key={idx} className="mb-2">
+                              <div className="small text-dark">
+                                {p.policyText || "—"}
+                              </div>
+                              {(p.fromDate || p.toDate) && (
+                                <div className="text-muted small">
+                                  Valid:{" "}
+                                  {p.fromDate
+                                    ? new Date(p.fromDate).toLocaleDateString()
+                                    : "—"}
+                                  {" – "}
+                                  {p.toDate
+                                    ? new Date(p.toDate).toLocaleDateString()
+                                    : "—"}
+                                </div>
                               )}
                             </div>
-                          ))}
-                        </Accordion.Body>
-                      </Accordion.Item>
-                    ))}
-                  </Accordion>
-                </Card.Body>
-              </Card>
-
-              {/* Primary Guest */}
-              <Card className="p-4 mb-4 shadow-sm border-0">
-                <h5 className="mb-3 fw-bold">Primary Guest Details</h5>
-                <Row className="g-3">
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Salutation
-                      </Form.Label>
-                      <Form.Select
-                        value={primaryGuest.salutation}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("salutation", e.target.value)
-                        }
-                        isInvalid={!!validationErrors.salutation}
-                      >
-                        <option value="">Select</option>
-                        <option value="Mr">Mr</option>
-                        <option value="Mrs">Mrs</option>
-                        <option value="Ms">Ms</option>
-                        <option value="Dr">Dr</option>
-                      </Form.Select>
-                      {validationErrors.salutation && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.salutation}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>First Name
-                      </Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={primaryGuest.firstName}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("firstName", e.target.value)
-                        }
-                        isInvalid={!!validationErrors.firstName}
-                        required
-                      />
-                      {validationErrors.firstName && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.firstName}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Middle Name</Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={primaryGuest.middleName}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("middleName", e.target.value)
-                        }
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Last Name
-                      </Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={primaryGuest.lastName}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("lastName", e.target.value)
-                        }
-                        isInvalid={!!validationErrors.lastName}
-                        required
-                      />
-                      {validationErrors.lastName && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.lastName}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Email
-                      </Form.Label>
-                      <Form.Control
-                        type="email"
-                        value={primaryGuest.email}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("email", e.target.value)
-                        }
-                        isInvalid={!!validationErrors.email}
-                        required
-                      />
-                      {validationErrors.email && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.email}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Phone
-                      </Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={primaryGuest.phone}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("phone", e.target.value)
-                        }
-                        isInvalid={!!validationErrors.phone}
-                        required
-                      />
-                      {validationErrors.phone && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.phone}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Passport No</Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={primaryGuest.passportNo}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("passportNo", e.target.value)
-                        }
-                        required
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Agent LPO
-                      </Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={primaryGuest.agentLpo}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("agentLpo", e.target.value)
-                        }
-                        isInvalid={!!validationErrors.agentLpo}
-                        required
-                      />
-                      {validationErrors.agentLpo && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.agentLpo}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                </Row>
-              </Card>
-
-              {/* Remarks & Requests */}
-              <Card className="p-4 mb-2 shadow-sm border-0">
-                <h5 className="mb-3 fw-bold">Remarks & Special Requests</h5>
-                <Row className="g-3">
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Tourism Dirhams (AED)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        value={tourismDirhams}
-                        onChange={(e) => setTourismDirhams(e.target.value)}
-                        placeholder="0"
-                        min="0"
-                        step="0.01"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Remarks</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={3}
-                        placeholder="Any remarks..."
-                        value={remarks}
-                        onChange={(e) => setRemarks(e.target.value)}
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={12}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Special Request</Form.Label>
-                      <div className="special-request-grid">
-                        {SPECIAL_REQUEST_OPTIONS.map((request) => (
-                          <Form.Check
-                            key={request}
-                            type="checkbox"
-                            id={`special-request-${request.replace(/[^a-zA-Z0-9]/g, "-")}`}
-                            label={request}
-                            checked={specialRequests.includes(request)}
-                            onChange={() => handleSpecialRequestToggle(request)}
-                            className="mb-2 special-request-check"
-                          />
-                        ))}
+                          ))
+                        ) : (
+                          <div className="text-muted small">
+                            No amendment policy specified.
+                          </div>
+                        )}
                       </div>
-                    </Form.Group>
-                  </Col>
-                  {selectedRate?.roomStatus !== "On Request" && (
-                    <Col md={12}>
-                      <Form.Group className="mb-3">
-                        <Form.Label className="mb-2 fw-semibold">
-                          Are you sure to continue booking?
-                        </Form.Label>
-                        <div className="mt-2">
-                          <Form.Check
-                            type="radio"
-                            id="book-voucher"
-                            name="bookingConfirmation"
-                            label="Book & Voucher"
-                            value="Book & Voucher"
-                            checked={bookingConfirmation === "Book & Voucher"}
-                            onChange={(e) =>
-                              setBookingConfirmation(e.target.value)
-                            }
-                            className="mb-2"
+
+                      {/* Child Policy */}
+                      <div className="policy-block mb-3 p-3 rounded bg-white shadow-sm">
+                        <h6 className="text-primary mb-2 fw-bold">
+                          Child Policy
+                        </h6>
+                        {policyData?.policies?.childPolicy?.length &&
+                        policyData.policies.childPolicy.some(
+                          (p) => p.policyText,
+                        ) ? (
+                          policyData.policies.childPolicy.map((p, idx) => (
+                            <div key={idx} className="mb-2 small text-dark">
+                              {p.policyText || "—"}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-muted small">
+                            No child policy specified.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Terms & Conditions */}
+                      <div className="policy-block p-3 rounded bg-white shadow-sm">
+                        <h6 className="text-dark mb-2 fw-bold">
+                          Terms &amp; Conditions
+                        </h6>
+                        {termsAndConditions ? (
+                          <div
+                            className="small text-dark terms-content"
+                            style={{ whiteSpace: "pre-wrap", maxHeight: 220, overflowY: "auto" }}
+                            dangerouslySetInnerHTML={{
+                              __html: termsAndConditions,
+                            }}
                           />
-                          <Form.Check
-                            type="radio"
-                            id="book-now-voucher-later"
-                            name="bookingConfirmation"
-                            label="Book Now & Voucher later"
-                            value="Book Now & Voucher later"
-                            checked={
-                              bookingConfirmation === "Book Now & Voucher later"
-                            }
-                            onChange={(e) =>
-                              setBookingConfirmation(e.target.value)
-                            }
-                          />
-                        </div>
-                      </Form.Group>
-                    </Col>
+                        ) : (
+                          <div className="text-muted small">
+                            No terms &amp; conditions configured for this hotel.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-3 p-3 bg-white rounded shadow-sm">
+                        <Form.Check
+                          type="checkbox"
+                          id="policy-accept"
+                          label="Yes, I have read and accept the policies and terms &amp; conditions"
+                          checked={policyAccepted}
+                          onChange={(e) =>
+                            setPolicyAccepted(e.target.checked)
+                          }
+                        />
+                      </div>
+                    </>
                   )}
-                </Row>
-              </Card>
-
-              {/* Booking Done By Section */}
-              <Card className="p-4 mb-4 shadow-sm border-0 bg-light">
-                <h6 className="mb-3 fw-bold text-primary d-flex align-items-center">
-                  <FaUserTie className="me-2" /> Booking Done By
-                </h6>
-                <Row>
-                  <Col md={4}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold">Employee</Form.Label>
-                      <Form.Select
-                        value={primaryGuest.employeeId}
-                        onChange={(e) =>
-                          handlePrimaryGuestChange("employeeId", e.target.value)
-                        }
-                        className="form-control"
-                      >
-                        <option value="">Select Employee</option>
-                        {employees.map((employee) => (
-                          <option
-                            key={employee.employeeId}
-                            value={employee.employeeId}
-                          >
-                            {employee.firstName} {employee.lastName}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
-                  </Col>
-                </Row>
-              </Card>
-
-              <div className="d-flex justify-content-end gap-2 mt-4">
-                <div className="d-flex align-items-center me-2 fw-bold text-danger">
-                  New Total: {formatPrice(sellingPriceWithTd)}
-                </div>
-                <Button variant="secondary" onClick={() => navigate(-1)}>
-                  Back
-                </Button>
-                <Button variant="primary" type="submit" onClick={handleSubmit}>
-                  Confirm Booking
-                </Button>
-              </div>
+                </Modal.Body>
+                <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowPolicyModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={!policyAccepted || policiesLoading}
+                    onClick={() => {
+                      setShowPolicyModal(false);
+                      // Move to order-summary step
+                      handleSubmit();
+                    }}
+                  >
+                    Proceed
+                  </Button>
+                </Modal.Footer>
+              </Modal>
 
               {/* ✅ Confirmation Modal */}
               <Modal
@@ -1281,8 +1613,8 @@ const HotelBookingPage = () => {
                           <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
                             <h6 className="mb-0 fw-bold">Total Price</h6>
                             <h4 className="mb-0">
-                              {formatPrice(totalPriceWithTd)}{" "}
-                              for {pendingPayload.rooms.length}{" "}
+                              {formatPrice(totalPriceWithTd)} for{" "}
+                              {pendingPayload.rooms.length}{" "}
                               {pendingPayload.rooms.length > 1
                                 ? "rooms"
                                 : "room"}
@@ -1295,7 +1627,11 @@ const HotelBookingPage = () => {
                         <h6 className="fw-bold mb-2">Rate Split</h6>
                         <div className="d-flex justify-content-between">
                           <span>Selling Price</span>
-                          <span>{formatPrice(selectedRate.roomRateBasedOnRoomCount || 0)}</span>
+                          <span>
+                            {formatPrice(
+                              selectedRate.roomRateBasedOnRoomCount || 0,
+                            )}
+                          </span>
                         </div>
                         <div className="d-flex justify-content-between">
                           <span>Tourism Dirhams</span>

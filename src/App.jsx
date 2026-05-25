@@ -621,7 +621,7 @@ export default function App() {
           transform: "translate(-50%, -50%)",
         }}
         toastOptions={{
-          duration: 3000,
+          duration: 1000,
           style: {
             background: "#363636",
             color: "#fff",

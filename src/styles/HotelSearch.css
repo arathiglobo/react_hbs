@@ -686,23 +686,23 @@
   width: 100%;
 }
 
-/* 2-column grid; single column when only 1 card */
+/* 3-column compact grid; collapses on smaller screens */
 .rgs-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
 }
 
 /* Each room card */
 .rgs-room-card {
-  border: 1.5px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 10px;
   background: #fff;
   transition: box-shadow 0.2s, border-color 0.2s;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .rgs-room-card:hover {
@@ -718,22 +718,22 @@
 }
 
 .rgs-room-label {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: #374151;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .rgs-remove-btn {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: 1px solid #fca5a5;
   background: none;
   color: #ef4444;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -751,7 +751,7 @@
 .rgs-counters-col {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .rgs-counter-row {
@@ -766,14 +766,14 @@
 }
 
 .rgs-counter-title {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: #1f2937;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 
 .rgs-counter-sub {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   color: #9ca3af;
 }
 
@@ -781,17 +781,17 @@
 .rgs-counter {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .rgs-counter-btn {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 1.5px solid #667eea;
+  border: 1px solid #667eea;
   background: #fff;
   color: #667eea;
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -813,10 +813,10 @@
 }
 
 .rgs-counter-val {
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: #111827;
-  min-width: 18px;
+  min-width: 14px;
   text-align: center;
 }
 
@@ -872,19 +872,19 @@
 /* Add room tile — same size as a room card */
 .rgs-add-room-btn {
   border: 2px dashed #c7d2fe;
-  border-radius: 14px;
+  border-radius: 10px;
   background: #f5f7ff;
   color: #667eea;
-  font-size: 0.9rem;
+  font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 80px;
+  gap: 4px;
+  min-height: 60px;
 }
 
 .rgs-add-room-btn:hover {
@@ -893,9 +893,15 @@
 }
 
 .rgs-add-icon {
-  font-size: 1.4rem;
+  font-size: 1.05rem;
   line-height: 1;
   font-weight: 300;
+}
+
+@media (max-width: 992px) {
+  .rgs-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 768px) {
@@ -905,12 +911,12 @@
   }
 
   .rgs-room-card {
-    padding: 12px;
+    padding: 10px;
   }
 
   .rgs-counter-row {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
     gap: 6px;
   }
 
