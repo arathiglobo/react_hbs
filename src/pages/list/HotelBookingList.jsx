@@ -909,7 +909,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                   </InputGroup.Text>
                   <Form.Control
                     type="text"
-                    placeholder="Search by Booking Code..."
+                    placeholder="Search here..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     style={{
@@ -939,7 +939,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                         onChange={(e) => handleMonthChange(e.target.value)}
                         className="form-control"
                         size="sm"
-                        style={{ fontSize: "0.82rem", height: "38px" }}
+                        style={{ fontSize: "0.82rem", height: "45px" }}
                       >
                         <option value="">Month</option>
                         {months.map((month, index) => (
@@ -955,7 +955,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                         onChange={(e) => handleYearChange(e.target.value)}
                         className="form-control"
                         size="sm"
-                        style={{ fontSize: "0.82rem", height: "38px" }}
+                        style={{ fontSize: "0.82rem", height: "45px" }}
                       >
                         <option value="">Year</option>
                         {years.map((year) => (

@@ -1344,42 +1344,38 @@ const HotelBookingPage = () => {
                 backdrop="static"
                 size="lg"
                 scrollable
+                dialogClassName="policy-modal"
               >
-                <Modal.Header
-                  closeButton
-                  className="bg-primary text-white py-2"
-                  style={{ borderBottom: "none" }}
-                >
-                  <Modal.Title className="fw-semibold d-flex align-items-center">
-                    <FaHotel className="me-2" />
+                <Modal.Header closeButton className="policy-modal-header">
+                  <Modal.Title className="policy-modal-title">
                     Hotel Policies &amp; Terms
                   </Modal.Title>
                 </Modal.Header>
-                <Modal.Body className="bg-light">
+                <Modal.Body className="policy-modal-body">
                   {policiesLoading ? (
-                    <div className="text-center py-5">
-                      <div className="spinner-border text-primary" />
-                      <div className="mt-3 text-muted">
-                        Fetching hotel policies &amp; terms...
+                    <div className="text-center py-4">
+                      <div className="spinner-border spinner-border-sm text-secondary" />
+                      <div className="mt-2 text-muted small">
+                        Loading policies &amp; terms…
                       </div>
                     </div>
                   ) : (
                     <>
                       {/* Cancellation Policy */}
-                      <div className="policy-block mb-3 p-3 rounded bg-white shadow-sm">
-                        <h6 className="text-danger mb-2 fw-bold">
+                      <section className="policy-section">
+                        <h6 className="policy-section-title">
                           Cancellation Policy
                         </h6>
                         {policyData?.policies?.cancellationPolicy?.length ? (
                           policyData.policies.cancellationPolicy.map(
                             (p, idx) => (
-                              <div key={idx} className="mb-2">
-                                <div className="small text-dark">
+                              <div key={idx} className="policy-item">
+                                <div className="policy-text">
                                   {p.policyText || "—"}
                                 </div>
                                 {(p.fromDate || p.toDate) && (
-                                  <div className="text-muted small">
-                                    Valid:{" "}
+                                  <div className="policy-meta">
+                                    Valid{" "}
                                     {p.fromDate
                                       ? new Date(p.fromDate).toLocaleDateString()
                                       : "—"}
@@ -1393,26 +1389,26 @@ const HotelBookingPage = () => {
                             ),
                           )
                         ) : (
-                          <div className="text-muted small">
+                          <div className="policy-empty">
                             No cancellation policy specified.
                           </div>
                         )}
-                      </div>
+                      </section>
 
                       {/* Amendment Policy */}
-                      <div className="policy-block mb-3 p-3 rounded bg-white shadow-sm">
-                        <h6 className="text-warning mb-2 fw-bold">
+                      <section className="policy-section">
+                        <h6 className="policy-section-title">
                           Amendment Policy
                         </h6>
                         {policyData?.policies?.amendmentPolicy?.length ? (
                           policyData.policies.amendmentPolicy.map((p, idx) => (
-                            <div key={idx} className="mb-2">
-                              <div className="small text-dark">
+                            <div key={idx} className="policy-item">
+                              <div className="policy-text">
                                 {p.policyText || "—"}
                               </div>
                               {(p.fromDate || p.toDate) && (
-                                <div className="text-muted small">
-                                  Valid:{" "}
+                                <div className="policy-meta">
+                                  Valid{" "}
                                   {p.fromDate
                                     ? new Date(p.fromDate).toLocaleDateString()
                                     : "—"}
@@ -1425,80 +1421,76 @@ const HotelBookingPage = () => {
                             </div>
                           ))
                         ) : (
-                          <div className="text-muted small">
+                          <div className="policy-empty">
                             No amendment policy specified.
                           </div>
                         )}
-                      </div>
+                      </section>
 
                       {/* Child Policy */}
-                      <div className="policy-block mb-3 p-3 rounded bg-white shadow-sm">
-                        <h6 className="text-primary mb-2 fw-bold">
-                          Child Policy
-                        </h6>
+                      <section className="policy-section">
+                        <h6 className="policy-section-title">Child Policy</h6>
                         {policyData?.policies?.childPolicy?.length &&
                         policyData.policies.childPolicy.some(
                           (p) => p.policyText,
                         ) ? (
                           policyData.policies.childPolicy.map((p, idx) => (
-                            <div key={idx} className="mb-2 small text-dark">
-                              {p.policyText || "—"}
+                            <div key={idx} className="policy-item">
+                              <div className="policy-text">
+                                {p.policyText || "—"}
+                              </div>
                             </div>
                           ))
                         ) : (
-                          <div className="text-muted small">
+                          <div className="policy-empty">
                             No child policy specified.
                           </div>
                         )}
-                      </div>
+                      </section>
 
                       {/* Terms & Conditions */}
-                      <div className="policy-block p-3 rounded bg-white shadow-sm">
-                        <h6 className="text-dark mb-2 fw-bold">
+                      <section className="policy-section policy-section-last">
+                        <h6 className="policy-section-title">
                           Terms &amp; Conditions
                         </h6>
                         {termsAndConditions ? (
                           <div
-                            className="small text-dark terms-content"
-                            style={{ whiteSpace: "pre-wrap", maxHeight: 220, overflowY: "auto" }}
+                            className="terms-content"
                             dangerouslySetInnerHTML={{
                               __html: termsAndConditions,
                             }}
                           />
                         ) : (
-                          <div className="text-muted small">
+                          <div className="policy-empty">
                             No terms &amp; conditions configured for this hotel.
                           </div>
                         )}
-                      </div>
-
-                      <div className="mt-3 p-3 bg-white rounded shadow-sm">
-                        <Form.Check
-                          type="checkbox"
-                          id="policy-accept"
-                          label="Yes, I have read and accept the policies and terms &amp; conditions"
-                          checked={policyAccepted}
-                          onChange={(e) =>
-                            setPolicyAccepted(e.target.checked)
-                          }
-                        />
-                      </div>
+                      </section>
                     </>
                   )}
                 </Modal.Body>
-                <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
+                <Modal.Footer className="policy-modal-footer">
+                  <Form.Check
+                    type="checkbox"
+                    id="policy-accept"
+                    className="me-auto policy-accept-check"
+                    label="I have read and accept the policies and terms & conditions"
+                    checked={policyAccepted}
+                    onChange={(e) => setPolicyAccepted(e.target.checked)}
+                  />
                   <Button
                     variant="outline-secondary"
+                    size="sm"
                     onClick={() => setShowPolicyModal(false)}
                   >
                     Cancel
                   </Button>
                   <Button
                     variant="primary"
+                    size="sm"
                     disabled={!policyAccepted || policiesLoading}
                     onClick={() => {
                       setShowPolicyModal(false);
-                      // Move to order-summary step
                       handleSubmit();
                     }}
                   >
