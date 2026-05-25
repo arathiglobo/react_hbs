@@ -212,6 +212,12 @@ const AgentReg = () => {
     gmName: "",
     gmContactNo: "",
     gmEmail: "",
+    preferredClaimMethod: "",
+    bankAccountHolderName: "",
+    bankName: "",
+    bankAccountNumber: "",
+    bankIfscCode: "",
+    bankBranchName: "",
   });
 
   const mapAgentToForm = (data) => ({
@@ -242,6 +248,12 @@ const AgentReg = () => {
     gmName: data?.gmName || "",
     gmContactNo: data?.gmContactNo || "",
     gmEmail: data?.gmEmail || "",
+    preferredClaimMethod: data?.preferredClaimMethod || "",
+    bankAccountHolderName: data?.bankAccountHolderName || "",
+    bankName: data?.bankName || "",
+    bankAccountNumber: data?.bankAccountNumber || "",
+    bankIfscCode: data?.bankIfscCode || "",
+    bankBranchName: data?.bankBranchName || "",
     agentGSTDetailsDTO: {
       agentClassification:
         data?.agentClassification ||
@@ -390,6 +402,12 @@ const AgentReg = () => {
       gmName: "",
       gmContactNo: "",
       gmEmail: "",
+      preferredClaimMethod: "",
+      bankAccountHolderName: "",
+      bankName: "",
+      bankAccountNumber: "",
+      bankIfscCode: "",
+      bankBranchName: "",
     });
     setProvinces([]);
     setPlaces([]);
@@ -655,6 +673,12 @@ const AgentReg = () => {
       gmName: "",
       gmContactNo: "",
       gmEmail: "",
+      preferredClaimMethod: "",
+      bankAccountHolderName: "",
+      bankName: "",
+      bankAccountNumber: "",
+      bankIfscCode: "",
+      bankBranchName: "",
     });
     setProvinces([]);
     setPlaces([]);
@@ -803,6 +827,20 @@ const AgentReg = () => {
     const mobileValue = getStringValue(data.mobileNumber);
     if (mobileValue && !/^\+?\d{10,15}$/.test(mobileValue.replace(/\s/g, "")))
       newErrors.mobileNumber = "Mobile Number must be 10-15 digits";
+
+    // Incentive claim method + bank details validation
+    if (data.preferredClaimMethod === "BANK_TRANSFER") {
+      if (!getStringValue(data.bankAccountHolderName))
+        newErrors.bankAccountHolderName = "Account Holder Name is required";
+      if (!getStringValue(data.bankName))
+        newErrors.bankName = "Bank Name is required";
+      if (!getStringValue(data.bankAccountNumber))
+        newErrors.bankAccountNumber = "Account Number is required";
+      if (!getStringValue(data.bankIfscCode))
+        newErrors.bankIfscCode = "IFSC Code is required";
+      if (!getStringValue(data.bankBranchName))
+        newErrors.bankBranchName = "Branch Name is required";
+    }
 
     // GST fields validation (only if country is India)
     if (String(data?.countryId) === "1") {
@@ -2866,6 +2904,259 @@ const AgentReg = () => {
                             </Form.Group>
                           </Col>
                         </Row>
+                      </Card.Body>
+                    </Card>
+
+                    {/* Incentive Claim Preferences */}
+                    <Card className="mb-3">
+                      <Card.Header>Incentive Claim Preferences</Card.Header>
+                      <Card.Body>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Preferred Incentive Claim Method</Form.Label>
+                              <Form.Select
+                                value={formData.preferredClaimMethod || ""}
+                                onChange={
+                                  isViewMode
+                                    ? undefined
+                                    : (e) => {
+                                        const v = e.target.value;
+                                        setFormData({
+                                          ...formData,
+                                          preferredClaimMethod: v,
+                                          // Clear bank fields when switching away from BANK_TRANSFER
+                                          ...(v !== "BANK_TRANSFER"
+                                            ? {}
+                                            : {}),
+                                        });
+                                      }
+                                }
+                                className={`form-input ${isViewMode ? "bg-light" : ""}`}
+                                disabled={isViewMode}
+                              >
+                                <option value="">Select method</option>
+                                <option value="CREDIT_LIMIT">
+                                  Add to Credit Limit
+                                </option>
+                                <option value="BANK_TRANSFER">
+                                  Transfer to Bank Account
+                                </option>
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+
+                        {formData.preferredClaimMethod === "BANK_TRANSFER" && (
+                          <div
+                            style={{
+                              border: "2px solid #28a745",
+                              padding: "15px",
+                              margin: "10px 0",
+                              borderRadius: "5px",
+                            }}
+                          >
+                            <h6 className="mb-3 text-success">Bank Details</h6>
+                            <Row>
+                              <Col md={6}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>
+                                    Account Holder Name{" "}
+                                    <span className="text-danger">*</span>
+                                  </Form.Label>
+                                  <Form.Control
+                                    value={formData.bankAccountHolderName || ""}
+                                    placeholder="Enter account holder name"
+                                    isInvalid={!!validationErrors.bankAccountHolderName}
+                                    {...getFormControlProps(
+                                      "bankAccountHolderName",
+                                      (e) => {
+                                        setFormData({
+                                          ...formData,
+                                          bankAccountHolderName: e.target.value,
+                                        });
+                                        if (validationErrors.bankAccountHolderName) {
+                                          setValidationErrors((prev) => ({
+                                            ...prev,
+                                            bankAccountHolderName: "",
+                                          }));
+                                        }
+                                      },
+                                      {
+                                        className: `form-input ${
+                                          validationErrors.bankAccountHolderName
+                                            ? "is-invalid"
+                                            : ""
+                                        }`,
+                                      }
+                                    )}
+                                  />
+                                  {validationErrors.bankAccountHolderName && (
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.bankAccountHolderName}
+                                    </Form.Control.Feedback>
+                                  )}
+                                </Form.Group>
+                              </Col>
+                              <Col md={6}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>
+                                    Bank Name{" "}
+                                    <span className="text-danger">*</span>
+                                  </Form.Label>
+                                  <Form.Control
+                                    value={formData.bankName || ""}
+                                    placeholder="Enter bank name"
+                                    isInvalid={!!validationErrors.bankName}
+                                    {...getFormControlProps(
+                                      "bankName",
+                                      (e) => {
+                                        setFormData({
+                                          ...formData,
+                                          bankName: e.target.value,
+                                        });
+                                        if (validationErrors.bankName) {
+                                          setValidationErrors((prev) => ({
+                                            ...prev,
+                                            bankName: "",
+                                          }));
+                                        }
+                                      },
+                                      {
+                                        className: `form-input ${
+                                          validationErrors.bankName ? "is-invalid" : ""
+                                        }`,
+                                      }
+                                    )}
+                                  />
+                                  {validationErrors.bankName && (
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.bankName}
+                                    </Form.Control.Feedback>
+                                  )}
+                                </Form.Group>
+                              </Col>
+                              <Col md={6}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>
+                                    Account Number{" "}
+                                    <span className="text-danger">*</span>
+                                  </Form.Label>
+                                  <Form.Control
+                                    value={formData.bankAccountNumber || ""}
+                                    placeholder="Enter account number"
+                                    isInvalid={!!validationErrors.bankAccountNumber}
+                                    {...getFormControlProps(
+                                      "bankAccountNumber",
+                                      (e) => {
+                                        setFormData({
+                                          ...formData,
+                                          bankAccountNumber: e.target.value,
+                                        });
+                                        if (validationErrors.bankAccountNumber) {
+                                          setValidationErrors((prev) => ({
+                                            ...prev,
+                                            bankAccountNumber: "",
+                                          }));
+                                        }
+                                      },
+                                      {
+                                        className: `form-input ${
+                                          validationErrors.bankAccountNumber
+                                            ? "is-invalid"
+                                            : ""
+                                        }`,
+                                      }
+                                    )}
+                                  />
+                                  {validationErrors.bankAccountNumber && (
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.bankAccountNumber}
+                                    </Form.Control.Feedback>
+                                  )}
+                                </Form.Group>
+                              </Col>
+                              <Col md={6}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>
+                                    IFSC Code <span className="text-danger">*</span>
+                                  </Form.Label>
+                                  <Form.Control
+                                    value={formData.bankIfscCode || ""}
+                                    placeholder="Enter IFSC code"
+                                    isInvalid={!!validationErrors.bankIfscCode}
+                                    {...getFormControlProps(
+                                      "bankIfscCode",
+                                      (e) => {
+                                        setFormData({
+                                          ...formData,
+                                          bankIfscCode: e.target.value.toUpperCase(),
+                                        });
+                                        if (validationErrors.bankIfscCode) {
+                                          setValidationErrors((prev) => ({
+                                            ...prev,
+                                            bankIfscCode: "",
+                                          }));
+                                        }
+                                      },
+                                      {
+                                        className: `form-input ${
+                                          validationErrors.bankIfscCode
+                                            ? "is-invalid"
+                                            : ""
+                                        }`,
+                                      }
+                                    )}
+                                  />
+                                  {validationErrors.bankIfscCode && (
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.bankIfscCode}
+                                    </Form.Control.Feedback>
+                                  )}
+                                </Form.Group>
+                              </Col>
+                              <Col md={12}>
+                                <Form.Group className="mb-3">
+                                  <Form.Label>
+                                    Branch Name <span className="text-danger">*</span>
+                                  </Form.Label>
+                                  <Form.Control
+                                    value={formData.bankBranchName || ""}
+                                    placeholder="Enter branch name"
+                                    isInvalid={!!validationErrors.bankBranchName}
+                                    {...getFormControlProps(
+                                      "bankBranchName",
+                                      (e) => {
+                                        setFormData({
+                                          ...formData,
+                                          bankBranchName: e.target.value,
+                                        });
+                                        if (validationErrors.bankBranchName) {
+                                          setValidationErrors((prev) => ({
+                                            ...prev,
+                                            bankBranchName: "",
+                                          }));
+                                        }
+                                      },
+                                      {
+                                        className: `form-input ${
+                                          validationErrors.bankBranchName
+                                            ? "is-invalid"
+                                            : ""
+                                        }`,
+                                      }
+                                    )}
+                                  />
+                                  {validationErrors.bankBranchName && (
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.bankBranchName}
+                                    </Form.Control.Feedback>
+                                  )}
+                                </Form.Group>
+                              </Col>
+                            </Row>
+                          </div>
+                        )}
                       </Card.Body>
                     </Card>
                   </Col>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Button, Table, ProgressBar, Spinner, Form, Modal } from "react-bootstrap";
+import { Card, Button, Table, ProgressBar, Spinner, Form, Modal, Row, Col } from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import RegionalClock from "../../components/RegionalClock";
@@ -14,6 +14,14 @@ const SERVICE_LABEL = {
   RESTAURANT: "Restaurant",
 };
 
+const emptyBank = {
+  bankAccountHolderName: "",
+  bankName: "",
+  bankAccountNumber: "",
+  bankIfscCode: "",
+  bankBranchName: "",
+};
+
 export default function AgentIncentiveDashboard() {
   const role = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
   const storedId = localStorage.getItem("userId");
@@ -22,10 +30,13 @@ export default function AgentIncentiveDashboard() {
   const [agentId, setAgentId] = useState(defaultAgentId);
   const [summary, setSummary] = useState(null);
   const [rows, setRows] = useState([]);
+  const [agentProfile, setAgentProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [resolvingId, setResolvingId] = useState(false);
   const [claimOpen, setClaimOpen] = useState(false);
   const [claimRemarks, setClaimRemarks] = useState("");
+  const [claimMethod, setClaimMethod] = useState("CREDIT_LIMIT");
+  const [bank, setBank] = useState(emptyBank);
   const [submitting, setSubmitting] = useState(false);
   const [syncingSelf, setSyncingSelf] = useState(false);
 
@@ -48,17 +59,37 @@ export default function AgentIncentiveDashboard() {
     }
   };
 
-  // Resolve agentId from username if it's not yet cached in localStorage.
-  // Login only stores UserName / role / token — userId is populated by some
-  // booking list pages. This component fetches it directly so the dashboard
-  // works even on a fresh login.
+  // Load the agent profile so we can pre-fill the claim modal with
+  // their preferred method + saved bank details.
+  const fetchAgentProfile = async (id) => {
+    if (!id) return;
+    try {
+      const res = await axiosInstance.get(`/api/agent/${id}`);
+      if (res.data) {
+        setAgentProfile(res.data);
+        if (res.data.preferredClaimMethod) {
+          setClaimMethod(res.data.preferredClaimMethod);
+        }
+        setBank({
+          bankAccountHolderName: res.data.bankAccountHolderName || "",
+          bankName: res.data.bankName || "",
+          bankAccountNumber: res.data.bankAccountNumber || "",
+          bankIfscCode: res.data.bankIfscCode || "",
+          bankBranchName: res.data.bankBranchName || "",
+        });
+      }
+    } catch (err) {
+      // non-fatal
+    }
+  };
+
   useEffect(() => {
     const resolveAndLoad = async () => {
       if (defaultAgentId) {
         fetchAll(defaultAgentId);
+        fetchAgentProfile(defaultAgentId);
         return;
       }
-      // Admins see a manual search box — don't auto-resolve.
       if (role === "admin") return;
 
       const userName =
@@ -73,9 +104,10 @@ export default function AgentIncentiveDashboard() {
           localStorage.setItem("userId", id);
           setAgentId(id);
           fetchAll(id);
+          fetchAgentProfile(id);
         }
       } catch (err) {
-        // silent — UI shows the empty state
+        // silent
       } finally {
         setResolvingId(false);
       }
@@ -83,8 +115,6 @@ export default function AgentIncentiveDashboard() {
     resolveAndLoad();
   }, []);
 
-  // Manual "Refresh" reruns the sync (if user has permission) and reloads.
-  // Useful for the common case of "I just made a booking — show me points".
   const refreshFromBookings = async () => {
     if (!agentId) return;
     setSyncingSelf(true);
@@ -92,7 +122,7 @@ export default function AgentIncentiveDashboard() {
       try {
         await axiosInstance.post("/api/incentive/sync");
       } catch (e) {
-        // Sync may be admin-only in some setups — fall through to a plain reload.
+        // sync may be admin-only
       }
       await fetchAll(agentId);
       toast.success("Refreshed");
@@ -107,17 +137,50 @@ export default function AgentIncentiveDashboard() {
     return Math.min(100, Math.max(0, Math.round(p)));
   }, [summary]);
 
+  const calculatedAmount = useMemo(() => {
+    if (!summary) return 0;
+    const pts = Number(summary.totalPointsEarned || 0);
+    const rate = Number(summary.ratePerPoint || 0);
+    return pts * rate;
+  }, [summary]);
+
+  const openClaimModal = () => {
+    if (agentProfile?.preferredClaimMethod) {
+      setClaimMethod(agentProfile.preferredClaimMethod);
+    }
+    setClaimOpen(true);
+  };
+
   const submitClaim = async () => {
     if (!summary || !summary.agentId) return;
     if (!summary.eligibleToClaim) {
       toast.error("Not eligible yet — target not reached");
       return;
     }
+    if (!claimMethod) {
+      toast.error("Please select a claim method");
+      return;
+    }
+    if (claimMethod === "BANK_TRANSFER") {
+      const missing = Object.keys(bank).find((k) => !String(bank[k] || "").trim());
+      if (missing) {
+        toast.error("All bank details are required for bank transfer");
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       await axiosInstance.post("/api/incentive/claim", {
         agentId: summary.agentId,
         agentRemarks: claimRemarks || null,
+        claimMethod,
+        bankAccountHolderName:
+          claimMethod === "BANK_TRANSFER" ? bank.bankAccountHolderName : null,
+        bankName: claimMethod === "BANK_TRANSFER" ? bank.bankName : null,
+        bankAccountNumber:
+          claimMethod === "BANK_TRANSFER" ? bank.bankAccountNumber : null,
+        bankIfscCode: claimMethod === "BANK_TRANSFER" ? bank.bankIfscCode : null,
+        bankBranchName: claimMethod === "BANK_TRANSFER" ? bank.bankBranchName : null,
       });
       toast.success("Claim submitted for review");
       setClaimOpen(false);
@@ -137,8 +200,6 @@ export default function AgentIncentiveDashboard() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          {/* Regional date+time chip — uses the logged-in user's
-              registered country's timezone. */}
           <div className="d-flex justify-content-end mb-3">
             <RegionalClock />
           </div>
@@ -155,7 +216,14 @@ export default function AgentIncentiveDashboard() {
                       value={agentId}
                       onChange={(e) => setAgentId(e.target.value)}
                     />
-                    <Button size="sm" onClick={() => fetchAll(agentId)} disabled={!agentId}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        fetchAll(agentId);
+                        fetchAgentProfile(agentId);
+                      }}
+                      disabled={!agentId}
+                    >
                       Load
                     </Button>
                   </Form>
@@ -219,19 +287,25 @@ export default function AgentIncentiveDashboard() {
                     <div className="col-md-3">
                       <Card className="h-100 border-0 shadow-sm">
                         <Card.Body>
-                          <div className="text-muted small">Target</div>
+                          <div className="text-muted small">Target Points</div>
                           <div className="display-6 fw-semibold">
                             {summary.targetPoints || 0}
+                          </div>
+                          <div className="text-muted small">
+                            Rate: ₹{summary.ratePerPoint ?? 0} / point
                           </div>
                         </Card.Body>
                       </Card>
                     </div>
                     <div className="col-md-3">
-                      <Card className="h-100 border-0 shadow-sm">
+                      <Card className="h-100 border-0 shadow-sm bg-success-subtle">
                         <Card.Body>
-                          <div className="text-muted small">Reward on Claim</div>
-                          <div className="display-6 fw-semibold">
-                            {summary.rewardAmount ?? "-"}
+                          <div className="text-muted small">Claimable Amount</div>
+                          <div className="display-6 fw-semibold text-success">
+                            ₹{summary.rewardAmount ?? 0}
+                          </div>
+                          <div className="text-muted small">
+                            {summary.totalPointsEarned || 0} × ₹{summary.ratePerPoint ?? 0}
                           </div>
                         </Card.Body>
                       </Card>
@@ -252,7 +326,7 @@ export default function AgentIncentiveDashboard() {
                     <Button
                       className="btn-green"
                       disabled={!summary.eligibleToClaim}
-                      onClick={() => setClaimOpen(true)}
+                      onClick={openClaimModal}
                     >
                       {summary.eligibleToClaim ? "Claim Reward" : "Claim — target not reached"}
                     </Button>
@@ -334,16 +408,111 @@ export default function AgentIncentiveDashboard() {
             </Card.Body>
           </Card>
 
-          <Modal show={claimOpen} onHide={() => setClaimOpen(false)} centered>
+          <Modal show={claimOpen} onHide={() => setClaimOpen(false)} centered size="lg">
             <Modal.Header closeButton={!submitting}>
               <Modal.Title>Submit Claim</Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              <p>
-                You are about to claim{" "}
-                <strong>{summary?.totalPointsEarned || 0}</strong> points for a reward of{" "}
-                <strong>{summary?.rewardAmount ?? "-"}</strong>. An admin will review your claim.
-              </p>
+              <div className="alert alert-info">
+                <div>
+                  <strong>{summary?.totalPointsEarned || 0}</strong> points × ₹
+                  <strong>{summary?.ratePerPoint || 0}</strong> per point
+                </div>
+                <div className="display-6 fw-semibold text-success mt-1">
+                  ₹{calculatedAmount.toFixed(2)}
+                </div>
+                <div className="small text-muted">
+                  This amount will be processed after admin approval.
+                </div>
+              </div>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Claim Method</Form.Label>
+                <div className="d-flex gap-3">
+                  <Form.Check
+                    type="radio"
+                    id="method-credit"
+                    name="claimMethod"
+                    label="Add to Credit Limit"
+                    value="CREDIT_LIMIT"
+                    checked={claimMethod === "CREDIT_LIMIT"}
+                    onChange={(e) => setClaimMethod(e.target.value)}
+                  />
+                  <Form.Check
+                    type="radio"
+                    id="method-bank"
+                    name="claimMethod"
+                    label="Transfer to Bank Account"
+                    value="BANK_TRANSFER"
+                    checked={claimMethod === "BANK_TRANSFER"}
+                    onChange={(e) => setClaimMethod(e.target.value)}
+                  />
+                </div>
+              </Form.Group>
+
+              {claimMethod === "BANK_TRANSFER" && (
+                <Card className="mb-3">
+                  <Card.Header className="py-2">
+                    <span className="fw-semibold small">Bank Details</span>
+                  </Card.Header>
+                  <Card.Body>
+                    <Row className="g-2">
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label>Account Holder Name <span className="text-danger">*</span></Form.Label>
+                          <Form.Control
+                            value={bank.bankAccountHolderName}
+                            onChange={(e) =>
+                              setBank({ ...bank, bankAccountHolderName: e.target.value })
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label>Bank Name <span className="text-danger">*</span></Form.Label>
+                          <Form.Control
+                            value={bank.bankName}
+                            onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label>Account Number <span className="text-danger">*</span></Form.Label>
+                          <Form.Control
+                            value={bank.bankAccountNumber}
+                            onChange={(e) =>
+                              setBank({ ...bank, bankAccountNumber: e.target.value })
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label>IFSC Code <span className="text-danger">*</span></Form.Label>
+                          <Form.Control
+                            value={bank.bankIfscCode}
+                            onChange={(e) => setBank({ ...bank, bankIfscCode: e.target.value })}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={12}>
+                        <Form.Group>
+                          <Form.Label>Branch Name <span className="text-danger">*</span></Form.Label>
+                          <Form.Control
+                            value={bank.bankBranchName}
+                            onChange={(e) =>
+                              setBank({ ...bank, bankBranchName: e.target.value })
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              )}
+
               <Form.Group>
                 <Form.Label>Remarks (optional)</Form.Label>
                 <Form.Control
@@ -365,7 +534,7 @@ export default function AgentIncentiveDashboard() {
                     <Spinner animation="border" size="sm" className="me-2" /> Submitting...
                   </>
                 ) : (
-                  "Submit Claim"
+                  "Confirm & Submit"
                 )}
               </Button>
             </Modal.Footer>

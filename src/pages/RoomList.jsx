@@ -355,13 +355,18 @@ const RoomList = () => {
         );
       case "Available":
         return (
+          // <small>
+          //   {" "}
+           
+          //   <span className="bg-success text-white px-3 py-0 rounded">
+          //     Available{" "}
+          //   </span>
+          // </small>
           <small>
-            {" "}
-            This room is{" "}
-            <span className="bg-success text-white px-3 py-0 rounded">
-              Available{" "}
-            </span>
-          </small>
+  <span style={{ color: "#198754", fontWeight: "700" }}>
+    Available
+  </span>
+</small>
         );
       default:
         return (
