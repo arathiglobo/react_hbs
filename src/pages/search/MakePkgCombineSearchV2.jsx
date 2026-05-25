@@ -38,6 +38,8 @@ import TopBar from "../../components/TopBar";
 import {
   SingleAddOnService,
   ADDON_SERVICES_CATALOG,
+  ADDON_SERVICES_STORAGE_KEY,
+  readAddOnServices,
 } from "../../components/AddOnServicesPanel";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -210,6 +212,121 @@ function LazyImage({ src, alt, className }) {
 }
 
 // ─────────────────────────────────────────────
+// Sample / demo cab data (UI testing only)
+// ─────────────────────────────────────────────
+// Used by the "Load Sample Cabs" button on the Transfer step — only
+// kicks in when the operator explicitly clicks it, so real searches are
+// untouched. The shape matches what /api/makeYourOwnPackageV2/getTransfer
+// Inhouse returns after frontend mapping, so the cab-list UI and the
+// existing handleAddTransferToCart payload builder both work without
+// any further changes. cabid values are prefixed `demo-` so they're
+// easy to spot in the Redis cart / DB if a tester accidentally proceeds.
+const SAMPLE_TRANSFER_RESULTS = [
+  {
+    cabid: "demo-sedan-001",
+    cabname: "Toyota Camry (Sedan)",
+    cabdetails: "Comfortable 4-seater sedan — A/C, luggage space for 2 large bags.",
+    cabpic: "https://b2b.choosenfly.com/assets/details/profilepic/hotel/cab-sedan.jpg",
+    noOfCabs: 1,
+    searchCabDetailsDTO: [
+      {
+        types: "PRIVATE",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 180,
+        sicRate: 0,
+        totalRate: 180,
+        totalRateWithoutMrk: 165,
+        travelType: "1",
+        dropDetails: "1",
+        paxDetails: "3",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+      {
+        types: "SIC",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 0,
+        sicRate: 75,
+        totalRate: 75,
+        totalRateWithoutMrk: 65,
+        travelType: "1",
+        dropDetails: "2",
+        paxDetails: "3",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+    ],
+  },
+  {
+    cabid: "demo-suv-002",
+    cabname: "Toyota Land Cruiser (SUV)",
+    cabdetails: "Premium 6-seater SUV — A/C, leather seats, ample luggage.",
+    cabpic: "https://b2b.choosenfly.com/assets/details/profilepic/hotel/cab-suv.jpg",
+    noOfCabs: 1,
+    searchCabDetailsDTO: [
+      {
+        types: "PRIVATE",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 350,
+        sicRate: 0,
+        totalRate: 350,
+        totalRateWithoutMrk: 320,
+        travelType: "1",
+        dropDetails: "1",
+        paxDetails: "5",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+    ],
+  },
+  {
+    cabid: "demo-van-003",
+    cabname: "Toyota Hiace (Van)",
+    cabdetails: "Spacious 12-seater van — A/C, perfect for families / groups.",
+    cabpic: "https://b2b.choosenfly.com/assets/details/profilepic/hotel/cab-van.jpg",
+    noOfCabs: 1,
+    searchCabDetailsDTO: [
+      {
+        types: "PRIVATE",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 450,
+        sicRate: 0,
+        totalRate: 450,
+        totalRateWithoutMrk: 410,
+        travelType: "1",
+        dropDetails: "1",
+        paxDetails: "11",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+      {
+        types: "SIC",
+        location: "Airport",
+        dropOff: "Hotel",
+        privateRate: 0,
+        sicRate: 60,
+        totalRate: 60,
+        totalRateWithoutMrk: 50,
+        travelType: "1",
+        dropDetails: "2",
+        paxDetails: "11",
+        locationId: "1",
+        hourDetails: "0",
+        luggage: "true",
+      },
+    ],
+  },
+];
+
+// ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
 // v2 prefetch — MakeUrOwnPackageV2 kicks off hotel/transfer/activity
@@ -265,26 +382,107 @@ const readV2VisaRequired = () => {
 };
 
 export default function MakePkgCombineSearchV2() {
-  // Services chosen on the prior /addons step. Each `false` removes the
-  // corresponding tab so the operator only sees what the booking covers.
-  const v2Services = readV2Services();
   const v2VisaRequired = readV2VisaRequired();
-  // Wizard steps — add-on services come first (one step per catalogue
-  // entry: Visa → Meet & Greet → Airport Transfer → ...), then the
-  // hotel / transfer / activity search steps (only the ones enabled by
-  // v2Services). The last step's Next button becomes "Proceed to Booking".
-  const wizardSteps = [
-    ...ADDON_SERVICES_CATALOG.map((svc) => ({
-      key: `addon-${svc.key}`,
-      label: svc.label,
-      Icon: FaConciergeBell,
-      type: "addon",
-      serviceKey: svc.key,
-    })),
-    v2Services.hotel    && { key: "accommodation", label: "Hotel",      Icon: FaHotel,     type: "search" },
-    v2Services.transfer && { key: "transfer",       label: "Transfer",   Icon: FaCar,       type: "search" },
-    v2Services.tour     && { key: "tours",          label: "Activities", Icon: FaTicketAlt, type: "search" },
-  ].filter(Boolean);
+
+  // ── Service gates + add-on flags ─────────────────────────────────
+  // Both are component state so the new Step 0 (Select Services) can
+  // flip them on/off and the wizard re-derives its step list. Mirrored
+  // to the same sessionStorage keys the rest of the flow (booking page,
+  // TopBar, AddOnServicesPanel) already reads from — payload / save
+  // behaviour stays identical.
+  const [v2Services, setV2Services] = useState(() => {
+    const s = readV2Services();
+    return { ...s, hotel: true };
+  });
+  const [addonFlags, setAddonFlags] = useState(() => {
+    const all = readAddOnServices();
+    const out = {};
+    ADDON_SERVICES_CATALOG.forEach((svc) => {
+      out[svc.key] = !!all[svc.key]?.enabled;
+    });
+    return out;
+  });
+
+  // Persist gate flags whenever the operator flips one (booking page
+  // reads `makePkgV2Services` on save). Hotel stays mandatory ON.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        "makePkgV2Services",
+        JSON.stringify({ ...v2Services, hotel: true })
+      );
+    } catch {
+      /* private mode / quota — non-fatal */
+    }
+  }, [v2Services]);
+
+  // Flip an optional gate (transfer / tour). Hotel is mandatory and the
+  // toggle is locked in the UI, but guard here too.
+  const toggleServiceGate = useCallback((gateKey, value) => {
+    if (gateKey === "hotel") return;
+    setV2Services((prev) => ({ ...prev, [gateKey]: !!value, hotel: true }));
+  }, []);
+
+  // Flip an add-on service. Mirrors the change into the canonical
+  // `mypkg_addon_services` blob that <SingleAddOnService/>, the booking
+  // page, and the side panels all read — so the per-service detail step
+  // picks up the gate the operator just set without re-prompting.
+  const toggleAddonService = useCallback((addonKey, value) => {
+    setAddonFlags((prev) => ({ ...prev, [addonKey]: !!value }));
+    try {
+      const all = readAddOnServices();
+      const svc = ADDON_SERVICES_CATALOG.find((s) => s.key === addonKey);
+      const blank = svc
+        ? (() => {
+            const f = {};
+            (svc.fields || []).forEach((x) => { f[x.name] = ""; });
+            return f;
+          })()
+        : {};
+      all[addonKey] = { ...blank, ...(all[addonKey] || {}), enabled: !!value };
+      sessionStorage.setItem(ADDON_SERVICES_STORAGE_KEY, JSON.stringify(all));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Wizard steps — Step 0 is the new "Select Services" picker; every
+  // following step is gated by the corresponding flag, so disabled
+  // services never get a detail page and never trigger validation.
+  // Order: selection → addons (catalogue order) → hotel → cab → tours.
+  // Hotel must come before Cab and Activities because the existing
+  // hasHotelInCart gate disables the "Add to cart" buttons on Cab and
+  // Activity rows until a hotel is in the cart — so the operator needs
+  // to land on the Hotel step first.
+  const wizardSteps = useMemo(() => {
+    const steps = [
+      {
+        key: "service-select",
+        label: "Select Services",
+        Icon: FaConciergeBell,
+        type: "select",
+      },
+      ...ADDON_SERVICES_CATALOG
+        .filter((svc) => addonFlags[svc.key])
+        .map((svc) => ({
+          key: `addon-${svc.key}`,
+          label: svc.label,
+          Icon: FaConciergeBell,
+          type: "addon",
+          serviceKey: svc.key,
+        })),
+    ];
+    if (v2Services.hotel) {
+      steps.push({ key: "accommodation", label: "Hotel", Icon: FaHotel, type: "search" });
+    }
+    if (v2Services.transfer) {
+      steps.push({ key: "transfer", label: "Transfer", Icon: FaCar, type: "search" });
+    }
+    if (v2Services.tour) {
+      steps.push({ key: "tours", label: "Activities", Icon: FaTicketAlt, type: "search" });
+    }
+    return steps;
+  }, [v2Services, addonFlags]);
   const location = useLocation();
   // Pull search criteria from location.state first; fall back to the
   // sessionStorage snapshot written by MakeUrOwnPackageV2 / addons page
@@ -327,8 +525,36 @@ const [activeAccordion, setActiveAccordion] = useState({});
       : destination?.label || ""
   );
   const [agentId, setAgentId] = useState(agent || "");
-  // v2: wizard step index — 0 = first enabled service.
+  // v2: wizard step index — 0 = the new "Select Services" picker.
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
+
+  // If the operator went Back and disabled a service whose detail step
+  // was at the current index, clamp so we don't render a missing step.
+  useEffect(() => {
+    if (currentStepIdx >= wizardSteps.length) {
+      setCurrentStepIdx(Math.max(0, wizardSteps.length - 1));
+    }
+  }, [wizardSteps.length, currentStepIdx]);
+
+  // <SingleAddOnService/> can flip an addon's gate from inside its own
+  // step (the Yes/No radio writes to mypkg_addon_services). Re-pull the
+  // canonical gates on every navigation tick so the Step 0 toggles and
+  // the wizardSteps memo stay in sync with what was just clicked.
+  useEffect(() => {
+    const all = readAddOnServices();
+    setAddonFlags((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      ADDON_SERVICES_CATALOG.forEach((svc) => {
+        const enabled = !!all[svc.key]?.enabled;
+        if (next[svc.key] !== enabled) {
+          next[svc.key] = enabled;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [currentStepIdx]);
   const [isProceeding, setIsProceeding] = useState(false);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [rooms, setRooms] = useState([
@@ -1739,6 +1965,122 @@ const [activeAccordion, setActiveAccordion] = useState({});
                   STEP CONTENT
               ═══════════════════════════════════════ */}
 
+              {/* ── SERVICE SELECTION (Step 0) ──
+                  Single picker page — every optional service has a
+                  toggle, hotel is locked ON. Only enabled services
+                  produce follow-up wizard steps; toggling something OFF
+                  here also strips its step (and disabled services don't
+                  trigger validation or contribute to the payload). The
+                  operator can come back to this step at any time to add
+                  more services without losing data already typed into
+                  the detail steps — addon field values are preserved
+                  across Yes→No→Yes toggles. */}
+              {wizardSteps[currentStepIdx]?.type === "select" && (
+                <Card className="border-0 shadow-sm rounded-4">
+                  <Card.Body className="p-4">
+                    <h5 className="fw-bold mb-1">Choose services for this booking</h5>
+                    <div className="text-muted mb-4" style={{ fontSize: "0.95rem" }}>
+                      Pick the services you want to include. You can come
+                      back to this step anytime to enable more — already
+                      entered details will not be lost.
+                    </div>
+                    <Row className="g-3">
+                      {(() => {
+                        const rows = [
+                          {
+                            key: "hotel",
+                            label: "Hotel",
+                            description: "Hotel accommodation for the trip.",
+                            Icon: FaHotel,
+                            checked: true,
+                            mandatory: true,
+                          },
+                          ...ADDON_SERVICES_CATALOG.map((svc) => ({
+                            key: `addon:${svc.key}`,
+                            addonKey: svc.key,
+                            label: svc.label,
+                            description: svc.question || `Add ${svc.label} to this booking.`,
+                            Icon: FaConciergeBell,
+                            checked: !!addonFlags[svc.key],
+                          })),
+                          {
+                            key: "transfer",
+                            label: "Cab / Transfer",
+                            description: "Airport, inter-city or hourly transfers.",
+                            Icon: FaCar,
+                            checked: !!v2Services.transfer,
+                          },
+                          {
+                            key: "tour",
+                            label: "Tours & Activities",
+                            description: "Sightseeing, day trips, attractions.",
+                            Icon: FaTicketAlt,
+                            checked: !!v2Services.tour,
+                          },
+                        ];
+                        return rows.map((row) => {
+                          const RowIcon = row.Icon;
+                          return (
+                            <Col xs={12} md={6} key={row.key}>
+                              <div
+                                className="d-flex align-items-start border rounded-3 p-3 h-100"
+                                style={{
+                                  background: row.checked ? "#f8f7ff" : "#ffffff",
+                                  borderColor: row.checked ? "#c7d2fe" : "#e5e7eb",
+                                  transition: "background 0.15s ease, border-color 0.15s ease",
+                                }}
+                              >
+                                <span
+                                  className="me-3 d-inline-flex align-items-center justify-content-center"
+                                  style={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: "50%",
+                                    background: row.checked ? "#6366f1" : "#e5e7eb",
+                                    color: row.checked ? "#fff" : "#6b7280",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <RowIcon />
+                                </span>
+                                <div className="flex-grow-1 me-2">
+                                  <div className="d-flex align-items-center gap-2">
+                                    <span className="fw-semibold">{row.label}</span>
+                                    {row.mandatory && (
+                                      <Badge bg="warning" text="dark" className="text-uppercase" style={{ fontSize: "0.65rem" }}>
+                                        Mandatory
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="small text-muted mt-1">{row.description}</div>
+                                </div>
+                                <Form.Check
+                                  type="switch"
+                                  id={`svc-select-${row.key}`}
+                                  checked={row.checked}
+                                  disabled={row.mandatory}
+                                  onChange={(e) => {
+                                    if (row.mandatory) return;
+                                    if (row.addonKey) {
+                                      toggleAddonService(row.addonKey, e.target.checked);
+                                    } else if (row.key === "transfer" || row.key === "tour") {
+                                      toggleServiceGate(row.key, e.target.checked);
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </Col>
+                          );
+                        });
+                      })()}
+                    </Row>
+                    <div className="text-muted small mt-3 fst-italic">
+                      Hotel is mandatory and is always included in the package.
+                    </div>
+                  </Card.Body>
+                </Card>
+              )}
+
               {/* ── ADD-ON SERVICE (one per catalogue entry) ──
                   The `key` prop is critical: without it React reuses the
                   same component instance across steps, the internal
@@ -2375,8 +2717,121 @@ const [activeAccordion, setActiveAccordion] = useState({});
               {wizardSteps[currentStepIdx]?.key === "transfer" && (
                   <Card className="border-0 shadow-sm rounded-4">
                     <Card.Body>
-                      {/* Search form removed — transfers are pre-fetched
-                          with the criteria from the previous page. */}
+                      {/* ── Pickup / Dropoff selectors ──
+                          Always visible on the transfer step (even when the
+                          cab list comes back empty) — the operator needs
+                          them to satisfy the wizard's pickup+dropoff
+                          requirement, and they're populated independently
+                          from the cab list (via /cab-search/lookup-by-
+                          destination). Selections persist to sessionStorage
+                          and are stamped onto each cab DTO at booking save.
+                          Pairs with a manual "Search Transfers" button so
+                          the operator can retry the search after picking
+                          locations / when the prefetch returned empty. */}
+                      <Card className="mb-4 shadow-sm" style={{ borderRadius: "12px" }}>
+                        <Card.Body>
+                          <Row className="g-3 align-items-end">
+                            <Col md={5}>
+                              <Form.Label className="fw-semibold">
+                                Pickup <span className="text-danger">*</span>
+                              </Form.Label>
+                              <Select
+                                classNamePrefix="rs"
+                                isClearable
+                                isLoading={cabLookupLoading}
+                                options={cabLookupOptions}
+                                value={transferPickupZone}
+                                placeholder="Select pickup location"
+                                onChange={(opt) => {
+                                  setTransferPickupZone(opt);
+                                  setTransferZoneErrors((e) => ({ ...e, pickup: "" }));
+                                }}
+                                formatOptionLabel={(opt) => (
+                                  <div>
+                                    <div>{opt.label}</div>
+                                    {opt.subtitle && (
+                                      <small className="text-muted">{opt.subtitle}</small>
+                                    )}
+                                  </div>
+                                )}
+                                menuPortalTarget={document.body}
+                                menuPosition="fixed"
+                                styles={{
+                                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                  menu: (base) => ({ ...base, zIndex: 9999 }),
+                                }}
+                                noOptionsMessage={() =>
+                                  cabLookupLoading ? "Loading…" : "No locations found"
+                                }
+                              />
+                              {transferZoneErrors.pickup && (
+                                <div className="text-danger small mt-1">
+                                  {transferZoneErrors.pickup}
+                                </div>
+                              )}
+                            </Col>
+                            <Col md={5}>
+                              <Form.Label className="fw-semibold">
+                                Dropoff <span className="text-danger">*</span>
+                              </Form.Label>
+                              <Select
+                                classNamePrefix="rs"
+                                isClearable
+                                isLoading={cabLookupLoading}
+                                options={cabLookupOptions}
+                                value={transferDropoffZone}
+                                placeholder="Select dropoff location"
+                                onChange={(opt) => {
+                                  setTransferDropoffZone(opt);
+                                  setTransferZoneErrors((e) => ({ ...e, dropoff: "" }));
+                                }}
+                                formatOptionLabel={(opt) => (
+                                  <div>
+                                    <div>{opt.label}</div>
+                                    {opt.subtitle && (
+                                      <small className="text-muted">{opt.subtitle}</small>
+                                    )}
+                                  </div>
+                                )}
+                                menuPortalTarget={document.body}
+                                menuPosition="fixed"
+                                styles={{
+                                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                  menu: (base) => ({ ...base, zIndex: 9999 }),
+                                }}
+                                noOptionsMessage={() =>
+                                  cabLookupLoading ? "Loading…" : "No locations found"
+                                }
+                              />
+                              {transferZoneErrors.dropoff && (
+                                <div className="text-danger small mt-1">
+                                  {transferZoneErrors.dropoff}
+                                </div>
+                              )}
+                            </Col>
+                            <Col md={2} className="d-grid">
+                              <Button
+                                variant="primary"
+                                onClick={handleTransferSearchSubmit}
+                                disabled={transferLoading}
+                                title="Re-run the transfer search with the current criteria"
+                              >
+                                {transferLoading ? (
+                                  <>
+                                    <Spinner animation="border" size="sm" className="me-2" />
+                                    Searching…
+                                  </>
+                                ) : (
+                                  <>
+                                    <FaSearch className="me-2" />
+                                    Search
+                                  </>
+                                )}
+                              </Button>
+                            </Col>
+                          </Row>
+                        </Card.Body>
+                      </Card>
 
                       {transferLoading && (
                         <Card className="shadow-sm rounded-xl mb-4 mt-4">
@@ -2408,96 +2863,6 @@ const [activeAccordion, setActiveAccordion] = useState({});
                           <h6 className="fw-bold mb-3">
                             Transfer Results ({transferResults.length})
                           </h6>
-
-                          {/* ── Pickup / Dropoff selectors ──
-                              Single set applied to every cab added in
-                              this session; persisted to sessionStorage
-                              and stamped onto each cab DTO at booking
-                              save time. */}
-                          <Card className="mb-4 shadow-sm" style={{ borderRadius: "12px" }}>
-                            <Card.Body>
-                              <Row className="g-3">
-                                <Col md={6}>
-                                  <Form.Label className="fw-semibold">
-                                    Pickup <span className="text-danger">*</span>
-                                  </Form.Label>
-                                  <Select
-                                    classNamePrefix="rs"
-                                    isClearable
-                                    isLoading={cabLookupLoading}
-                                    options={cabLookupOptions}
-                                    value={transferPickupZone}
-                                    placeholder="Select pickup location"
-                                    onChange={(opt) => {
-                                      setTransferPickupZone(opt);
-                                      setTransferZoneErrors((e) => ({ ...e, pickup: "" }));
-                                    }}
-                                    formatOptionLabel={(opt) => (
-                                      <div>
-                                        <div>{opt.label}</div>
-                                        {opt.subtitle && (
-                                          <small className="text-muted">{opt.subtitle}</small>
-                                        )}
-                                      </div>
-                                    )}
-                                    menuPortalTarget={document.body}
-                                    menuPosition="fixed"
-                                    styles={{
-                                      menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                                      menu: (base) => ({ ...base, zIndex: 9999 }),
-                                    }}
-                                    noOptionsMessage={() =>
-                                      cabLookupLoading ? "Loading…" : "No locations found"
-                                    }
-                                  />
-                                  {transferZoneErrors.pickup && (
-                                    <div className="text-danger small mt-1">
-                                      {transferZoneErrors.pickup}
-                                    </div>
-                                  )}
-                                </Col>
-                                <Col md={6}>
-                                  <Form.Label className="fw-semibold">
-                                    Dropoff <span className="text-danger">*</span>
-                                  </Form.Label>
-                                  <Select
-                                    classNamePrefix="rs"
-                                    isClearable
-                                    isLoading={cabLookupLoading}
-                                    options={cabLookupOptions}
-                                    value={transferDropoffZone}
-                                    placeholder="Select dropoff location"
-                                    onChange={(opt) => {
-                                      setTransferDropoffZone(opt);
-                                      setTransferZoneErrors((e) => ({ ...e, dropoff: "" }));
-                                    }}
-                                    formatOptionLabel={(opt) => (
-                                      <div>
-                                        <div>{opt.label}</div>
-                                        {opt.subtitle && (
-                                          <small className="text-muted">{opt.subtitle}</small>
-                                        )}
-                                      </div>
-                                    )}
-                                    menuPortalTarget={document.body}
-                                    menuPosition="fixed"
-                                    styles={{
-                                      menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                                      menu: (base) => ({ ...base, zIndex: 9999 }),
-                                    }}
-                                    noOptionsMessage={() =>
-                                      cabLookupLoading ? "Loading…" : "No locations found"
-                                    }
-                                  />
-                                  {transferZoneErrors.dropoff && (
-                                    <div className="text-danger small mt-1">
-                                      {transferZoneErrors.dropoff}
-                                    </div>
-                                  )}
-                                </Col>
-                              </Row>
-                            </Card.Body>
-                          </Card>
 
                           <Row className="g-4">
                             {transferResults.map((cab) => (
@@ -2688,6 +3053,24 @@ const [activeAccordion, setActiveAccordion] = useState({});
                           <p className="small">
                             Please try different dates or contact support.
                           </p>
+                          {/* UI-test helper — populates the cab list with a
+                              handful of demo cars so the operator can step
+                              through the rest of the wizard end-to-end while
+                              the inhouse cab catalogue is being seeded.
+                              Click-only; nothing fires automatically. */}
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => {
+                              setTransferResults(SAMPLE_TRANSFER_RESULTS);
+                              toast.success(
+                                "Loaded sample cabs for UI testing. These are demo entries — replace with a real search before booking a live customer."
+                              );
+                            }}
+                          >
+                            Load Sample Cabs (Demo)
+                          </Button>
                         </div>
                       )}
                     </Card.Body>

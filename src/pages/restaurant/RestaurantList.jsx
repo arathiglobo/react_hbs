@@ -10,6 +10,7 @@ import {
   Alert,
   Pagination,
   Modal,
+  Form,
 } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import {
@@ -25,6 +26,9 @@ import {
   FaPhone,
   FaStar,
   FaRupeeSign,
+  FaEnvelope,
+  FaPaperPlane,
+  FaTimes,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -53,6 +57,44 @@ const RestaurantList = () => {
   const [page, setPage] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [toDelete, setToDelete] = useState(null);
+
+  // ── Multi-select + email-out state ───────────────────────────────
+  // `selectedIds` carries every restaurant the operator has ticked
+  // (across all pages). Survives pagination + filter changes. The
+  // email modal opens via the toolbar's "Send via Email" button once
+  // at least one row is selected; submitting it POSTs to the new
+  // /api/restaurant/email endpoint, which renders one PDF per
+  // restaurant and emails them as attachments.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const isSelected = (id) => selectedIds.has(id);
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+  const selectAllOnPage = (rows) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      rows.forEach((r) => next.add(r.id));
+      return next;
+    });
+  };
+  const deselectAllOnPage = (rows) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      rows.forEach((r) => next.delete(r.id));
+      return next;
+    });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -119,6 +161,64 @@ const RestaurantList = () => {
     }
   };
 
+  // ── Send selected restaurants via email ──────────────────────────
+  // Validates the address client-side, then POSTs to
+  // /api/restaurant/email. The backend always returns HTTP 200 with a
+  // { status, message, count } payload — failures are surfaced via the
+  // `status === "FAILURE"` branch so a misconfigured mailer doesn't
+  // throw a generic axios error.
+  const openEmailModal = () => {
+    if (selectedIds.size === 0) {
+      toast.error("Select at least one restaurant first.");
+      return;
+    }
+    setEmailTo("");
+    setEmailError("");
+    setShowEmailModal(true);
+  };
+  const closeEmailModal = () => {
+    if (sending) return;
+    setShowEmailModal(false);
+    setEmailTo("");
+    setEmailError("");
+  };
+  const handleSendEmail = async () => {
+    const trimmed = (emailTo || "").trim();
+    const rx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmed || !rx.test(trimmed)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    if (selectedIds.size === 0) {
+      setEmailError("Selection is empty. Close this dialog and pick at least one restaurant.");
+      return;
+    }
+    setEmailError("");
+    setSending(true);
+    try {
+      const res = await axiosInstance.post("/api/restaurant/email", {
+        restaurantIds: Array.from(selectedIds),
+        email: trimmed,
+      });
+      const data = res?.data || {};
+      if (data.status === "SUCCESS") {
+        toast.success(data.message || "Email sent.");
+        setShowEmailModal(false);
+        setEmailTo("");
+        clearSelection();
+      } else {
+        toast.error(data.message || "Failed to send email.");
+      }
+    } catch (e) {
+      console.error("restaurant email send failed", e);
+      toast.error(
+        e?.response?.data?.message || "Failed to send email. Please try again."
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div
       className="min-vh-100 bg-gradient-light d-flex flex-column"
@@ -142,7 +242,28 @@ const RestaurantList = () => {
                   Manage your restaurant listings and details
                 </p>
               </div>
-              <div className="d-flex gap-2">
+              <div className="d-flex gap-2 flex-wrap">
+                <Button
+                  variant="primary"
+                  onClick={openEmailModal}
+                  disabled={selectedIds.size === 0}
+                  className="d-flex align-items-center gap-2 px-4 py-2 rounded-pill shadow"
+                  title={
+                    selectedIds.size === 0
+                      ? "Tick at least one restaurant to enable"
+                      : `Email ${selectedIds.size} restaurant${
+                          selectedIds.size === 1 ? "" : "s"
+                        } via PDF`
+                  }
+                >
+                  <FaEnvelope />
+                  Send via Email
+                  {selectedIds.size > 0 && (
+                    <Badge bg="light" text="dark" className="ms-1">
+                      {selectedIds.size}
+                    </Badge>
+                  )}
+                </Button>
                 <Button
                   variant="success"
                   onClick={handleCreate}
@@ -229,14 +350,89 @@ const RestaurantList = () => {
                     )}
                   </div>
                 ) : (
-                  <Row>
+                  <>
+                    {/* Page-level selection toolbar — appears whenever
+                        any row is selected on any page, plus a quick
+                        "select all on this page" action so the operator
+                        doesn't have to tick rows one by one for a bulk
+                        email send. */}
+                    <div className="d-flex flex-wrap align-items-center gap-3 mb-3 px-1">
+                      <div className="text-muted small">
+                        {selectedIds.size > 0 ? (
+                          <>
+                            <strong>{selectedIds.size}</strong> selected
+                          </>
+                        ) : (
+                          <>No restaurants selected</>
+                        )}
+                      </div>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-decoration-none"
+                        onClick={() => selectAllOnPage(pageData)}
+                      >
+                        Select all on this page
+                      </Button>
+                      {selectedIds.size > 0 && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 text-decoration-none text-danger"
+                          onClick={clearSelection}
+                        >
+                          <FaTimes className="me-1" />
+                          Clear selection
+                        </Button>
+                      )}
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-decoration-none"
+                        onClick={() => deselectAllOnPage(pageData)}
+                      >
+                        Deselect this page
+                      </Button>
+                    </div>
+                    <Row>
                     {pageData.map((r) => (
                       <Col key={r.id} lg={4} md={6} className="mb-4">
                         <Card
-                          className="h-100 shadow-sm border-0 rounded-4 hotel-card"
-                          style={{ cursor: "pointer" }}
+                          className={`h-100 shadow-sm border-0 rounded-4 hotel-card${
+                            isSelected(r.id) ? " border border-primary" : ""
+                          }`}
+                          style={{
+                            cursor: "pointer",
+                            boxShadow: isSelected(r.id)
+                              ? "0 0 0 2px #0d6efd, 0 4px 16px rgba(13,110,253,0.15)"
+                              : undefined,
+                          }}
                           onClick={() => handleView(r.id)}
                         >
+                          {/* Selection checkbox — sits over the cover
+                              image; stopPropagation so clicking it
+                              doesn't trigger the card-level navigate. */}
+                          <Form.Check
+                            type="checkbox"
+                            id={`rest-select-${r.id}`}
+                            checked={isSelected(r.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleSelected(r.id);
+                            }}
+                            style={{
+                              position: "absolute",
+                              top: 12,
+                              left: 12,
+                              zIndex: 5,
+                              background: "rgba(255,255,255,0.92)",
+                              borderRadius: 4,
+                              padding: "2px 6px",
+                              boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+                            }}
+                            title="Select this restaurant for email"
+                          />
                           <div className="position-relative">
                             <Card.Img
                               variant="top"
@@ -347,7 +543,8 @@ const RestaurantList = () => {
                         </Card>
                       </Col>
                     ))}
-                  </Row>
+                    </Row>
+                  </>
                 )}
 
                 {!loading && !error && totalPages > 1 && (
@@ -381,6 +578,138 @@ const RestaurantList = () => {
           </Container>
         </main>
       </div>
+
+      {/* ──────────────────────────────────────────────────────────
+          Send-via-Email modal — opens when the operator clicks
+          "Send via Email" with at least one restaurant ticked. POSTs
+          { restaurantIds, email } to /api/restaurant/email; backend
+          renders one PDF per restaurant and emails them as
+          attachments. The summary block lists the picked restaurants
+          so the operator can confirm the selection before send.
+          ────────────────────────────────────────────────────────── */}
+      <Modal
+        show={showEmailModal}
+        onHide={closeEmailModal}
+        centered
+        backdrop="static"
+        keyboard={!sending}
+      >
+        <Modal.Header closeButton={!sending}>
+          <Modal.Title className="d-flex align-items-center">
+            <FaEnvelope className="text-primary me-2" />
+            Send Restaurant Details
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="mb-3 small text-muted">
+            One PDF per restaurant will be generated and attached to the email.
+          </div>
+          <div className="mb-3">
+            <div className="fw-semibold mb-1">
+              Selected ({selectedIds.size})
+            </div>
+            <div
+              style={{
+                maxHeight: 140,
+                overflowY: "auto",
+                background: "#f8f9fa",
+                border: "1px solid #e9ecef",
+                borderRadius: 8,
+                padding: "0.5rem 0.75rem",
+              }}
+            >
+              {selectedIds.size === 0 ? (
+                <div className="text-muted small fst-italic">
+                  No restaurants selected.
+                </div>
+              ) : (
+                items
+                  .filter((r) => selectedIds.has(r.id))
+                  .map((r) => (
+                    <div
+                      key={r.id}
+                      className="d-flex justify-content-between align-items-center small py-1"
+                    >
+                      <span>
+                        <FaUtensils className="me-2 text-primary" />
+                        {r.restaurantName}
+                        {r.place ? (
+                          <span className="text-muted ms-2">· {r.place}</span>
+                        ) : null}
+                      </span>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-danger"
+                        onClick={() => toggleSelected(r.id)}
+                        disabled={sending}
+                        title="Remove from selection"
+                      >
+                        <FaTimes />
+                      </Button>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+          <Form.Group className="mb-2">
+            <Form.Label className="fw-semibold">Recipient email</Form.Label>
+            <Form.Control
+              type="email"
+              placeholder="customer@example.com"
+              value={emailTo}
+              isInvalid={!!emailError}
+              disabled={sending}
+              onChange={(e) => {
+                setEmailTo(e.target.value);
+                if (emailError) setEmailError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !sending) {
+                  e.preventDefault();
+                  handleSendEmail();
+                }
+              }}
+              autoFocus
+            />
+            {emailError && (
+              <Form.Control.Feedback type="invalid">
+                {emailError}
+              </Form.Control.Feedback>
+            )}
+            <Form.Text className="text-muted">
+              The selected restaurants' details will be emailed to this address.
+            </Form.Text>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={closeEmailModal}
+            disabled={sending}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleSendEmail}
+            disabled={sending || selectedIds.size === 0}
+            className="d-flex align-items-center gap-2"
+          >
+            {sending ? (
+              <>
+                <Spinner animation="border" size="sm" />
+                Sending…
+              </>
+            ) : (
+              <>
+                <FaPaperPlane />
+                Send Email
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <Modal show={!!toDelete} onHide={() => !deleting && setToDelete(null)} centered>
         <Modal.Header closeButton={!deleting}>

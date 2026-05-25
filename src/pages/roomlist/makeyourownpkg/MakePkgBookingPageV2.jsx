@@ -547,7 +547,7 @@ const MakePkgBookingPageV2 = () => {
   }, []);
 
   // ── Fetch service-wise policies when the confirmation modal opens ──
-  // Hotel:   GET /api/hotels/{hotelId}/terms-and-conditions-package  (new endpoint)
+  // Hotel:   GET /api/hotels/{hotelId}/terms-and-conditions   (new endpoint)
   //          GET /api/hotels/{hotelId}/policies               (existing)
   // Cab:     GET /api/cabRates/cab/{cabId}/policies           (new endpoint)
   // Activity:GET /api/activityRate/inclutionAndTerms/{id}     (existing — type=2 only)
@@ -624,7 +624,7 @@ const MakePkgBookingPageV2 = () => {
             const slot = { terms: [], cancellations: [] };
             try {
               const tcRes = await axiosInstance.get(
-                `/api/hotels/${hotelId}/terms-and-conditions-package`
+                `/api/hotels/${hotelId}/terms-and-conditions`
               );
               slot.terms = Array.isArray(tcRes.data)
                 ? tcRes.data
