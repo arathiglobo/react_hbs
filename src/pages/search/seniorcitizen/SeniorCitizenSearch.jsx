@@ -1,0 +1,815 @@
+/**
+ * SeniorCitizenSearch.jsx
+ *
+ * Search page for the Senior Citizen booking flow. The shape mirrors
+ * HotelSearch.jsx exactly (destination / nationality / agent / nights /
+ * check-in / check-out / rooms & guests selector), so users see a
+ * familiar UI when switching flows. Validation errors are displayed
+ * inline next to each field.
+ *
+ * Backend endpoints used:
+ *   POST /api/senior-citizen-hotel-search/search
+ *   GET  /api/senior-citizen-hotel-search/results/{searchId}
+ *
+ * The results page surfaces hotels with the per-hotel Senior Citizen
+ * discount already applied. "View Rooms" hands off to
+ * /senior-citizen-room-list with the necessary context.
+ */
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Card, Button, Row, Col, Form, Pagination, Spinner,
+} from "react-bootstrap";
+import Sidebar from "../../../components/Sidebar";
+import TopBar from "../../../components/TopBar";
+import Select from "react-select";
+import axiosInstance from "../../../components/AxiosInstance";
+import { FaSearch, FaStar, FaUserClock } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import "../../../styles/HotelSearch.css";
+
+function Counter({ value, min, max, onChange }) {
+  return (
+    <div className="rgs-counter">
+      <button type="button" className="rgs-counter-btn"
+              onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}>−</button>
+      <span className="rgs-counter-val">{value}</span>
+      <button type="button" className="rgs-counter-btn"
+              onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}>+</button>
+    </div>
+  );
+}
+
+function RoomGuestSelector({ value, onChange }) {
+  const [rooms, setRooms] = useState(value);
+  const update = (next) => { setRooms(next); onChange && onChange(next); };
+  const addRoom = () =>
+    update([...rooms, { adults: 1, children: 0, childAges: [], adultAges: [65] }]);
+  const removeRoom = (index) => update(rooms.filter((_, i) => i !== index));
+  const setAdults = (index, adults) =>
+    update(rooms.map((r, i) =>
+      i === index
+        ? { ...r, adults,
+            // Resize the adultAges array to match the new adult count.
+            // Default new adults to 65 so the senior-citizen markup kicks
+            // in by default — the user can override per-row below.
+            adultAges: Array.from({ length: adults }, (_, j) =>
+              (r.adultAges && r.adultAges[j] != null) ? r.adultAges[j] : 65
+            ) }
+        : r
+    ));
+  const setChildren = (index, children) =>
+    update(rooms.map((r, i) =>
+      i === index
+        ? { ...r, children,
+            childAges: Array.from({ length: children }, (_, j) => r.childAges[j] || 5) }
+        : r
+    ));
+  const setChildAge = (roomIdx, childIdx, age) =>
+    update(rooms.map((r, i) => {
+      if (i !== roomIdx) return r;
+      const ages = [...r.childAges];
+      ages[childIdx] = age;
+      return { ...r, childAges: ages };
+    }));
+  const setAdultAge = (roomIdx, adultIdx, age) =>
+    update(rooms.map((r, i) => {
+      if (i !== roomIdx) return r;
+      const ages = [...(r.adultAges || [])];
+      ages[adultIdx] = age;
+      return { ...r, adultAges: ages };
+    }));
+
+  return (
+    <div className="rgs-wrap">
+      <div className="rgs-grid">
+        {rooms.map((room, i) => (
+          <div key={i} className="rgs-room-card">
+            <div className="rgs-room-header">
+              <span className="rgs-room-label">🛏 Room {i + 1}</span>
+              {rooms.length > 1 && (
+                <button type="button" className="rgs-remove-btn" onClick={() => removeRoom(i)}>✕</button>
+              )}
+            </div>
+            <div className="rgs-counters-col">
+              <div className="rgs-counter-row">
+                <div className="rgs-counter-info">
+                  <span className="rgs-counter-title">Adults</span>
+                  <span className="rgs-counter-sub">Age 18+</span>
+                </div>
+                <Counter value={room.adults} min={1} max={6} onChange={(v) => setAdults(i, v)} />
+              </div>
+              <div className="rgs-counter-row">
+                <div className="rgs-counter-info">
+                  <span className="rgs-counter-title">Children</span>
+                  <span className="rgs-counter-sub">Age 0–17</span>
+                </div>
+                <Counter value={room.children} min={0} max={4} onChange={(v) => setChildren(i, v)} />
+              </div>
+            </div>
+            {/* Adult ages — required for the senior-citizen flow. If any
+                adult age is ≥ 60 the backend treats this room as a
+                senior-citizen booking and applies the configured markup
+                (discount) to the contract rate. */}
+            {room.adults > 0 && (
+              <div className="rgs-child-ages">
+                <span className="rgs-child-ages-label">Adult ages *</span>
+                <div className="rgs-child-ages-row">
+                  {Array.from({ length: room.adults }).map((_, idx) => {
+                    const age = (room.adultAges && room.adultAges[idx]) || 65;
+                    const isSenior = Number(age) >= 60;
+                    return (
+                      <div key={idx} className="rgs-child-age-select">
+                        <label className="rgs-child-age-label">
+                          Adult {idx + 1} {isSenior ? "👵" : ""}
+                        </label>
+                        <Form.Select size="sm" value={age}
+                                     onChange={(e) => setAdultAge(i, idx, parseInt(e.target.value))}
+                                     className="rgs-age-dropdown"
+                                     style={isSenior ? { borderColor: "#198754" } : undefined}>
+                          {Array.from({ length: 83 }).map((__, k) => {
+                            const a = k + 18; // 18..100
+                            return (
+                              <option key={a} value={a}>
+                                {a} {a === 1 ? "yr" : "yrs"}{a >= 60 ? " · Senior" : ""}
+                              </option>
+                            );
+                          })}
+                        </Form.Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {room.children > 0 && (
+              <div className="rgs-child-ages">
+                <span className="rgs-child-ages-label">Child ages</span>
+                <div className="rgs-child-ages-row">
+                  {Array.from({ length: room.children }).map((_, idx) => (
+                    <div key={idx} className="rgs-child-age-select">
+                      <label className="rgs-child-age-label">Child {idx + 1}</label>
+                      <Form.Select size="sm" value={room.childAges[idx] || 5}
+                                   onChange={(e) => setChildAge(i, idx, parseInt(e.target.value))}
+                                   className="rgs-age-dropdown">
+                        {Array.from({ length: 18 }).map((__, age) => (
+                          <option key={age} value={age}>{age} {age === 1 ? "yr" : "yrs"}</option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
+          <span className="rgs-add-icon">+</span><span>Add Room</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function SeniorCitizenSearch() {
+  const navigate = useNavigate();
+
+  const [nationalityList, setNationalityList] = useState([]);
+  const [selectedNationality, setSelectedNationality] = useState(null);
+  const [destinationOptions, setDestinationOptions] = useState([]);
+  const [selectedDestination, setSelectedDestination] = useState(null);
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [nights, setNights] = useState(1);
+  const [agent, setAgent] = useState("");
+  const [agents, setAgents] = useState([]);
+  const [agentBalance, setAgentBalance] = useState(null);
+  const [agentBalanceLoading, setAgentBalanceLoading] = useState(false);
+  // Seed Adult 1 to age 65 so the senior-citizen markup applies by
+  // default. The user can change it to a non-senior age (or any other)
+  // before searching. Backend decides per-room whether the markup
+  // applies based on the highest age in `adultAges`.
+  const [rooms, setRooms] = useState([
+    { adults: 1, children: 0, childAges: [], adultAges: [65] },
+  ]);
+  const [roomsOpen, setRoomsOpen] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [isDestinationLoading, setIsDestinationLoading] = useState(false);
+  const [isNationalityLoading, setIsNationalityLoading] = useState(false);
+
+  // Results state
+  const [allResults, setAllResults] = useState([]);
+  const [hasSearchResult, setHasSearchResult] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [pollStatus, setPollStatus] = useState("IDLE");
+  const [searchId, setSearchId] = useState(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize] = useState(10);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sortBy, setSortBy] = useState("priceAsc");
+  const [starRating, setStarRating] = useState(null);
+  const [hotelSearchTerm, setHotelSearchTerm] = useState("");
+  const resultsRef = useRef(null);
+
+  const starOptions = [
+    { value: 5, label: "5 Stars" }, { value: 4, label: "4 Stars" },
+    { value: 3, label: "3 Stars" }, { value: 2, label: "2 Stars" }, { value: 1, label: "1 Star" },
+  ];
+
+  function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => { clearTimeout(timeout); func(...args); };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
+
+  const debouncedCitySearch = useRef(
+    debounce(async (searchText = "") => {
+      if (!searchText || searchText.length < 2) { setDestinationOptions([]); return; }
+      setIsDestinationLoading(true);
+      try {
+        const response = await axiosInstance.get(`/api/province?search=${searchText}`);
+        const list = Array.isArray(response.data) ? response.data : [];
+        setDestinationOptions(list.slice(0, 50).map((city) => ({
+          value: city.id,
+          label: `${city.stateName}, ${city.country}`,
+          countryId: city.countryId,
+        })));
+      } catch { setDestinationOptions([]); }
+      finally { setIsDestinationLoading(false); }
+    }, 300)
+  ).current;
+
+  const debouncedCountrySearch = useRef(
+    debounce(async (search) => {
+      try {
+        setIsNationalityLoading(true);
+        const response = await axiosInstance.get(`/api/country?search=${search}`);
+        setNationalityList(Array.isArray(response.data)
+          ? response.data.map((c) => ({ value: c.id, label: c.name, code: c.countryCode }))
+          : []);
+      } catch { setNationalityList([]); }
+      finally { setIsNationalityLoading(false); }
+    }, 300)
+  ).current;
+
+  const countryList = async () => {
+    try {
+      setIsNationalityLoading(true);
+      const response = await axiosInstance.get("/api/country?limit=50");
+      setNationalityList(Array.isArray(response.data)
+        ? response.data.map((c) => ({ value: c.id, label: c.name, code: c.countryCode }))
+        : []);
+    } catch { setNationalityList([]); }
+    finally { setIsNationalityLoading(false); }
+  };
+
+  const loadPopularDestinations = async () => {
+    if (destinationOptions.length > 0) return;
+    try {
+      setIsDestinationLoading(true);
+      const response = await axiosInstance.get("/api/province?limit=50");
+      const list = Array.isArray(response.data) ? response.data : [];
+      setDestinationOptions(list.map((city) => ({
+        value: city.id,
+        label: `${city.stateName},${city.country}`,
+        countryId: city.countryId,
+      })));
+    } catch { /* silent */ }
+    finally { setIsDestinationLoading(false); }
+  };
+
+  useEffect(() => {
+    countryList();
+    (async () => {
+      try {
+        const { data } = await axiosInstance.get("/api/agent");
+        setAgents(Array.isArray(data) ? data : data?.content || []);
+      } catch { setAgents([]); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!agent) { setAgentBalance(null); return; }
+    let cancelled = false;
+    setAgentBalanceLoading(true);
+    axiosInstance.get(`/api/agent-credit-limit/agent/${agent}`)
+      .then((res) => { if (!cancelled) setAgentBalance(res?.data?.availableCreditLimit ?? null); })
+      .catch(() => { if (!cancelled) setAgentBalance(null); })
+      .finally(() => { if (!cancelled) setAgentBalanceLoading(false); });
+    return () => { cancelled = true; };
+  }, [agent]);
+
+  useEffect(() => {
+    if (checkIn && checkOut) {
+      const start = new Date(checkIn);
+      const end = new Date(checkOut);
+      const diff = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+      setNights(diff);
+    }
+  }, [checkIn, checkOut]);
+
+  const handleNightsChange = (value) => {
+    const val = Math.max(1, Number(value) || 1);
+    setNights(val);
+    if (checkIn) {
+      const start = new Date(checkIn);
+      const out = new Date(start);
+      out.setDate(start.getDate() + val);
+      const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
+        .toISOString().slice(0, 10);
+      setCheckOut(iso);
+    }
+  };
+
+  const formatDate = (date) => date.toISOString().split("T")[0];
+  const getTomorrow = (date = new Date()) => {
+    const t = new Date(date); t.setDate(t.getDate() + 1); return t;
+  };
+  const today = formatDate(new Date());
+  const minCheckOutDate = checkIn ? formatDate(getTomorrow(new Date(checkIn))) : formatDate(getTomorrow());
+
+  const validateForm = () => {
+    const e = {};
+    if (!selectedNationality) e.nationality = "Nationality is required";
+    if (!selectedDestination) e.destination = "Destination is required";
+    if (!checkIn) e.checkIn = "Check-in date is required";
+    if (!checkOut) e.checkOut = "Check-out date is required";
+    else if (checkIn && checkOut <= checkIn) e.checkOut = "Check-out must be after check-in";
+    if (!agent) e.agent = "Agent is required";
+
+    // Senior-citizen rule — the booking only qualifies if at least one
+    // adult across all rooms is aged 60+. Without this guard the flow
+    // would silently apply no discount and just match the normal search.
+    const hasSenior = rooms.some((r) =>
+      (r.adultAges || []).some((a) => Number(a) >= 60)
+    );
+    if (!hasSenior) {
+      e.rooms = "At least one adult must be 60+ to use the Senior Citizen flow";
+    }
+    return e;
+  };
+
+  const clearError = (field) => {
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const { [field]: _omit, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const handleSearchSubmit = async (e) => {
+    e.preventDefault();
+    const formErrors = validateForm();
+    if (Object.keys(formErrors).length > 0) {
+      setErrors(formErrors);
+      setHasSearched(false);
+      return;
+    }
+    setErrors({});
+    setIsLoading(true);
+    setHasSearched(true);
+    setHasSearchResult(false);
+    setAllResults([]);
+    setPollStatus("IN_PROGRESS");
+
+    try {
+      const noOfRooms = String(rooms.length);
+      const roomConfigurations = rooms.map((room, idx) => ({
+        roomNo: idx + 1,
+        adultCount: String(room.adults || 1),
+        childCount: String(room.children || 0),
+        childAges: room.childAges?.length ? room.childAges : [],
+        adultAges: room.adultAges?.length ? room.adultAges : [],
+      }));
+
+      const payload = {
+        checkIn,
+        checkOut,
+        nationalityId: String(selectedNationality.value),
+        nationalityCode: selectedNationality.code,
+        noOfRooms,
+        destinationCityId: selectedDestination.value,
+        destinationCountryId: selectedDestination.countryId,
+        agentId: Number(agent),
+        roomConfigurations,
+      };
+
+      const { data } = await axiosInstance.post(
+        "/api/senior-citizen-hotel-search/search", payload
+      );
+      const sid = data?.searchId;
+      if (!sid) throw new Error("No searchId returned");
+      setSearchId(sid);
+
+      // Poll for results
+      let attempts = 0;
+      const poll = async () => {
+        attempts += 1;
+        try {
+          const params = new URLSearchParams({
+            agentId: agent, checkInDate: checkIn,
+            page: pageIndex, size: pageSize, sortBy: "baseRate",
+          });
+          const { data: r } = await axiosInstance.get(
+            `/api/senior-citizen-hotel-search/results/${sid}?${params.toString()}`
+          );
+          const list = Array.isArray(r?.result) ? r.result : Array.isArray(r?.content) ? r.content : [];
+          setAllResults(list);
+          setTotalElements(Number(r?.totalResults ?? r?.totalElements ?? list.length));
+          setTotalPages(Math.max(1, Math.ceil((Number(r?.totalResults ?? r?.totalElements ?? list.length)) / pageSize)));
+          setHasSearchResult(true);
+          if (r?.finalStatus === "COMPLETED" || attempts >= 10) {
+            setPollStatus("COMPLETED");
+            setIsLoading(false);
+            return;
+          }
+          setTimeout(poll, 1500);
+        } catch (err) {
+          console.error("Senior citizen search poll failed:", err);
+          setPollStatus("ERROR");
+          setIsLoading(false);
+        }
+      };
+      poll();
+    } catch (err) {
+      console.error("Senior citizen search failed:", err);
+      setHasSearched(false);
+      setPollStatus("ERROR");
+      setIsLoading(false);
+    }
+  };
+
+  const filteredResults = useMemo(() => {
+    let res = allResults;
+    if (starRating) res = res.filter((h) => Number(h.starRating) === Number(starRating.value));
+    if (hotelSearchTerm.trim()) {
+      const q = hotelSearchTerm.toLowerCase();
+      res = res.filter((h) => (h.hotelName || "").toLowerCase().includes(q));
+    }
+    if (sortBy === "priceAsc") res = [...res].sort((a, b) => (a.baseRate || 0) - (b.baseRate || 0));
+    if (sortBy === "priceDesc") res = [...res].sort((a, b) => (b.baseRate || 0) - (a.baseRate || 0));
+    return res;
+  }, [allResults, starRating, hotelSearchTerm, sortBy]);
+
+  const apiIdFromType = (apiType) => {
+    const m = { inhouse: 1, jumeirah: 10, iwtx: 12, x3: 15, ratehawk: 14, darina: 16, atharva: 3 };
+    return m[(apiType || "").toLowerCase()] || 1;
+  };
+
+  const handleViewRooms = (h) => {
+    // Carry the full per-room shape (including adultAges) into the
+    // room-list page — the backend re-applies the senior-citizen markup
+    // per room based on the adult ages, so it needs them again here.
+    navigate("/senior-citizen-room-list", {
+      state: {
+        hotelCode: h.hotelCode,
+        hotelId: h.hotelCode,
+        hotelName: h.hotelName,
+        hotelImage: h.hotelImage,
+        address: h.hotelAddress,
+        starRating: h.starRating,
+        apiType: h.apiType,
+        apiId: apiIdFromType(h.apiType),
+        nationalityCode: (selectedNationality?.code || "IN").toUpperCase().slice(0, 2),
+        checkIn, checkOut,
+        noOfRooms: rooms.length,
+        adults: rooms.reduce((a, r) => a + r.adults, 0),
+        children: rooms.reduce((a, r) => a + r.children, 0),
+        agentId: agent,
+        // Per-room breakdown — needed by SeniorCitizenRoomList to build
+        // the room-search payload with the right adult ages.
+        rooms: rooms.map((r) => ({
+          adults: r.adults || 1,
+          children: r.children || 0,
+          childAges: r.childAges || [],
+          adultAges: Array.isArray(r.adultAges) && r.adultAges.length === (r.adults || 1)
+            ? r.adultAges
+            : Array.from({ length: r.adults || 1 }, () => 65),
+        })),
+      },
+    });
+  };
+
+  return (
+    <div className="min-vh-100 bg-light d-flex flex-column">
+      <TopBar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
+        <main className="flex-grow-1 p-4">
+          <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
+            <Card.Body className="p-4">
+              <div className="mb-4 text-start">
+                <h2 className="fw-semibold text-primary mb-1 d-flex align-items-center">
+                  <FaUserClock className="me-2" /> Senior Citizen — Hotel Search
+                </h2>
+                <p className="text-muted">
+                  Senior-citizen discounts are applied automatically to eligible hotels.
+                  Verification (employee code / govt-ID upload) happens on the booking page.
+                </p>
+              </div>
+
+              <Form onSubmit={handleSearchSubmit}>
+                <Row className="g-4">
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Destination *</Form.Label>
+                      <Select
+                        options={destinationOptions}
+                        value={selectedDestination}
+                        onChange={(option) => {
+                          setSelectedDestination(option);
+                          if (option) clearError("destination");
+                        }}
+                        placeholder="Where do you want to go?"
+                        isSearchable isClearable
+                        className="modern-select"
+                        isLoading={isDestinationLoading}
+                        noOptionsMessage={() =>
+                          isDestinationLoading ? "Searching destinations..." : "Type to search destinations..."
+                        }
+                        onMenuOpen={() => {
+                          if (destinationOptions.length === 0) loadPopularDestinations();
+                        }}
+                        onInputChange={(inputValue, { action }) => {
+                          if (action === "input-change") debouncedCitySearch(inputValue);
+                        }}
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({ ...base, minHeight: "42px" }),
+                        }}
+                      />
+                      {errors.destination && (
+                        <div className="text-danger small mt-1">{errors.destination}</div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Nationality *</Form.Label>
+                      <Select
+                        options={nationalityList}
+                        value={selectedNationality}
+                        onChange={(option) => {
+                          setSelectedNationality(option);
+                          if (option) clearError("nationality");
+                        }}
+                        onInputChange={(v) => v.length >= 2 && debouncedCountrySearch(v)}
+                        isLoading={isNationalityLoading}
+                        placeholder="Select nationality"
+                        isSearchable isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({ ...base, minHeight: "42px" }),
+                        }}
+                      />
+                      {errors.nationality && (
+                        <div className="text-danger small mt-1">{errors.nationality}</div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Agent *</Form.Label>
+                      <Form.Select
+                        style={{ height: "46px" }}
+                        value={agent}
+                        onChange={(e) => {
+                          setAgent(e.target.value);
+                          if (e.target.value) clearError("agent");
+                        }}
+                      >
+                        <option value="">Select Agent</option>
+                        {agents.map((a) => (
+                          <option key={a.id || a.agentId} value={a.id || a.agentId}>
+                            {a.companyName || `${a.firstName || ""} ${a.lastName || ""}`}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {errors.agent && <div className="text-danger small mt-1">{errors.agent}</div>}
+                      {agent && (
+                        <div className="mt-1 small">
+                          {agentBalanceLoading ? (
+                            <span className="text-muted">Loading available balance…</span>
+                          ) : agentBalance != null ? (
+                            <span className="fw-semibold" style={{ color: "#dc3545" }}>
+                              Available Balance: {Number(agentBalance).toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-muted">Available balance unavailable</span>
+                          )}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  <Col lg={2} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Nights</Form.Label>
+                      <Form.Control style={{ height: "42px" }} type="number" min={1} max={60}
+                                    value={nights} onChange={(e) => handleNightsChange(e.target.value)} />
+                    </Form.Group>
+                  </Col>
+
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Check-in *</Form.Label>
+                      <Form.Control style={{ height: "42px" }} type="date" value={checkIn} min={today}
+                                    onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                                    onChange={(e) => {
+                                      const newCheckIn = e.target.value;
+                                      setCheckIn(newCheckIn);
+                                      if (newCheckIn) {
+                                        clearError("checkIn");
+                                        setCheckOut(formatDate(getTomorrow(new Date(newCheckIn))));
+                                        clearError("checkOut");
+                                      }
+                                    }} />
+                      {errors.checkIn && <div className="text-danger small mt-1">{errors.checkIn}</div>}
+                    </Form.Group>
+                  </Col>
+
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Check-out *</Form.Label>
+                      <Form.Control style={{ height: "42px" }} type="date" value={checkOut} min={minCheckOutDate}
+                                    onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                                    onChange={(e) => {
+                                      setCheckOut(e.target.value);
+                                      if (e.target.value) clearError("checkOut");
+                                    }} />
+                      {errors.checkOut && <div className="text-danger small mt-1">{errors.checkOut}</div>}
+                    </Form.Group>
+                  </Col>
+
+                  <Col lg={4} md={6}>
+                    <Form.Label className="fw-semibold text-dark">Rooms & Guests</Form.Label>
+                    <Button variant="outline-primary" className="w-100 text-start rooms-summary-btn-modern"
+                            type="button" onClick={() => setRoomsOpen((o) => !o)}>
+                      {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                      {rooms.reduce((a, r) => a + r.children, 0)
+                        ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child` : ""}{" "}
+                      · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                      <span className="float-end">{roomsOpen ? "▴" : "▾"}</span>
+                    </Button>
+                  </Col>
+                </Row>
+
+                {roomsOpen && (
+                  <Row className="g-3 mt-3">
+                    <Col md={12}>
+                      <RoomGuestSelector value={rooms} onChange={(next) => {
+                        setRooms(next);
+                        // Drop the "must include senior" error as soon as the
+                        // user adjusts the rooms — re-validated on submit.
+                        clearError("rooms");
+                      }} />
+                    </Col>
+                  </Row>
+                )}
+
+                {errors.rooms && (
+                  <Row className="mt-3">
+                    <Col className="text-center">
+                      <div className="text-danger small">{errors.rooms}</div>
+                    </Col>
+                  </Row>
+                )}
+
+                <Row className="mt-3">
+                  <Col className="d-flex justify-content-center gap-3">
+                    <Button type="submit" className="btn-search-modern" disabled={isLoading} size="lg">
+                      {isLoading ? (
+                        <><Spinner animation="border" size="sm" className="me-2" /> Searching...</>
+                      ) : (
+                        <><FaSearch className="me-2" /> SEARCH HOTELS</>
+                      )}
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
+            </Card.Body>
+          </Card>
+
+          {!hasSearched && !hasSearchResult && (
+            <Card className="shadow-sm rounded-xl">
+              <Card.Body className="text-center text-muted py-5">
+                <FaSearch className="display-4 text-muted mb-3" />
+                <h4>Ready to Find Senior-Citizen-Friendly Stays?</h4>
+                <p>Fill in the form above and we'll surface hotels with active senior-citizen discounts.</p>
+              </Card.Body>
+            </Card>
+          )}
+
+          {(hasSearchResult || allResults.length > 0) && (
+            <div ref={resultsRef}>
+              <Card className="shadow-sm rounded-xl mb-3 filtersection">
+                <Card.Body className="p-2">
+                  <div className="d-flex align-items-center gap-3 flex-wrap">
+                    <Form.Control type="text" placeholder="Search Hotel Name..." style={{ maxWidth: 260 }}
+                                  value={hotelSearchTerm} onChange={(e) => setHotelSearchTerm(e.target.value)} />
+                    <Select options={starOptions} value={starRating} onChange={setStarRating}
+                            placeholder="All Stars" isClearable
+                            menuPortalTarget={document.body}
+                            styles={{
+                              control: (base) => ({ ...base, minWidth: 160, height: 38 }),
+                              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                            }} />
+                    <Button size="sm" className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
+                            onClick={() => setSortBy("priceAsc")}>Low to High</Button>
+                    <Button size="sm" className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
+                            onClick={() => setSortBy("priceDesc")}>High to Low</Button>
+                    <Button variant="outline-primary" size="sm"
+                            onClick={() => { setStarRating(null); setSortBy("priceAsc"); setHotelSearchTerm(""); }}>
+                      Clear
+                    </Button>
+                  </div>
+                </Card.Body>
+              </Card>
+
+              {pollStatus === "IN_PROGRESS" && (
+                <div className="text-center mb-2 small text-muted">
+                  <Spinner animation="border" size="sm" /> Searching hotels…
+                </div>
+              )}
+
+              <Row className="g-3">
+                {filteredResults.length > 0 ? filteredResults.map((hotel, idx) => (
+                  <Col xs={12} key={hotel.hotelCode || idx}>
+                    <Card className="shadow-sm">
+                      <Card.Body>
+                        <Row className="align-items-center">
+                          <Col md={2}>
+                            {hotel.hotelImage
+                              ? <img src={hotel.hotelImage} alt={hotel.hotelName}
+                                     className="img-fluid rounded" style={{ maxHeight: 100 }} />
+                              : <div className="bg-light p-3 text-center text-muted">No Image</div>}
+                          </Col>
+                          <Col md={6}>
+                            <h6 className="mb-1">{hotel.hotelName || "Hotel"}</h6>
+                            <div className="text-muted small">{hotel.hotelAddress}</div>
+                            <div>
+                              {Array.from({ length: hotel.starRating || 0 }).map((_, i) => (
+                                <FaStar key={i} className="text-warning" />
+                              ))}
+                            </div>
+                            <div className="small text-muted mt-1">
+                              Channel: {(hotel.apiType || "INHOUSE").toUpperCase()}
+                            </div>
+                          </Col>
+                          <Col md={2}>
+                            <div className="text-muted small">Senior-Citizen Rate</div>
+                            <div className="h5 mb-0 text-success">
+                              {hotel.baseRate != null ? Number(hotel.baseRate).toFixed(2) : "-"}
+                            </div>
+                          </Col>
+                          <Col md={2} className="text-end">
+                            <Button size="sm" variant="primary" onClick={() => handleViewRooms(hotel)}>
+                              View Rooms
+                            </Button>
+                          </Col>
+                        </Row>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                )) : (
+                  <Col xs={12}>
+                    <Card className="shadow-sm rounded-xl">
+                      <Card.Body className="text-center text-muted py-5">
+                        <FaSearch className="display-4 text-muted mb-3" />
+                        <h5>No results found</h5>
+                        <p>Try adjusting your filters or search criteria.</p>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                )}
+              </Row>
+
+              {totalPages > 1 && (
+                <div className="d-flex justify-content-end mt-3">
+                  <Pagination size="sm">
+                    <Pagination.Prev disabled={pageIndex === 0}
+                                     onClick={() => setPageIndex((p) => Math.max(0, p - 1))} />
+                    <Pagination.Item active>{pageIndex + 1}</Pagination.Item>
+                    <Pagination.Next disabled={pageIndex + 1 >= totalPages}
+                                     onClick={() => setPageIndex((p) => p + 1)} />
+                  </Pagination>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}

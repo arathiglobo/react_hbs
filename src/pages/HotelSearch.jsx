@@ -1943,7 +1943,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                         {getHotelFeatureLabels(hotel).length > 0 && (
                                           <span
                                             className="flash-sale-pill"
-                                            title="We have new features in booking — take a look there!"
+                                            title="We have new features in Booking section — take a look there!"
                                           >
                                             <span className="flash-dot" />
                                             Flash Sale

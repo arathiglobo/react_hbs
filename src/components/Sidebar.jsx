@@ -33,9 +33,41 @@ export default function Sidebar() {
   const handleClose = () => setShow(false);
   const handleShow = () => setShow(true);
   const [openGroups, setOpenGroups] = useState({});
+  // Only Booking List uses the centered-overlay positioning — every
+  // other submenu keeps the default absolute-positioned dropdown. This
+  // is the computed viewport position for the Booking List submenu;
+  // null until the user has clicked it at least once.
+  const [bookingListPos, setBookingListPos] = useState(null);
   const sidebarRef = useRef(null);
   const offcanvasRef = useRef(null);
   const [hotelId, setHotelId] = useState(null);
+
+  // Booking List has the longest children list (19 entries) so it can
+  // run off the viewport bottom when opened. When the user clicks it,
+  // we compute a position so the menu is vertically CENTERED on the
+  // trigger, clamped to the viewport so neither edge ever escapes.
+  // Returns { top, left, maxHeight } in viewport coords for a
+  // position: fixed inline style on the submenu div.
+  const computeBookingListPos = (triggerEl) => {
+    if (!triggerEl) return null;
+    const rect = triggerEl.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const TOPBAR_RESERVE = 70;
+    const BOTTOM_GAP = 10;
+    const LEFT_GAP = 8;
+    const HARD_CAP = 380;
+    const maxHeight = Math.max(
+      160,
+      Math.min(HARD_CAP, vh - TOPBAR_RESERVE - BOTTOM_GAP),
+    );
+    const triggerCenter = rect.top + rect.height / 2;
+    const idealTop = triggerCenter - maxHeight / 2;
+    const top = Math.max(
+      TOPBAR_RESERVE,
+      Math.min(vh - maxHeight - BOTTOM_GAP, idealTop),
+    );
+    return { top, left: rect.right + LEFT_GAP, maxHeight };
+  };
 
   const storedRoles = (localStorage.getItem("userRole") || "")
     .split(",")
@@ -286,6 +318,10 @@ export default function Sidebar() {
           label: "Student Booking",
           to: "/new-booking/student",
         },
+        {
+          label: "Senior Citizen Booking",
+          to: "/new-booking/senior-citizen",
+        },
       ],
     },
     {
@@ -387,6 +423,10 @@ export default function Sidebar() {
         {
           label: "Student Booking",
           to: "/booking-details/student-booking-list",
+        },
+        {
+          label: "Senior Citizen Booking",
+          to: "/booking-details/senior-citizen-booking-list",
         },
       ],
     },
@@ -706,6 +746,15 @@ export default function Sidebar() {
                           e.preventDefault();
                           e.stopPropagation();
                           console.log("Clicked on:", item.label); // Debug log
+                          // Only Booking List uses the centered
+                          // overlay — measure its trigger position
+                          // on each click so the menu can re-center
+                          // even after a sidebar/viewport scroll.
+                          if (item.label === "Booking List") {
+                            setBookingListPos(
+                              computeBookingListPos(e.currentTarget),
+                            );
+                          }
                           const groupKey = item.label;
                           toggleGroup(groupKey, true); // Pass true to indicate it's a top-level item
                         }
@@ -732,13 +781,28 @@ export default function Sidebar() {
                     style={{
                       display: openGroups[item.label] ? "block" : "none",
                       zIndex: 9999,
-                      marginLeft: "12px",
-                      marginTop: "6px",
+                      // ── Booking List override ─────────────────────
+                      // Use viewport-fixed position centered on the
+                      // trigger so the long children list never runs
+                      // off the bottom (or, after clamping, the top).
+                      // Falls back to the default absolute placement
+                      // (the `else` branch) when bookingListPos hasn't
+                      // been measured yet on this session.
+                      ...(item.label === "Booking List" && bookingListPos
+                        ? {
+                            position: "fixed",
+                            top: `${bookingListPos.top}px`,
+                            left: `${bookingListPos.left}px`,
+                            maxHeight: `${bookingListPos.maxHeight}px`,
+                          }
+                        : {
+                            marginLeft: "12px",
+                            marginTop: "6px",
+                            // ⭐ IMPORTANT FIX
+                            maxHeight: "380px", // controls submenu height
+                          }),
                       paddingLeft: "8px",
                       borderLeft: "1px solid #e5e7eb",
-
-                      // ⭐ IMPORTANT FIX
-                      maxHeight: "380px", // controls submenu height
                       overflowY: "auto", // enables scroll
                       scrollbarWidth: "thin", // Firefox
                       scrollbarColor: "#eeeaea",

@@ -236,6 +236,14 @@ import StudentRoomList from "./pages/roomlist/StudentRoomList";
 import StudentBookingPage from "./pages/booking/student/StudentBookingPage";
 import StudentBookingList from "./pages/list/StudentBookingList";
 import StudentBookingDetailView from "./pages/list/StudentBookingDetailView";
+
+// Senior Citizen Booking Module — parallel flow (mirrors student flow)
+import SeniorCitizenList from "./pages/HotelActions/SeniorCitizen/SeniorCitizenList";
+import SeniorCitizenSearch from "./pages/search/seniorcitizen/SeniorCitizenSearch";
+import SeniorCitizenRoomList from "./pages/roomlist/SeniorCitizenRoomList";
+import SeniorCitizenBookingPage from "./pages/booking/seniorcitizen/SeniorCitizenBookingPage";
+import SeniorCitizenBookingList from "./pages/list/SeniorCitizenBookingList";
+import SeniorCitizenBookingDetailView from "./pages/list/SeniorCitizenBookingDetailView";
 import SchefferDriverReg from "./pages/Registration/SchefferDriverReg";
 import SchefferDriverRates from "./pages/Registration/SchefferDriverRates";
 import { SchefferDriverSearch } from "./pages/search/schefferDriver/SchefferDriverSearch";
@@ -501,6 +509,17 @@ export default function App() {
         <Route path="/booking-details/student-booking-list" element={<PrivateRoute><StudentBookingList /></PrivateRoute>} />
         <Route path="/booking-details/student-booking/:id" element={<PrivateRoute><StudentBookingDetailView /></PrivateRoute>} />
         {/* Admin verification now lives inline on the StudentBookingList page. */}
+
+        {/* Senior Citizen Booking Module — parallel flow */}
+        {/* Master CRUD + per-hotel promotion (opens from hotel-details) */}
+        <Route path="/hotel-actions/:id/senior-citizen" element={<PrivateRoute><SeniorCitizenList /></PrivateRoute>} />
+        {/* New-Booking flow — search → room-list → booking-page */}
+        <Route path="/new-booking/senior-citizen" element={<PrivateRoute><SeniorCitizenSearch /></PrivateRoute>} />
+        <Route path="/senior-citizen-room-list" element={<PrivateRoute><SeniorCitizenRoomList /></PrivateRoute>} />
+        <Route path="/senior-citizen-booking-page" element={<PrivateRoute><SeniorCitizenBookingPage /></PrivateRoute>} />
+        {/* Booking list + detail view */}
+        <Route path="/booking-details/senior-citizen-booking-list" element={<PrivateRoute><SeniorCitizenBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/senior-citizen-booking/:id" element={<PrivateRoute><SeniorCitizenBookingDetailView /></PrivateRoute>} />
 
 
         {/* Ayurveda Module — standalone flow (no impact on hotel booking) */}

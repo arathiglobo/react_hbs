@@ -237,24 +237,10 @@ const HotelBookingPage = () => {
       errors.lastName = "Last Name is required";
       hasErrors = true;
     }
-    if (!primaryGuest.email || primaryGuest.email.trim() === "") {
-      errors.email = "Email is required";
-      hasErrors = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.email)) {
-      errors.email = "Please enter a valid email address";
-      hasErrors = true;
-    }
-    if (!primaryGuest.phone || primaryGuest.phone.trim() === "") {
-      errors.phone = "Phone is required";
-      hasErrors = true;
-    } else if (primaryGuest.phone.trim().length > 15) {
-      errors.phone = "Phone number cannot exceed 15 digits";
-      hasErrors = true;
-    }
-    if (!primaryGuest.agentLpo || primaryGuest.agentLpo.trim() === "") {
-      errors.agentLpo = "Agent LPO is required";
-      hasErrors = true;
-    }
+    // Email / Phone / Passport No / Agent LPO are no longer collected
+    // on this page (the inputs were hidden) — drop their validations.
+    // If you re-introduce the inputs later, restore the corresponding
+    // `if (!primaryGuest.<field>) { ... }` blocks.
 
     // Validate Guest fields in rooms
     rooms.forEach((room, roomIndex) => {
@@ -341,12 +327,7 @@ const HotelBookingPage = () => {
         } else if (typeof d === "string") {
           tc = d;
         } else {
-          tc =
-            d?.termsAndConditions ||
-            d?.terms ||
-            d?.data ||
-            d?.message ||
-            "";
+          tc = d?.termsAndConditions || d?.terms || d?.data || d?.message || "";
         }
         setTermsAndConditions(tc);
       } else {
@@ -583,9 +564,13 @@ const HotelBookingPage = () => {
       // ✅ Step 2: Proceed to confirm booking
       console.log("✅ Credit check passed. Proceeding with booking...");
 
+      // Tag this booking as paid via the agent's credit limit. If an
+      // online-payment branch is added later (when credit is short),
+      // that branch should send paymentMode = "ONLINE" instead so the
+      // Booking List can label the row correctly.
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
-        pendingPayload,
+        { ...pendingPayload, paymentMode: "CREDITLIMIT" },
       );
 
       const bookingResponse = response.data;
@@ -654,7 +639,12 @@ const HotelBookingPage = () => {
               </div>
             )}
             {/* Guest Details Section */}
-            <Form onSubmit={(e) => { e.preventDefault(); openPolicyConsent(); }}>
+            <Form
+              onSubmit={(e) => {
+                e.preventDefault();
+                openPolicyConsent();
+              }}
+            >
               <Row className="g-3">
                 <Col lg={8} className="hbp-left-col">
                   {/* {Object.keys(validationErrors).length > 0 && (
@@ -980,88 +970,14 @@ const HotelBookingPage = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Email
-                          </Form.Label>
-                          <Form.Control
-                            type="email"
-                            value={primaryGuest.email}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("email", e.target.value)
-                            }
-                            isInvalid={!!validationErrors.email}
-                            required
-                          />
-                          {validationErrors.email && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.email}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Phone
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.phone}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("phone", e.target.value)
-                            }
-                            isInvalid={!!validationErrors.phone}
-                            required
-                          />
-                          {validationErrors.phone && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.phone}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>Passport No</Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.passportNo}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange(
-                                "passportNo",
-                                e.target.value,
-                              )
-                            }
-                            required
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Agent LPO
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.agentLpo}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange(
-                                "agentLpo",
-                                e.target.value,
-                              )
-                            }
-                            isInvalid={!!validationErrors.agentLpo}
-                            required
-                          />
-                          {validationErrors.agentLpo && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.agentLpo}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
+                      {/* Email / Phone / Passport No / Agent LPO
+                          inputs are hidden by request. The state
+                          fields (primaryGuest.email, .phone, etc.)
+                          are kept so the booking payload still has
+                          the keys, just with empty values. Restore
+                          the <Col md={3}> blocks below the original
+                          Last Name column if these fields need to
+                          come back. */}
                     </Row>
                   </Card>
 
@@ -1191,7 +1107,6 @@ const HotelBookingPage = () => {
                       </Col>
                     </Row>
                   </Card>
-
                 </Col>
 
                 {/* Right sticky column — Booking Summary + Price */}
@@ -1379,7 +1294,9 @@ const HotelBookingPage = () => {
                                   <div className="policy-meta">
                                     Valid{" "}
                                     {p.fromDate
-                                      ? new Date(p.fromDate).toLocaleDateString()
+                                      ? new Date(
+                                          p.fromDate,
+                                        ).toLocaleDateString()
                                       : "—"}
                                     {" – "}
                                     {p.toDate
@@ -1502,12 +1419,17 @@ const HotelBookingPage = () => {
               </Modal>
 
               {/* ✅ Confirmation Modal */}
+              {/* Bumped to size="lg" so the order summary fits on
+                  a single screen without an inner scroll. Header /
+                  body paddings are also trimmed (py-2 → py-1, p-3 →
+                  p-2) so all sections — hotel info, dates, policy,
+                  payable, rate split — are visible at once. */}
               <Modal
                 show={showConfirmModal}
                 onHide={() => setShowConfirmModal(false)}
                 centered
                 backdrop="static"
-                size="md"
+                // size="sm"
               >
                 <Modal.Header
                   closeButton
@@ -1523,19 +1445,24 @@ const HotelBookingPage = () => {
                   "pendingPayload::inside :order modal:::",
                   pendingPayload,
                 )}
-                <Modal.Body className="px-4 py-3 bg-light">
+                <Modal.Body className="px-3 py-2 bg-light">
                   {pendingPayload && (
-                    <div className="border rounded-3 bg-white shadow-sm p-3">
-                      <div className="mb-3">
-                        <h5 className="fw-bold text-primary mb-2">
-                          {pendingPayload.hotelName}
-                        </h5>
-                        <p className="text-muted mb-0">
-                          {pendingPayload.address}
+                    <div className="border rounded-3 bg-white shadow-sm p-2">
+                      <div className="mb-2">
+                        <p className="mb-0 d-flex align-items-center flex-wrap">
+                          <span className="fw-bold text-primary fs-5">
+                            {pendingPayload.hotelName}
+                          </span>
+
+                          {pendingPayload.address && (
+                            <span className="text-muted small ms-1">
+                              , {pendingPayload.address}
+                            </span>
+                          )}
                         </p>
                       </div>
 
-                      <hr />
+                      <hr className="my-2" />
 
                       <Row className="gy-2">
                         <Col xs={6}>
@@ -1567,7 +1494,7 @@ const HotelBookingPage = () => {
                             <strong>Nights:</strong> {pendingPayload.nights}
                           </p>
                         </Col>
-                        <Col xs={12}>
+                        {/* <Col xs={12}>
                           <p className="mb-1">
                             <strong>Cancellation Policy:</strong>
                           </p>
@@ -1587,12 +1514,12 @@ const HotelBookingPage = () => {
                               </li>
                             )}
                           </ul>
-                        </Col>
+                        </Col> */}
 
                         <Col xs={12}>
                           {/* ✅ Show Selling Price only if ADMIN */}
                           {activeUserRole === "ADMIN" && (
-                            <div className="p-3 rounded bg-white shadow-sm mt-2 border">
+                            <div className="p-2 rounded bg-white border mt-2">
                               <div className="d-flex justify-content-between align-items-center">
                                 <h6 className="mb-0 text-muted">
                                   Selling Price
@@ -1604,21 +1531,25 @@ const HotelBookingPage = () => {
                             </div>
                           )}
 
-                          <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
-                            <h6 className="mb-0 fw-bold">Total Price</h6>
-                            <h4 className="mb-0">
-                              {formatPrice(totalPriceWithTd)} for{" "}
-                              {pendingPayload.rooms.length}{" "}
-                              {pendingPayload.rooms.length > 1
-                                ? "rooms"
-                                : "room"}
-                            </h4>
+                          {/* Payable row — plain border, no green
+                              highlight. Single-line layout. */}
+                          <div className="p-2 rounded bg-white border mt-2 d-flex justify-content-between align-items-center">
+                            <h6 className="mb-0 fw-bold">Payable</h6>
+                            <h5 className="mb-0 fw-bold">
+                              {formatPrice(totalPriceWithTd)}{" "}
+                              <span className="text-muted small fw-normal">
+                                for {pendingPayload.rooms.length}{" "}
+                                {pendingPayload.rooms.length > 1
+                                  ? "rooms"
+                                  : "room"}
+                              </span>
+                            </h5>
                           </div>
                         </Col>
                       </Row>
 
-                      <div className="mt-3 p-3 bg-white border rounded">
-                        <h6 className="fw-bold mb-2">Rate Split</h6>
+                      <div className="mt-2 p-2 bg-white border rounded">
+                        <h6 className="fw-bold mb-1">Rate Split</h6>
                         <div className="d-flex justify-content-between">
                           <span>Selling Price</span>
                           <span>
@@ -1631,14 +1562,14 @@ const HotelBookingPage = () => {
                           <span>Tourism Dirhams</span>
                           <span>{formatPrice(tourismDirhamsAmount)}</span>
                         </div>
-                        <hr className="my-2" />
-                        <div className="d-flex justify-content-between fw-bold text-danger">
+                        <hr className="my-1" />
+                        <div className="d-flex justify-content-between fw-bold">
                           <span>Total (Selling + TD)</span>
                           <span>{formatPrice(sellingPriceWithTd)}</span>
                         </div>
                       </div>
 
-                      <div className="mt-3 p-2 bg-white border rounded d-flex align-items-center">
+                      <div className="mt-2 p-2 bg-white border rounded d-flex align-items-center">
                         <span
                           className="me-2 d-inline-flex align-items-center justify-content-center"
                           style={{
@@ -1660,7 +1591,7 @@ const HotelBookingPage = () => {
                         </span>
                       </div>
 
-                      <div className="mt-3 text-center">
+                      <div className="mt-2 text-center">
                         <p className="text-muted small mb-0">
                           Please review the booking details carefully before
                           confirming.

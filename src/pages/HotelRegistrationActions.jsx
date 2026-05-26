@@ -225,6 +225,10 @@ const HotelRegistrationActions = () => {
     { label: "Policy", icon: FaFileAlt, status: "count", count: 0 },
     { label: "Govt Employee Discount", icon: FaGift, status: "count", count: 0 },
     { label: "Student Discount", icon: FaGift, status: "count", count: 0 },
+    // Senior Citizen — master CRUD + per-hotel discount promotion. Opens
+    // a list page from which the user can register / edit / delete senior
+    // citizens and configure the discount for this hotel.
+    { label: "Senior Citizen", icon: FaUser, status: "count", count: 0 },
     {
       label: "Compulsory Events",
       icon: FaCheckSquare,
@@ -759,6 +763,11 @@ const HotelRegistrationActions = () => {
       // Student Discount — per-hotel CRUD page that drives the discount
       // applied in the student search + booking flow.
       navigate(`/hotel-actions/${id}/student-discount`);
+    } else if (actionLabel === "Senior Citizen") {
+      // Senior Citizen — master CRUD for registering senior citizens +
+      // per-hotel discount promotion. Drives the senior-citizen search
+      // and booking flow.
+      navigate(`/hotel-actions/${id}/senior-citizen`);
     }else if (actionLabel === "Promotion") {
       navigate(`/hotel-actions/${id}/promotions`);
     } else if (actionLabel === "Policy") {

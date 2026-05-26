@@ -114,12 +114,19 @@ const AyurvedaBookingList = () => {
   };
 
   return (
-    <div className="d-flex">
-      <Sidebar />
-      <div className="flex-grow-1">
-        <TopBar />
-        <div className="ayurveda-page">
-          <Container fluid className="p-3">
+    // Layout mirrors SeniorCitizenBookingList / StudentBookingList:
+    // TopBar is full-width on top, then a flex row underneath holds
+    // the Sidebar (sticky on the left) and the page content. The old
+    // structure put Sidebar + TopBar side-by-side in a flex row, which
+    // left a 60px gap above the Sidebar (its `top: 60px` sticky offset
+    // expects TopBar to live above it, not next to it).
+    <div className="min-vh-100 bg-light d-flex flex-column">
+      <TopBar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
+        <main className="flex-grow-1">
+          <div className="ayurveda-page">
+            <Container fluid className="p-3">
             <div className="ayurveda-header">
               <div>
                 <h2 className="ayurveda-title">
@@ -304,8 +311,9 @@ const AyurvedaBookingList = () => {
                 </Pagination>
               </div>
             )}
-          </Container>
-        </div>
+            </Container>
+          </div>
+        </main>
       </div>
 
       {/* Details Modal */}

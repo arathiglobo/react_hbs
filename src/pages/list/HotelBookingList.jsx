@@ -39,8 +39,43 @@ const COLUMN_WIDTHS = {
   bookDate: "80px",
   bookingDetails: "155px",
   deadlineDate: "90px",
+  paymentMode: "110px",
   notification: "95px",
   action: "110px",
+};
+
+// Resolve a human-readable Payment Mode label from whatever shape the
+// backend sends. Most rows will have `paymentMode` directly; older
+// rows may only have a boolean (`creditLimitPayment` / `paidOnline`)
+// or a snake_case alias.
+const getPaymentModeLabel = (booking) => {
+  const raw =
+    booking?.paymentMode ||
+    booking?.payment_mode ||
+    booking?.paymentType ||
+    "";
+  const norm = String(raw).trim().toUpperCase();
+  if (
+    norm === "CREDIT" ||
+    norm === "CREDIT_LIMIT" ||
+    norm === "CREDIT LIMIT" ||
+    // CREDITLIMIT — the exact string HotelBookingPage sends when the
+    // agent's credit check passes (see confirmBooking).
+    norm === "CREDITLIMIT"
+  ) {
+    return "Credit Limit Payment";
+  }
+  if (norm === "ONLINE" || norm === "ONLINE_PAYMENT" || norm === "ONLINE PAYMENT") {
+    return "Online Payment";
+  }
+  if (norm) return raw; // unrecognised, show as-is
+
+  // Fallbacks for older row shapes.
+  if (booking?.creditLimitPayment === true) return "Credit Limit Payment";
+  if (booking?.paidOnline === true || booking?.onlinePayment === true) {
+    return "Online Payment";
+  }
+  return "-";
 };
 
 const normalizeBoolean = (value, truthyMatchers = [], falsyMatchers = []) => {
@@ -135,6 +170,11 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [voucherDetails, setVoucherDetails] = useState(null);
   const [loadingVoucherDetails, setLoadingVoucherDetails] = useState(false);
+  // Agent LPO captured inside the "Confirm Booking Status" modal.
+  // Required before the OK click can fire — saved on the booking's
+  // hotel_customer row (the column already exists there).
+  const [confirmAgentLpo, setConfirmAgentLpo] = useState("");
+  const [confirmAgentLpoError, setConfirmAgentLpoError] = useState("");
   const [updatingConfirmationStatus, setUpdatingConfirmationStatus] =
     useState(null);
   const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
@@ -444,6 +484,10 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
   // Handle confirm status click - open modal
   const handleConfirmStatusClick = (booking) => {
     setBookingToUpdateStatus(booking);
+    // Start each open with a clean LPO field — even if the user
+    // typed something for a previous booking, we don't reuse it.
+    setConfirmAgentLpo("");
+    setConfirmAgentLpoError("");
     setShowConfirmStatusModal(true);
   };
 
@@ -451,12 +495,25 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
   const updateConfirmationStatus = async () => {
     if (!bookingToUpdateStatus) return;
 
+    // Agent LPO is required — show inline error, keep the modal open.
+    const lpoTrimmed = (confirmAgentLpo || "").trim();
+    if (!lpoTrimmed) {
+      setConfirmAgentLpoError("Agent LPO is required");
+      return;
+    }
+    setConfirmAgentLpoError("");
+
     try {
       setUpdatingConfirmationStatus(bookingToUpdateStatus.bookingId);
       const response = await axiosInstance.patch(
         `/api/booking-confirmation/${bookingToUpdateStatus.bookingId}/confirmation-status`,
         {
           confirmStatus: true,
+          // Forwarded to the backend so it can be persisted on the
+          // booking's hotel_customer row (column `agent_lpo` already
+          // exists). Backend should pick this up and update the
+          // associated HotelCustomer entity in the same transaction.
+          agentLpo: lpoTrimmed,
         },
       );
 
@@ -466,6 +523,8 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
         await fetchBookings();
         setShowConfirmStatusModal(false);
         setBookingToUpdateStatus(null);
+        setConfirmAgentLpo("");
+        setConfirmAgentLpoError("");
         toast.success(
           response.data.message || "Confirmation status updated successfully!",
         );
@@ -1209,6 +1268,24 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                           >
                             Deadline Date
                           </th>
+                          {/* New Payment Mode column — shows the
+                              method used at booking time (credit
+                              limit vs online payment). */}
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.paymentMode,
+                            }}
+                          >
+                            Payment Mode
+                          </th>
                           <th
                             style={{
                               padding: "0.45rem 0.6rem",
@@ -1245,7 +1322,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                         {filteredBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={10}
+                              colSpan={11}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -1426,6 +1503,37 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                   }}
                                 >
                                   {formatDeadlineDate(b.deadlineDate)}
+                                </td>
+                                {/* Payment Mode cell — Credit Limit
+                                    Payment vs Online Payment, rendered
+                                    from `paymentMode` on the booking
+                                    row (with fallbacks for legacy
+                                    shapes). */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentMode,
+                                  }}
+                                >
+                                  {(() => {
+                                    const label = getPaymentModeLabel(b);
+                                    if (label === "-") {
+                                      return (
+                                        <span className="text-muted">-</span>
+                                      );
+                                    }
+                                    const isOnline = label === "Online Payment";
+                                    return (
+                                      <Badge
+                                        bg={isOnline ? "info" : "success"}
+                                        className="px-2 py-1"
+                                        style={{ fontSize: "0.7rem" }}
+                                      >
+                                        {label}
+                                      </Badge>
+                                    );
+                                  })()}
                                 </td>
                                 <td
                                   style={{
@@ -2906,12 +3014,14 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                 if (!updatingConfirmationStatus) {
                   setShowConfirmStatusModal(false);
                   setBookingToUpdateStatus(null);
+                  setConfirmAgentLpo("");
+                  setConfirmAgentLpoError("");
                 }
               }}
               centered
               backdrop="static"
               keyboard={false}
-              size="sm"
+              size="md"
             >
               <Modal.Header
                 closeButton={!updatingConfirmationStatus}
@@ -2949,6 +3059,30 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                     </div>
                   )}
                 </div>
+                {/* Agent LPO — required before confirming. Backend
+                    persists it on the booking's hotel_customer row
+                    (column `agent_lpo` already exists there). */}
+                <Form.Group controlId="confirmAgentLpoInput" className="text-start">
+                  <Form.Label className="fw-semibold mb-1">
+                    Agent LPO <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter Agent LPO"
+                    value={confirmAgentLpo}
+                    onChange={(e) => {
+                      setConfirmAgentLpo(e.target.value);
+                      if (confirmAgentLpoError && e.target.value.trim()) {
+                        setConfirmAgentLpoError("");
+                      }
+                    }}
+                    isInvalid={!!confirmAgentLpoError}
+                    disabled={!!updatingConfirmationStatus}
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {confirmAgentLpoError}
+                  </Form.Control.Feedback>
+                </Form.Group>
               </Modal.Body>
               <Modal.Footer
                 style={{
@@ -2961,6 +3095,8 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                   onClick={() => {
                     setShowConfirmStatusModal(false);
                     setBookingToUpdateStatus(null);
+                    setConfirmAgentLpo("");
+                    setConfirmAgentLpoError("");
                   }}
                   disabled={updatingConfirmationStatus}
                 >
