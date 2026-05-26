@@ -11,7 +11,6 @@ import {
   Badge,
   Alert,
   Modal,
-  Table,
 } from "react-bootstrap";
 import {
   FaHotel,
@@ -37,7 +36,7 @@ import { toLocalDateTime } from "../../utils/dateUtils";
  *   2. Guest Details accordion — one panel per room, with per-guest rows
  *      (salutation / first / middle / last / gender / child).
  *   3. Primary Guest Details card — full guest profile form.
- *   4. Remarks & Special Requests card.
+ *   4. Special Requests card.
  *   5. Submit row at the bottom.
  *
  * Data source: react-router state (passed by /last-minute-room-list "Book")
@@ -773,7 +772,9 @@ export default function LastMinuteBookingForm() {
                     }
                   />
                 </Col>
-                <Col md={4}>
+                {/* Agent LPO — hidden for Last Minute bookings (kept in state
+                    so the existing payload mapping still works). */}
+                <Col md={4} style={{ display: "none" }}>
                   <Form.Label>Agent LPO</Form.Label>
                   <Form.Control
                     value={primaryGuest.agentLpo}
@@ -786,32 +787,32 @@ export default function LastMinuteBookingForm() {
             </Card.Body>
           </Card>
 
-          {/* ── Remarks & Special Requests ── */}
-          <Card className="mb-3 shadow-sm border-0">
-            <Card.Body className="p-3">
-              <h5 className="mb-3 fw-bold">Remarks & Special Requests</h5>
-              <Row className="g-2">
-                <Col md={6}>
-                  <Form.Label>Remarks</Form.Label>
+          {/* ── Special Requests ── mirrors HotelBookingPage's grid layout */}
+          <Card className="p-4 mb-2 shadow-sm border-0">
+            <h5 className="mb-3 fw-bold">Special Requests</h5>
+            <Row className="g-3">
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Tourism Dirhams (AED)</Form.Label>
                   <Form.Control
-                    as="textarea"
-                    rows={3}
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="Anything the hotel should know…"
+                    type="number"
+                    value={tourismDirham}
+                    onChange={(e) => setTourismDirham(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="0.01"
                   />
-                </Col>
-                <Col md={6}>
+                </Form.Group>
+              </Col>
+              <Col md={12}>
+                <Form.Group className="mb-3">
                   <Form.Label>Special Request</Form.Label>
-                  <div
-                    className="border rounded p-2"
-                    style={{ maxHeight: 110, overflowY: "auto" }}
-                  >
+                  <div className="special-request-grid">
                     {SPECIAL_REQUEST_OPTIONS.map((opt) => (
                       <Form.Check
                         key={opt}
                         type="checkbox"
-                        id={`lm-sr-${opt}`}
+                        id={`lm-sr-${opt.replace(/[^a-zA-Z0-9]/g, "-")}`}
                         label={opt}
                         checked={specialRequests.includes(opt)}
                         onChange={(e) => {
@@ -822,24 +823,23 @@ export default function LastMinuteBookingForm() {
                               specialRequests.filter((x) => x !== opt)
                             );
                         }}
+                        className="mb-2 special-request-check"
                       />
                     ))}
                   </div>
-                </Col>
-              </Row>
-              <Row className="g-2 mt-2">
-                <Col md={4}>
-                  <Form.Label>Booking Confirmation</Form.Label>
-                  <Form.Select
-                    value={bookingConfirmation}
-                    onChange={(e) => setBookingConfirmation(e.target.value)}
-                  >
-                    <option>Book & Voucher</option>
-                    <option>Book on Hold</option>
-                  </Form.Select>
-                </Col>
-              </Row>
-            </Card.Body>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Label>Booking Confirmation</Form.Label>
+                <Form.Select
+                  value={bookingConfirmation}
+                  onChange={(e) => setBookingConfirmation(e.target.value)}
+                >
+                  <option>Book & Voucher</option>
+                  <option>Book on Hold</option>
+                </Form.Select>
+              </Col>
+            </Row>
           </Card>
 
           {/* ── Submit row ── */}
@@ -848,7 +848,12 @@ export default function LastMinuteBookingForm() {
               <div>
                 <div className="text-muted small">Total payable</div>
                 <h4 className="mb-0 text-success fw-bold">
-                  {formatPrice(totalPrice)}
+                  {formatPrice(
+                    Number(totalPrice || 0) +
+                      (tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                        ? Number(tourismDirham)
+                        : 0)
+                  )}
                 </h4>
               </div>
               <div className="d-flex gap-2">
@@ -872,137 +877,135 @@ export default function LastMinuteBookingForm() {
           </Card>
         </Form>
 
-        {/* ── Order Summary Modal ─────────────────────────────────────
-            Shown after the form passes validation. The actual POST to
-            /api/last-minute-booking/create only fires when the user clicks
-            "Confirm" inside this modal. */}
+        {/* ── Order Summary Modal — mirrors /hotel-booking-page confirm modal */}
         <Modal
           show={showSummaryModal}
           onHide={() => !submitting && setShowSummaryModal(false)}
-          size="lg"
           centered
           backdrop="static"
+          size="md"
         >
-          <Modal.Header closeButton={!submitting}>
-            <Modal.Title>Order Summary — please review</Modal.Title>
+          <Modal.Header
+            closeButton={!submitting}
+            className="bg-primary text-white py-2"
+            style={{ borderBottom: "none" }}
+          >
+            <Modal.Title className="fw-semibold d-flex align-items-center">
+              <FaHotel className="me-2" /> Confirm Your Booking
+            </Modal.Title>
           </Modal.Header>
-          <Modal.Body>
-            <Row>
-              <Col md={6}>
-                <h6 className="fw-bold mb-2">Hotel</h6>
-                <div>{hotel.hotelName}</div>
-                <div className="text-muted small">{hotel.address || "—"}</div>
-              </Col>
-              <Col md={3}>
-                <h6 className="fw-bold mb-2">Check-in</h6>
-                <div>{ctx.checkInDate}</div>
-              </Col>
-              <Col md={3}>
-                <h6 className="fw-bold mb-2">Check-out</h6>
-                <div>{ctx.checkOutDate}</div>
-              </Col>
-            </Row>
 
-            <hr />
-            <h6 className="fw-bold mb-2">Primary Guest</h6>
-            <div>
-              {primaryGuest.salutation} {primaryGuest.firstName}{" "}
-              {primaryGuest.middleName} {primaryGuest.lastName}
-            </div>
-            <div className="text-muted small">
-              {primaryGuest.email} · {primaryGuest.phone}
-            </div>
+          <Modal.Body className="px-4 py-3 bg-light">
+            <div className="border rounded-3 bg-white shadow-sm p-3">
+              <div className="mb-3">
+                <h5 className="fw-bold text-primary mb-2">
+                  {hotel.hotelName}
+                </h5>
+                <p className="text-muted mb-0">{hotel.address || "—"}</p>
+              </div>
 
-            <hr />
-            <h6 className="fw-bold mb-2">
-              Rooms ({rooms.length}) · Meal Plan: {room.mealPlanName || "—"}
-            </h6>
-            <Table size="sm" bordered className="mb-2">
-              <thead>
-                <tr>
-                  <th>Room</th>
-                  <th>Adults</th>
-                  <th>Children</th>
-                  <th>Guests</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rooms.map((r, i) => (
-                  <tr key={i}>
-                    <td>Room {i + 1}</td>
-                    <td>{r.adults}</td>
-                    <td>{r.children}</td>
-                    <td>
-                      {(r.guests || [])
-                        .map(
-                          (g) =>
-                            `${g.salutation || ""} ${g.firstName || ""} ${g.lastName || ""}`.trim()
-                        )
-                        .filter(Boolean)
-                        .join(", ") || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+              <hr />
 
-            {(remarks || specialRequests.length > 0) && (
-              <>
-                <hr />
-                {remarks && (
-                  <>
-                    <h6 className="fw-bold mb-1">Remarks</h6>
-                    <p className="mb-2">{remarks}</p>
-                  </>
-                )}
+              <Row className="gy-2">
+                <Col xs={6}>
+                  <p className="mb-1">
+                    <strong>Check-In:</strong>
+                    <br />
+                    <span className="text-dark">{ctx.checkInDate}</span>
+                  </p>
+                </Col>
+                <Col xs={6}>
+                  <p className="mb-1">
+                    <strong>Check-Out:</strong>
+                    <br />
+                    <span className="text-dark">{ctx.checkOutDate}</span>
+                  </p>
+                </Col>
+                <Col xs={6}>
+                  <p className="mb-1">
+                    <strong>Rooms:</strong> {totalRoomCount}
+                  </p>
+                </Col>
+                <Col xs={6}>
+                  <p className="mb-1">
+                    <strong>Nights:</strong> {nights}
+                  </p>
+                </Col>
+                <Col xs={12}>
+                  <p className="mb-1">
+                    <strong>Primary Guest:</strong>{" "}
+                    {[primaryGuest.salutation, primaryGuest.firstName,
+                      primaryGuest.middleName, primaryGuest.lastName]
+                      .filter(Boolean)
+                      .join(" ")}
+                  </p>
+                  <p className="mb-0 text-muted small">
+                    {primaryGuest.email} · {primaryGuest.phone}
+                  </p>
+                </Col>
                 {specialRequests.length > 0 && (
-                  <>
-                    <h6 className="fw-bold mb-1">Special Requests</h6>
-                    <p className="mb-0">{specialRequests.join(", ")}</p>
-                  </>
+                  <Col xs={12}>
+                    <p className="mb-1">
+                      <strong>Special Requests:</strong>
+                    </p>
+                    <p className="mb-0 text-muted small">
+                      {specialRequests.join(", ")}
+                    </p>
+                  </Col>
                 )}
-              </>
-            )}
+                <Col xs={12}>
+                  <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
+                    <h6 className="mb-0 fw-bold">Total Price</h6>
+                    <h4 className="mb-0">
+                      {formatPrice(
+                        Number(totalPrice || 0) +
+                          (tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                            ? Number(tourismDirham)
+                            : 0)
+                      )}{" "}
+                      for {totalRoomCount}{" "}
+                      {totalRoomCount > 1 ? "rooms" : "room"}
+                    </h4>
+                  </div>
+                </Col>
+              </Row>
 
-            <hr />
-            <Row className="align-items-end mb-2">
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label className="fw-semibold mb-1">
-                    Tourism Dirham
-                  </Form.Label>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={tourismDirham}
-                    onChange={(e) => setTourismDirham(e.target.value)}
-                  />
-                  <Form.Text className="text-muted">
-                    Optional — added to the total below.
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-            </Row>
-            <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
-              <span className="fw-semibold">
-                Total ({nights} night{nights !== 1 ? "s" : ""} ×{" "}
-                {totalRoomCount} room{totalRoomCount !== 1 ? "s" : ""})
-                {tourismDirham !== "" && !isNaN(Number(tourismDirham)) && (
-                  <span className="text-muted small ms-2">
-                    + {formatPrice(Number(tourismDirham))} TD
+              <div className="mt-3 p-3 bg-white border rounded">
+                <h6 className="fw-bold mb-2">Rate Split</h6>
+                <div className="d-flex justify-content-between">
+                  <span>Selling Price</span>
+                  <span>{formatPrice(totalPrice)}</span>
+                </div>
+                <div className="d-flex justify-content-between">
+                  <span>Tourism Dirhams</span>
+                  <span>
+                    {formatPrice(
+                      tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                        ? Number(tourismDirham)
+                        : 0
+                    )}
                   </span>
-                )}
-              </span>
-              <span className="fs-4 fw-bold text-success">
-                {formatPrice(
-                  Number(totalPrice || 0) +
-                    (tourismDirham !== "" && !isNaN(Number(tourismDirham))
-                      ? Number(tourismDirham)
-                      : 0)
-                )}
-              </span>
+                </div>
+                <hr className="my-2" />
+                <div className="d-flex justify-content-between fw-bold text-danger">
+                  <span>Total (Selling + TD)</span>
+                  <span>
+                    {formatPrice(
+                      Number(totalPrice || 0) +
+                        (tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                          ? Number(tourismDirham)
+                          : 0)
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 text-center">
+                <p className="text-muted small mb-0">
+                  Please review the booking details carefully before
+                  confirming.
+                </p>
+              </div>
             </div>
 
             {error && (
@@ -1011,20 +1014,34 @@ export default function LastMinuteBookingForm() {
               </Alert>
             )}
           </Modal.Body>
-          <Modal.Footer>
+
+          <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
             <Button
-              variant="secondary"
+              variant="outline-secondary"
               onClick={() => setShowSummaryModal(false)}
               disabled={submitting}
             >
-              Edit Details
+              <i className="bi bi-x-circle me-1"></i> Cancel
             </Button>
             <Button
-              style={{ backgroundColor: "#c0392b", border: "none" }}
+              variant="primary"
               onClick={handleConfirmFromModal}
               disabled={submitting}
+              className="px-4 fw-semibold"
             >
-              {submitting ? "Saving…" : "Confirm & Book"}
+              {submitting ? (
+                <>
+                  <span
+                    className="spinner-border spinner-border-sm me-2"
+                    role="status"
+                  ></span>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <i className="bi bi-check-circle me-1"></i> Confirm
+                </>
+              )}
             </Button>
           </Modal.Footer>
         </Modal>

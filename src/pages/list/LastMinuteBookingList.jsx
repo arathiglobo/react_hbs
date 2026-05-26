@@ -11,7 +11,14 @@ import {
   Col,
   Alert,
 } from "react-bootstrap";
-import { FaEye, FaTimes, FaSearch, FaInbox } from "react-icons/fa";
+import {
+  FaEye,
+  FaTrashAlt,
+  FaSearch,
+  FaInbox,
+  FaFileInvoice,
+  FaFilePdf,
+} from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -24,8 +31,12 @@ import { formatDateTime } from "../../utils/dateUtils";
  * Last Minute flow. Talks to /api/last-minute-booking/list, /api/last-minute-
  * booking/{id} (view), and /api/last-minute-booking/{id}/cancel.
  *
- * Columns: S.N · Customer · Booking Code · Hotel · Check-in · Check-out ·
- * Total · Status · Actions (View + Cancel).
+ * Columns: S.N · Customer · Booking Code · Hotel · Supplier · Supplier Ref ·
+ * Check-in · Check-out · Total · Payment Method · Status · Actions.
+ * Actions: View · Cancel (trash) · View Voucher · View Invoice.
+ *
+ * Supplier / Supplier Ref / Payment Method may be left blank by the backend
+ * and rendered as "-" — they are populated by ops at a later stage.
  *
  * View click → opens a Modal showing the full booking detail. Cancel click →
  * SweetAlert confirm, then PATCH cancel; on success refreshes the list.
@@ -72,6 +83,32 @@ export default function LastMinuteBookingList() {
     } finally {
       setViewLoading(false);
     }
+  };
+
+  // ── View Voucher handler — calls the existing PDF endpoint and opens the
+  //    returned URL in a new tab. The backend returns a path under /uploads/…
+  //    that the FE can render directly.
+  const handleViewVoucher = async (bookingId) => {
+    try {
+      const res = await axiosInstance.get(
+        `/api/last-minute-booking/${bookingId}/voucher`
+      );
+      const status = res.data?.status;
+      const url = res.data?.pdfUrl || res.data?.pdfPath;
+      if (status === "SUCCESS" && url) {
+        window.open(url, "_blank");
+      } else {
+        toast.error(res.data?.message || "Voucher not available yet.");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to load voucher");
+    }
+  };
+
+  // ── View Invoice handler — opens the invoice page for this booking. The
+  //    existing /invoice page accepts bookingId via query string.
+  const handleViewInvoice = (bookingId) => {
+    window.open(`/invoice?bookingId=${bookingId}`, "_blank");
   };
 
   // ── Cancel handler ──
@@ -169,11 +206,14 @@ export default function LastMinuteBookingList() {
                         <th>Customer</th>
                         <th>Booking Code</th>
                         <th>Hotel</th>
+                        <th>Supplier</th>
+                        <th>Supplier Ref</th>
                         <th>Check-in</th>
                         <th>Check-out</th>
                         <th>Total</th>
+                        <th>Payment Method</th>
                         <th>Status</th>
-                        <th style={{ width: 130 }} className="text-center">
+                        <th style={{ width: 180 }} className="text-center">
                           Actions
                         </th>
                       </tr>
@@ -187,6 +227,20 @@ export default function LastMinuteBookingList() {
                             {b.bookingCode || "-"}
                           </td>
                           <td>{b.hotelName || "-"}</td>
+                          {/* Supplier name — left blank for later entry. */}
+                          <td>
+                            {b.supplierName && b.supplierName !== "Inhouse"
+                              ? b.supplierName
+                              : "-"}
+                          </td>
+                          {/* Supplier ref — backend defaults to "0"; render
+                              "-" so it can be edited/entered later. */}
+                          <td>
+                            {b.supplierReference &&
+                            b.supplierReference !== "0"
+                              ? b.supplierReference
+                              : "-"}
+                          </td>
                           <td>{formatDateTime(b.checkInDate)}</td>
                           <td>{formatDateTime(b.checkOutDate)}</td>
                           <td>
@@ -194,6 +248,12 @@ export default function LastMinuteBookingList() {
                               ? `AED ${Number(b.totalRate).toFixed(2)}`
                               : "-"}
                           </td>
+                          {/* Payment Method — e.g. Credit Limit / Card /
+                              Bank Transfer / Top Up / Credit Points. The
+                              backend resolves the value from the booking's
+                              payment record when available; renders "-" until
+                              the payment integration is wired up. */}
+                          <td>{b.paymentMethod || "-"}</td>
                           <td>
                             {b.isCancelled ? (
                               <Badge bg="danger">Cancelled</Badge>
@@ -213,7 +273,7 @@ export default function LastMinuteBookingList() {
                                 onClick={() => handleView(b.bookingId)}
                               />
                               {!b.isCancelled && (
-                                <FaTimes
+                                <FaTrashAlt
                                   role="button"
                                   title="Cancel booking"
                                   className="text-danger"
@@ -223,6 +283,20 @@ export default function LastMinuteBookingList() {
                                   }
                                 />
                               )}
+                              <FaFilePdf
+                                role="button"
+                                title="View Voucher"
+                                className="text-success"
+                                style={{ fontSize: 18, cursor: "pointer" }}
+                                onClick={() => handleViewVoucher(b.bookingId)}
+                              />
+                              <FaFileInvoice
+                                role="button"
+                                title="View Invoice"
+                                className="text-warning"
+                                style={{ fontSize: 18, cursor: "pointer" }}
+                                onClick={() => handleViewInvoice(b.bookingId)}
+                              />
                             </div>
                           </td>
                         </tr>

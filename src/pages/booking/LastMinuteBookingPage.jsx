@@ -390,14 +390,9 @@ export default function LastMinuteBookingPage() {
           {/* ── Search Card ── */}
           <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
             <Card.Body className="p-4">
-              <div className="mb-4 d-flex justify-content-between align-items-start">
-                <div>
-                  <h2 className="fw-semibold text-primary mb-1">Last Minute Deals</h2>
-                  <p className="text-muted mb-0">Discounted rooms for check-in within 2 days</p>
-                </div>
-                <Badge bg="warning" text="dark" className="align-self-center">
-                  Check-in: today through +{checkInWindowDays} day{checkInWindowDays === 1 ? "" : "s"} only
-                </Badge>
+              <div className="mb-4">
+                <h2 className="fw-semibold text-primary mb-1">Last Minute Deals</h2>
+                <p className="text-muted mb-0">Discounted rooms for check-in within 2 days</p>
               </div>
 
               <Form onSubmit={handleSearch}>
@@ -511,6 +506,9 @@ export default function LastMinuteBookingPage() {
                         }}
                       />
                       {errors.checkIn && <div className="text-danger small mt-1">{errors.checkIn}</div>}
+                      <Badge bg="warning" text="dark" className="mt-2">
+                        Check-in: today through +{checkInWindowDays} day{checkInWindowDays === 1 ? "" : "s"} only
+                      </Badge>
                     </Form.Group>
                   </Col>
 
