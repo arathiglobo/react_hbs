@@ -2,7 +2,7 @@ import React from "react";
 import { Routes, Route, Link } from "react-router-dom";
 import Login from "./pages/Login";
 import SelectRole from "./pages/SelectRole";
-import Register from "./pages/Register";
+import Register from "./pages/Register"; 
 
 import Country from "./pages/master/Country";
 import Destination from "./pages/master/Destination";
