@@ -1,0 +1,1435 @@
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Container,
+  Card,
+  Form,
+  Button,
+  Row,
+  Col,
+  Spinner,
+  Badge,
+  Table,
+  Modal,
+  Accordion,
+} from "react-bootstrap";
+import {
+  FaHotel,
+  FaCalendarAlt,
+  FaUsers,
+  FaUtensils,
+  FaCheckCircle,
+} from "react-icons/fa";
+import axiosInstance from "../../components/AxiosInstance";
+import Sidebar from "../../components/Sidebar";
+import Topbar from "../../components/TopBar";
+import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
+import { toast } from "react-hot-toast";
+import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
+// Reuse the hotel-booking-page styles so the long-stay page renders
+// with the same shell, summary cards, and Policies & Terms modal as
+// /booking/hotel.
+import "../../styles/HotelBookingPage.css";
+
+// Pretty-print the structured cancellation policy chargeType + value
+// rendered on the booking page. Mirrors the dropdown labels used in
+// the contract create/edit table editor.
+const formatChargeType = (t) => {
+  switch ((t || "").toUpperCase()) {
+    case "PERCENT": return "%";
+    case "AMOUNT": return "Amount (AED)";
+    case "FULL_STAY": return "Full Stay";
+    case "NIGHTS": return "Nights";
+    default: return t || "—";
+  }
+};
+const formatChargeValue = (p) => {
+  if (p == null || p.value == null) return "—";
+  const t = (p.chargeType || "").toUpperCase();
+  if (t === "PERCENT") return `${p.value}%`;
+  if (t === "AMOUNT") return `AED ${p.value}`;
+  if (t === "NIGHTS") return `${p.value} night${p.value === 1 ? "" : "s"}`;
+  return String(p.value);
+};
+
+// Render one cancellation-policy row as a natural-language line —
+// matches the plain-text rendering used by /booking/hotel's policy
+// modal (e.g. "10% cancelled within 30 days", "Full Stay (100) no-show").
+const formatCancellationPolicyLine = (p) => {
+  if (!p) return "";
+  const value = formatChargeValue(p);
+  const cond = (p.condition || "").trim();
+  return cond ? `${value} ${cond}` : value;
+};
+
+export default function LongStayBookingPage() {
+  const navigate = useNavigate();
+  const [draft, setDraft] = useState(null);
+  const [agents, setAgents] = useState([]);
+  const [agentId, setAgentId] = useState("");
+  const [rooms, setRooms] = useState([]);
+  const [primaryGuest, setPrimaryGuest] = useState({
+    salutation: "",
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    passportNo: "",
+    nationality: "",
+    gender: "",
+  });
+  const [remarks, setRemarks] = useState("");
+  const [tourismDirham, setTourismDirham] = useState("");
+  const [quote, setQuote] = useState(null);
+  const [quoteError, setQuoteError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  // Pre-confirmation Policies & Terms modal — mirrors
+  // HotelBookingPage's flow: Confirm Booking → policy modal → accept
+  // → summary modal → final Confirm.
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("longStayBookingDraft");
+    if (!raw) {
+      toast.error("No booking draft — please search again");
+      navigate("/new-booking/long-stay", { replace: true });
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    setDraft(parsed);
+    if (parsed.agentId) setAgentId(String(parsed.agentId));
+    if (parsed.nationality) {
+      setPrimaryGuest((g) => ({ ...g, nationality: parsed.nationality }));
+    }
+
+    // Initialize rooms with guests array based on search criteria
+    const initialRooms = (parsed.rooms || [{ adults: 1, children: 0, childAges: [] }]).map(
+      (room) => ({
+        adults: room.adults || 1,
+        children: room.children || 0,
+        childAges: room.childAges || [],
+        guests: Array.from(
+          { length: (room.adults || 1) + (room.children || 0) },
+          (_, i) => ({
+            salutation: "",
+            firstName: "",
+            lastName: "",
+            gender: "",
+            isChild: i >= (room.adults || 1),
+          })
+        ),
+      })
+    );
+    setRooms(initialRooms);
+
+    axiosInstance
+      .get("/api/agent")
+      .then((res) => setAgents(res.data || []))
+      .catch(() => {});
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!draft) return;
+    const fetchQuote = async () => {
+      try {
+        setQuoteError(null);
+        // Send the party size so the backend can add extra-adult and
+        // child charges. Each room's adults/children count maps 1:1
+        // to LongStayRoomGuestsDTO on the backend, which is what
+        // LongStayBookingService#countExtras reads.
+        const partyRooms = (rooms || []).map((r) => ({
+          adults: Number(r.adults) || 0,
+          children: Number(r.children) || 0,
+          childAges: r.childAges || [],
+        }));
+        const res = await axiosInstance.post("/api/longStayBooking/quote", {
+          hotelId: draft.hotelId,
+          longStayRoomId: draft.room.longStayRoomId,
+          // agentId lets the backend apply this agent's configured
+          // markup (PERCENT or AMOUNT) on top of the room rate —
+          // mirrors the hotel booking flow.
+          agentId: agentId ? Number(agentId) : draft.agentId || null,
+          checkInDate: toLocalDateTime(draft.checkIn),
+          checkOutDate: toLocalDateTime(draft.checkOut),
+          rooms: partyRooms,
+        });
+        setQuote(res.data);
+      } catch (err) {
+        const msg = err.response?.data?.message || err.message || "Could not compute quote";
+        setQuoteError(msg);
+        setQuote(null);
+      }
+    };
+    fetchQuote();
+  }, [draft, rooms, agentId]);
+
+  const handleGuestChange = (rIdx, gIdx, field, value) => {
+    setRooms((prev) => {
+      const updated = [...prev];
+      updated[rIdx] = {
+        ...updated[rIdx],
+        guests: updated[rIdx].guests.map((g, i) =>
+          i === gIdx ? { ...g, [field]: value } : g
+        ),
+      };
+      return updated;
+    });
+    if (rIdx === 0 && gIdx === 0 && ["salutation", "firstName", "lastName", "gender"].includes(field)) {
+      setPrimaryGuest((p) => ({ ...p, [field]: value }));
+    }
+    const key = `r${rIdx}_g${gIdx}_${field}`;
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+  };
+
+  const handlePrimaryGuestChange = (field, value) => {
+    setPrimaryGuest((p) => ({ ...p, [field]: value }));
+    if (errors[field]) setErrors((e) => ({ ...e, [field]: undefined }));
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!primaryGuest.salutation) e.salutation = "Salutation is required";
+    if (!primaryGuest.firstName.trim()) e.firstName = "First name is required";
+    if (!primaryGuest.lastName.trim()) e.lastName = "Last name is required";
+    if (!primaryGuest.email.trim()) {
+      e.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.email.trim())) {
+      e.email = "Enter a valid email";
+    }
+    if (!primaryGuest.phone.trim()) {
+      e.phone = "Phone is required";
+    } else if (!/^[+0-9\s\-()]{7,}$/.test(primaryGuest.phone.trim())) {
+      e.phone = "Enter a valid phone";
+    }
+    rooms.forEach((room, rIdx) => {
+      room.guests.forEach((g, gIdx) => {
+        if (!g.salutation) e[`r${rIdx}_g${gIdx}_salutation`] = "Required";
+        if (!g.firstName?.trim()) e[`r${rIdx}_g${gIdx}_firstName`] = "Required";
+        if (!g.lastName?.trim()) e[`r${rIdx}_g${gIdx}_lastName`] = "Required";
+      });
+    });
+    return e;
+  };
+
+  const handleBook = () => {
+    const e = validate();
+    setErrors(e);
+    if (Object.keys(e).length > 0) {
+      toast.error("Please fix the highlighted fields");
+      return;
+    }
+    if (!quote || quoteError) {
+      toast.error("Price quote not ready — please wait or retry");
+      return;
+    }
+    // If the contract has any cancellation rules / notes / T&C, gate
+    // the booking summary behind the Policies & Terms modal. If
+    // nothing is configured (legacy contracts), skip straight to the
+    // confirmation modal so the agent flow doesn't change for them.
+    const hasPolicy =
+      (draft?.contract?.cancellationPolicy || []).length > 0 ||
+      !!draft?.contract?.cancellationPolicyNotes ||
+      (draft?.contract?.termsAndConditions || []).length > 0;
+    if (hasPolicy) {
+      setPolicyAccepted(false);
+      setShowPolicyModal(true);
+    } else {
+      setShowConfirmModal(true);
+    }
+  };
+
+  const confirmBooking = async () => {
+    try {
+      setSubmitting(true);
+      const fullName = [
+        primaryGuest.salutation,
+        primaryGuest.firstName,
+        primaryGuest.middleName,
+        primaryGuest.lastName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      const payload = {
+        hotelId: draft.hotelId,
+        longStayContractId: draft.contract.longStayContractId,
+        longStayRoomId: draft.room.longStayRoomId,
+        agentId: agentId ? Number(agentId) : null,
+        checkInDate: toLocalDateTime(draft.checkIn),
+        checkOutDate: toLocalDateTime(draft.checkOut),
+        primaryGuestName: fullName,
+        primaryGuestEmail: primaryGuest.email.trim(),
+        primaryGuestPhone: primaryGuest.phone.trim(),
+        nationality: primaryGuest.nationality || null,
+        remarks: remarks || null,
+        tourismDirham:
+          tourismDirham !== "" && !isNaN(Number(tourismDirham))
+            ? Number(tourismDirham)
+            : null,
+        primaryGuestDetails: {
+          salutation: primaryGuest.salutation,
+          firstName: primaryGuest.firstName.trim(),
+          middleName: primaryGuest.middleName?.trim() || null,
+          lastName: primaryGuest.lastName.trim(),
+          email: primaryGuest.email.trim(),
+          phone: primaryGuest.phone.trim(),
+          passportNo: primaryGuest.passportNo?.trim() || null,
+          nationality: primaryGuest.nationality || null,
+          gender: primaryGuest.gender || null,
+        },
+        rooms: rooms.map((room) => ({
+          adults: room.adults,
+          children: room.children,
+          childAges: room.childAges,
+          guests: room.guests.map((g, gIdx) => ({
+            salutation: g.salutation,
+            firstName: g.firstName?.trim() || "",
+            lastName: g.lastName?.trim() || "",
+            gender: g.gender || null,
+            isChild: !!g.isChild,
+            childAge: g.isChild
+              ? room.childAges[gIdx - room.adults] ?? null
+              : null,
+          })),
+        })),
+      };
+      const res = await axiosInstance.post("/api/longStayBooking/create", payload);
+      toast.success(`Booking confirmed: ${res.data.bookingCode}`);
+      sessionStorage.removeItem("longStayBookingDraft");
+      setShowConfirmModal(false);
+      navigate("/booking-details/long-stay-booking-list");
+    } catch (err) {
+      toast.error(`Booking failed: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!draft) return null;
+  const fmt = (n) => (n == null ? "-" : Number(n).toFixed(2));
+
+  // Currency formatter — matches HotelBookingPage so both flows render
+  // prices identically ("AED 1,234.00").
+  const formatPrice = (price) =>
+    new Intl.NumberFormat("en-AE", {
+      style: "currency",
+      currency: "AED",
+    }).format(price || 0);
+
+  // Tourism Dirham parsed for live summary calculations — mirrors
+  // HotelBookingPage#tourismDirhamsAmount so the two flows behave
+  // identically.
+  const tdAmount =
+    tourismDirham !== "" && !isNaN(Number(tourismDirham))
+      ? Number(tourismDirham)
+      : 0;
+  // quote.totalAmount is already agent-markup-inclusive (see
+  // LongStayBookingService#quote). totalAmountWithoutMarkup +
+  // markupAmount are the pre-markup audit values backend now ships
+  // so we can render the same Selling Price → Markup → Total
+  // breakdown the hotel booking page shows.
+  const sellingPrice = quote?.totalAmount != null ? Number(quote.totalAmount) : 0;
+  const preMarkupRate =
+    quote?.totalAmountWithoutMarkup != null
+      ? Number(quote.totalAmountWithoutMarkup)
+      : sellingPrice;
+  const markupAmount =
+    quote?.markupAmount != null ? Number(quote.markupAmount) : 0;
+  const markupType = quote?.markupType || null;
+  const markupValue = quote?.markupValue != null ? Number(quote.markupValue) : null;
+  const newTotal = sellingPrice + tdAmount;
+
+  // ── derived totals for header chips ────────────────────────────────────
+  const totalAdults = rooms.reduce((s, r) => s + (r.adults || 0), 0);
+  const totalChildren = rooms.reduce((s, r) => s + (r.children || 0), 0);
+  const totalGuests = totalAdults + totalChildren;
+
+  const mealPlanLabel =
+    draft.room.roomTypeName ||
+    (draft.room.meal ? "Meal included" : "Room only");
+
+  return (
+    <div className="min-vh-100 bg-light d-flex flex-column hotel-booking-container">
+      <Topbar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
+        <main className="content-wrapper py-4 flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
+          <Container fluid="xl">
+            <div className="d-flex justify-content-end mb-2">
+              <AgentBalanceDisplay agentId={agentId} />
+            </div>
+
+            <Form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleBook();
+              }}
+            >
+              <Row className="g-3">
+                <Col lg={8} className="hbp-left-col">
+                  {/* Guest Details */}
+                  <Card className="mb-2 shadow-sm border-0">
+                    <Card.Header className="bg-light py-2">
+                      <div className="d-flex align-items-center">
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => navigate(-1)}
+                          className="me-3"
+                        >
+                          ← Back
+                        </Button>
+                        <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
+                      </div>
+                    </Card.Header>
+                    <Card.Body className="p-0">
+                      <Accordion
+                        alwaysOpen
+                        defaultActiveKey={rooms.map((_, i) => i.toString())}
+                        className="guest-details-accordion"
+                      >
+                        {rooms.map((room, rIdx) => (
+                          <Accordion.Item
+                            key={rIdx}
+                            eventKey={rIdx.toString()}
+                            className="mb-3 guest-room-item"
+                          >
+                            <Accordion.Header className="bg-primary text-white">
+                              <h6 className="mb-0 fw-bold w-100 d-flex flex-wrap align-items-center gap-2">
+                                <span>
+                                  Room {rIdx + 1} -{" "}
+                                  {room.roomCategoryName ||
+                                    draft.room.roomCategoryName ||
+                                    `Category #${draft.room.hotelRoomCategoryId}`}
+                                </span>
+                                {mealPlanLabel && (
+                                  <Badge bg="light" text="dark" className="ms-2">
+                                    <FaUtensils className="me-1" />
+                                    {mealPlanLabel}
+                                  </Badge>
+                                )}
+                              </h6>
+                            </Accordion.Header>
+                            <Accordion.Body className="p-4">
+                              {room.guests.map((g, gIdx) => (
+                                <div key={gIdx} className="guest-row mb-3">
+                                  <Row className="align-items-center g-2">
+                                    <Col md={2}>
+                                      <span className="fw-semibold text-muted">
+                                        {g.isChild
+                                          ? `Child ${
+                                              gIdx - room.adults + 1
+                                            } (Age: ${
+                                              room.childAges[gIdx - room.adults] ??
+                                              "-"
+                                            })`
+                                          : `Adult ${gIdx + 1}`}{" "}
+                                        *
+                                      </span>
+                                    </Col>
+                                    <Col md={2}>
+                                      <Form.Select
+                                        value={g.salutation}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            rIdx,
+                                            gIdx,
+                                            "salutation",
+                                            e.target.value
+                                          )
+                                        }
+                                        className="form-control-sm"
+                                        isInvalid={
+                                          !!errors[`r${rIdx}_g${gIdx}_salutation`]
+                                        }
+                                      >
+                                        <option value="">SELECT</option>
+                                        <option value="Mr">Mr</option>
+                                        <option value="Mrs">Mrs</option>
+                                        <option value="Ms">Ms</option>
+                                        <option value="Master">Master</option>
+                                      </Form.Select>
+                                    </Col>
+                                    <Col md={3}>
+                                      <Form.Control
+                                        type="text"
+                                        placeholder="First Name *"
+                                        value={g.firstName}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            rIdx,
+                                            gIdx,
+                                            "firstName",
+                                            e.target.value
+                                          )
+                                        }
+                                        className="form-control-sm"
+                                        isInvalid={
+                                          !!errors[`r${rIdx}_g${gIdx}_firstName`]
+                                        }
+                                      />
+                                    </Col>
+                                    <Col md={3}>
+                                      <Form.Control
+                                        type="text"
+                                        placeholder="Last Name *"
+                                        value={g.lastName}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            rIdx,
+                                            gIdx,
+                                            "lastName",
+                                            e.target.value
+                                          )
+                                        }
+                                        className="form-control-sm"
+                                        isInvalid={
+                                          !!errors[`r${rIdx}_g${gIdx}_lastName`]
+                                        }
+                                      />
+                                    </Col>
+                                    <Col md={2}>
+                                      <Form.Select
+                                        value={g.gender}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            rIdx,
+                                            gIdx,
+                                            "gender",
+                                            e.target.value
+                                          )
+                                        }
+                                        className="form-control-sm"
+                                      >
+                                        <option value="">Gender</option>
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                        <option value="Other">Other</option>
+                                      </Form.Select>
+                                    </Col>
+                                  </Row>
+                                  {gIdx < room.guests.length - 1 && (
+                                    <hr className="my-3" />
+                                  )}
+                                </div>
+                              ))}
+                            </Accordion.Body>
+                          </Accordion.Item>
+                        ))}
+                      </Accordion>
+                    </Card.Body>
+                  </Card>
+
+                  {/* Lead Passenger */}
+                  <Card className="p-4 mb-4 shadow-sm border-0">
+                    <h5 className="mb-3 fw-bold">Lead Passenger</h5>
+                    <Row className="g-3">
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Salutation
+                          </Form.Label>
+                          <Form.Select
+                            value={primaryGuest.salutation}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("salutation", e.target.value)
+                            }
+                            isInvalid={!!errors.salutation}
+                          >
+                            <option value="">Select</option>
+                            <option value="Mr">Mr</option>
+                            <option value="Mrs">Mrs</option>
+                            <option value="Ms">Ms</option>
+                            <option value="Dr">Dr</option>
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>First Name
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.firstName}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("firstName", e.target.value)
+                            }
+                            isInvalid={!!errors.firstName}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Middle Name</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.middleName}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("middleName", e.target.value)
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Last Name
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.lastName}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("lastName", e.target.value)
+                            }
+                            isInvalid={!!errors.lastName}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Email
+                          </Form.Label>
+                          <Form.Control
+                            type="email"
+                            value={primaryGuest.email}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("email", e.target.value)
+                            }
+                            isInvalid={!!errors.email}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>
+                            <span style={{ color: "red" }}>*</span>Phone
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.phone}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("phone", e.target.value)
+                            }
+                            isInvalid={!!errors.phone}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Passport No</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={primaryGuest.passportNo}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange("passportNo", e.target.value)
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={3}>
+                        <Form.Group>
+                          <Form.Label>Nationality</Form.Label>
+                          <Form.Control
+                            type="text"
+                            maxLength={2}
+                            placeholder="e.g. AE"
+                            value={primaryGuest.nationality}
+                            onChange={(e) =>
+                              handlePrimaryGuestChange(
+                                "nationality",
+                                e.target.value.toUpperCase()
+                              )
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card>
+
+                  {/* Stay & Room Details */}
+                  <Card className="p-4 mb-4 shadow-sm border-0">
+                    <h5 className="mb-3 fw-bold">Stay &amp; Room Details</h5>
+                    <Row className="g-3">
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">Hotel</div>
+                        <div className="fw-semibold">{draft.hotelName}</div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">Contract</div>
+                        <div className="fw-semibold">{draft.contract.rateCode}</div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">Billing</div>
+                        <div className="fw-semibold">
+                          {draft.contract.additionalCostType === "WEEKLY"
+                            ? "Weekly"
+                            : "Day-wise"}
+                        </div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">
+                          Room Category
+                        </div>
+                        <div className="fw-semibold">
+                          {draft.room.roomCategoryName ||
+                            `Category #${draft.room.hotelRoomCategoryId}`}
+                        </div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">Meal Plan</div>
+                        <div className="fw-semibold d-flex align-items-center">
+                          <FaUtensils className="me-2 text-muted" />
+                          {mealPlanLabel}
+                        </div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">Occupancy</div>
+                        <div className="fw-semibold">
+                          {draft.room.occupancyTypeName ||
+                            `Occ-${draft.room.occupancyTypeId}`}
+                        </div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">Check-In</div>
+                        <div className="fw-semibold">
+                          {formatDateTime(draft.checkIn)}
+                        </div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">Check-Out</div>
+                        <div className="fw-semibold">
+                          {formatDateTime(draft.checkOut)}
+                        </div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small fw-semibold">
+                          Refund Policy
+                        </div>
+                        <div>
+                          {draft.room.refundable ? (
+                            <Badge bg="success">
+                              <FaCheckCircle className="me-1" /> Flexible
+                            </Badge>
+                          ) : (
+                            <Badge bg="danger">Non-Refundable</Badge>
+                          )}
+                        </div>
+                      </Col>
+                    </Row>
+                  </Card>
+
+                  {/* Remarks & Tourism Dirhams */}
+                  <Card className="p-4 mb-2 shadow-sm border-0">
+                    <h5 className="mb-3 fw-bold">Remarks &amp; Tourism Dirhams</h5>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Tourism Dirhams (AED)</Form.Label>
+                          {/*
+                            Kept out of the confirmation modal so the
+                            operator sees the running total update live
+                            in the right-side summary. Optional — added
+                            on top of the quoted total.
+                          */}
+                          <Form.Control
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={tourismDirham}
+                            onChange={(e) => setTourismDirham(e.target.value)}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Remarks</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            placeholder="Any special requests or notes for the property"
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card>
+                </Col>
+
+                {/* Right sticky column — Booking Summary + Price */}
+                <Col lg={4} className="hbp-right-col">
+                  <div className="hbp-sticky-summary">
+                    <Card className="shadow-sm rounded-3 mb-3 booking-summary-card border-0 overflow-hidden">
+                      <Card.Header className="bg-primary text-white py-2 rounded-top">
+                        <h6 className="mb-0 d-flex align-items-center">
+                          <FaHotel className="me-2" /> Booking Summary
+                        </h6>
+                      </Card.Header>
+                      <Card.Body className="p-3">
+                        <div className="mb-3">
+                          <div className="fw-bold text-primary mb-1">
+                            {draft.hotelName}
+                          </div>
+                          {draft.address && (
+                            <div className="text-muted small mb-2">
+                              {draft.address}
+                            </div>
+                          )}
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <span className="badge bg-secondary">
+                              {draft.contract.additionalCostType === "WEEKLY"
+                                ? "Weekly billing"
+                                : "Day-wise billing"}
+                            </span>
+                            {draft.room.refundable ? (
+                              <Badge bg="success">Flexible</Badge>
+                            ) : (
+                              <Badge bg="danger">Non-Refundable</Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaCalendarAlt className="me-2 text-primary" />
+                            Check-in
+                          </div>
+                          <div className="hbp-summary-value">
+                            {formatDateTime(draft.checkIn)}
+                          </div>
+                        </div>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaCalendarAlt className="me-2 text-primary" />
+                            Check-out
+                          </div>
+                          <div className="hbp-summary-value">
+                            {formatDateTime(draft.checkOut)}
+                          </div>
+                        </div>
+                        <div className="hbp-summary-row align-items-start">
+                          <div className="hbp-summary-label">
+                            <FaUsers className="me-2 text-primary" />
+                            Guests
+                          </div>
+                          <div className="hbp-summary-value text-end">
+                            {rooms.map((room, i) => (
+                              <div key={i} className="small">
+                                Room {i + 1}: {room.adults} Adult
+                                {room.adults > 1 ? "s" : ""}
+                                {room.children
+                                  ? `, ${room.children} Child${
+                                      room.children > 1 ? "ren" : ""
+                                    }`
+                                  : ""}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaUtensils className="me-2 text-primary" />
+                            Meal Plan
+                          </div>
+                          <div className="hbp-summary-value">{mealPlanLabel}</div>
+                        </div>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">Nights</div>
+                          <div className="hbp-summary-value">
+                            {quote?.totalNights ?? "—"}
+                          </div>
+                        </div>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">Contract</div>
+                          <div className="hbp-summary-value">
+                            {draft.contract.rateCode}
+                          </div>
+                        </div>
+                      </Card.Body>
+                    </Card>
+
+                    <Card className="shadow-sm rounded-3 border-0 hbp-price-card">
+                      <Card.Header className="bg-light py-2">
+                        <h6 className="mb-0 fw-bold">Price Details</h6>
+                      </Card.Header>
+                      <Card.Body className="p-3">
+                        {quoteError ? (
+                          <div
+                            className="text-danger small p-2 rounded"
+                            style={{ background: "#fee2e2" }}
+                          >
+                            {quoteError}
+                          </div>
+                        ) : !quote ? (
+                          <div className="text-center py-4">
+                            <Spinner animation="border" size="sm" />
+                            <div className="small text-muted mt-2">
+                              Computing quote…
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {quote.contractsUsed &&
+                              quote.contractsUsed.length > 1 && (
+                                <div
+                                  className="small mb-2 p-2 rounded"
+                                  style={{ background: "#eff6ff", color: "#1e40af" }}
+                                >
+                                  Booking spans{" "}
+                                  <strong>{quote.contractsUsed.length}</strong>{" "}
+                                  contract validities — billed pro-rata.
+                                </div>
+                              )}
+
+                            {quote.months && quote.months.length > 0 && (
+                              <>
+                                {quote.months.map((m) => (
+                                  <div
+                                    key={m.monthIndex}
+                                    className="mb-2 p-2 rounded"
+                                    style={{ background: "#fafbfc" }}
+                                  >
+                                    <div className="d-flex justify-content-between align-items-center">
+                                      <div>
+                                        <div className="fw-semibold small">
+                                          Month {m.monthIndex}
+                                        </div>
+                                        <div
+                                          className="text-muted"
+                                          style={{ fontSize: 11 }}
+                                        >
+                                          {m.from} → {m.to}
+                                        </div>
+                                      </div>
+                                      <span className="fw-bold text-success small">
+                                        {fmt(m.amount)}
+                                      </span>
+                                    </div>
+                                    {m.slices && m.slices.length > 0 && (
+                                      <Table
+                                        size="sm"
+                                        className="mt-2 mb-0"
+                                        style={{ fontSize: 12 }}
+                                      >
+                                        <thead className="text-muted">
+                                          <tr>
+                                            <th>Validity</th>
+                                            <th>Days</th>
+                                            <th className="text-end">Sub-total</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {m.slices.map((s, i) => (
+                                            <tr key={i}>
+                                              <td>{s.rateCode}</td>
+                                              <td>{s.days}</td>
+                                              <td className="text-end">
+                                                {fmt(s.amount)}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </Table>
+                                    )}
+                                  </div>
+                                ))}
+                              </>
+                            )}
+
+                            {quote.remainder && quote.remainder.days > 0 && (
+                              <div
+                                className="mb-2 p-2 rounded"
+                                style={{ background: "#fffbeb" }}
+                              >
+                                <div className="d-flex justify-content-between">
+                                  <div>
+                                    <div
+                                      className="fw-semibold small"
+                                      style={{ color: "#92400e" }}
+                                    >
+                                      Remainder · {quote.remainder.days} day
+                                      {quote.remainder.days > 1 ? "s" : ""}
+                                    </div>
+                                    <div
+                                      className="text-muted"
+                                      style={{ fontSize: 11 }}
+                                    >
+                                      {quote.remainder.costType === "WEEKLY"
+                                        ? "Weekly"
+                                        : "Day-wise"}
+                                    </div>
+                                  </div>
+                                  <span
+                                    className="fw-bold small"
+                                    style={{ color: "#92400e" }}
+                                  >
+                                    {fmt(quote.remainder.amount)}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            <hr className="my-2" />
+                            {markupAmount > 0 && (
+                              <div className="hbp-summary-row">
+                                <div className="hbp-summary-label">
+                                  Pre-Markup Rate
+                                </div>
+                                <div className="hbp-summary-value">
+                                  {fmt(preMarkupRate)}
+                                </div>
+                              </div>
+                            )}
+                            {markupAmount > 0 && (
+                              <div className="hbp-summary-row">
+                                <div className="hbp-summary-label">
+                                  Agent Markup
+                                  {markupType && markupValue != null && (
+                                    <span
+                                      className="text-muted ms-1"
+                                      style={{ fontSize: 11 }}
+                                    >
+                                      (
+                                      {markupType === "PERCENT"
+                                        ? `${markupValue}%`
+                                        : `AED ${markupValue}`}
+                                      )
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="hbp-summary-value">
+                                  {fmt(markupAmount)}
+                                </div>
+                              </div>
+                            )}
+                            <div className="hbp-summary-row">
+                              <div className="hbp-summary-label">Selling Price</div>
+                              <div className="hbp-summary-value">
+                                {fmt(sellingPrice)}
+                              </div>
+                            </div>
+                            <div className="hbp-summary-row">
+                              <div className="hbp-summary-label">
+                                Tourism Dirhams
+                              </div>
+                              <div className="hbp-summary-value">
+                                {fmt(tdAmount)}
+                              </div>
+                            </div>
+                            <hr className="my-2" />
+                            <div className="hbp-summary-row fw-bold">
+                              <div className="hbp-summary-label text-danger">
+                                New Total
+                              </div>
+                              <div className="hbp-summary-value text-danger">
+                                {fmt(newTotal)}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </Card.Body>
+                    </Card>
+
+                    <div className="hbp-action-bar mt-3 d-flex gap-2">
+                      <Button
+                        variant="outline-secondary"
+                        onClick={() => navigate(-1)}
+                        className="flex-grow-1"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        variant="primary"
+                        type="button"
+                        onClick={handleBook}
+                        disabled={!quote || !!quoteError || submitting}
+                        className="flex-grow-1"
+                      >
+                        Confirm Booking
+                      </Button>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+
+              {/* ── Policies & Terms Modal (pre-confirmation gate) ─────────────── */}
+              {/*
+                Uses the same .policy-modal-* CSS classes as
+                /booking/hotel so the long-stay modal is visually identical
+                to the hotel one (plain white header, uppercase section
+                titles, dividers, neutral footer with checkbox + Cancel +
+                Proceed). Styling lives in styles/HotelBookingPage.css.
+              */}
+              <Modal
+                show={showPolicyModal}
+                onHide={() => setShowPolicyModal(false)}
+                centered
+                backdrop="static"
+                size="lg"
+                scrollable
+                dialogClassName="policy-modal"
+              >
+                <Modal.Header closeButton className="policy-modal-header">
+                  <Modal.Title className="policy-modal-title">
+                    Hotel Policies &amp; Terms
+                  </Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="policy-modal-body">
+                  {/* Cancellation Policy */}
+                  <section className="policy-section">
+                    <h6 className="policy-section-title">Cancellation Policy</h6>
+                    {(draft?.contract?.cancellationPolicy || []).length > 0 ? (
+                      draft.contract.cancellationPolicy.map((p, i) => (
+                        <div key={i} className="policy-item">
+                          <div className="policy-text">
+                            {formatCancellationPolicyLine(p)}
+                          </div>
+                        </div>
+                      ))
+                    ) : !draft?.contract?.cancellationPolicyNotes ? (
+                      <div className="policy-empty">
+                        No cancellation policy configured.
+                      </div>
+                    ) : null}
+                    {draft?.contract?.cancellationPolicyNotes && (
+                      <div className="policy-item">
+                        <div className="policy-text">
+                          {draft.contract.cancellationPolicyNotes}
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Terms & Conditions */}
+                  <section className="policy-section policy-section-last">
+                    <h6 className="policy-section-title">Terms &amp; Conditions</h6>
+                    {(draft?.contract?.termsAndConditions || []).length > 0 ? (
+                      draft.contract.termsAndConditions.map((t, i) => (
+                        <div key={i} className="policy-item">
+                          <div className="policy-text">{t}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="policy-empty">
+                        No terms &amp; conditions configured.
+                      </div>
+                    )}
+                  </section>
+                </Modal.Body>
+                <Modal.Footer className="policy-modal-footer">
+                  <Form.Check
+                    type="checkbox"
+                    id="ls-policy-accept"
+                    className="me-auto policy-accept-check"
+                    label={
+                      <span>
+                        I have read and accept the{" "}
+                        <span className="text-primary">policies</span> and{" "}
+                        <span className="text-primary">terms &amp; conditions</span>
+                      </span>
+                    }
+                    checked={policyAccepted}
+                    onChange={(e) => setPolicyAccepted(e.target.checked)}
+                  />
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() => setShowPolicyModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={!policyAccepted}
+                    onClick={() => {
+                      // Accept → close this modal, open the summary modal.
+                      // Mirrors HotelBookingPage policy → summary chain.
+                      setShowPolicyModal(false);
+                      setShowConfirmModal(true);
+                    }}
+                  >
+                    Proceed
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Confirmation Modal ─────────────────────────────────────────── */}
+              <Modal
+                show={showConfirmModal}
+                onHide={() => !submitting && setShowConfirmModal(false)}
+                centered
+                backdrop="static"
+                size="md"
+              >
+                {/*
+                  Unified confirmation modal — structure copied from
+                  HotelBookingPage so the operator sees the same shape across
+                  the hotel and long-stay flows (per product spec / screenshot
+                  reference). Sections (top → bottom):
+                    1. Hotel name + address
+                    2. Check-In / Check-Out / Rooms / Nights grid
+                    3. Cancellation Policy bullet list
+                    4. Selling Price card
+                    5. Total Price green gradient band ("for N room(s)")
+                    6. Rate Split card (Selling / Tourism Dirhams / Total in red)
+                    7. Green tick — policies accepted
+                    8. Grey footer note
+                */}
+                <Modal.Header
+                  closeButton={!submitting}
+                  className="bg-primary text-white py-2"
+                  style={{ borderBottom: "none" }}
+                >
+                  <Modal.Title className="fw-semibold d-flex align-items-center">
+                    <FaHotel className="me-2" /> Confirm Your Booking
+                  </Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="px-4 py-3 bg-light">
+                  {draft && (
+                    <div className="border rounded-3 bg-white shadow-sm p-3">
+                      {/* Hotel name + address */}
+                      <div className="mb-3">
+                        <h5 className="fw-bold text-primary mb-2">
+                          {draft.hotelName}
+                        </h5>
+                        <p className="text-muted mb-0">{draft.address || "—"}</p>
+                      </div>
+
+                      <hr />
+
+                      <Row className="gy-2">
+                        <Col xs={6}>
+                          <p className="mb-1">
+                            <strong>Check-In:</strong>
+                            <br />
+                            <span className="text-dark">
+                              {formatDateTime(draft.checkIn)}
+                            </span>
+                          </p>
+                        </Col>
+                        <Col xs={6}>
+                          <p className="mb-1">
+                            <strong>Check-Out:</strong>
+                            <br />
+                            <span className="text-dark">
+                              {formatDateTime(draft.checkOut)}
+                            </span>
+                          </p>
+                        </Col>
+                        <Col xs={6}>
+                          <p className="mb-1">
+                            <strong>Rooms:</strong> {rooms.length}
+                          </p>
+                        </Col>
+                        <Col xs={6}>
+                          <p className="mb-1">
+                            <strong>Nights:</strong> {quote?.totalNights ?? "—"}
+                          </p>
+                        </Col>
+
+                        {/*
+                          Cancellation Policy summary — rendered as plain
+                          bulleted text (matches the hotel summary modal's
+                          format). Each structured row becomes one bullet via
+                          formatCancellationPolicyLine ("10% cancelled within
+                          30 days"), plus the free-text notes as the trailing
+                          bullet. Falls back to the Flexible / Non-Refundable
+                          + max-stay bullets for legacy contracts with no
+                          configured policy.
+                        */}
+                        <Col xs={12}>
+                          <p className="mb-1">
+                            <strong>Cancellation Policy:</strong>
+                          </p>
+                          <ul className="mb-0 ps-3">
+                            {(draft.contract?.cancellationPolicy || []).length >
+                              0 || draft.contract?.cancellationPolicyNotes ? (
+                              <>
+                                {(draft.contract?.cancellationPolicy || []).map(
+                                  (p, i) => (
+                                    <li key={i} className="text-dark">
+                                      {formatCancellationPolicyLine(p)}
+                                    </li>
+                                  )
+                                )}
+                                {draft.contract?.cancellationPolicyNotes && (
+                                  <li className="text-dark">
+                                    {draft.contract.cancellationPolicyNotes}
+                                  </li>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {draft.room?.refundable ? (
+                                  <li className="text-dark">
+                                    Flexible — cancellation allowed per the
+                                    contract's refund terms.
+                                  </li>
+                                ) : (
+                                  <li className="text-dark">
+                                    Non-Refundable — once confirmed this booking
+                                    cannot be cancelled for a refund.
+                                  </li>
+                                )}
+                                {draft.contract?.maxBookingDays && (
+                                  <li className="text-dark">
+                                    Maximum stay capped at{" "}
+                                    <strong>
+                                      {draft.contract.maxBookingDays}
+                                    </strong>{" "}
+                                    nights per contract terms.
+                                  </li>
+                                )}
+                              </>
+                            )}
+                          </ul>
+                        </Col>
+
+                        <Col xs={12}>
+                          {/* Selling Price card */}
+                          <div className="p-3 rounded bg-white shadow-sm mt-2 border">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <h6 className="mb-0 text-muted">Selling Price</h6>
+                              <h5 className="mb-0 text-success fw-bold">
+                                {formatPrice(sellingPrice)}
+                              </h5>
+                            </div>
+                          </div>
+
+                          {/* Total Price green band */}
+                          <div
+                            className="p-3 rounded bg-gradient-success text-white text-center mt-2"
+                            style={{
+                              background:
+                                "linear-gradient(135deg,#10b981 0%,#059669 100%)",
+                            }}
+                          >
+                            <h6 className="mb-0 fw-bold">Total Price</h6>
+                            <h4 className="mb-0">
+                              {formatPrice(newTotal)} for {rooms.length}{" "}
+                              {rooms.length > 1 ? "rooms" : "room"}
+                            </h4>
+                          </div>
+                        </Col>
+                      </Row>
+
+                      {/* Rate Split */}
+                      <div className="mt-3 p-3 bg-white border rounded">
+                        <h6 className="fw-bold mb-2">Rate Split</h6>
+                        {markupAmount > 0 && (
+                          <>
+                            <div className="d-flex justify-content-between">
+                              <span>Pre-Markup Rate</span>
+                              <span>{formatPrice(preMarkupRate)}</span>
+                            </div>
+                            <div className="d-flex justify-content-between">
+                              <span>
+                                Agent Markup
+                                {markupType && markupValue != null && (
+                                  <small className="text-muted ms-1">
+                                    (
+                                    {markupType === "PERCENT"
+                                      ? `${markupValue}%`
+                                      : `AED ${markupValue}`}
+                                    )
+                                  </small>
+                                )}
+                              </span>
+                              <span>{formatPrice(markupAmount)}</span>
+                            </div>
+                          </>
+                        )}
+                        <div className="d-flex justify-content-between">
+                          <span>Selling Price</span>
+                          <span>{formatPrice(sellingPrice)}</span>
+                        </div>
+                        <div className="d-flex justify-content-between">
+                          <span>Tourism Dirhams</span>
+                          <span>{formatPrice(tdAmount)}</span>
+                        </div>
+                        <hr className="my-2" />
+                        <div className="d-flex justify-content-between fw-bold text-danger">
+                          <span>Total (Selling + TD)</span>
+                          <span>{formatPrice(newTotal)}</span>
+                        </div>
+                      </div>
+
+                      {/* Policies accepted tick */}
+                      <div className="mt-3 p-2 bg-white border rounded d-flex align-items-center">
+                        <span
+                          className="me-2 d-inline-flex align-items-center justify-content-center"
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: "50%",
+                            background: "#16a34a",
+                            color: "#fff",
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            lineHeight: 1,
+                          }}
+                          aria-hidden="true"
+                        >
+                          ✓
+                        </span>
+                        <span className="small text-dark">
+                          Hotel policies and terms &amp; conditions accepted
+                        </span>
+                      </div>
+
+                      <div className="mt-3 text-center">
+                        <p className="text-muted small mb-0">
+                          Please review the booking details carefully before
+                          confirming.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </Modal.Body>
+                <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowConfirmModal(false)}
+                    disabled={submitting}
+                  >
+                    <i className="bi bi-x-circle me-1"></i> Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={confirmBooking}
+                    disabled={submitting}
+                    className="px-4 fw-semibold"
+                  >
+                    {submitting ? (
+                      <>
+                        <Spinner
+                          animation="border"
+                          size="sm"
+                          className="me-2"
+                          role="status"
+                        />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <FaCheckCircle className="me-1" /> Confirm
+                      </>
+                    )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+            </Form>
+          </Container>
+        </main>
+      </div>
+    </div>
+  );
+}

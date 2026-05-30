@@ -1,0 +1,68 @@
+/* No page-specific layout overrides: we use the global layout like Bank.jsx */
+
+.bg-light {
+  --bs-bg-opacity: 1;
+  background-color: rgb(248 249 250 / 0%) !important;
+}
+.border-end {
+  border-right: var(--bs-border-width) var(--bs-border-style) #dee2e600 !important;
+}
+
+.country-select .react-select__control {
+border-radius: 50px !important; /* makes it oval */
+min-height: 38px;              /* standard input height */
+font-size: 14px;               /* smaller text */
+}
+
+.country-select .react-select__value-container {
+padding: 2px 12px; /* reduce padding inside */
+}
+
+/* Generic pill styling for row AsyncSelect in table */
+.pill-select__control {
+border-radius: 999px !important;
+min-height: 36px !important;
+box-shadow: none !important;
+}
+.pill-select__value-container {
+padding: 4px 12px !important;
+}
+.pill-select__indicators {
+height: 30px;
+}
+.pill-select__indicator {
+padding: 4px !important;
+}
+.pill-select__menu {
+border-radius: 12px !important;
+}
+.pill-select__option {
+font-size: 14px;
+}
+
+/* Align table content nicely */
+.mapping-table td, .mapping-table th {
+vertical-align: middle;
+}
+
+.mapping-table td > .btn {
+border-radius: 999px;
+padding: 6px 14px;
+line-height: 1.1;
+}
+
+.mapping-table thead th {
+white-space: nowrap;
+}
+
+/* Make selects in table cells look clean and wide */
+.mapping-table .pill-select__control{
+min-height: 40px !important;
+border-radius: 999px !important;
+}
+.mapping-table .pill-select__value-container{
+padding: 6px 12px !important;
+}
+.mapping-table .pill-select__indicators{
+height: 36px;
+}
