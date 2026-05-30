@@ -1,20 +1,34 @@
 .hotel-booking-container {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-.main-content {
-  flex: 1 1 auto;
+/* Parent-scoped so this page owns its layout: the extra specificity
+   (.hotel-booking-container .content-wrapper) beats the single-class
+   .content-wrapper / .main-content rules that other pages' globally
+   imported stylesheets (e.g. RoomList.css with margin-top:-590px)
+   would otherwise leak onto this page regardless of import order. */
+.hotel-booking-container .main-content {
+  flex-grow: 1;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   min-width: 0;
 }
 
-.content-wrapper {
-  flex: 1 1 auto;
+@media (min-width: 992px) {
+  .hotel-booking-container .main-content {
+    flex-direction: row;
+  }
+}
+
+.hotel-booking-container .content-wrapper {
+  flex: 1;
   min-width: 0;
-  overflow-x: hidden;
   background-color: #ffffff;
+  /* Top/bottom spacing comes from the py-4 utility on <main>; only
+     horizontal padding is set here so the top gap stays constant. */
+  margin: 0;
   padding: 0 1rem;
 }
 
@@ -57,11 +71,11 @@
     flex-direction: column;
   }
 
-  .main-content {
+  .hotel-booking-container .main-content {
     width: 100%;
   }
 
-  .content-wrapper {
+  .hotel-booking-container .content-wrapper {
     padding: 1rem;
   }
 }

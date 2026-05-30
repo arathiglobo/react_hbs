@@ -335,20 +335,6 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const parentBookingCode = new URLSearchParams(location.search).get(
     "parentBookingCode"
   );
-
-  // Agent logins book under themselves — the backend forces the booking to
-  // the logged-in agent, so the manual Agent picker is hidden and the
-  // agent-required validation is skipped. currentActiveRole isn't set for
-  // single-role logins, so fall back to userRole; admin/super-admin/staff
-  // keep the picker exactly as before.
-  const activeRole = (localStorage.getItem("currentActiveRole") || "")
-    .trim()
-    .toUpperCase();
-  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
-  const isAgentRole = activeRole
-    ? activeRole === "AGENT"
-    : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
-
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
   const [destinationOptions, setDestinationOptions] = useState([]);
@@ -408,6 +394,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   // Map of hotelId → { eligible, percentage } returned by the probe endpoint.
   const [twentyFourHourMap, setTwentyFourHourMap] = useState({});
   const [clickedHotelIds, setClickedHotelIds] = useState([]);
+
+  // Map of hotelId → { longStay, twentyFourHourCheckIn, lastMinute, dayStay,
+  // meetAndSpace, govEmployeeDiscount, studentDiscount } returned by
+  // /api/hotel-feature-flags. Drives the scrolling "Exclusive Deals" banner
+  // above the search results and the per-hotel blinking "Flash Sale" pill.
+  const [featureFlagsMap, setFeatureFlagsMap] = useState({});
 
   const [allResults, setAllResults] = useState([]);
   const [finalHotelSearchTerm, setFinalHotelSearchTerm] = useState("");
@@ -541,6 +533,66 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     }
   };
 
+  // ── Hotel feature flags ───────────────────────────────────────────────
+  // Backend: GET /api/hotel-feature-flags?ids=1,2,3
+  // Returns { hotels: { "1": { longStay, twentyFourHour, lastMinute, dayStay,
+  // meetingSpace, govEmployee, studentDiscount, anyFeature, features: [...] }},
+  // summary: { anyFeature, features: [...] } }. We re-fetch whenever the result
+  // set changes (new search, channel filter, pagination) so the banner only
+  // surfaces features actually present in the visible hotels.
+
+  // Pull the numeric tail off the hotelCode ("IN5" → 5) — same trick the
+  // 24-hour probe uses, so the feature-flag map (keyed by numeric id) lines
+  // up with the search result rows (keyed by prefixed code).
+  const extractHotelNumericId = (h) => {
+    if (h?.hotelId != null) return String(h.hotelId);
+    const raw = String(h?.hotelCode || h?.id || "");
+    const m = raw.match(/(\d+)$/);
+    return m ? m[1] : null;
+  };
+
+  // Comma-joined, sorted, de-duped id list. Sorted so the dependency string
+  // stays stable when the underlying array is just reordered — avoids a
+  // spurious re-fetch.
+  const resultHotelIdsCsv = useMemo(() => {
+    const ids = new Set();
+    allResults.forEach((h) => {
+      const id = extractHotelNumericId(h);
+      if (id) ids.add(id);
+    });
+    return Array.from(ids).sort((a, b) => Number(a) - Number(b)).join(",");
+  }, [allResults]);
+
+  useEffect(() => {
+    if (!resultHotelIdsCsv) {
+      setFeatureFlagsMap({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axiosInstance.get(
+          `/api/hotel-feature-flags?ids=${resultHotelIdsCsv}`
+        );
+        if (cancelled) return;
+        const hotels = res?.data?.hotels || {};
+        setFeatureFlagsMap(hotels);
+      } catch (err) {
+        console.warn("hotel-feature-flags fetch failed (non-fatal):", err);
+        if (!cancelled) setFeatureFlagsMap({});
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [resultHotelIdsCsv]);
+
+  const getHotelFeatureLabels = (hotel) => {
+    const id = extractHotelNumericId(hotel);
+    if (!id) return [];
+    const flags = featureFlagsMap[id];
+    if (!flags) return [];
+    return Array.isArray(flags.features) ? flags.features : [];
+  };
+
   const filteredResults = useMemo(() => {
     let results = allResults;
 
@@ -592,6 +644,28 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     return results;
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
       is24HourCheckin, twentyFourHourMap]);
+
+  // Union of active feature labels across hotels currently in view. Order
+  // mirrors the backend's canonical ordering (Long Stay → 24 Hour Check-In
+  // → Last Minute → Day Stay → Meeting & Space → Govt Employee Discount →
+  // Student Discount) so the marquee text stays stable across renders.
+  // Empty → deals banner is suppressed entirely.
+  const activeFeatureLabels = useMemo(() => {
+    const canonical = [
+      "Long Stay",
+      "24 Hour Check-In",
+      "Last Minute",
+      "Day Stay",
+      "Meeting & Space",
+      "Govt Employee Discount",
+      "Student Discount",
+    ];
+    const set = new Set();
+    filteredResults.forEach((h) => {
+      getHotelFeatureLabels(h).forEach((label) => set.add(label));
+    });
+    return canonical.filter((l) => set.has(l));
+  }, [filteredResults, featureFlagsMap]);
 
   const effectiveTotalPages = useMemo(
     () => Math.max(1, totalPages),
@@ -746,7 +820,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     if (!selectedDestination) newErrors.destination = "Destination is required";
     if (!checkIn) newErrors.checkIn = "Check-in date is required";
     if (!checkOut) newErrors.checkOut = "Check-out date is required";
-    if (!isAgentRole && !agent) newErrors.agent = "Agent is required";
+    if (!agent) newErrors.agent = "Agent is required";
     return newErrors;
   };
 
@@ -1244,8 +1318,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                       )}
                     </Form.Group>
                   </Col>
-                     {!isAgentRole && (
-                    <Col lg={3} md={6}>
+                     <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Agent
@@ -1290,7 +1363,6 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                       )}
                     </Form.Group>
                   </Col>
-                     )}
 
 
 
@@ -1517,6 +1589,38 @@ export default function HotelSearch({ force24Hour = false } = {}) {
           {(hasSearchResult || allResults.length > 0) && (
             <div ref={resultsRef}>
               <div className="search-layout">
+                {/* ── Exclusive deals scrolling banner ───────────────────
+                    Surfaces the union of feature flags (Long Stay, 24 Hour
+                    Check-In, Last Minute, Day Stay, Meeting & Space, Govt
+                    Employee Discount, Student Discount) across the hotels
+                    in view. Suppressed entirely when no hotel has any flag
+                    set so we don't render an empty marquee. */}
+              {activeFeatureLabels.length > 0 && (
+  <div style={{ overflow: "hidden", width: "100%", marginBottom: "14px" }}>
+    <div className="deals-banner" style={{ marginBottom: 0 }}>
+      <div className="deals-banner-tag">
+        <FaStar className="deals-banner-icon" /> EXCLUSIVE DEALS
+      </div>
+      <div className="deals-banner-scroll">
+        <div className="deals-banner-track">
+          {[0, 1].map((dup) => (
+            <React.Fragment key={dup}>
+              {activeFeatureLabels.map((label, i) => (
+                <React.Fragment key={`${dup}-${i}`}>
+                  <strong>{label}</strong>
+                  <span style={{ color: "#94a3b8", margin: "0 6px" }}>·</span>
+                </React.Fragment>
+              ))}
+              <span style={{ color: "#cbd5e1", marginRight: "56px" }}>
+                Unlock special rates at preferred hotels.
+              </span>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
                 <Row className="g-4">
                   {/* Left Sidebar */}
                   <Col lg={3} className="leftside d-none d-lg-block">
@@ -1828,6 +1932,23 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                           : "Price on request"}
                                       </div>
 
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          alignItems: "flex-end",
+                                          gap: "6px",
+                                        }}
+                                      >
+                                        {getHotelFeatureLabels(hotel).length > 0 && (
+                                          <span
+                                            className="flash-sale-pill"
+                                            title="We have new features in Booking section — take a look there!"
+                                          >
+                                            <span className="flash-dot" />
+                                            Flash Sale
+                                          </span>
+                                        )}
                                       <Button
                                         size="sm"
                                         variant={
@@ -1927,6 +2048,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                       >
                                         View Rooms
                                       </Button>
+                                      </div>
                                     </div>
                                   </div>
                                 </Col>
