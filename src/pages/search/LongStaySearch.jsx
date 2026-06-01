@@ -539,6 +539,25 @@ export default function LongStaySearch() {
     return tomorrow;
   };
   const today = formatDate(new Date());
+
+  // Pure utility — number of whole nights between two ISO date strings.
+  // Returns null when either input is missing or unparseable, and clamps
+  // to 0 when checkOut <= checkIn so we never display a negative value.
+  // Used by the CheckIn / CheckOut handlers below to keep the Nights
+  // field in sync with whatever the operator picks. The submit-time
+  // validator still enforces the MIN_LONG_STAY_NIGHTS rule — this
+  // helper only mirrors the date pair into the Nights input.
+  const nightsBetween = (cin, cout) => {
+    if (!cin || !cout) return null;
+    const start = new Date(cin);
+    const end = new Date(cout);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return null;
+    }
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const diff = Math.round((end.getTime() - start.getTime()) / MS_PER_DAY);
+    return Math.max(0, diff);
+  };
   const minCheckOutDate = checkIn
     ? formatDate(getTomorrow(new Date(checkIn)))
     : formatDate(getTomorrow());
@@ -961,23 +980,54 @@ export default function LongStaySearch() {
                         onChange={(e) => {
                           const newCheckIn = e.target.value;
                           setCheckIn(newCheckIn);
-                          if (newCheckIn) {
-                            clearError("checkIn");
-                            // If the operator already typed a valid
-                            // nights value, derive check-out from that
-                            // so we don't silently lose their input.
-                            // Otherwise fall back to "next day" as a
-                            // placeholder until they enter nights.
-                            const n = Number(nights);
-                            const start = new Date(newCheckIn);
-                            const useNights = Number.isFinite(n) && n >= MIN_LONG_STAY_NIGHTS;
-                            const out = new Date(start);
-                            out.setDate(start.getDate() + (useNights ? Math.floor(n) : 1));
-                            const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
-                              .toISOString()
-                              .slice(0, 10);
-                            setCheckOut(iso);
-                            clearError("checkOut");
+                          if (!newCheckIn) return;
+                          clearError("checkIn");
+
+                          // Two-way sync rules when CheckIn changes:
+                          //  (a) If a valid CheckOut is already on the form
+                          //      AND it is on/after the new CheckIn, KEEP
+                          //      CheckOut and recompute Nights from the
+                          //      date pair. This is what the spec asks for
+                          //      under "If user changes Check-in Date".
+                          //  (b) Otherwise (no CheckOut yet, or CheckOut
+                          //      now lies before CheckIn) fall back to the
+                          //      original behavior: derive CheckOut from
+                          //      Nights when the operator already typed a
+                          //      valid Nights value, else a "next day"
+                          //      placeholder. This preserves the existing
+                          //      Nights → CheckOut flow.
+                          const start = new Date(newCheckIn);
+                          const existingOut = checkOut ? new Date(checkOut) : null;
+                          const keepExistingOut =
+                            existingOut &&
+                            !Number.isNaN(existingOut.getTime()) &&
+                            existingOut.getTime() >= start.getTime();
+
+                          if (keepExistingOut) {
+                            const n = nightsBetween(newCheckIn, checkOut);
+                            if (n !== null) setNights(String(n));
+                            clearError("nights");
+                            return;
+                          }
+
+                          const n = Number(nights);
+                          const useNights =
+                            Number.isFinite(n) && n >= MIN_LONG_STAY_NIGHTS;
+                          const out = new Date(start);
+                          out.setDate(start.getDate() + (useNights ? Math.floor(n) : 1));
+                          const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
+                            .toISOString()
+                            .slice(0, 10);
+                          setCheckOut(iso);
+                          clearError("checkOut");
+                          // Keep Nights mirrored to the new (CheckIn, derived
+                          // CheckOut) pair so the field reflects what was
+                          // actually picked — important when the fallback
+                          // landed on the "next day" placeholder (1 night)
+                          // and Nights was previously a stale value like 30.
+                          const derivedNights = nightsBetween(newCheckIn, iso);
+                          if (derivedNights !== null) {
+                            setNights(String(derivedNights));
                           }
                         }}
                       />
@@ -998,8 +1048,24 @@ export default function LongStaySearch() {
                         min={minCheckOutDate}
                         onClick={(e) => e.target.showPicker && e.target.showPicker()}
                         onChange={(e) => {
-                          setCheckOut(e.target.value);
-                          if (e.target.value) clearError("checkOut");
+                          const newCheckOut = e.target.value;
+                          setCheckOut(newCheckOut);
+                          if (newCheckOut) clearError("checkOut");
+                          // CheckOut → Nights sync. If CheckIn is set and
+                          // the new CheckOut is on/after it, mirror the
+                          // diff into the Nights field so the operator
+                          // sees a coherent triple. The browser's `min`
+                          // attribute already blocks pre-CheckIn values
+                          // from the picker; the helper additionally
+                          // clamps to 0 for safety when the user types
+                          // an earlier date by hand.
+                          if (newCheckOut && checkIn) {
+                            const n = nightsBetween(checkIn, newCheckOut);
+                            if (n !== null) {
+                              setNights(String(n));
+                              if (n > 0) clearError("nights");
+                            }
+                          }
                         }}
                       />
                       {errors.checkOut && (

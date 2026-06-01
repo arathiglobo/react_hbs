@@ -24,6 +24,7 @@ import {
   FaPhoneAlt,
   FaEnvelope,
   FaIdCard,
+  FaFileInvoice,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -48,6 +49,7 @@ const CabBookingList = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [voucherLoading, setVoucherLoading] = useState(false);
   // Booking-details view modal
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsBooking, setDetailsBooking] = useState(null);
@@ -241,6 +243,30 @@ const CabBookingList = () => {
       toast.error("Error cancelling booking");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  // Voucher action → backend (CabBookingController#getCabBookingPdf) returns a
+  // PdfGenerationResponseDTO with { status, message, pdfUrl }; open the URL in a
+  // new tab so the browser renders the PDF inline. Mirrors LongStayBookingList.
+  const handleVoucher = async (b) => {
+    const id = b.custombookingId;
+    if (!id) return;
+    try {
+      setVoucherLoading(true);
+      const res = await axiosInstance.get(`/api/cab/${id}/pdf`, {
+        params: { type: "VOUCHER" },
+      });
+      if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
+        window.open(res.data.pdfUrl, "_blank", "noopener,noreferrer");
+        toast.success("Voucher opened in a new tab");
+      } else {
+        toast.error(res.data?.message || "Failed to generate voucher");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to generate voucher");
+    } finally {
+      setVoucherLoading(false);
     }
   };
 
@@ -447,6 +473,20 @@ const CabBookingList = () => {
                                   }}
                                 >
                                   <FaEye size={12} className="text-primary" />
+                                </Button>
+                                <Button
+                                  variant="light"
+                                  size="sm"
+                                  className="rounded-pill px-3 border"
+                                  title="Voucher"
+                                  disabled={voucherLoading}
+                                  onClick={() => handleVoucher(b)}
+                                >
+                                  {voucherLoading ? (
+                                    <Spinner size="sm" />
+                                  ) : (
+                                    <FaFileInvoice size={12} className="text-success" />
+                                  )}
                                 </Button>
                                 {status === "upcoming" && (
                                   <Button

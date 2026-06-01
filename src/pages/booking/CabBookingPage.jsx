@@ -149,12 +149,15 @@ const CabBookingPage = () => {
     }
   };
 
-  const [transporterDetails, setTransporterDetails] = useState({
+  // Transporter & driver details were removed from the booking form, but the
+  // booking payload still carries these (empty) fields so the backend contract
+  // is unchanged. They're assigned on the backend / a later workflow stage.
+  const transporterDetails = {
     transporter: "",
     contactNumber: "",
     driverName: "",
     driverContact: "",
-  });
+  };
 
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -271,10 +274,6 @@ const CabBookingPage = () => {
         return updated;
       });
     }
-  };
-
-  const handleTransporterChange = (field, value) => {
-    setTransporterDetails((prev) => ({ ...prev, [field]: value }));
   };
 
   const handlePriceChange = (field, value) => {
@@ -754,90 +753,21 @@ const CabBookingPage = () => {
                   </Card>
                 )}
 
-                {/* Transporter & Driver Details Card */}
+                {/* Price Details Card */}
                <Card className="shadow border-0 rounded-4 mb-4">
 
   {/* Header */}
   <Card.Header className="bg-white border-0 pt-4 px-4">
     <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
       <FaCar className="me-2 text-primary" />
-      Transporter & Driver Details
+      Price Details
     </h5>
   </Card.Header>
 
   <Card.Body className="px-4 pb-4">
 
-    {/* ===== Transport Fields ===== */}
-    <Row className="g-3">
-
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Transporter Name
-          </Form.Label>
-          <Form.Control
-            className="rounded-3 shadow-sm"
-            placeholder="Enter transporter name"
-            value={transporterDetails.transporter}
-            onChange={(e) =>
-              handleTransporterChange("transporter", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Contact Number
-          </Form.Label>
-          <Form.Control
-            className="rounded-3 shadow-sm"
-            placeholder="Enter contact number"
-            value={transporterDetails.contactNumber}
-            onChange={(e) =>
-              handleTransporterChange("contactNumber", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Driver Name
-          </Form.Label>
-          <Form.Control
-            className="rounded-3 shadow-sm"
-            placeholder="Enter driver name"
-            value={transporterDetails.driverName}
-            onChange={(e) =>
-              handleTransporterChange("driverName", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Driver Contact
-          </Form.Label>
-          <Form.Control
-            className="rounded-3 shadow-sm"
-            placeholder="Enter driver contact"
-            value={transporterDetails.driverContact}
-            onChange={(e) =>
-              handleTransporterChange("driverContact", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-    </Row>
-
     {/* ===== Price Section ===== */}
-    <div className="mt-4 pt-4 border-top">
+    <div>
 
       <Row className="g-3">
 
@@ -1453,31 +1383,6 @@ const CabBookingPage = () => {
               <span>{primaryGuest.passportNumber || "—"}</span>
             </Col>
           </Row>
-
-          {/* Transporter (only if anything filled) */}
-          {(transporterDetails.transporter || transporterDetails.driverName) && (
-            <>
-              <h6 className="fw-bold mb-2">Transporter &amp; Driver</h6>
-              <Row className="mb-3">
-                <Col md={6}>
-                  <small className="text-muted d-block">Transporter</small>
-                  <span>{transporterDetails.transporter || "—"}</span>
-                </Col>
-                <Col md={6}>
-                  <small className="text-muted d-block">Transporter Contact</small>
-                  <span>{transporterDetails.contactNumber || "—"}</span>
-                </Col>
-                <Col md={6} className="mt-2">
-                  <small className="text-muted d-block">Driver</small>
-                  <span>{transporterDetails.driverName || "—"}</span>
-                </Col>
-                <Col md={6} className="mt-2">
-                  <small className="text-muted d-block">Driver Contact</small>
-                  <span>{transporterDetails.driverContact || "—"}</span>
-                </Col>
-              </Row>
-            </>
-          )}
 
           <hr />
 

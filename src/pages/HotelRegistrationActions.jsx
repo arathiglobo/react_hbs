@@ -11,6 +11,8 @@ import {
   Modal,
   Form,
   Table,
+  OverlayTrigger,
+  Tooltip,
 } from "react-bootstrap";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -156,6 +158,12 @@ const HotelRegistrationActions = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showRePassword, setShowRePassword] = useState(false);
 
+  // Per-module configuration counts shown next to each Action item.
+  // Populated from GET /api/hotels/{id}/action-counts. Defaults to an empty
+  // object so the actions array (which reads `actionCounts.xxx ?? 0`) always
+  // renders 0 until the fetch resolves.
+  const [actionCounts, setActionCounts] = useState({});
+
   const navigationTabs = [
     { id: "basic-details", label: "Basic details", icon: FaUser },
     // { id: "gallery", label: "Gallery", icon: FaImages },
@@ -182,6 +190,11 @@ const HotelRegistrationActions = () => {
       : "disabled",
   });
 
+  // Counts come from GET /api/hotels/{id}/action-counts (single round-trip,
+  // each module = one SELECT COUNT(*) — see HotelActionCountsService).
+  // `mandatory: true` flags the configurations the user MUST set up before
+  // a hotel is considered properly configured. Those items get a small red
+  // asterisk + tooltip and switch to a warning state when count = 0.
   const actions = [
     {
       label: "Mail center",
@@ -203,37 +216,95 @@ const HotelRegistrationActions = () => {
       label: "Occupancy & Minimum length",
       icon: FaUsers,
       status: "count",
-      count: 0,
+      count: actionCounts.occupancyAndMinimumLength ?? 0,
+      mandatory: true,
     },
     {
       label: "Hotel Availability",
       icon: FaBullhorn,
       status: "count",
-      count: 0,
+      count: actionCounts.hotelAvailability ?? 0,
     },
-    { label: "Contract Rate", icon: FaMoneyBill, status: "count", count: 0 },
+    {
+      label: "Contract Rate",
+      icon: FaMoneyBill,
+      status: "count",
+      count: actionCounts.contractRate ?? 0,
+      mandatory: true,
+    },
     // Last Minute Booking — Phase 1 entry point (separate from normal contract rate)
-    { label: "Last Minute Contract Rate", icon: FaMoneyBill, status: "count", count: 0 },
+    {
+      label: "Last Minute Contract Rate",
+      icon: FaMoneyBill,
+      status: "count",
+      count: actionCounts.lastMinuteContractRate ?? 0,
+    },
     // 24 Hour Check-In configuration entry point
-    { label: "24 Hour Check-In", icon: FaCalendarAlt, status: "count", count: 0 },
+    {
+      label: "24 Hour Check-In",
+      icon: FaCalendarAlt,
+      status: "count",
+      count: actionCounts.twentyFourHourCheckin ?? 0,
+    },
     // Day Stay Check-In configuration entry point
-    { label: "Day Stay", icon: FaCalendarAlt, status: "count", count: 0 },
-    { label: "Long Stay Contract", icon: FaCalendarAlt, status: "count", count: 0 },
+    {
+      label: "Day Stay",
+      icon: FaCalendarAlt,
+      status: "count",
+      count: actionCounts.dayStay ?? 0,
+    },
+    {
+      label: "Long Stay Contract",
+      icon: FaCalendarAlt,
+      status: "count",
+      count: actionCounts.longStayContract ?? 0,
+    },
     // Meet & Space — entry point for the new Meeting & Space feature (manage spaces + rates)
-    { label: "Meeting & Space", icon: FaUsers, status: "count", count: 0 },
-    { label: "Promotion", icon: FaGift, status: "count", count: 0 },
-    { label: "Policy", icon: FaFileAlt, status: "count", count: 0 },
-    { label: "Govt Employee Discount", icon: FaGift, status: "count", count: 0 },
-    { label: "Student Discount", icon: FaGift, status: "count", count: 0 },
+    {
+      label: "Meeting & Space",
+      icon: FaUsers,
+      status: "count",
+      count: actionCounts.meetingAndSpace ?? 0,
+    },
+    {
+      label: "Promotion",
+      icon: FaGift,
+      status: "count",
+      count: actionCounts.promotion ?? 0,
+    },
+    {
+      label: "Policy",
+      icon: FaFileAlt,
+      status: "count",
+      count: actionCounts.policy ?? 0,
+      mandatory: true,
+    },
+    {
+      label: "Govt Employee Discount",
+      icon: FaGift,
+      status: "count",
+      count: actionCounts.govEmployeeDiscount ?? 0,
+    },
+    {
+      label: "Student Discount",
+      icon: FaGift,
+      status: "count",
+      count: actionCounts.studentDiscount ?? 0,
+    },
     // Senior Citizen — master CRUD + per-hotel discount promotion. Opens
     // a list page from which the user can register / edit / delete senior
     // citizens and configure the discount for this hotel.
-    { label: "Senior Citizen", icon: FaUser, status: "count", count: 0 },
+    {
+      label: "Senior Citizen",
+      icon: FaUser,
+      status: "count",
+      count: actionCounts.seniorCitizen ?? 0,
+    },
     {
       label: "Compulsory Events",
       icon: FaCheckSquare,
       status: "count",
-      count: 0,
+      count: actionCounts.compulsoryEvents ?? 0,
     },
     // { label: "Image Upload", icon: FaImage, status: "count", count: 0 },
     { label: "Hotel Edit", icon: FaEdit, status: "none", count: null },
@@ -267,6 +338,27 @@ const HotelRegistrationActions = () => {
     if (id) {
       fetchHotelData();
     }
+  }, [id]);
+
+  // Fetch per-module configuration counts for the Actions panel. Backed by
+  // GET /api/hotels/{id}/action-counts → HotelActionCountsService which runs
+  // one SELECT COUNT(*) per module (no N+1, single round-trip). Failures
+  // silently leave counts at 0 — the page still functions, just shows zeros.
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/hotels/${id}/action-counts`)
+      .then((res) => {
+        if (!cancelled && res?.data) setActionCounts(res.data);
+      })
+      .catch((err) => {
+        console.error("Error fetching hotel action counts:", err);
+        if (!cancelled) setActionCounts({});
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   // Reset login-related state when hotel ID changes
@@ -668,13 +760,35 @@ const HotelRegistrationActions = () => {
     } else if (action.status === "disabled") {
       return <FaUnlink className="status-icon disabled" />;
     } else if (action.status === "count") {
+      // Mandatory + not configured → red badge + a small warning icon next to
+      // it so the row reads "this is required and you haven't set it up yet."
+      // Mandatory + configured → green badge (same as any other configured
+      // module). Non-mandatory zeros stay subtle (light gray) so they don't
+      // look like errors.
+      const isMandatoryEmpty = action.mandatory && action.count === 0;
+      const badgeBg = action.count > 0
+        ? "success"
+        : action.mandatory
+          ? "danger"
+          : "secondary";
       return (
-        <Badge
-          bg={action.count > 0 ? "success" : "danger"}
-          className="status-badge"
-        >
-          {action.count}
-        </Badge>
+        <span className="d-flex align-items-center gap-1">
+          {isMandatoryEmpty && (
+            <OverlayTrigger
+              placement="left"
+              overlay={
+                <Tooltip id={`mandatory-warn-${action.label}`}>
+                  Mandatory configuration missing
+                </Tooltip>
+              }
+            >
+              <FaExclamationTriangle className="status-icon warning" />
+            </OverlayTrigger>
+          )}
+          <Badge bg={badgeBg} className="status-badge">
+            {action.count}
+          </Badge>
+        </span>
       );
     }
     return null;
@@ -1662,6 +1776,29 @@ const HotelRegistrationActions = () => {
                                 <action.icon className="action-icon" />
                                 <span className="action-label">
                                   {action.label}
+                                  {action.mandatory && (
+                                    <OverlayTrigger
+                                      placement="top"
+                                      overlay={
+                                        <Tooltip id={`mandatory-${action.label}`}>
+                                          Mandatory Configuration
+                                        </Tooltip>
+                                      }
+                                    >
+                                      <span
+                                        className="text-danger ms-1 fw-bold"
+                                        aria-label="Mandatory Configuration"
+                                        style={{
+                                          cursor: "help",
+                                          fontSize: "1.3rem",
+                                          lineHeight: 1,
+                                          verticalAlign: "middle",
+                                        }}
+                                      >
+                                        *
+                                      </span>
+                                    </OverlayTrigger>
+                                  )}
                                 </span>
                               </div>
                               {getStatusIcon(action)}

@@ -84,6 +84,116 @@ function LazyImage({ src, alt, className }) {
   );
 }
 
+// ── Demo / dummy cab inventory ────────────────────────────────────────
+// Sample transfers surfaced for the test route "Dubai International Airport
+// → Test Hotel" so the search → results → booking flow can be demonstrated
+// without live cab inventory. Each cab carries BOTH an SIC (Shared) and a
+// Private rate row so the Shared/Private toggle has data either way.
+// Shapes mirror what /api/cab-search/search returns (see mapping below).
+const DUMMY_ORIGIN_NAME = "Dubai International Airport";
+const DUMMY_DEST_NAME = "Test Hotel";
+const DUMMY_CAB_RESULTS = [
+  {
+    cabid: "demo-sedan",
+    cabname: "Toyota Camry (Sedan)",
+    cabdetails: "Comfortable 3-seater sedan with luggage space",
+    cabpic:
+      "https://images.unsplash.com/photo-1549924231-f129b911e442?auto=format&fit=crop&w=480&q=60",
+    noOfCabs: 1,
+    cabProviderId: null,
+    cabProviderName: "Dubai City Transfers",
+    originLocationName: DUMMY_ORIGIN_NAME,
+    destinationLocationName: DUMMY_DEST_NAME,
+    capacityMin: 1,
+    capacityMax: 3,
+    searchCabDetailsDTO: [
+      {
+        types: "SIC",
+        location: DUMMY_ORIGIN_NAME,
+        dropOff: DUMMY_DEST_NAME,
+        sicRate: 55,
+        totalRate: 55,
+        totalRateWithoutMarkup: 50,
+      },
+      {
+        types: "Private",
+        location: DUMMY_ORIGIN_NAME,
+        dropOff: DUMMY_DEST_NAME,
+        privateRate: 130,
+        privateTotalRate: 130,
+        totalRate: 130,
+        totalRateWithoutMarkup: 120,
+      },
+    ],
+  },
+  {
+    cabid: "demo-suv",
+    cabname: "Toyota Land Cruiser (SUV)",
+    cabdetails: "Premium 6-seater SUV, ideal for families",
+    cabpic:
+      "https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=480&q=60",
+    noOfCabs: 1,
+    cabProviderId: null,
+    cabProviderName: "Dubai City Transfers",
+    originLocationName: DUMMY_ORIGIN_NAME,
+    destinationLocationName: DUMMY_DEST_NAME,
+    capacityMin: 1,
+    capacityMax: 6,
+    searchCabDetailsDTO: [
+      {
+        types: "SIC",
+        location: DUMMY_ORIGIN_NAME,
+        dropOff: DUMMY_DEST_NAME,
+        sicRate: 70,
+        totalRate: 70,
+        totalRateWithoutMarkup: 64,
+      },
+      {
+        types: "Private",
+        location: DUMMY_ORIGIN_NAME,
+        dropOff: DUMMY_DEST_NAME,
+        privateRate: 220,
+        privateTotalRate: 220,
+        totalRate: 220,
+        totalRateWithoutMarkup: 200,
+      },
+    ],
+  },
+  {
+    cabid: "demo-van",
+    cabname: "Toyota Hiace (Van)",
+    cabdetails: "Spacious 10-seater van for groups",
+    cabpic:
+      "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=480&q=60",
+    noOfCabs: 1,
+    cabProviderId: null,
+    cabProviderName: "Dubai City Transfers",
+    originLocationName: DUMMY_ORIGIN_NAME,
+    destinationLocationName: DUMMY_DEST_NAME,
+    capacityMin: 1,
+    capacityMax: 10,
+    searchCabDetailsDTO: [
+      {
+        types: "SIC",
+        location: DUMMY_ORIGIN_NAME,
+        dropOff: DUMMY_DEST_NAME,
+        sicRate: 45,
+        totalRate: 45,
+        totalRateWithoutMarkup: 40,
+      },
+      {
+        types: "Private",
+        location: DUMMY_ORIGIN_NAME,
+        dropOff: DUMMY_DEST_NAME,
+        privateRate: 300,
+        privateTotalRate: 300,
+        totalRate: 300,
+        totalRateWithoutMarkup: 275,
+      },
+    ],
+  },
+];
+
 export const CabSearch = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -525,6 +635,42 @@ export const CabSearch = () => {
     return errs;
   };
 
+  // ── Real cab ids for the demo route ──────────────────────────────────
+  // The booking API (/api/cab/book) requires an existing Cab row, so the
+  // demo cards must carry REAL cab ids to be bookable. We pull them from the
+  // cab-provider registry: each provider exposes a nested cabList; if that's
+  // empty we fall back to the per-provider /cabs/{id} endpoint. Returns up to
+  // a handful of { cabId, name, cabpic }.
+  const fetchRealCabsForDemo = async () => {
+    try {
+      const res = await axiosInstance.get("/api/cabProvider", {
+        params: { page: 0, limit: 50 },
+      });
+      const providers = Array.isArray(res.data) ? res.data : [];
+      const cabs = [];
+      providers.forEach((p) => {
+        (Array.isArray(p.cabList) ? p.cabList : []).forEach((c) => {
+          if (c?.cabId != null)
+            cabs.push({ cabId: c.cabId, name: c.name, cabpic: c.cabpic });
+        });
+      });
+      // Fallback: providers came back without a nested cabList — query the
+      // first provider's cabs directly (CabListDTO → { cabId, cabName }).
+      if (cabs.length === 0 && providers[0]?.cabprovider != null) {
+        const cl = await axiosInstance.get(
+          `/api/cabProvider/cabs/${providers[0].cabprovider}`,
+        );
+        (Array.isArray(cl.data) ? cl.data : []).forEach((c) => {
+          if (c?.cabId != null) cabs.push({ cabId: c.cabId, name: c.cabName });
+        });
+      }
+      return cabs;
+    } catch (e) {
+      console.warn("Demo cab lookup failed:", e);
+      return [];
+    }
+  };
+
   const handleTransferSearchSubmit = async (e) => {
     e.preventDefault();
 
@@ -640,7 +786,48 @@ export const CabSearch = () => {
           }))
         : [];
 
-      setTransferResults(mappedResults);
+      // ── Demo route injection ──────────────────────────────────────────
+      // When searching the sample route "Dubai International Airport →
+      // Test Hotel", surface the dummy cab inventory so the flow can be
+      // demonstrated even when no live rates are configured. Matching is
+      // lenient (case-insensitive substring) on the picked origin/dest
+      // labels. Any real results still show alongside the demo cabs.
+      const originLabel = (
+        origin?.label ||
+        origin?.locationName ||
+        ""
+      ).toLowerCase();
+      const destLabel = (
+        destination?.label ||
+        destination?.locationName ||
+        ""
+      ).toLowerCase();
+      const isDemoRoute =
+        originLabel.includes("dubai") &&
+        originLabel.includes("airport") &&
+        destLabel.includes("test hotel");
+
+      if (isDemoRoute) {
+        // Attach REAL cab ids to the demo cards so they can be booked. We keep
+        // the demo names / images / rates but point each card at an existing
+        // Cab row (cycling through whatever's registered).
+        const realCabs = await fetchRealCabsForDemo();
+        if (realCabs.length === 0) {
+          toast.error(
+            "No registered cabs found — demo cards will show but can't be booked. Register a cab first.",
+          );
+        }
+        const demoResults = DUMMY_CAB_RESULTS.map((tpl, i) => {
+          const real = realCabs.length ? realCabs[i % realCabs.length] : null;
+          return {
+            ...tpl,
+            cabid: real ? real.cabId : tpl.cabid,
+          };
+        });
+        setTransferResults([...mappedResults, ...demoResults]);
+      } else {
+        setTransferResults(mappedResults);
+      }
     } catch (err) {
       console.error("Transfer search failed:", err);
       toast.error("Failed to search for transfers.");
