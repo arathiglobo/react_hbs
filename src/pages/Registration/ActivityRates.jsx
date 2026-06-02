@@ -835,7 +835,7 @@ const ActivityRates = () => {
                 <span className="fw-semibold">
                   <FaDollarSign className="me-2 text-success"/>Activity Rates
                   {providerId
-                    ? <span className="text-muted ms-2">(Provider ID: {providerId})</span>
+                    ? <span className="text-muted ms-2">({providerName || `Provider ID: ${providerId}`})</span>
                     : <span className="text-warning ms-2">(No Provider Selected)</span>}
                 </span>
               </div>

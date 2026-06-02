@@ -2158,10 +2158,10 @@ const PackageReg = () => {
                 </Tab>
 
                 <Tab
-                  eventKey="others"
+                  eventKey="inclusions"
                   title={
                     <span>
-                      Others
+                      Inclusions
                       {validationErrors.others && (
                         <span className="text-danger ms-1" title="Has errors">!</span>
                       )}
@@ -2174,134 +2174,175 @@ const PackageReg = () => {
                       {validationErrors.others}
                     </div>
                   )}
-                  <Row>
-                    <Col md={4}>
-                      <h6>Inclusion</h6>
-                      <div style={{ maxHeight: "300px", overflowY: "auto" }}>
-                        {isLoadingTerms ? (
-                          <div className="text-center text-muted">
-                            Loading inclusions...
-                          </div>
-                        ) : (
-                          packageOthersDTOList
-                            .filter((other) => other.descriptionType === 1)
-                            .map((other, index) => (
-                              <FormCheck
-                                key={other.otherId}
-                                type="checkbox"
-                                label={other.type || `Inclusion ${index + 1}`}
-                                checked={!other.isDeleted}
-                                onChange={(e) => {
-                                  const updatedOthers =
-                                    packageOthersDTOList.map((item) =>
-                                      item.otherId === other.otherId
-                                        ? {
-                                          ...item,
-                                          isDeleted: !e.target.checked,
-                                        }
-                                        : item
-                                    );
-                                  setPackageOthersDTOList(updatedOthers);
-
-                                  // Clear others validation error when user selects items
-                                  if (validationErrors.others) {
-                                    setValidationErrors((prev) => ({
-                                      ...prev,
-                                      others: undefined,
-                                    }));
-                                  }
-                                }}
-                                disabled={isViewMode}
-                              />
-                            ))
-                        )}
+                  <h6>Inclusion</h6>
+                  <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                    {isLoadingTerms ? (
+                      <div className="text-center text-muted">
+                        Loading inclusions...
                       </div>
-                    </Col>
-                    <Col md={4}>
-                      <h6>Exclusion</h6>
-                      <div style={{ maxHeight: "300px", overflowY: "auto" }}>
-                        {isLoadingTerms ? (
-                          <div className="text-center text-muted">
-                            Loading exclusions...
-                          </div>
-                        ) : (
-                          packageOthersDTOList
-                            .filter((other) => other.descriptionType === 2)
-                            .map((other, index) => (
-                              <FormCheck
-                                key={other.otherId}
-                                type="checkbox"
-                                label={other.type || `Exclusion ${index + 1}`}
-                                checked={!other.isDeleted}
-                                onChange={(e) => {
-                                  const updatedOthers =
-                                    packageOthersDTOList.map((item) =>
-                                      item.otherId === other.otherId
-                                        ? {
-                                          ...item,
-                                          isDeleted: !e.target.checked,
-                                        }
-                                        : item
-                                    );
-                                  setPackageOthersDTOList(updatedOthers);
+                    ) : (
+                      (() => {
+                        const inclusions = packageOthersDTOList.filter(
+                          (other) => other.descriptionType === 1
+                        );
+                        if (inclusions.length === 0) {
+                          return (
+                            <div className="text-muted">No inclusions available</div>
+                          );
+                        }
+                        return inclusions.map((other, index) => (
+                          <FormCheck
+                            key={other.otherId}
+                            type="checkbox"
+                            label={other.type || `Inclusion ${index + 1}`}
+                            checked={!other.isDeleted}
+                            onChange={(e) => {
+                              const updatedOthers = packageOthersDTOList.map(
+                                (item) =>
+                                  item.otherId === other.otherId
+                                    ? { ...item, isDeleted: !e.target.checked }
+                                    : item
+                              );
+                              setPackageOthersDTOList(updatedOthers);
+                              if (validationErrors.others) {
+                                setValidationErrors((prev) => ({
+                                  ...prev,
+                                  others: undefined,
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          />
+                        ));
+                      })()
+                    )}
+                  </div>
+                </Tab>
 
-                                  // Clear others validation error when user selects items
-                                  if (validationErrors.others) {
-                                    setValidationErrors((prev) => ({
-                                      ...prev,
-                                      others: undefined,
-                                    }));
-                                  }
-                                }}
-                                disabled={isViewMode}
-                              />
-                            ))
-                        )}
+                <Tab
+                  eventKey="exclusions"
+                  title={
+                    <span>
+                      Exclusions
+                      {validationErrors.others && (
+                        <span className="text-danger ms-1" title="Has errors">!</span>
+                      )}
+                    </span>
+                  }
+                >
+                  {validationErrors.others && (
+                    <div className="alert alert-danger mb-3">
+                      <i className="fas fa-exclamation-triangle me-2"></i>
+                      {validationErrors.others}
+                    </div>
+                  )}
+                  <h6>Exclusion</h6>
+                  <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                    {isLoadingTerms ? (
+                      <div className="text-center text-muted">
+                        Loading exclusions...
                       </div>
-                    </Col>
-                    <Col md={4}>
-                      <h6>Terms and Conditions</h6>
-                      <div style={{ maxHeight: "300px", overflowY: "auto" }}>
-                        {isLoadingTerms ? (
-                          <div className="text-center text-muted">
-                            Loading terms & conditions...
-                          </div>
-                        ) : (
-                          packageOthersDTOList
-                            .filter((other) => other.descriptionType === 3)
-                            .map((other, index) => (
-                              <FormCheck
-                                key={other.otherId}
-                                type="checkbox"
-                                label={other.type || `Terms ${index + 1}`}
-                                checked={!other.isDeleted}
-                                onChange={(e) => {
-                                  const updatedOthers =
-                                    packageOthersDTOList.map((item) =>
-                                      item.otherId === other.otherId
-                                        ? {
-                                          ...item,
-                                          isDeleted: !e.target.checked,
-                                        }
-                                        : item
-                                    );
-                                  setPackageOthersDTOList(updatedOthers);
+                    ) : (
+                      (() => {
+                        const exclusions = packageOthersDTOList.filter(
+                          (other) => other.descriptionType === 2
+                        );
+                        if (exclusions.length === 0) {
+                          return (
+                            <div className="text-muted">No exclusions available</div>
+                          );
+                        }
+                        return exclusions.map((other, index) => (
+                          <FormCheck
+                            key={other.otherId}
+                            type="checkbox"
+                            label={other.type || `Exclusion ${index + 1}`}
+                            checked={!other.isDeleted}
+                            onChange={(e) => {
+                              const updatedOthers = packageOthersDTOList.map(
+                                (item) =>
+                                  item.otherId === other.otherId
+                                    ? { ...item, isDeleted: !e.target.checked }
+                                    : item
+                              );
+                              setPackageOthersDTOList(updatedOthers);
+                              if (validationErrors.others) {
+                                setValidationErrors((prev) => ({
+                                  ...prev,
+                                  others: undefined,
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          />
+                        ));
+                      })()
+                    )}
+                  </div>
+                </Tab>
 
-                                  // Clear others validation error when user selects items
-                                  if (validationErrors.others) {
-                                    setValidationErrors((prev) => ({
-                                      ...prev,
-                                      others: undefined,
-                                    }));
-                                  }
-                                }}
-                                disabled={isViewMode}
-                              />
-                            ))
-                        )}
+                <Tab
+                  eventKey="terms"
+                  title={
+                    <span>
+                      Terms and Conditions
+                      {validationErrors.others && (
+                        <span className="text-danger ms-1" title="Has errors">!</span>
+                      )}
+                    </span>
+                  }
+                >
+                  {validationErrors.others && (
+                    <div className="alert alert-danger mb-3">
+                      <i className="fas fa-exclamation-triangle me-2"></i>
+                      {validationErrors.others}
+                    </div>
+                  )}
+                  <h6>Terms and Conditions</h6>
+                  <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                    {isLoadingTerms ? (
+                      <div className="text-center text-muted">
+                        Loading terms & conditions...
                       </div>
-                    </Col>
-                  </Row>
+                    ) : (
+                      (() => {
+                        const terms = packageOthersDTOList.filter(
+                          (other) => other.descriptionType === 3
+                        );
+                        if (terms.length === 0) {
+                          return (
+                            <div className="text-muted">
+                              No terms and conditions available
+                            </div>
+                          );
+                        }
+                        return terms.map((other, index) => (
+                          <FormCheck
+                            key={other.otherId}
+                            type="checkbox"
+                            label={other.type || `Terms ${index + 1}`}
+                            checked={!other.isDeleted}
+                            onChange={(e) => {
+                              const updatedOthers = packageOthersDTOList.map(
+                                (item) =>
+                                  item.otherId === other.otherId
+                                    ? { ...item, isDeleted: !e.target.checked }
+                                    : item
+                              );
+                              setPackageOthersDTOList(updatedOthers);
+                              if (validationErrors.others) {
+                                setValidationErrors((prev) => ({
+                                  ...prev,
+                                  others: undefined,
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          />
+                        ));
+                      })()
+                    )}
+                  </div>
                 </Tab>
               </Tabs>
             </Modal.Body>
