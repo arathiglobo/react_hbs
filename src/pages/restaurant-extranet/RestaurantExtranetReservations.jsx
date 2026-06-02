@@ -25,6 +25,9 @@ import {
   FaCalendarAlt,
   FaUsers,
   FaClock,
+  FaCreditCard,
+  FaCalendarPlus,
+  FaShieldAlt,
 } from "react-icons/fa";
 import RestaurantExtranetLayout from "./RestaurantExtranetLayout";
 
@@ -45,12 +48,16 @@ import RestaurantExtranetLayout from "./RestaurantExtranetLayout";
 const STATUS_TABS = [
   { key: "all",      label: "All",              match: () => true },
   { key: "pending",  label: "Pending Approval", match: (b) => statusOf(b) === "Pending Approval" },
+  { key: "guarantee",label: "Guarantee Pending",match: (b) => statusOf(b) === "Guarantee Pending" },
   { key: "confirmed",label: "Confirmed",        match: (b) => statusOf(b) === "Confirmed" },
+  { key: "reconfirmed", label: "Reconfirmed",   match: (b) => statusOf(b) === "Reconfirmed" },
+  { key: "datechange", label: "Date Change Requested", match: (b) => statusOf(b) === "Date Change Requested" },
   { key: "checked",  label: "Checked In",       match: (b) => statusOf(b) === "Checked In" },
   { key: "done",     label: "Completed",        match: (b) => statusOf(b) === "Completed" },
   { key: "noshow",   label: "No Show",          match: (b) => statusOf(b) === "No Show" },
   { key: "rejected", label: "Rejected",         match: (b) => statusOf(b) === "Rejected" },
   { key: "cancel",   label: "Cancelled",        match: (b) => statusOf(b) === "Cancelled" },
+  { key: "autocancel", label: "Auto Cancelled", match: (b) => statusOf(b) === "Auto Cancelled" },
 ];
 
 function statusOf(b) {
@@ -59,14 +66,18 @@ function statusOf(b) {
 
 function statusBadgeVariant(status) {
   switch ((status || "").toLowerCase()) {
-    case "pending approval": return "warning";
-    case "confirmed":        return "primary";
-    case "checked in":       return "info";
-    case "completed":        return "success";
-    case "no show":          return "dark";
-    case "rejected":         return "danger";
-    case "cancelled":        return "secondary";
-    default:                 return "secondary";
+    case "pending approval":       return "warning";
+    case "guarantee pending":      return "warning";
+    case "confirmed":              return "primary";
+    case "reconfirmed":            return "info";
+    case "date change requested":  return "warning";
+    case "checked in":             return "info";
+    case "completed":              return "success";
+    case "no show":                return "dark";
+    case "rejected":               return "danger";
+    case "cancelled":              return "secondary";
+    case "auto cancelled":         return "danger";
+    default:                       return "secondary";
   }
 }
 
@@ -97,6 +108,27 @@ const RestaurantExtranetReservations = () => {
   const [remarkText, setRemarkText] = useState("");
   const [remarkAction, setRemarkAction] = useState("remark");
   const [remarkSubmitting, setRemarkSubmitting] = useState(false);
+
+  // Guarantee details modal state
+  const [guaranteeBooking, setGuaranteeBooking] = useState(null);
+  const [guaranteeForm, setGuaranteeForm] = useState({
+    cardHolder: "",
+    cardNumber: "",
+    expiry: "",
+    cardType: "Visa",
+  });
+  const [guaranteeSubmitting, setGuaranteeSubmitting] = useState(false);
+
+  // Date-change request modal state
+  const [dateChangeBooking, setDateChangeBooking] = useState(null);
+  const [dateChangeForm, setDateChangeForm] = useState({
+    proposedDate: "",
+    proposedTime: "",
+    proposedDateAlt: "",
+    proposedTimeAlt: "",
+    reason: "",
+  });
+  const [dateChangeSubmitting, setDateChangeSubmitting] = useState(false);
 
   const fetchBookings = useCallback(async () => {
     setLoading(true);
@@ -147,25 +179,41 @@ const RestaurantExtranetReservations = () => {
     return out;
   }, [rows]);
 
-  const runAction = async (booking, action, remark) => {
+  const runAction = async (booking, action, remarkOrBody) => {
     setActingId(booking.id);
     try {
+      // remarkOrBody may be: null/undefined, a string (legacy remark),
+      // or an object (full request body for newer endpoints).
+      let body = {};
+      if (remarkOrBody && typeof remarkOrBody === "object") {
+        body = remarkOrBody;
+      } else if (remarkOrBody) {
+        body = { remark: remarkOrBody };
+      }
       const res = await axiosInstance.post(
         `/api/restaurant-extranet/bookings/${booking.id}/${action}`,
-        remark ? { remark } : {}
+        body
       );
       const data = res?.data || {};
       if (data.status === "SUCCESS") {
         toast.success("Booking updated.");
-        setRows((prev) =>
-          prev.map((r) => (r.id === booking.id && data.booking ? data.booking : r))
-        );
+        if (data.booking) {
+          setRows((prev) =>
+            prev.map((r) => (r.id === booking.id ? data.booking : r))
+          );
+        } else {
+          // No booking returned — refresh to be safe.
+          fetchBookings();
+        }
+        return true;
       } else {
         toast.error(data.message || "Action failed.");
+        return false;
       }
     } catch (err) {
       const msg = err?.response?.data?.message || "Action failed.";
       toast.error(msg);
+      return false;
     } finally {
       setActingId(null);
     }
@@ -197,6 +245,94 @@ const RestaurantExtranetReservations = () => {
     }
   };
 
+  // ---------- Confirm With Guarantee (require-guarantee) ----------
+  const requireGuarantee = (b) => {
+    runAction(b, "require-guarantee", {});
+  };
+
+  // ---------- Provide Guarantee Details ----------
+  const openGuarantee = (booking) => {
+    setGuaranteeBooking(booking);
+    setGuaranteeForm({
+      cardHolder: "",
+      cardNumber: "",
+      expiry: "",
+      cardType: "Visa",
+    });
+  };
+  const closeGuarantee = () => {
+    if (guaranteeSubmitting) return;
+    setGuaranteeBooking(null);
+  };
+  const submitGuarantee = async () => {
+    if (!guaranteeBooking) return;
+    const { cardHolder, cardNumber, expiry, cardType } = guaranteeForm;
+    if (!cardHolder.trim() || !cardNumber.trim() || !expiry.trim() || !cardType) {
+      toast.error("Please fill in all card details.");
+      return;
+    }
+    // Light validation — backend will do the real checks
+    if (!/^\d{2}\/\d{2}$/.test(expiry.trim())) {
+      toast.error("Expiry must be in MM/YY format.");
+      return;
+    }
+    setGuaranteeSubmitting(true);
+    try {
+      const ok = await runAction(guaranteeBooking, "provide-guarantee", {
+        cardHolder: cardHolder.trim(),
+        cardNumber: cardNumber.trim(),
+        expiry: expiry.trim(),
+        cardType,
+      });
+      if (ok) {
+        setGuaranteeBooking(null);
+      }
+    } finally {
+      setGuaranteeSubmitting(false);
+    }
+  };
+
+  // ---------- Request Date / Time Change ----------
+  const openDateChange = (booking) => {
+    setDateChangeBooking(booking);
+    setDateChangeForm({
+      proposedDate: "",
+      proposedTime: "",
+      proposedDateAlt: "",
+      proposedTimeAlt: "",
+      reason: "",
+    });
+  };
+  const closeDateChange = () => {
+    if (dateChangeSubmitting) return;
+    setDateChangeBooking(null);
+  };
+  const submitDateChange = async () => {
+    if (!dateChangeBooking) return;
+    const { proposedDate, proposedTime, proposedDateAlt, proposedTimeAlt, reason } =
+      dateChangeForm;
+    if (!proposedDate || !proposedTime) {
+      toast.error("Please pick a proposed date and time.");
+      return;
+    }
+    setDateChangeSubmitting(true);
+    try {
+      const body = {
+        proposedDate,
+        proposedTime,
+      };
+      if (proposedDateAlt) body.proposedDateAlt = proposedDateAlt;
+      if (proposedTimeAlt) body.proposedTimeAlt = proposedTimeAlt;
+      if (reason && reason.trim()) body.reason = reason.trim();
+      const ok = await runAction(dateChangeBooking, "request-date-change", body);
+      if (ok) {
+        setDateChangeBooking(null);
+      }
+    } finally {
+      setDateChangeSubmitting(false);
+    }
+  };
+
   const renderActions = (b) => {
     const s = statusOf(b);
     const isActing = actingId === b.id;
@@ -210,7 +346,18 @@ const RestaurantExtranetReservations = () => {
           disabled={isActing}
           onClick={() => runAction(b, "confirm", null)}
         >
-          <FaCheckCircle className="me-1" /> Confirm
+          <FaCheckCircle className="me-1" /> Confirm Without Guarantee
+        </Button>
+      );
+      btns.push(
+        <Button
+          key="confirm-guarantee"
+          variant="warning"
+          size="sm"
+          disabled={isActing}
+          onClick={() => requireGuarantee(b)}
+        >
+          <FaShieldAlt className="me-1" /> Confirm With Guarantee
         </Button>
       );
       btns.push(
@@ -224,6 +371,32 @@ const RestaurantExtranetReservations = () => {
           <FaTimesCircle className="me-1" /> Reject
         </Button>
       );
+    }
+    if (s === "Guarantee Pending") {
+      if (b.agentReconfirmedAt) {
+        btns.push(
+          <Button
+            key="provide-guarantee"
+            variant="primary"
+            size="sm"
+            disabled={isActing}
+            onClick={() => openGuarantee(b)}
+          >
+            <FaCreditCard className="me-1" /> Provide Guarantee Details
+          </Button>
+        );
+      } else {
+        btns.push(
+          <Badge
+            key="awaiting-reconfirm"
+            bg="secondary"
+            className="px-2 py-2"
+            style={{ fontWeight: 500 }}
+          >
+            Awaiting agent reconfirmation
+          </Badge>
+        );
+      }
     }
     if (s === "Confirmed") {
       btns.push(
@@ -259,6 +432,19 @@ const RestaurantExtranetReservations = () => {
           onClick={() => runAction(b, "complete", null)}
         >
           <FaFlagCheckered className="me-1" /> Complete
+        </Button>
+      );
+    }
+    if (s === "Pending Approval" || s === "Confirmed" || s === "Reconfirmed") {
+      btns.push(
+        <Button
+          key="date-change"
+          variant="outline-warning"
+          size="sm"
+          disabled={isActing}
+          onClick={() => openDateChange(b)}
+        >
+          <FaCalendarPlus className="me-1" /> Request Date/Time Change
         </Button>
       );
     }
@@ -522,6 +708,262 @@ const RestaurantExtranetReservations = () => {
             ) : remarkAction === "reject" ? "Reject Reservation"
               : remarkAction === "no-show" ? "Mark No Show"
               : "Save Remark"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Provide Guarantee Details modal */}
+      <Modal
+        show={!!guaranteeBooking}
+        onHide={closeGuarantee}
+        centered
+        backdrop="static"
+        keyboard={!guaranteeSubmitting}
+      >
+        <Modal.Header closeButton={!guaranteeSubmitting}>
+          <Modal.Title className="d-flex align-items-center">
+            <FaCreditCard className="me-2 text-primary" />
+            Provide Guarantee Details
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {guaranteeBooking && (
+            <div className="small text-muted mb-3">
+              <strong>{guaranteeBooking.bookingNumber}</strong> ·{" "}
+              {guaranteeBooking.customerName || "Guest"} ·{" "}
+              {fmtDate(guaranteeBooking.bookingDate)}{" "}
+              {fmtTime(guaranteeBooking.bookingTime)}
+            </div>
+          )}
+          <Form.Group className="mb-2">
+            <Form.Label className="fw-semibold">
+              Card Holder Name <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="text"
+              value={guaranteeForm.cardHolder}
+              onChange={(e) =>
+                setGuaranteeForm((f) => ({ ...f, cardHolder: e.target.value }))
+              }
+              placeholder="Name on card"
+              disabled={guaranteeSubmitting}
+              autoFocus
+            />
+          </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Label className="fw-semibold">
+              Card Number <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="text"
+              inputMode="numeric"
+              value={guaranteeForm.cardNumber}
+              onChange={(e) =>
+                setGuaranteeForm((f) => ({ ...f, cardNumber: e.target.value }))
+              }
+              placeholder="1234 5678 9012 3456"
+              disabled={guaranteeSubmitting}
+            />
+          </Form.Group>
+          <Row>
+            <Col xs={6}>
+              <Form.Group className="mb-2">
+                <Form.Label className="fw-semibold">
+                  Expiry (MM/YY) <span className="text-danger">*</span>
+                </Form.Label>
+                <Form.Control
+                  type="text"
+                  value={guaranteeForm.expiry}
+                  onChange={(e) =>
+                    setGuaranteeForm((f) => ({ ...f, expiry: e.target.value }))
+                  }
+                  placeholder="MM/YY"
+                  maxLength={5}
+                  disabled={guaranteeSubmitting}
+                />
+              </Form.Group>
+            </Col>
+            <Col xs={6}>
+              <Form.Group className="mb-2">
+                <Form.Label className="fw-semibold">
+                  Card Type <span className="text-danger">*</span>
+                </Form.Label>
+                <Form.Select
+                  value={guaranteeForm.cardType}
+                  onChange={(e) =>
+                    setGuaranteeForm((f) => ({ ...f, cardType: e.target.value }))
+                  }
+                  disabled={guaranteeSubmitting}
+                >
+                  <option value="Visa">Visa</option>
+                  <option value="Mastercard">Mastercard</option>
+                  <option value="Amex">Amex</option>
+                  <option value="Other">Other</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+          </Row>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={closeGuarantee}
+            disabled={guaranteeSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={submitGuarantee}
+            disabled={guaranteeSubmitting}
+          >
+            {guaranteeSubmitting ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Submitting…
+              </>
+            ) : (
+              "Submit Guarantee"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Request Date / Time Change modal */}
+      <Modal
+        show={!!dateChangeBooking}
+        onHide={closeDateChange}
+        centered
+        backdrop="static"
+        keyboard={!dateChangeSubmitting}
+      >
+        <Modal.Header closeButton={!dateChangeSubmitting}>
+          <Modal.Title className="d-flex align-items-center">
+            <FaCalendarPlus className="me-2 text-warning" />
+            Request Date / Time Change
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {dateChangeBooking && (
+            <div className="small text-muted mb-3">
+              <strong>{dateChangeBooking.bookingNumber}</strong> ·{" "}
+              {dateChangeBooking.customerName || "Guest"} · current{" "}
+              {fmtDate(dateChangeBooking.bookingDate)}{" "}
+              {fmtTime(dateChangeBooking.bookingTime)}
+            </div>
+          )}
+          <Row>
+            <Col xs={6}>
+              <Form.Group className="mb-2">
+                <Form.Label className="fw-semibold">
+                  Proposed Date <span className="text-danger">*</span>
+                </Form.Label>
+                <Form.Control
+                  type="date"
+                  value={dateChangeForm.proposedDate}
+                  onChange={(e) =>
+                    setDateChangeForm((f) => ({
+                      ...f,
+                      proposedDate: e.target.value,
+                    }))
+                  }
+                  disabled={dateChangeSubmitting}
+                  autoFocus
+                />
+              </Form.Group>
+            </Col>
+            <Col xs={6}>
+              <Form.Group className="mb-2">
+                <Form.Label className="fw-semibold">
+                  Proposed Time <span className="text-danger">*</span>
+                </Form.Label>
+                <Form.Control
+                  type="time"
+                  value={dateChangeForm.proposedTime}
+                  onChange={(e) =>
+                    setDateChangeForm((f) => ({
+                      ...f,
+                      proposedTime: e.target.value,
+                    }))
+                  }
+                  disabled={dateChangeSubmitting}
+                />
+              </Form.Group>
+            </Col>
+          </Row>
+          <Row>
+            <Col xs={6}>
+              <Form.Group className="mb-2">
+                <Form.Label className="fw-semibold">
+                  Alternate Date <span className="text-muted small">(optional)</span>
+                </Form.Label>
+                <Form.Control
+                  type="date"
+                  value={dateChangeForm.proposedDateAlt}
+                  onChange={(e) =>
+                    setDateChangeForm((f) => ({
+                      ...f,
+                      proposedDateAlt: e.target.value,
+                    }))
+                  }
+                  disabled={dateChangeSubmitting}
+                />
+              </Form.Group>
+            </Col>
+            <Col xs={6}>
+              <Form.Group className="mb-2">
+                <Form.Label className="fw-semibold">
+                  Alternate Time <span className="text-muted small">(optional)</span>
+                </Form.Label>
+                <Form.Control
+                  type="time"
+                  value={dateChangeForm.proposedTimeAlt}
+                  onChange={(e) =>
+                    setDateChangeForm((f) => ({
+                      ...f,
+                      proposedTimeAlt: e.target.value,
+                    }))
+                  }
+                  disabled={dateChangeSubmitting}
+                />
+              </Form.Group>
+            </Col>
+          </Row>
+          <Form.Group className="mb-2">
+            <Form.Label className="fw-semibold">Reason (optional)</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={dateChangeForm.reason}
+              onChange={(e) =>
+                setDateChangeForm((f) => ({ ...f, reason: e.target.value }))
+              }
+              placeholder="Why is a date/time change needed?"
+              disabled={dateChangeSubmitting}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={closeDateChange}
+            disabled={dateChangeSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="warning"
+            onClick={submitDateChange}
+            disabled={dateChangeSubmitting}
+          >
+            {dateChangeSubmitting ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Submitting…
+              </>
+            ) : (
+              "Submit Request"
+            )}
           </Button>
         </Modal.Footer>
       </Modal>

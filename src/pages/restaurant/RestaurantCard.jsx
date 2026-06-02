@@ -162,11 +162,16 @@ const RestaurantCard = ({ restaurant, viewMode = "grid", onView, onBook }) => {
                   <BookingModeBadges modes={restaurant.bookingModes} />
                 </div>
                 <div className="d-flex flex-wrap gap-1 mb-2">
-                  {(restaurant.cuisineTypes || []).slice(0, 5).map((c) => (
+                  {(restaurant.cuisineTypes || []).map((c) => (
                     <Badge key={c} bg="light" text="dark" className="border">
                       {c}
                     </Badge>
                   ))}
+                  {restaurant.isInsideHotel && restaurant.hotelName && (
+                    <Badge bg="info" text="dark" className="border">
+                      Inside Hotel: {restaurant.hotelName}
+                    </Badge>
+                  )}
                 </div>
                 {restaurant.description && (
                   <p
@@ -274,11 +279,16 @@ const RestaurantCard = ({ restaurant, viewMode = "grid", onView, onBook }) => {
           <BookingModeBadges modes={restaurant.bookingModes} />
         </div>
         <div className="mb-2 d-flex flex-wrap gap-1">
-          {(restaurant.cuisineTypes || []).slice(0, 3).map((c) => (
+          {(restaurant.cuisineTypes || []).map((c) => (
             <Badge key={c} bg="light" text="dark" className="border">
               {c}
             </Badge>
           ))}
+          {restaurant.isInsideHotel && restaurant.hotelName && (
+            <Badge bg="info" text="dark" className="border">
+              Inside Hotel: {restaurant.hotelName}
+            </Badge>
+          )}
         </div>
         <div className="mt-auto d-flex gap-2">
           <Button

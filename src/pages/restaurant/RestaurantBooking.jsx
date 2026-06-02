@@ -14,7 +14,6 @@ import {
 } from "react-bootstrap";
 import { FaArrowLeft, FaUtensils, FaCheckCircle, FaSave, FaCheck, FaFilePdf, FaExternalLinkAlt } from "react-icons/fa";
 import { toast } from "react-hot-toast";
-import Swal from "sweetalert2";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -281,22 +280,12 @@ const RestaurantBooking = () => {
         paymentStatus: "Not Paid",
       };
 
-      const res = await axiosInstance.post("/api/restaurant/booking/save", payload);
-      const bookingNo = res.data?.bookingNumber || "RB-" + Date.now();
+      await axiosInstance.post("/api/restaurant/booking/save", payload);
 
       setSummaryOpen(false);
-      await Swal.fire({
-        icon: "success",
-        title: "Booking Confirmed!",
-        html:
-          `<div>Booking number: <strong>${bookingNo}</strong></div>` +
-          `<div class="mt-2 small text-muted">` +
-          `A confirmation email has been sent to the restaurant ` +
-          `and to the agent (${form.agentName || "agent"}). ` +
-          `Add the price on the booking list once the restaurant confirms.` +
-          `</div>`,
-        confirmButtonText: "View Bookings",
-      });
+      // Per spec: no post-save confirmation popup. The request email is
+      // already on its way; the bookings list is the source of truth for
+      // status. Redirect there directly.
       navigate("/booking-details/restaurant-booking-list");
     } catch (er) {
       console.error(er);
@@ -646,7 +635,15 @@ const RestaurantBooking = () => {
                     </Card.Header>
                     <Card.Body>
                       <div className="fw-semibold">{restaurant.restaurantName}</div>
-                      <div className="small text-muted mb-3">{restaurant.place}</div>
+                      <div className="small text-muted">{restaurant.place}</div>
+                      {restaurant.isInsideHotel && restaurant.hotelName && (
+                        <div className="small text-muted mb-3">
+                          Hotel: <span className="fw-semibold">{restaurant.hotelName}</span>
+                        </div>
+                      )}
+                      {!(restaurant.isInsideHotel && restaurant.hotelName) && (
+                        <div className="mb-3"></div>
+                      )}
                       <div className="d-flex justify-content-between small mb-1">
                         <span className="text-muted">Date</span>
                         <span className="fw-semibold">{form.bookingDate || "—"}</span>
@@ -679,7 +676,7 @@ const RestaurantBooking = () => {
                     disabled={saving}
                   >
                     <FaCheck className="me-2" />{" "}
-                    {saving ? "Saving..." : "Review & Submit"}
+                    {saving ? "Saving..." : "Submit"}
                   </Button>
                 </div>
               </Col>
@@ -808,12 +805,15 @@ const RestaurantBooking = () => {
         <Modal.Header closeButton={!saving}>
           <Modal.Title>
             <FaCheckCircle className="text-success me-2" />
-            Confirm Booking
+            Request Booking
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Row className="g-2 mb-3">
             <Col md={6}><strong>Restaurant:</strong> {restaurant.restaurantName}</Col>
+            {restaurant.isInsideHotel && restaurant.hotelName && (
+              <Col md={6}><strong>Hotel:</strong> {restaurant.hotelName}</Col>
+            )}
             <Col md={6}><strong>Place:</strong> {restaurant.place}</Col>
             <Col md={6}>
               <strong>Date / Time:</strong>{" "}
@@ -834,9 +834,9 @@ const RestaurantBooking = () => {
           <Alert variant="info" className="mb-0 small">
             <strong>What happens next?</strong>
             <ul className="mb-0 mt-1">
-              <li>A confirmation email is sent to <strong>{restaurant.restaurantName}</strong>.</li>
-              <li>A copy is sent to the agent ({form.agentName || "—"}).</li>
-              <li>You can add / update the price on the bookings list.</li>
+              <li>A request email is sent to <strong>{restaurant.restaurantName || "Green Leaf"}</strong>.</li>
+              <li>A copy is sent to the agent ({form.agentName || "Globo"}).</li>
+              <li>The restaurant will acknowledge by email.</li>
             </ul>
           </Alert>
         </Modal.Body>
@@ -852,7 +852,7 @@ const RestaurantBooking = () => {
               </>
             ) : (
               <>
-                <FaSave className="me-2" /> Confirm Booking
+                <FaSave className="me-2" /> Request Booking
               </>
             )}
           </Button>

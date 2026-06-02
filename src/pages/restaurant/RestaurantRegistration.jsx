@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Card,
   Button,
@@ -136,6 +136,13 @@ const initialState = {
   gstNumber: "",
   taxPercent: "",
 
+  // Inside-a-hotel flag + hotel reference. When isInsideHotel is true the
+  // operator picks a hotel from /api/hotels?search=... and we capture both
+  // the id and the display name. Defaults to NO.
+  isInsideHotel: false,
+  hotelId: null,
+  hotelName: "",
+
   // Destination / Province FK (from /api/destination + /api/province) —
   // drives the Place dropdown. placeSource indicates which master table
   // destinationId points at. The denormalised destinationName is also
@@ -204,6 +211,67 @@ const RestaurantRegistration = () => {
   const [currencyOptions, setCurrencyOptions] = useState([]);
   const [starOptions, setStarOptions] = useState([]);
   const [destinationOptions, setDestinationOptions] = useState([]);
+  const [destinationLoading, setDestinationLoading] = useState(false);
+
+  /** Debounced Place/City lookup. The form-mount effect already loads the
+   *  first page of /api/destination + /api/province; this helper re-runs
+   *  the same calls with a `search` query param so the dropdown narrows
+   *  as the user types. Mirrors the pattern used in RestaurantSearch.jsx. */
+  const destinationDebounceRef = useRef(null);
+  const searchDestinations = (input) => {
+    if (destinationDebounceRef.current) clearTimeout(destinationDebounceRef.current);
+    destinationDebounceRef.current = setTimeout(async () => {
+      setDestinationLoading(true);
+      try {
+        const q = input ? `&search=${encodeURIComponent(input)}` : "";
+        const [destRes, provRes] = await Promise.all([
+          axiosInstance
+            .get(`/api/destination?page=0&limit=10${q}`)
+            .catch(() => ({ data: [] })),
+          axiosInstance
+            .get(`/api/province?page=0&limit=10${q}`)
+            .catch(() => ({ data: [] })),
+        ]);
+        const destList = Array.isArray(destRes.data) ? destRes.data : destRes.data?.content || [];
+        const provList = Array.isArray(provRes.data) ? provRes.data : provRes.data?.content || [];
+        const destOpts = destList
+          .filter((d) => !d.isDeleted)
+          .map((d) => ({
+            value: `DESTINATION:${d.id}`,
+            id: d.id,
+            source: "DESTINATION",
+            label: d.name || d.destinationName || `Destination #${d.id}`,
+          }));
+        const provOpts = provList
+          .filter((p) => !p.isDeleted)
+          .map((p) => ({
+            value: `PROVINCE:${p.id}`,
+            id: p.id,
+            source: "PROVINCE",
+            label:
+              (p.stateName || p.name || `Province #${p.id}`) +
+              (p.country ? `, ${p.country}` : ""),
+          }));
+        setDestinationOptions([
+          { label: "Destinations", options: destOpts },
+          { label: "Provinces", options: provOpts },
+        ]);
+      } catch {
+        // keep last good options on failure
+      } finally {
+        setDestinationLoading(false);
+      }
+    }, 300);
+  };
+
+  // Hotel autocomplete (only used when isInsideHotel === true). We hit
+  // /api/hotels?search=<text> on every keystroke (debounced) and surface
+  // the suggestions in a dropdown. If the endpoint isn't available the
+  // UI gracefully falls back to a plain text input.
+  const [hotelSuggestions, setHotelSuggestions] = useState([]);
+  const [hotelSearchText, setHotelSearchText] = useState("");
+  const [hotelLookupAvailable, setHotelLookupAvailable] = useState(true);
+  const [showHotelSuggestions, setShowHotelSuggestions] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,6 +374,48 @@ const RestaurantRegistration = () => {
     };
   }, []);
 
+  // ── Hotel autocomplete (debounced) ──────────────────────────────────
+  // Triggered while the user types in the Hotel Name field after toggling
+  // "Is Restaurant Inside Hotel?" -> Yes. Falls back to plain text input
+  // if /api/hotels?search=... isn't reachable.
+  useEffect(() => {
+    if (!formData.isInsideHotel) return;
+    if (!hotelLookupAvailable) return;
+    const q = (hotelSearchText || "").trim();
+    if (q.length < 2) {
+      setHotelSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const res = await axiosInstance.get(
+          `/api/hotels?search=${encodeURIComponent(q)}`
+        );
+        const list = Array.isArray(res.data) ? res.data : res.data?.content || [];
+        if (!cancelled) {
+          setHotelSuggestions(
+            list.slice(0, 10).map((h) => ({
+              id: h.id ?? h.hotelId,
+              name: h.name ?? h.hotelName ?? h.title ?? `Hotel #${h.id ?? h.hotelId}`,
+            }))
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          // Endpoint not wired — disable lookup so we don't keep retrying
+          // on every keystroke. UI degrades to a plain text input.
+          setHotelSuggestions([]);
+          setHotelLookupAvailable(false);
+        }
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [hotelSearchText, formData.isInsideHotel, hotelLookupAvailable]);
+
   // Prefill form when in edit mode.
   useEffect(() => {
     if (!isEdit) return;
@@ -383,6 +493,11 @@ const RestaurantRegistration = () => {
           currencyCode: d.currencyCode || "",
           hotelCategoryId: d.hotelCategoryId || null,
           starRating: d.starRating ?? null,
+          // Inside-hotel fields. Backend may not have them on legacy
+          // rows — fall back to blank/false so the form still loads cleanly.
+          isInsideHotel: !!d.isInsideHotel,
+          hotelId: d.hotelId ?? null,
+          hotelName: d.hotelName || "",
           // Promotions — saved as RestaurantPromotion rows. Normalise the
           // dayMask back into an array for the multi-select UI; the save
           // path re-joins it before sending.
@@ -402,6 +517,11 @@ const RestaurantRegistration = () => {
               }))
             : [],
         });
+        // Seed the hotel autocomplete textbox so edit mode shows the saved
+        // hotel name without forcing the operator to re-search.
+        if (d.isInsideHotel && d.hotelName) {
+          setHotelSearchText(d.hotelName);
+        }
         setExistingImages(Array.isArray(d.images) ? d.images : []);
         setExistingMenuPdfs(
           Array.isArray(d.menuPdfs)
@@ -856,6 +976,11 @@ const RestaurantRegistration = () => {
     setMenuPdfFiles([]);
     setExistingMenuPdfs([]);
     setErrors({});
+    // Clear the hotel autocomplete so the form returns to a true blank
+    // state when the operator hits Reset.
+    setHotelSearchText("");
+    setHotelSuggestions([]);
+    setShowHotelSuggestions(false);
   };
 
   return (
@@ -910,6 +1035,7 @@ const RestaurantRegistration = () => {
                       placeholder="Search destination or province..."
                       isClearable
                       isSearchable
+                      isLoading={destinationLoading}
                       options={destinationOptions}
                       // Resolve the saved (destinationId, placeSource) back
                       // to its option so the field shows the picked label
@@ -938,6 +1064,14 @@ const RestaurantRegistration = () => {
                           id: formData.destinationId,
                         };
                       })()}
+                      onInputChange={(input, meta) => {
+                        // Refine the option list as the user types.
+                        // react-select fires this on every keystroke; the
+                        // helper debounces the actual fetch.
+                        if (meta?.action === "input-change") {
+                          searchDestinations(input);
+                        }
+                      }}
                       onChange={(opt) => {
                         setFormData((prev) => ({
                           ...prev,
@@ -963,10 +1097,6 @@ const RestaurantRegistration = () => {
                     {errors.place && (
                       <div className="invalid-feedback d-block">{errors.place}</div>
                     )}
-                    <Form.Text muted>
-                      Combined list from /api/destination + /api/province.
-                      Saves destinationId + placeSource on the restaurant.
-                    </Form.Text>
                   </Col>
                   <Col md={4}>
                     <Form.Label>Status</Form.Label>
@@ -975,6 +1105,126 @@ const RestaurantRegistration = () => {
                       <option value="Inactive">Inactive</option>
                     </Form.Select>
                   </Col>
+
+                  <Col md={4}>
+                    <Form.Label>Is Restaurant Inside Hotel? *</Form.Label>
+                    <div className="d-flex gap-3 align-items-center pt-2">
+                      <Form.Check
+                        type="radio"
+                        inline
+                        id="insideHotel-no"
+                        name="isInsideHotel"
+                        label="No"
+                        checked={!formData.isInsideHotel}
+                        onChange={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            isInsideHotel: false,
+                            // Clear hotel reference when switching back to No
+                            hotelId: null,
+                            hotelName: "",
+                          }))
+                        }
+                      />
+                      <Form.Check
+                        type="radio"
+                        inline
+                        id="insideHotel-yes"
+                        name="isInsideHotel"
+                        label="Yes"
+                        checked={!!formData.isInsideHotel}
+                        onChange={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            isInsideHotel: true,
+                          }))
+                        }
+                      />
+                    </div>
+                  </Col>
+
+                  {/* ── Hotel Name autocomplete (conditional) ──────────
+                      Only rendered when isInsideHotel = Yes. Hits
+                      /api/hotels?search=<text> on debounced keystrokes;
+                      gracefully degrades to a plain text input if the
+                      lookup endpoint isn't available. */}
+                  {formData.isInsideHotel && (
+                    <Col md={12}>
+                      <Form.Label>Hotel Name</Form.Label>
+                      <div style={{ position: "relative" }}>
+                        <Form.Control
+                          type="text"
+                          placeholder={
+                            hotelLookupAvailable
+                              ? "Start typing hotel name..."
+                              : "Enter hotel name"
+                          }
+                          value={hotelSearchText}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setHotelSearchText(v);
+                            setShowHotelSuggestions(true);
+                            // Keep formData.hotelName in sync; clear hotelId
+                            // until the user picks a suggestion.
+                            setFormData((prev) => ({
+                              ...prev,
+                              hotelName: v,
+                              hotelId: prev.hotelName === v ? prev.hotelId : null,
+                            }));
+                          }}
+                          onFocus={() => setShowHotelSuggestions(true)}
+                          onBlur={() => {
+                            // Delay so a click on a suggestion still
+                            // registers before the dropdown closes.
+                            setTimeout(() => setShowHotelSuggestions(false), 150);
+                          }}
+                          autoComplete="off"
+                        />
+                        {hotelLookupAvailable &&
+                          showHotelSuggestions &&
+                          hotelSuggestions.length > 0 && (
+                            <ul
+                              className="list-group position-absolute w-100 shadow-sm"
+                              style={{
+                                top: "100%",
+                                left: 0,
+                                zIndex: 1050,
+                                maxHeight: 220,
+                                overflowY: "auto",
+                              }}
+                            >
+                              {hotelSuggestions.map((h) => (
+                                <li
+                                  key={h.id}
+                                  className="list-group-item list-group-item-action py-1"
+                                  style={{ cursor: "pointer" }}
+                                  onMouseDown={(e) => {
+                                    // Use onMouseDown so the click fires
+                                    // before the input's onBlur clears the
+                                    // suggestion list.
+                                    e.preventDefault();
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      hotelId: h.id,
+                                      hotelName: h.name,
+                                    }));
+                                    setHotelSearchText(h.name);
+                                    setShowHotelSuggestions(false);
+                                  }}
+                                >
+                                  {h.name}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                      </div>
+                      <Form.Text muted>
+                        {hotelLookupAvailable
+                          ? "Pick from suggestions to link this restaurant to a registered hotel."
+                          : "Hotel lookup unavailable — name will be saved as plain text."}
+                      </Form.Text>
+                    </Col>
+                  )}
 
                   <Col md={6}>
                     <Form.Label>Address *</Form.Label>

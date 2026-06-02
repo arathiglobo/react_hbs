@@ -34,12 +34,22 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 
-/** Status options surfaced in the update-status modal. */
+/** Status options surfaced in the update-status modal AND the filter dropdown.
+ *  Includes the extranet-driven flow states: guarantee pending,
+ *  reconfirmed, date-change requested, auto-cancelled — plus the
+ *  pre-existing operational states (Checked In, No Show, Rejected). */
 const BOOKING_STATUS_OPTIONS = [
   "Pending Approval",
+  "Guarantee Pending",
   "Confirmed",
+  "Reconfirmed",
+  "Date Change Requested",
+  "Checked In",
+  "No Show",
   "Completed",
+  "Rejected",
   "Cancelled",
+  "Auto Cancelled",
 ];
 const PAYMENT_STATUS_OPTIONS = [
   "Not Paid",
@@ -315,6 +325,89 @@ const RestaurantBookingList = () => {
     }
   };
 
+  /** Agent confirms (reconfirms) the booking even though the restaurant
+   *  is holding a credit-card guarantee — backend endpoint just flips
+   *  status to "Reconfirmed". */
+  const handleReconfirm = async (b) => {
+    const conf = await Swal.fire({
+      icon: "question",
+      title: "Reconfirm this booking?",
+      text: `Booking ${b.bookingNumber}`,
+      showCancelButton: true,
+      confirmButtonColor: "#0d6efd",
+    });
+    if (!conf.isConfirmed) return;
+    try {
+      await axiosInstance.post(`/api/restaurant/booking/${b.id}/reconfirm`);
+      toast.success("Booking reconfirmed");
+      fetchList();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Failed to reconfirm booking");
+    }
+  };
+
+  /** Accept the restaurant's proposed date/time change. `useAlternate`
+   *  picks the proposedDateAlt/proposedTimeAlt pair instead of the
+   *  primary suggestion. */
+  const handleAcceptDateChange = async (b, useAlternate = false) => {
+    try {
+      await axiosInstance.post(
+        `/api/restaurant/booking/${b.id}/accept-date-change`,
+        { useAlternate }
+      );
+      toast.success(
+        useAlternate
+          ? "Alternate date/time accepted"
+          : "Proposed date/time accepted"
+      );
+      fetchList();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Failed to accept date change");
+    }
+  };
+
+  /** Reject the restaurant's proposed date change — booking goes back to
+   *  its previous state (typically Confirmed). */
+  const handleRejectDateChange = async (b) => {
+    const conf = await Swal.fire({
+      icon: "warning",
+      title: "Reject proposed date change?",
+      text: `Booking ${b.bookingNumber}`,
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+    });
+    if (!conf.isConfirmed) return;
+    try {
+      await axiosInstance.post(
+        `/api/restaurant/booking/${b.id}/reject-date-change`
+      );
+      toast.success("Date change rejected");
+      fetchList();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Failed to reject date change");
+    }
+  };
+
+  /** Combined-case handler: agent agrees to the new date AND continues
+   *  through the guarantee-required step in one go. We accept the date
+   *  change first (so the booking carries the new slot) and then call
+   *  reconfirm so it ends up at "Reconfirmed". */
+  const handleReconfirmAndContinue = async (b, useAlternate = false) => {
+    try {
+      await axiosInstance.post(
+        `/api/restaurant/booking/${b.id}/accept-date-change`,
+        { useAlternate }
+      );
+      await axiosInstance.post(`/api/restaurant/booking/${b.id}/reconfirm`);
+      toast.success("Date change accepted and booking reconfirmed");
+      fetchList();
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.message || "Failed to reconfirm booking"
+      );
+    }
+  };
+
   const handleCancel = async (b) => {
     const conf = await Swal.fire({
       icon: "warning",
@@ -373,10 +466,11 @@ const RestaurantBookingList = () => {
                     }}
                   >
                     <option value="all">All Statuses</option>
-                    <option value="Pending Approval">Pending Approval</option>
-                    <option value="Confirmed">Confirmed</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
+                    {BOOKING_STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
                   </Form.Select>
                 </Col>
               </Row>
@@ -412,7 +506,8 @@ const RestaurantBookingList = () => {
                   </thead>
                   <tbody>
                     {pageData.map((b, i) => (
-                      <tr key={b.id || i}>
+                      <React.Fragment key={b.id || i}>
+                      <tr>
                         <td>{(page - 1) * PER_PAGE + i + 1}</td>
                         <td className="fw-semibold">{b.bookingNumber}</td>
                         <td>{b.restaurantName}</td>
@@ -554,6 +649,33 @@ const RestaurantBookingList = () => {
                           )}
                         </td>
                       </tr>
+                      {/* Inline "Reconfirmation Required" panel — surfaces
+                          whenever the restaurant has flagged this booking
+                          for guarantee capture or proposed a date/time
+                          change. The agent acts directly from the row
+                          instead of opening a separate modal. */}
+                      {(b.bookingStatus === "Guarantee Pending" ||
+                        b.bookingStatus === "Date Change Requested") && (
+                        <tr>
+                          <td colSpan={9} style={{ background: "#fffbe6" }}>
+                            <ReconfirmPanel
+                              booking={b}
+                              onReconfirm={() => handleReconfirm(b)}
+                              onCancel={() => handleCancel(b)}
+                              onAcceptPrimary={() => handleAcceptDateChange(b, false)}
+                              onAcceptAlternate={() => handleAcceptDateChange(b, true)}
+                              onReject={() => handleRejectDateChange(b)}
+                              onReconfirmAndContinuePrimary={() =>
+                                handleReconfirmAndContinue(b, false)
+                              }
+                              onReconfirmAndContinueAlternate={() =>
+                                handleReconfirmAndContinue(b, true)
+                              }
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </Table>
@@ -612,6 +734,84 @@ const RestaurantBookingList = () => {
                   <strong>Special Request:</strong> {selected.specialRequest || "-"}
                 </Col>
               </Row>
+
+              {/* Guarantee card details — only visible once the agent has
+                  actually captured a card via the extranet workflow. We
+                  show the masked card number returned by the backend, so
+                  the operator can verify *which* card is on file without
+                  exposing raw PAN. */}
+              {selected.guaranteeStatus === "Provided" && (
+                <div
+                  className="mt-3 p-3"
+                  style={{
+                    background: "#f0f9ff",
+                    border: "1px solid #bae6fd",
+                    borderRadius: 8,
+                  }}
+                >
+                  <div className="fw-semibold mb-2">
+                    Credit Card Guarantee (on file)
+                  </div>
+                  <Row className="g-2 small">
+                    <Col md={6}>
+                      <strong>Card Holder:</strong>{" "}
+                      {selected.guaranteeCardHolder || "—"}
+                    </Col>
+                    <Col md={6}>
+                      <strong>Card Number:</strong>{" "}
+                      {selected.guaranteeCardNumber || "—"}
+                    </Col>
+                    <Col md={6}>
+                      <strong>Card Type:</strong>{" "}
+                      {selected.guaranteeCardType || "—"}
+                    </Col>
+                    <Col md={6}>
+                      <strong>Expiry:</strong>{" "}
+                      {selected.guaranteeCardExpiry || "—"}
+                    </Col>
+                  </Row>
+                </div>
+              )}
+
+              {/* Date-change snapshot — surfaces the original vs proposed
+                  slot in the view modal so the agent can confirm what the
+                  restaurant asked for even after the inline panel is gone. */}
+              {(selected.proposedDate || selected.originalBookingDate) && (
+                <div
+                  className="mt-3 p-3"
+                  style={{
+                    background: "#fffbeb",
+                    border: "1px solid #fde68a",
+                    borderRadius: 8,
+                  }}
+                >
+                  <div className="fw-semibold mb-2">Date Change</div>
+                  <div className="small mb-1">
+                    <strong>Original:</strong>{" "}
+                    {selected.originalBookingDate || selected.bookingDate}{" "}
+                    {selected.originalBookingTime || selected.bookingTime}
+                  </div>
+                  {selected.proposedDate && (
+                    <div className="small mb-1">
+                      <strong>Proposed:</strong> {selected.proposedDate}{" "}
+                      {selected.proposedTime || ""}
+                      {(selected.proposedDateAlt || selected.proposedTimeAlt) && (
+                        <>
+                          {" "}
+                          <span className="text-muted">OR</span>{" "}
+                          {selected.proposedDateAlt || ""}{" "}
+                          {selected.proposedTimeAlt || ""}
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {selected.dateChangeReason && (
+                    <div className="small">
+                      <strong>Reason:</strong> {selected.dateChangeReason}
+                    </div>
+                  )}
+                </div>
+              )}
               {Array.isArray(selected.items) && selected.items.length > 0 && (
                 <Table className="mt-3" size="sm" bordered>
                   <thead className="table-light">
@@ -1026,13 +1226,27 @@ const statusVariant = (s) => {
   switch (s) {
     case "Confirmed":
       return "success";
+    case "Reconfirmed":
+      return "info";
     case "Pending":
     case "Pending Approval":
       return "warning";
+    case "Guarantee Pending":
+      return "warning";
+    case "Date Change Requested":
+      return "warning";
+    case "Checked In":
+      return "success";
+    case "No Show":
+      return "dark";
     case "Completed":
       return "primary";
+    case "Rejected":
+      return "danger";
     case "Cancelled":
       return "danger";
+    case "Auto Cancelled":
+      return "dark";
     default:
       return "secondary";
   }
@@ -1051,6 +1265,167 @@ const paymentVariant = (s) => {
     default:
       return "secondary";
   }
+};
+
+/** Inline panel rendered under a booking row when the restaurant has
+ *  flagged it for either a credit-card guarantee, a proposed date/time
+ *  change, or BOTH (combined case). The combined case chains
+ *  accept-date-change + reconfirm in one click. */
+const ReconfirmPanel = ({
+  booking,
+  onReconfirm,
+  onCancel,
+  onAcceptPrimary,
+  onAcceptAlternate,
+  onReject,
+  onReconfirmAndContinuePrimary,
+  onReconfirmAndContinueAlternate,
+}) => {
+  const isDateChange = booking.bookingStatus === "Date Change Requested";
+  const isGuaranteePending = booking.bookingStatus === "Guarantee Pending";
+  // Combined case: restaurant proposed a new slot AND the guarantee step
+  // is still pending. The backend uses guaranteeStatus to track that.
+  const combined =
+    isDateChange && booking.guaranteeStatus === "Pending";
+  const hasAlternate = !!(booking.proposedDateAlt || booking.proposedTimeAlt);
+  const originalDate = booking.originalBookingDate || booking.bookingDate;
+  const originalTime = booking.originalBookingTime || booking.bookingTime;
+
+  // --- Combined: date change + guarantee required ---
+  if (combined) {
+    return (
+      <div className="p-2">
+        <div className="d-flex align-items-center mb-2">
+          <FaSyncAlt className="me-2 text-warning" />
+          <strong>Reconfirmation Required</strong>
+        </div>
+        <div className="mb-2">
+          Restaurant proposed a new reservation time AND requires a credit
+          card guarantee.
+        </div>
+        <div className="small mb-1">
+          <strong>Original:</strong> {originalDate || "—"} {originalTime || ""}
+        </div>
+        <div className="small mb-1">
+          <strong>Proposed:</strong> {booking.proposedDate || "—"}{" "}
+          {booking.proposedTime || ""}
+          {hasAlternate && (
+            <>
+              {" "}
+              <span className="text-muted">OR</span>{" "}
+              {booking.proposedDateAlt || "—"} {booking.proposedTimeAlt || ""}
+            </>
+          )}
+        </div>
+        <div className="small mb-1">
+          <strong>Guarantee Required:</strong> Yes
+        </div>
+        <div className="small mb-2">
+          <strong>Reason:</strong> {booking.dateChangeReason || "—"}
+        </div>
+        <div className="d-flex gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={onReconfirmAndContinuePrimary}
+          >
+            Reconfirm &amp; Continue
+            {hasAlternate ? " (Primary)" : ""}
+          </Button>
+          {hasAlternate && (
+            <Button
+              size="sm"
+              variant="outline-primary"
+              onClick={onReconfirmAndContinueAlternate}
+            >
+              Reconfirm &amp; Continue (Alternate)
+            </Button>
+          )}
+          <Button size="sm" variant="danger" onClick={onReject}>
+            Reject
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Date change only ---
+  if (isDateChange) {
+    return (
+      <div className="p-2">
+        <div className="d-flex align-items-center mb-2">
+          <FaCalendarAlt className="me-2 text-warning" />
+          <strong>Restaurant has requested a date/time change</strong>
+        </div>
+        <div className="small mb-1">
+          <strong>Original:</strong> {originalDate || "—"} {originalTime || ""}
+        </div>
+        <div className="small mb-1">
+          <strong>Proposed:</strong> {booking.proposedDate || "—"}{" "}
+          {booking.proposedTime || ""}
+          {hasAlternate && (
+            <>
+              {" "}
+              <span className="text-muted">OR</span>{" "}
+              {booking.proposedDateAlt || "—"} {booking.proposedTimeAlt || ""}
+            </>
+          )}
+        </div>
+        <div className="small mb-2">
+          <strong>Reason:</strong> {booking.dateChangeReason || "—"}
+        </div>
+        <div className="d-flex gap-2 flex-wrap">
+          {hasAlternate ? (
+            <>
+              <Button size="sm" variant="success" onClick={onAcceptPrimary}>
+                Accept Primary
+              </Button>
+              <Button
+                size="sm"
+                variant="outline-success"
+                onClick={onAcceptAlternate}
+              >
+                Accept Alternate
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="success" onClick={onAcceptPrimary}>
+              Accept
+            </Button>
+          )}
+          <Button size="sm" variant="danger" onClick={onReject}>
+            Reject
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Guarantee pending only ---
+  if (isGuaranteePending) {
+    return (
+      <div className="p-2">
+        <div className="d-flex align-items-center mb-2">
+          <FaSyncAlt className="me-2 text-warning" />
+          <strong>Reconfirmation Required</strong>
+        </div>
+        <div className="mb-2">
+          Restaurant requires a credit card guarantee before confirming this
+          reservation.
+        </div>
+        <div className="d-flex gap-2 flex-wrap">
+          <Button size="sm" variant="primary" onClick={onReconfirm}>
+            Reconfirm
+          </Button>
+          <Button size="sm" variant="outline-danger" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 };
 
 const demoBookings = [

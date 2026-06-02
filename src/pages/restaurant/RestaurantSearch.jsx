@@ -95,12 +95,22 @@ const RestaurantSearch = () => {
   const [form, setForm] = useState({
     bookingDate: restoredCriteria?.bookingDate || today(),
     bookingTime: restoredCriteria?.bookingTime || "19:00",
-    destination: restoredCriteria?.destination || null, // { value, label }
+    // Combined destination/province typeahead pick (mirrors
+    // RestaurantRegistration.jsx). Shape: { value, label, id, source }.
+    destination: restoredCriteria?.destination || null,
+    countryId: restoredCriteria?.countryId || "",
+    countryName: restoredCriteria?.countryName || "",
     agentId: restoredCriteria?.agentId || "",
     agentName: restoredCriteria?.agentName || "",
     memberCount: restoredCriteria?.memberCount || 2,
     mealType: restoredCriteria?.mealType || "Any",
   });
+
+  // Country dropdown — populated from /api/country. Country is now
+  // INDEPENDENT of the City/Place typeahead (it just forwards countryId
+  // in the search payload).
+  const [countries, setCountries] = useState([]);
+  const [countriesLoading, setCountriesLoading] = useState(false);
 
   const [agents, setAgents] = useState([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -130,6 +140,11 @@ const RestaurantSearch = () => {
    *  "Italian" would hide all the other cuisine checkboxes the moment
    *  the backend returned only Italian restaurants. */
   const [cuisineOptions, setCuisineOptions] = useState([]);
+  /** Sidebar checkbox — when ON, post-filter the loaded result list to
+   *  restaurants where isInsideHotel === true. In-memory only — does NOT
+   *  re-call the search API. Replaces the old "Restaurant Type" radio
+   *  group that used to live on the search form. */
+  const [restaurantInHotelOnly, setRestaurantInHotelOnly] = useState(false);
 
   /** Load agents from /api/agent — same source HotelSearch uses. */
   useEffect(() => {
@@ -143,6 +158,115 @@ const RestaurantSearch = () => {
         if (!cancelled) setAgents([]);
       } finally {
         if (!cancelled) setAgentsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Load an initial slice of countries from /api/country on mount so the
+   *  dropdown isn't empty before the user types. Subsequent keystrokes
+   *  refine the list via the debounced searchCountries() below. */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCountriesLoading(true);
+      try {
+        const res = await axiosInstance.get("/api/country");
+        if (!cancelled)
+          setCountries(Array.isArray(res.data) ? res.data : res.data?.content || []);
+      } catch (e) {
+        if (!cancelled) setCountries([]);
+      } finally {
+        if (!cancelled) setCountriesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Debounced country lookup — refines the dropdown as the user types.
+   *  Hits /api/country?search=<term>. Mirrors the pattern used for the
+   *  destination/province search below. */
+  const countryDebounceRef = useRef(null);
+  const searchCountries = (input) => {
+    if (countryDebounceRef.current) clearTimeout(countryDebounceRef.current);
+    countryDebounceRef.current = setTimeout(async () => {
+      setCountriesLoading(true);
+      try {
+        const q = input ? `?search=${encodeURIComponent(input)}` : "";
+        const res = await axiosInstance.get(`/api/country${q}`);
+        const list = Array.isArray(res.data) ? res.data : res.data?.content || [];
+        setCountries(list);
+      } catch (e) {
+        setCountries([]);
+      } finally {
+        setCountriesLoading(false);
+      }
+    }, 300);
+  };
+
+  /** Initial Place/City option load. Mirrors RestaurantRegistration.jsx
+   *  — hits /api/destination and /api/province in parallel and merges
+   *  the rows into a single grouped option list. Subsequent keystrokes
+   *  refine the list via the debounced searchDestinations() below. */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setDestinationLoading(true);
+      try {
+        const [destRes, provRes] = await Promise.all([
+          axiosInstance
+            .get("/api/destination?page=0&limit=10")
+            .catch(() => ({ data: [] })),
+          axiosInstance
+            .get("/api/province?page=0&limit=10")
+            .catch(() => ({ data: [] })),
+        ]);
+        if (cancelled) return;
+        const destRows = Array.isArray(destRes.data)
+          ? destRes.data
+          : destRes.data?.content || [];
+        const provRows = Array.isArray(provRes.data)
+          ? provRes.data
+          : provRes.data?.content || [];
+        const destOpts = destRows
+          .filter((d) => !d.isDeleted)
+          .map((d) => {
+            const label =
+              d.name || d.destinationName || `Destination #${d.id}`;
+            return {
+              value: `DESTINATION:${d.id}`,
+              id: d.id,
+              source: "DESTINATION",
+              label,
+              stateName: label,
+            };
+          });
+        const provOpts = provRows
+          .filter((p) => !p.isDeleted)
+          .map((p) => {
+            const label =
+              (p.stateName || p.name || `Province #${p.id}`) +
+              (p.country ? `, ${p.country}` : "");
+            return {
+              value: `PROVINCE:${p.id}`,
+              id: p.id,
+              source: "PROVINCE",
+              label,
+              stateName: p.stateName || p.name || label,
+            };
+          });
+        setDestinationOptions([
+          { label: "Destinations", options: destOpts },
+          { label: "Provinces", options: provOpts },
+        ]);
+      } catch {
+        if (!cancelled) setDestinationOptions([]);
+      } finally {
+        if (!cancelled) setDestinationLoading(false);
       }
     })();
     return () => {
@@ -243,6 +367,21 @@ const RestaurantSearch = () => {
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
+  /** Country picker — OPTIONAL. Independent of the City/Place typeahead
+   *  (no city fetch is triggered). countryId is forwarded on the search
+   *  payload when present. */
+  const onCountryChange = (e) => {
+    const id = e.target.value;
+    const country = countries.find((c) => String(c.id) === String(id));
+    setForm((p) => ({
+      ...p,
+      countryId: id,
+      countryName: country?.name || country?.countryName || "",
+    }));
+    if (errors.countryId)
+      setErrors((prev) => ({ ...prev, countryId: "" }));
+  };
+
   const onAgentChange = (e) => {
     const id = e.target.value;
     const agent = agents.find((a) => String(a.id) === String(id));
@@ -258,7 +397,10 @@ const RestaurantSearch = () => {
     const err = {};
     if (!form.bookingDate) err.bookingDate = "Booking date is required";
     else if (form.bookingDate < today()) err.bookingDate = "Booking date cannot be in the past";
-    if (!form.destination) err.destination = "Destination is required";
+    // City/Place is required. Country is optional and does NOT satisfy
+    // the destination requirement on its own.
+    if (!form.destination)
+      err.destination = "City / Place is required";
     if (!isAgentRole && !form.agentId) err.agentId = "Agent is required";
     if (!form.memberCount || Number(form.memberCount) < 1)
       err.memberCount = "At least 1 member";
@@ -283,6 +425,8 @@ const RestaurantSearch = () => {
     // match against the right master table.
     destinationId: form.destination?.id || null,
     placeSource: form.destination?.source || null,
+    // Country is an independent optional filter — forwarded when set.
+    countryId: form.countryId ? Number(form.countryId) : null,
     agentId: Number(form.agentId) || null,
     memberCount: Number(form.memberCount),
     mealType: form.mealType === "Any" ? null : form.mealType,
@@ -433,6 +577,14 @@ const RestaurantSearch = () => {
     menuPortal: (base) => ({ ...base, zIndex: 9999 }),
   });
 
+  /** Post-filter the loaded result list with the in-memory sidebar
+   *  filters (currently just the "Restaurant in Hotel" checkbox). Does
+   *  NOT re-call the search API. Cuisine filtering still runs on the
+   *  server because the option list is captured off the initial search. */
+  const visibleResults = restaurantInHotelOnly
+    ? results.filter((r) => r?.isInsideHotel === true)
+    : results;
+
   return (
     <div
       className="min-vh-100 bg-gradient-light d-flex flex-column"
@@ -481,34 +633,86 @@ const RestaurantSearch = () => {
                       <Form.Control.Feedback type="invalid">{errors.bookingDate}</Form.Control.Feedback>
                     </Col>
 
-                    <Col lg={4} md={6}>
+                    {/* Country — OPTIONAL, independent filter. Does NOT
+                        drive the City/Place typeahead. Search-as-you-type
+                        hits /api/country?search=<term> (debounced) so the
+                        dropdown stays responsive over large country lists. */}
+                    <Col lg={3} md={6}>
                       <Form.Label className="fw-semibold text-dark">
-                        <FaMapMarkerAlt className="me-1 text-danger" /> Destination *
+                        <FaMapMarkerAlt className="me-1 text-danger" /> Country
                       </Form.Label>
                       <Select
-                        inputId="restaurant-destination"
-                        options={destinationOptions}
-                        value={form.destination}
-                        onChange={(opt) => setField("destination", opt)}
-                        onMenuOpen={() => {
-                          // Pre-populate the dropdown on focus so users
-                          // see options without typing.
-                          if (destinationOptions.length === 0) searchDestinations("");
-                        }}
-                        onInputChange={(input, meta) => {
-                          if (meta.action === "input-change") searchDestinations(input);
-                        }}
-                        isLoading={destinationLoading}
+                        placeholder={countriesLoading ? "Loading countries..." : "Select Country (optional)"}
                         isClearable
-                        placeholder="Pick a destination..."
-                        noOptionsMessage={() =>
-                          destinationLoading ? "Searching..." : "No matches"
+                        isSearchable
+                        isLoading={countriesLoading}
+                        options={countries.map((c) => ({
+                          value: c.id,
+                          label: c.name || c.countryName || `Country #${c.id}`,
+                        }))}
+                        value={
+                          form.countryId
+                            ? {
+                                value: form.countryId,
+                                label:
+                                  form.countryName ||
+                                  countries.find(
+                                    (c) => String(c.id) === String(form.countryId)
+                                  )?.name ||
+                                  `Country #${form.countryId}`,
+                              }
+                            : null
                         }
-                        // Portal the menu to <body> so the dropdown list
-                        // isn't clipped by sibling rows (e.g. the Search
-                        // button below) or by the card overflow.
+                        onInputChange={(input, meta) => {
+                          if (meta?.action === "input-change") {
+                            searchCountries(input);
+                          }
+                        }}
+                        onChange={(opt) => {
+                          setForm((p) => ({
+                            ...p,
+                            countryId: opt?.value || "",
+                            countryName: opt?.label || "",
+                          }));
+                          if (errors.countryId)
+                            setErrors((prev) => ({ ...prev, countryId: "" }));
+                        }}
                         menuPortalTarget={typeof document !== "undefined" ? document.body : null}
-                        menuPosition="fixed"
+                        styles={rsStyles(false)}
+                      />
+                    </Col>
+
+                    {/* City / Place — combined typeahead against
+                        /api/destination + /api/province. Mirrors the
+                        same pattern used in RestaurantRegistration.jsx.
+                        Picked option stores destinationId + placeSource
+                        + destinationName on the form so the backend can
+                        resolve the right master table. */}
+                    <Col lg={4} md={6}>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaMapMarkerAlt className="me-1 text-danger" /> City / Place *
+                      </Form.Label>
+                      <Select
+                        placeholder="Search destination or province..."
+                        isClearable
+                        isSearchable
+                        options={destinationOptions}
+                        isLoading={destinationLoading}
+                        value={form.destination}
+                        onInputChange={(input, meta) => {
+                          // Refine the option list as the user types.
+                          // react-select fires this on every keystroke;
+                          // the helper debounces the actual fetch.
+                          if (meta?.action === "input-change") {
+                            searchDestinations(input);
+                          }
+                        }}
+                        onChange={(opt) => {
+                          setForm((p) => ({ ...p, destination: opt || null }));
+                          if (errors.destination)
+                            setErrors((prev) => ({ ...prev, destination: "" }));
+                        }}
+                        menuPortalTarget={typeof document !== "undefined" ? document.body : null}
                         styles={rsStyles(!!errors.destination)}
                       />
                       {errors.destination && (
@@ -682,6 +886,41 @@ const RestaurantSearch = () => {
                         )}
                       </Card.Body>
                     </Card>
+
+                    {/* Restaurant Type — in-memory post-filter applied
+                        to the loaded result list. Checking the box keeps
+                        only restaurants where isInsideHotel === true.
+                        Does NOT re-call the search API. */}
+                    <Card className="shadow-sm rounded-4 mt-3">
+                      <Card.Header className="bg-white fw-semibold d-flex justify-content-between align-items-center">
+                        <span>
+                          <FaUtensils className="me-2 text-warning" />
+                          Restaurant Type
+                        </span>
+                        {restaurantInHotelOnly && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0 text-decoration-none"
+                            onClick={() => setRestaurantInHotelOnly(false)}
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </Card.Header>
+                      <Card.Body className="p-2">
+                        <Form.Check
+                          type="checkbox"
+                          id="restaurant-in-hotel-only"
+                          label="Restaurant in Hotel"
+                          checked={restaurantInHotelOnly}
+                          onChange={(e) =>
+                            setRestaurantInHotelOnly(e.target.checked)
+                          }
+                          className="mb-1"
+                        />
+                      </Card.Body>
+                    </Card>
                   </div>
                 </Col>
 
@@ -690,11 +929,20 @@ const RestaurantSearch = () => {
                   <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                     <h5 className="mb-0">
                       <Badge bg="primary" className="me-2">
-                        {results.length}
+                        {visibleResults.length}
                       </Badge>
                       {cuisineFilter.length
                         ? `restaurants · filtered by ${cuisineFilter.join(", ")}`
-                        : `restaurants in ${form.destination?.label || ""}`}
+                        : `restaurants in ${
+                            form.destination?.label ||
+                            form.countryName ||
+                            ""
+                          }`}
+                      {restaurantInHotelOnly && (
+                        <span className="text-muted small ms-2">
+                          · in-hotel only
+                        </span>
+                      )}
                     </h5>
                     {/* Grid / List view toggle — same pattern as RoomList.jsx */}
                     <div className="btn-group shadow-sm gap-1" role="group" aria-label="View mode">
@@ -719,13 +967,15 @@ const RestaurantSearch = () => {
                     </div>
                   </div>
 
-                  {results.length === 0 ? (
+                  {visibleResults.length === 0 ? (
                     <Card className="shadow-sm border-0 rounded-4">
                       <Card.Body className="text-center text-muted py-5">
                         <FaUtensils size={48} className="mb-2 opacity-50" />
                         <h6 className="mb-1">No restaurants match these filters</h6>
                         <small>
-                          {cuisineFilter.length
+                          {restaurantInHotelOnly
+                            ? "Uncheck \"Restaurant in Hotel\" or pick a different destination."
+                            : cuisineFilter.length
                             ? "Clear the cuisine filter to see all results."
                             : "Try a different destination or date."}
                         </small>
@@ -733,7 +983,7 @@ const RestaurantSearch = () => {
                     </Card>
                   ) : (
                     <Row className="g-3">
-                      {results.map((r) => (
+                      {visibleResults.map((r) => (
                         <Col
                           key={r.id}
                           md={viewMode === "grid" ? 6 : 12}
