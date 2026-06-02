@@ -593,17 +593,19 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     return Array.isArray(flags.features) ? flags.features : [];
   };
 
-  // Maps each canonical feature label to a CSS modifier class.
-  // Unknown labels degrade to the default pill styling.
+  // Maps each canonical feature label to a CSS modifier class AND the
+  // dedicated booking-page route the user is sent to when they click the
+  // pill. Unknown labels degrade to the default pill styling and the
+  // click is a no-op (we skip the navigation when route is undefined).
   const DEAL_PILL_META = {
-    "Last Minute":             { cls: "deal-last-minute" },
-    "Long Stay":               { cls: "deal-long-stay"   },
-    "Day Stay":                { cls: "deal-day-stay"    },
-    "24 Hour Check-In":        { cls: "deal-24h"         },
-    "Govt Employee Discount":  { cls: "deal-gov"         },
-    "Student Discount":        { cls: "deal-student"     },
-    "Meeting & Space":         { cls: "deal-meeting"     },
-    "Honeymoon":               { cls: "deal-honeymoon"   },
+    "Last Minute":             { cls: "deal-last-minute", route: "/new-booking/last-minute-booking" },
+    "Long Stay":               { cls: "deal-long-stay",   route: "/new-booking/long-stay"           },
+    "Day Stay":                { cls: "deal-day-stay",    route: "/new-booking/day-stay"            },
+    "24 Hour Check-In":        { cls: "deal-24h",         route: "/new-booking/hotel-24hr"          },
+    "Govt Employee Discount":  { cls: "deal-gov",         route: "/new-booking/gov-employee"        },
+    "Student Discount":        { cls: "deal-student",     route: "/new-booking/student"             },
+    "Meeting & Space":         { cls: "deal-meeting",     route: "/new-booking/meet-and-space"      },
+    "Honeymoon":               { cls: "deal-honeymoon",   route: "/new-booking/honeymoon"           },
   };
 
   const filteredResults = useMemo(() => {
@@ -1228,11 +1230,73 @@ export default function HotelSearch({ force24Hour = false } = {}) {
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
+                {/*
+                  Search criteria order (per spec):
+                    1. Agent
+                    2. Destination / City
+                    3. Nationality
+                    4. Check-In
+                    5. Nights
+                    6. Check-Out
+                    7. Rooms & Guests
+                  Row totals stay 12 on lg so the form keeps its
+                  responsive feel — first row holds Agent + Destination +
+                  Nationality (4/4/4), second row holds Check-In + Nights +
+                  Check-Out + Rooms & Guests (3/2/3/4).
+                */}
                 <Row className="g-4">
+                  {/* 1. Agent */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        Destination
+                        Agent
+                      </Form.Label>
+                      <Form.Select
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        value={agent}
+                        onChange={(e) => {
+                          setAgent(e.target.value);
+                          if (e.target.value) clearError("agent");
+                        }}
+                      >
+                        <option value="">Select Agent</option>
+                        {agents.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.companyName}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {errors.agent && (
+                        <div className="text-danger small mt-1">
+                          {errors.agent}
+                        </div>
+                      )}
+                      {agent && (
+                        <div className="mt-1 small">
+                          {agentBalanceLoading ? (
+                            <span className="text-muted">
+                              Loading available balance…
+                            </span>
+                          ) : agentBalance != null ? (
+                            <span className="fw-semibold" style={{ color: "#dc3545" }}>
+                              Available Balance: {Number(agentBalance).toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-muted">
+                              Available balance unavailable
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 2. Destination / City */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Destination / City
                       </Form.Label>
                       <Select
                         options={destinationOptions}
@@ -1295,6 +1359,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                     </Form.Group>
                   </Col>
 
+                  {/* 3. Nationality */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
@@ -1331,75 +1396,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                       )}
                     </Form.Group>
                   </Col>
-                     <Col lg={3} md={6}>
+
+                  {/* 4. Check-In */}
+                  <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        Agent
-                      </Form.Label>
-                      <Form.Select
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        value={agent}
-                        onChange={(e) => {
-                          setAgent(e.target.value);
-                          if (e.target.value) clearError("agent");
-                        }}
-                      >
-                        <option value="">Select Agent</option>
-                        {agents.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.companyName}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {errors.agent && (
-                        <div className="text-danger small mt-1">
-                          {errors.agent}
-                        </div>
-                      )}
-                      {agent && (
-                        <div className="mt-1 small">
-                          {agentBalanceLoading ? (
-                            <span className="text-muted">
-                              Loading available balance…
-                            </span>
-                          ) : agentBalance != null ? (
-                            <span className="fw-semibold" style={{ color: "#dc3545" }}>
-                              Available Balance: {Number(agentBalance).toFixed(2)}
-                            </span>
-                          ) : (
-                            <span className="text-muted">
-                              Available balance unavailable
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
-
-
-
-                    <Col lg={2} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Nights
-                      </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="number"
-                        min={1}
-                        max={60}
-                        value={nights}
-                        onChange={(e) => handleNightsChange(e.target.value)}
-                      />
-                    </Form.Group>
-                  </Col>
-
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Check-in
+                        Check-In
                       </Form.Label>
                       <Form.Control
                         style={{ height: "42px" }}
@@ -1430,10 +1432,29 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                     </Form.Group>
                   </Col>
 
-                    <Col lg={3} md={6}>
+                  {/* 5. Nights */}
+                  <Col lg={2} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        Check-out
+                        Nights
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={nights}
+                        onChange={(e) => handleNightsChange(e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+
+                  {/* 6. Check-Out */}
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Check-Out
                       </Form.Label>
                       <Form.Control
                         style={{ height: "42px" }}
@@ -1457,6 +1478,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                     </Form.Group>
                   </Col>
 
+                  {/* 7. Rooms & Guests */}
                   <Col lg={4} md={6}>
                     <Form.Label className="fw-semibold text-dark">
                       Rooms & Guests
@@ -1475,8 +1497,6 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                       <span className="float-end">{roomsOpen ? "▴" : "▾"}</span>
                     </Button>
                   </Col>
-
-               
                 </Row>
 
                 {roomsOpen && (
@@ -1832,13 +1852,31 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                 overflow: "hidden",
                               }}
                             >
+                              {/* Flash-deal badge — image placed at
+                                   /images/flash-sale.png (in public/). Falls
+                                   back to the legacy text pill if the asset
+                                   isn't found so the deal indicator never
+                                   disappears silently. */}
                               {getHotelFeatureLabels(hotel).length > 0 && (
                                 <span
-                                  className="flash-sale-pill flash-sale-corner"
+                                  className="flash-sale-badge flash-sale-corner"
                                   title="Limited-time deals available — see the badges below."
+                                  aria-label="Flash Sale"
                                 >
-                                  <span className="flash-dot" />
-                                  Flash Sale
+                                  <img
+                                    src="/images/flash-sale.png"
+                                    alt="Flash Sale"
+                                    className="flash-sale-img"
+                                    onError={(e) => {
+                                      // Asset missing — degrade to a small
+                                      // CSS-only fallback so the corner is
+                                      // still flagged for the operator.
+                                      const fallback = document.createElement("span");
+                                      fallback.className = "flash-sale-pill";
+                                      fallback.innerHTML = '<span class="flash-dot"></span> Flash Sale';
+                                      e.target.replaceWith(fallback);
+                                    }}
+                                  />
                                 </span>
                               )}
                               <Row className="g-0">
@@ -1943,23 +1981,47 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                       </span>
                                     )}
 
-                                    {/* Per-hotel available deals — replaces the
-                                        global marquee for in-card discovery so
-                                        each row clearly shows which feature
-                                        flags apply to that specific hotel. */}
+                                    {/* Per-hotel "Also Available Deals" — each
+                                        pill is a clickable shortcut to the
+                                        dedicated booking flow for that deal
+                                        type (Long Stay → /new-booking/long-stay,
+                                        Last Minute → /new-booking/last-minute-booking,
+                                        Day Stay → /new-booking/day-stay, etc.).
+                                        Falls back to a non-clickable pill if the
+                                        label isn't in DEAL_PILL_META.route.
+                                        stopPropagation is added because a future
+                                        row-level click handler shouldn't swallow
+                                        the navigation. */}
                                     {getHotelFeatureLabels(hotel).length > 0 && (
                                       <div className="available-deals-wrap">
                                         <div className="available-deals-label">
-                                          Available Deals
+                                          Also Available Deals
                                         </div>
                                         <div className="deal-pills-row">
                                           {getHotelFeatureLabels(hotel).map((label) => {
                                             const meta = DEAL_PILL_META[label] || { cls: "" };
+                                            const isClickable = !!meta.route;
                                             return (
                                               <span
                                                 key={label}
-                                                className={`deal-pill ${meta.cls}`}
-                                                title={label}
+                                                role={isClickable ? "button" : undefined}
+                                                tabIndex={isClickable ? 0 : undefined}
+                                                className={`deal-pill ${meta.cls}${isClickable ? " deal-pill-clickable" : ""}`}
+                                                title={isClickable ? `Open ${label} booking` : label}
+                                                style={isClickable ? { cursor: "pointer" } : undefined}
+                                                onClick={(e) => {
+                                                  if (!isClickable) return;
+                                                  e.stopPropagation();
+                                                  navigate(meta.route);
+                                                }}
+                                                onKeyDown={(e) => {
+                                                  if (!isClickable) return;
+                                                  if (e.key === "Enter" || e.key === " ") {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    navigate(meta.route);
+                                                  }
+                                                }}
                                               >
                                                 {label}
                                               </span>

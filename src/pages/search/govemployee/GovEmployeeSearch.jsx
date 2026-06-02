@@ -3,20 +3,24 @@
  *
  * "Search hotels for a government employee" page.
  *
- * Reference: HotelSearch.jsx — same UX, but talks to
- *   - POST /api/gov-employee-hotel-search/search
- *   - GET  /api/gov-employee-hotel-search/results/{searchId}
+ * UI mirrors HotelSearch.jsx for uniformity — same card chrome, field
+ * order (Agent → Destination/City → Nationality → Check-In → Nights →
+ * Check-Out → Rooms & Guests), `form-control-modern` styling, react-
+ * select with `menuPortalTarget`, centered `btn-search-modern` submit,
+ * and the same `RoomGuestSelector` panel. Only the backend endpoints
+ * and a small heading/subtitle differ.
  *
- * The response shape is identical to the normal hotel search, EXCEPT
- * each hotel's `baseRate` is already returned with the gov-employee
- * discount applied (computed server-side).
+ *  - POST /api/gov-employee-hotel-search/search
+ *  - GET  /api/gov-employee-hotel-search/results/{searchId}
+ *
+ * Each hotel's `baseRate` in the response is already returned with the
+ * gov-employee discount applied (computed server-side).
  *
  * Verification of the government employee (employee code or ID
- * document upload) is captured on the BOOKING page — not here — so
- * this screen is intentionally just dates / destination / occupancy.
+ * document upload) is captured on the BOOKING page, not here.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, Button, Row, Col, Form, Spinner } from "react-bootstrap";
 import { FaSearch, FaStar, FaIdBadge } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
@@ -25,6 +29,193 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import "../../../styles/HotelSearch.css";
+
+// ─────────────────────────────────────────────
+// Counter — inlined copy of the same widget defined in HotelSearch.jsx
+// so we don't have to refactor that file to export it. Same CSS hooks
+// (.rgs-counter-row / .rgs-counter-btn / .rgs-counter-val) so the
+// styling stays in lock-step with the main hotel search.
+// ─────────────────────────────────────────────
+function Counter({ value, min = 0, max = 10, onChange }) {
+  return (
+    <div className="rgs-counter">
+      <button
+        type="button"
+        className="rgs-counter-btn"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+      >
+        −
+      </button>
+      <span className="rgs-counter-val">{value}</span>
+      <button
+        type="button"
+        className="rgs-counter-btn"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// RoomGuestSelector — same shape and behavior as the one in
+// HotelSearch.jsx. Operates on an array of
+// `{ adults, children, childAges }` per room.
+// ─────────────────────────────────────────────
+function RoomGuestSelector({ value, onChange }) {
+  const [rooms, setRooms] = useState(value);
+
+  const update = (next) => {
+    setRooms(next);
+    onChange && onChange(next);
+  };
+
+  const addRoom = () =>
+    update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  const removeRoom = (index) => update(rooms.filter((_, i) => i !== index));
+
+  const setAdults = (index, adults) =>
+    update(rooms.map((r, i) => (i === index ? { ...r, adults } : r)));
+
+  const setChildren = (index, children) =>
+    update(
+      rooms.map((r, i) =>
+        i === index
+          ? {
+              ...r,
+              children,
+              childAges: Array.from(
+                { length: children },
+                (_, j) => r.childAges[j] || 5,
+              ),
+            }
+          : r,
+      ),
+    );
+
+  const setChildAge = (roomIdx, childIdx, age) =>
+    update(
+      rooms.map((r, i) => {
+        if (i !== roomIdx) return r;
+        const ages = [...r.childAges];
+        ages[childIdx] = age;
+        return { ...r, childAges: ages };
+      }),
+    );
+
+  return (
+    <div className="rgs-wrap">
+      <div className="rgs-grid">
+        {rooms.map((room, i) => (
+          <div key={i} className="rgs-room-card">
+            <div className="rgs-room-header">
+              <span className="rgs-room-label">🛏 Room {i + 1}</span>
+              {rooms.length > 1 && (
+                <button
+                  type="button"
+                  className="rgs-remove-btn"
+                  onClick={() => removeRoom(i)}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="rgs-counters-col">
+              <div className="rgs-counter-row">
+                <div className="rgs-counter-info">
+                  <span className="rgs-counter-title">Adults</span>
+                  <span className="rgs-counter-sub">Age 18+</span>
+                </div>
+                <Counter
+                  value={room.adults}
+                  min={1}
+                  max={6}
+                  onChange={(v) => setAdults(i, v)}
+                />
+              </div>
+              <div className="rgs-counter-row">
+                <div className="rgs-counter-info">
+                  <span className="rgs-counter-title">Children</span>
+                  <span className="rgs-counter-sub">Age 0–17</span>
+                </div>
+                <Counter
+                  value={room.children}
+                  min={0}
+                  max={4}
+                  onChange={(v) => setChildren(i, v)}
+                />
+              </div>
+            </div>
+
+            {room.children > 0 && (
+              <div className="rgs-child-ages">
+                <span className="rgs-child-ages-label">Child ages</span>
+                <div className="rgs-child-ages-row">
+                  {Array.from({ length: room.children }).map((_, idx) => (
+                    <div key={idx} className="rgs-child-age-select">
+                      <label className="rgs-child-age-label">
+                        Child {idx + 1}
+                      </label>
+                      <Form.Select
+                        size="sm"
+                        value={room.childAges[idx] || 5}
+                        onChange={(e) =>
+                          setChildAge(i, idx, parseInt(e.target.value))
+                        }
+                        className="rgs-age-dropdown"
+                      >
+                        {Array.from({ length: 18 }).map((__, age) => (
+                          <option key={age} value={age}>
+                            {age} {age === 1 ? "yr" : "yrs"}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
+          <span className="rgs-add-icon">+</span>
+          <span>Add Room</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Reusable react-select styles — match HotelSearch's look so the two
+// search forms feel identical (42-px control, modal-safe z-index, etc.)
+// ─────────────────────────────────────────────
+const SELECT_STYLES = {
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  control: (base) => ({
+    ...base,
+    minHeight: "42px",
+    border: "1px solid #dee2e6",
+    "&:hover": { borderColor: "#86b7fe" },
+  }),
+  menu: (base) => ({ ...base, zIndex: 9999, maxHeight: "200px" }),
+  option: (base, state) => ({
+    ...base,
+    backgroundColor: state.isFocused ? "#f8f9fa" : "white",
+    color: state.isSelected ? "white" : "#212529",
+    "&:active": { backgroundColor: "#0d6efd" },
+  }),
+  clearIndicator: (base) => ({
+    ...base,
+    color: "#6c757d",
+    "&:hover": { color: "#dc3545" },
+  }),
+};
 
 export default function GovEmployeeSearch() {
   const navigate = useNavigate();
@@ -43,30 +234,108 @@ export default function GovEmployeeSearch() {
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
 
   // ── form state ───────────────────────────────────────────────────
-  // Destination dropdown options (cities) loaded from /api/province?limit=50
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
-  // Nationality dropdown options (countries) loaded from /api/country?limit=50
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
 
   const [agents, setAgents] = useState([]);
   const [agent, setAgent] = useState("");
   const [agentBalance, setAgentBalance] = useState(null);
+  const [agentBalanceLoading, setAgentBalanceLoading] = useState(false);
 
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
-  const [adults, setAdults] = useState(1);
-  const [children, setChildren] = useState(0);
-  const [rooms, setRooms] = useState(1);
+  const [nights, setNights] = useState(1);
+
+  // Rooms now use the same shape as HotelSearch so the
+  // RoomGuestSelector widget can be reused verbatim.
+  const [rooms, setRooms] = useState([
+    { adults: 1, children: 0, childAges: [] },
+  ]);
+  const [roomsOpen, setRoomsOpen] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState([]);
   const resultsRef = useRef(null);
 
-  // ── date helpers — mirror HotelSearch.jsx so the auto-fill behaviour
-  //    (picking check-in defaults check-out to the next day) matches. ──
+  // ── Result-filter state ─ same shape as HotelSearch.jsx ─────────
+  //   • starRating  — single Star option (or null = "All Stars")
+  //   • hotelType   — array of selected types (checkbox)
+  //   • channelType — array of selected channel/API types (checkbox)
+  //   • sortBy      — "priceAsc" / "priceDesc"
+  //   • hotelSearchTerm — substring filter on hotel name
+  const [starRating, setStarRating] = useState(null);
+  const [hotelType, setHotelType] = useState([]);
+  const [channelType, setChannelType] = useState([]);
+  const [sortBy, setSortBy] = useState("priceAsc");
+  const [hotelSearchTerm, setHotelSearchTerm] = useState("");
+
+  // Reusable option lists for the sidebar / header — mirror HotelSearch.
+  const starOptions = [
+    { value: 5, label: "5 Stars" },
+    { value: 4, label: "4 Stars" },
+    { value: 3, label: "3 Stars" },
+    { value: 2, label: "2 Stars" },
+    { value: 1, label: "1 Star" },
+  ];
+  const hotelTypeOptions = [
+    { value: "hotel", label: "Hotel" },
+    { value: "villa", label: "Villa" },
+    { value: "resort", label: "Resort" },
+    { value: "apartment", label: "Apartment" },
+  ];
+  const channelTypeOptions = [{ value: "inhouse", label: "Inhouse" }];
+
+  // Derive the filtered+sorted result set the cards render. Pure —
+  // never mutates `results`. Re-runs only when the inputs change.
+  const filteredResults = useMemo(() => {
+    let out = Array.isArray(results) ? [...results] : [];
+
+    if (hotelSearchTerm.trim()) {
+      const q = hotelSearchTerm.trim().toLowerCase();
+      out = out.filter((h) =>
+        String(h.hotelName || "").toLowerCase().includes(q),
+      );
+    }
+    if (starRating) {
+      out = out.filter(
+        (h) => Number(h.starRating) === Number(starRating.value),
+      );
+    }
+    if (hotelType.length > 0) {
+      const sel = hotelType.map((t) => t.value.toLowerCase());
+      out = out.filter((h) =>
+        sel.includes(String(h.hotelType || "hotel").toLowerCase()),
+      );
+    }
+    if (channelType.length > 0) {
+      const sel = channelType.map((c) => c.value.toLowerCase());
+      out = out.filter((h) =>
+        sel.includes(String(h.apiType || "inhouse").toLowerCase()),
+      );
+    }
+
+    // Sort by `baseRate` (gov-discounted) — same rate the card shows.
+    out.sort((a, b) => {
+      const ra = Number(a.baseRate ?? Infinity);
+      const rb = Number(b.baseRate ?? Infinity);
+      return sortBy === "priceDesc" ? rb - ra : ra - rb;
+    });
+
+    return out;
+  }, [results, hotelSearchTerm, starRating, hotelType, channelType, sortBy]);
+
+  const clearFilters = () => {
+    setStarRating(null);
+    setHotelType([]);
+    setChannelType([]);
+    setSortBy("priceAsc");
+    setHotelSearchTerm("");
+  };
+
+  // ── date helpers — mirror HotelSearch.jsx ───────────────────────
   const formatDate = (d) => d.toISOString().split("T")[0];
   const getTomorrow = (from = new Date()) => {
     const t = new Date(from);
@@ -78,10 +347,42 @@ export default function GovEmployeeSearch() {
     ? formatDate(getTomorrow(new Date(checkIn)))
     : formatDate(getTomorrow());
 
-  // ── load destinations (cities) + nationalities (countries) + agents
-  //    — mirrors HotelSearch.jsx behaviour ────────────────────────────
+  // Keep nights and checkOut in sync, the same way HotelSearch does.
   useEffect(() => {
-    // Destinations — same /api/province?limit=50 endpoint HotelSearch uses.
+    if (checkIn && checkOut) {
+      const start = new Date(checkIn);
+      const end = new Date(checkOut);
+      const diff = Math.max(
+        1,
+        Math.ceil((end - start) / (1000 * 60 * 60 * 24)),
+      );
+      setNights(diff);
+    }
+  }, [checkIn, checkOut]);
+
+  const handleNightsChange = (value) => {
+    const val = Math.max(1, Number(value) || 1);
+    setNights(val);
+    if (checkIn) {
+      const start = new Date(checkIn);
+      const out = new Date(start);
+      out.setDate(start.getDate() + val);
+      const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
+        .toISOString()
+        .split("T")[0];
+      setCheckOut(iso);
+    }
+  };
+
+  const clearError = (key) =>
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const { [key]: _drop, ...rest } = prev;
+      return rest;
+    });
+
+  // ── load destinations + nationalities + agents ───────────────────
+  useEffect(() => {
     (async () => {
       try {
         const { data } = await axiosInstance.get("/api/province?limit=50");
@@ -89,16 +390,15 @@ export default function GovEmployeeSearch() {
         setDestinationOptions(
           list.map((city) => ({
             value: city.id ?? city.provinceId,
-            // Match HotelSearch label shape so the dropdown reads the
-            // same way (e.g. "Dubai, United Arab Emirates").
             label: `${city.stateName ?? city.name ?? ""}, ${city.country ?? ""}`,
             countryId: city.countryId,
-          }))
+          })),
         );
-      } catch (e) { /* silent */ }
+      } catch (e) {
+        /* silent */
+      }
     })();
 
-    // Nationalities — same /api/country?limit=50 endpoint HotelSearch uses.
     (async () => {
       try {
         const { data } = await axiosInstance.get("/api/country?limit=50");
@@ -108,79 +408,115 @@ export default function GovEmployeeSearch() {
             value: c.id,
             label: c.name,
             code: c.countryCode,
-          }))
+          })),
         );
-      } catch (e) { /* silent */ }
+      } catch (e) {
+        /* silent */
+      }
     })();
 
-    // Agents — for the agent dropdown + credit-limit display.
     (async () => {
       try {
         const { data } = await axiosInstance.get("/api/agent");
         const list = Array.isArray(data) ? data : data?.content || [];
         setAgents(list);
-      } catch (e) { /* silent */ }
+      } catch (e) {
+        /* silent */
+      }
     })();
   }, []);
 
-  // ── load agent credit balance when an agent is chosen ───────────
+  // ── load agent credit balance when an agent is chosen ────────────
   useEffect(() => {
-    if (!agent) { setAgentBalance(null); return; }
+    if (!agent) {
+      setAgentBalance(null);
+      return;
+    }
+    let cancelled = false;
+    setAgentBalanceLoading(true);
     (async () => {
       try {
-        const { data } = await axiosInstance.get(`/api/agent-credit-limit/agent/${agent}`);
-        setAgentBalance(data?.availableCreditLimit ?? null);
-      } catch (e) { setAgentBalance(null); }
+        const { data } = await axiosInstance.get(
+          `/api/agent-credit-limit/agent/${agent}`,
+        );
+        if (!cancelled)
+          setAgentBalance(data?.availableCreditLimit ?? null);
+      } catch (e) {
+        if (!cancelled) setAgentBalance(null);
+      } finally {
+        if (!cancelled) setAgentBalanceLoading(false);
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [agent]);
 
-  // ── form validation ─────────────────────────────────────────────
+  // ── form validation ──────────────────────────────────────────────
   const validate = () => {
     const e = {};
-    if (!selectedDestination) e.destination = "Required";
-    if (!selectedNationality) e.nationality = "Required";
-    if (!checkIn) e.checkIn = "Required";
-    if (!checkOut) e.checkOut = "Required";
-    if (!isAgentRole && !agent) e.agent = "Required";
+    if (!selectedDestination) e.destination = "Destination is required";
+    if (!selectedNationality) e.nationality = "Nationality is required";
+    if (!checkIn) e.checkIn = "Check-in is required";
+    if (!checkOut) e.checkOut = "Check-out is required";
+    if (!isAgentRole && !agent) e.agent = "Agent is required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  // ── initiate search + poll for results ──────────────────────────
-  const handleSearch = async () => {
+  // ── initiate search + poll for results ───────────────────────────
+  const handleSearchSubmit = async (event) => {
+    if (event && event.preventDefault) event.preventDefault();
     if (!validate()) return;
     setIsLoading(true);
     setResults([]);
     try {
+      // Aggregate counts across all rooms so the existing backend
+      // payload contract (single adults/children counts plus a
+      // noOfRooms field) keeps working. roomConfigurations also goes
+      // along for parity with the regular hotel search endpoint.
+      const totalAdults = rooms.reduce((s, r) => s + (r.adults || 0), 0);
+      const totalChildren = rooms.reduce((s, r) => s + (r.children || 0), 0);
+
       const payload = {
-        agentId: Number(agent),
+        agentId: Number(agent) || undefined,
         checkIn,
         checkOut,
-        // City + country mirror HotelSearch's payload shape so the
-        // backend search service can reuse the same fields.
         destinationCityId: selectedDestination.value,
-        destinationCountryId: selectedDestination.countryId ?? selectedDestination.value,
+        destinationCountryId:
+          selectedDestination.countryId ?? selectedDestination.value,
         nationalityId: selectedNationality?.value,
         nationalityCode: selectedNationality?.code,
-        noOfRooms: rooms,
-        roomConfigurations: Array.from({ length: rooms }).map(() => ({
-          adults,
-          children,
-          childAges: [],
+        noOfRooms: rooms.length,
+        adults: totalAdults,
+        children: totalChildren,
+        roomConfigurations: rooms.map((room, idx) => ({
+          roomNo: idx + 1,
+          adultCount: String(room.adults || 1),
+          childCount: String(room.children || 0),
+          childAges: room.childAges?.length ? room.childAges : [0],
+          adultAges: room.adultAges?.length ? room.adultAges : [25],
         })),
       };
-      const { data } = await axiosInstance.post("/api/gov-employee-hotel-search/search", payload);
-      const searchId = data?.searchId;
-      if (!searchId) { setIsLoading(false); return; }
 
-      // poll results — same pattern as HotelSearch
+      const { data } = await axiosInstance.post(
+        "/api/gov-employee-hotel-search/search",
+        payload,
+      );
+      const searchId = data?.searchId;
+      if (!searchId) {
+        setIsLoading(false);
+        return;
+      }
+
+      // poll results — same pattern as the previous implementation.
       let attempts = 0;
       const poll = async () => {
         attempts += 1;
         try {
           const { data: r } = await axiosInstance.get(
             `/api/gov-employee-hotel-search/results/${searchId}` +
-            `?agentId=${agent}&page=0&size=50&checkInDate=${checkIn}`
+              `?agentId=${agent}&page=0&size=50&checkInDate=${checkIn}`,
           );
           setResults(r?.result || []);
           if (r?.finalStatus === "COMPLETED" || attempts >= 10) {
@@ -188,7 +524,9 @@ export default function GovEmployeeSearch() {
             return;
           }
           setTimeout(poll, 1500);
-        } catch (e) { setIsLoading(false); }
+        } catch (e) {
+          setIsLoading(false);
+        }
       };
       poll();
     } catch (e) {
@@ -196,37 +534,44 @@ export default function GovEmployeeSearch() {
     }
   };
 
-  // ── click "View Rooms" → navigate to room-list (verification
-  //    happens later on the booking page) ─────────────────────────
-  //  We carry the provider info ("apiType") and 2-letter nationality
-  //  forward so the room-list page can build the correct
-  //  HotelRoomSearchRequest body for POST /api/hotel-rooms/search.
+  // ── click "View Rooms" → navigate to gov-employee room-list ─────
   const apiIdFromType = (apiType) => {
-    const map = { inhouse: 1, jumeirah: 10, iwtx: 12, x3: 15, ratehawk: 14, darina: 16, atharva: 3 };
+    const map = {
+      inhouse: 1,
+      jumeirah: 10,
+      iwtx: 12,
+      x3: 15,
+      ratehawk: 14,
+      darina: 16,
+      atharva: 3,
+    };
     return map[(apiType || "").toLowerCase()] || 1;
   };
   const handleBookHotel = (h) => {
+    // Use the first room's counts as the "primary" room for the
+    // room-list page header; the page itself shows all rooms in the
+    // booking flow.
+    const firstRoom = rooms[0] || { adults: 1, children: 0 };
     navigate("/gov-employee-room-list", {
       state: {
-        // hotelCode is what /api/hotel-rooms/search expects (the
-        // provider-specific code, e.g. "IN2"). hotelId is the numeric
-        // master id when available.
         hotelCode: h.hotelCode,
-        hotelId: h.hotelCode,          // raw value kept for display
+        hotelId: h.hotelCode,
         hotelName: h.hotelName,
         hotelImage: h.hotelImage,
         address: h.hotelAddress,
         starRating: h.starRating,
-        apiType: h.apiType,            // e.g. "INHOUSE" / "IWTX"
+        apiType: h.apiType,
         apiId: apiIdFromType(h.apiType),
-        // 2-letter ISO code; backend validates with @Pattern([A-Z]{2}).
-        nationalityCode: (selectedNationality?.code || "").length === 2
-          ? selectedNationality.code : "IN",
+        nationalityCode:
+          (selectedNationality?.code || "").length === 2
+            ? selectedNationality.code
+            : "IN",
         checkIn,
         checkOut,
-        noOfRooms: rooms,
-        adults,
-        children,
+        noOfRooms: rooms.length,
+        adults: firstRoom.adults,
+        children: firstRoom.children,
+        roomConfigurations: rooms,
         agentId: agent,
       },
     });
@@ -238,174 +583,539 @@ export default function GovEmployeeSearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm border-0">
-            <Card.Body>
-              <h5 className="mb-3">
-                <FaIdBadge className="me-2 text-primary" />
-                Government Employee — Hotel Search
-              </h5>
-              <p className="text-muted small">
-                Browse hotels with the configured government-employee discount applied.
-                You'll verify the employee (code or ID upload) on the booking page.
-              </p>
+          {/* ── Search Card — mirrors HotelSearch.jsx's chrome ── */}
+          <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
+            <Card.Body className="p-4">
+              <div className="mb-4 text-start">
+                <h2 className="fw-semibold text-primary mb-1">
+                  <FaIdBadge className="me-2" />
+                  Government Employee — Hotel Search
+                </h2>
+                <p className="text-muted">
+                  Browse hotels with the configured government-employee
+                  discount applied. You'll verify the employee (code or ID
+                  upload) on the booking page.
+                </p>
+              </div>
 
-              {/* Search form */}
-              <Row className="g-3">
-                {/* Destination — dropdown of cities from /api/province?limit=50 */}
-                <Col md={4}>
-                  <Form.Label>Destination *</Form.Label>
-                  <Select
-                    options={destinationOptions}
-                    value={selectedDestination}
-                    onChange={setSelectedDestination}
-                    placeholder="Select city / destination"
-                    isClearable
-                    isSearchable
-                  />
-                  {errors.destination && <small className="text-danger">{errors.destination}</small>}
-                </Col>
-
-                {/* Nationality — dropdown of countries from /api/country?limit=50 */}
-                <Col md={3}>
-                  <Form.Label>Nationality *</Form.Label>
-                  <Select
-                    options={nationalityList}
-                    value={selectedNationality}
-                    onChange={setSelectedNationality}
-                    placeholder="Select nationality"
-                    isClearable
-                    isSearchable
-                  />
-                  {errors.nationality && <small className="text-danger">{errors.nationality}</small>}
-                </Col>
-
-                <Col md={2}>
-                  <Form.Label>Check-In *</Form.Label>
-                  <Form.Control
-                    type="date"
-                    value={checkIn}
-                    min={today}
-                    onChange={(e) => {
-                      const newCheckIn = e.target.value;
-                      setCheckIn(newCheckIn);
-                      if (newCheckIn) {
-                        // Default check-out to the day after check-in, and
-                        // bump it forward if the existing value is no longer
-                        // valid (i.e. on/before the new check-in date).
-                        const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
-                        if (!checkOut || checkOut <= newCheckIn) {
-                          setCheckOut(nextDay);
-                        }
-                      }
-                    }}
-                  />
-                  {errors.checkIn && <small className="text-danger">{errors.checkIn}</small>}
-                </Col>
-                <Col md={2}>
-                  <Form.Label>Check-Out *</Form.Label>
-                  <Form.Control
-                    type="date"
-                    value={checkOut}
-                    min={minCheckOutDate}
-                    onChange={(e) => setCheckOut(e.target.value)}
-                  />
-                  {errors.checkOut && <small className="text-danger">{errors.checkOut}</small>}
-                </Col>
-
-                <Col md={1}>
-                  <Form.Label>Rooms</Form.Label>
-                  <Form.Control type="number" min="1" value={rooms}
-                                onChange={(e) => setRooms(Number(e.target.value))} />
-                </Col>
-                <Col md={1}>
-                  <Form.Label>Adults</Form.Label>
-                  <Form.Control type="number" min="1" value={adults}
-                                onChange={(e) => setAdults(Number(e.target.value))} />
-                </Col>
-                <Col md={1}>
-                  <Form.Label>Children</Form.Label>
-                  <Form.Control type="number" min="0" value={children}
-                                onChange={(e) => setChildren(Number(e.target.value))} />
-                </Col>
-                {/* Child-age inputs are intentionally NOT shown — HotelSearch
-                    asks for them but for the gov-employee flow we keep the
-                    form lighter. The booking page captures per-guest data. */}
-
-                {!isAgentRole && (
-                <Col md={4}>
-                  <Form.Label>Agent *</Form.Label>
-                  <Form.Select value={agent} onChange={(e) => setAgent(e.target.value)}>
-                    <option value="">-- Select Agent --</option>
-                    {agents.map((a) => (
-                      <option key={a.id || a.agentId} value={a.id || a.agentId}>
-                        {a.companyName || a.firstName + " " + a.lastName}
-                      </option>
-                    ))}
-                  </Form.Select>
-                  {errors.agent && <small className="text-danger">{errors.agent}</small>}
-                  {agentBalance !== null && (
-                    <div className="text-danger small mt-1">
-                      Available credit: <strong>{agentBalance}</strong>
-                    </div>
+              <Form onSubmit={handleSearchSubmit}>
+                {/*
+                  Search criteria order mirrors HotelSearch:
+                    1. Agent
+                    2. Destination / City
+                    3. Nationality
+                    4. Check-In
+                    5. Nights
+                    6. Check-Out
+                    7. Rooms & Guests
+                */}
+                <Row className="g-4">
+                  {/* 1. Agent — hidden for agent-role logins (booking is
+                       forced to the logged-in agent by the backend). */}
+                  {!isAgentRole && (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Agent
+                        </Form.Label>
+                        <Form.Select
+                          style={{ height: "42px" }}
+                          className="form-control-modern"
+                          value={agent}
+                          onChange={(e) => {
+                            setAgent(e.target.value);
+                            if (e.target.value) clearError("agent");
+                          }}
+                        >
+                          <option value="">Select Agent</option>
+                          {agents.map((a) => (
+                            <option
+                              key={a.id || a.agentId}
+                              value={a.id || a.agentId}
+                            >
+                              {a.companyName ||
+                                `${a.firstName || ""} ${a.lastName || ""}`}
+                            </option>
+                          ))}
+                        </Form.Select>
+                        {errors.agent && (
+                          <div className="text-danger small mt-1">
+                            {errors.agent}
+                          </div>
+                        )}
+                        {agent && (
+                          <div className="mt-1 small">
+                            {agentBalanceLoading ? (
+                              <span className="text-muted">
+                                Loading available balance…
+                              </span>
+                            ) : agentBalance != null ? (
+                              <span
+                                className="fw-semibold"
+                                style={{ color: "#dc3545" }}
+                              >
+                                Available Balance:{" "}
+                                {Number(agentBalance).toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-muted">
+                                Available balance unavailable
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Form.Group>
+                    </Col>
                   )}
-                </Col>
+
+                  {/* 2. Destination / City */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Destination / City
+                      </Form.Label>
+                      <Select
+                        options={destinationOptions}
+                        value={selectedDestination}
+                        onChange={(option) => {
+                          setSelectedDestination(option);
+                          if (option) clearError("destination");
+                        }}
+                        placeholder="Where do you want to go?"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={SELECT_STYLES}
+                      />
+                      {errors.destination && (
+                        <div className="text-danger small mt-1">
+                          {errors.destination}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 3. Nationality */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nationality
+                      </Form.Label>
+                      <Select
+                        options={nationalityList}
+                        value={selectedNationality}
+                        onChange={(option) => {
+                          setSelectedNationality(option);
+                          if (option) clearError("nationality");
+                        }}
+                        placeholder="Select nationality"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={SELECT_STYLES}
+                      />
+                      {errors.nationality && (
+                        <div className="text-danger small mt-1">
+                          {errors.nationality}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 4. Check-In */}
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Check-In
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="date"
+                        value={checkIn}
+                        min={today}
+                        onClick={(e) =>
+                          e.target.showPicker && e.target.showPicker()
+                        }
+                        onChange={(e) => {
+                          const newCheckIn = e.target.value;
+                          setCheckIn(newCheckIn);
+                          if (newCheckIn) {
+                            clearError("checkIn");
+                            const nextDay = formatDate(
+                              getTomorrow(new Date(newCheckIn)),
+                            );
+                            if (!checkOut || checkOut <= newCheckIn) {
+                              setCheckOut(nextDay);
+                              clearError("checkOut");
+                            }
+                          }
+                        }}
+                      />
+                      {errors.checkIn && (
+                        <div className="text-danger small mt-1">
+                          {errors.checkIn}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 5. Nights */}
+                  <Col lg={2} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nights
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={nights}
+                        onChange={(e) => handleNightsChange(e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+
+                  {/* 6. Check-Out */}
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Check-Out
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="date"
+                        value={checkOut}
+                        min={minCheckOutDate}
+                        onClick={(e) =>
+                          e.target.showPicker && e.target.showPicker()
+                        }
+                        onChange={(e) => {
+                          setCheckOut(e.target.value);
+                          if (e.target.value) clearError("checkOut");
+                        }}
+                      />
+                      {errors.checkOut && (
+                        <div className="text-danger small mt-1">
+                          {errors.checkOut}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 7. Rooms & Guests */}
+                  <Col lg={4} md={6}>
+                    <Form.Label className="fw-semibold text-dark">
+                      Rooms & Guests
+                    </Form.Label>
+                    <Button
+                      variant="outline-primary"
+                      className="w-100 text-start rooms-summary-btn-modern"
+                      type="button"
+                      onClick={() => setRoomsOpen((o) => !o)}
+                    >
+                      {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                      {rooms.reduce((a, r) => a + r.children, 0)
+                        ? `, ${rooms.reduce(
+                            (a, r) => a + r.children,
+                            0,
+                          )} child`
+                        : ""}{" "}
+                      · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                      <span className="float-end">
+                        {roomsOpen ? "▴" : "▾"}
+                      </span>
+                    </Button>
+                  </Col>
+                </Row>
+
+                {roomsOpen && (
+                  <Row className="g-3 mt-3">
+                    <Col md={12}>
+                      <RoomGuestSelector value={rooms} onChange={setRooms} />
+                    </Col>
+                  </Row>
                 )}
 
-                <Col md={8} className="d-flex align-items-end justify-content-end">
-                  <Button variant="primary" onClick={handleSearch} disabled={isLoading}>
-                    {isLoading ? <Spinner size="sm" className="me-1" /> : <FaSearch className="me-1" />}
-                    Search Hotels
-                  </Button>
-                </Col>
-              </Row>
+                <Row className="mt-3">
+                  <Col className="d-flex justify-content-center gap-3">
+                    <Button
+                      type="submit"
+                      className="btn-search-modern"
+                      disabled={isLoading}
+                      size="lg"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Searching...
+                        </>
+                      ) : (
+                        <>
+                          <FaSearch className="me-2" />
+                          SEARCH HOTELS
+                        </>
+                      )}
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
             </Card.Body>
           </Card>
 
-          {/* Results */}
-          <div className="mt-3" ref={resultsRef}>
-            {isLoading && (
-              <div className="text-center py-3">
-                <Spinner animation="border" />
-                <div className="text-muted small mt-2">Searching with government discount applied…</div>
-              </div>
-            )}
-            {!isLoading && results.length === 0 && <div className="text-muted">No results yet.</div>}
-            {results.map((h, idx) => (
-              <Card key={idx} className="mb-2 shadow-sm">
-                <Card.Body>
-                  <Row className="align-items-center">
-                    <Col md={2}>
-                      {h.hotelImage ? (
-                        <img src={h.hotelImage} alt={h.hotelName} className="img-fluid rounded" />
-                      ) : (
-                        <div className="bg-light p-3 text-center text-muted">No Image</div>
+          {/* ── Results + Filters ───────────────────────────────
+              Mirrors HotelSearch.jsx's two-column layout: left
+              sidebar with map preview + hotel-name search + Hotel
+              Type and Channel checkbox groups; right column with a
+              filter strip (star dropdown + Low/High sort pills +
+              Clear) above the result cards. */}
+          {(isLoading || results.length > 0) && (
+            <div className="mt-3" ref={resultsRef}>
+              <div className="search-layout">
+                <Row className="g-4">
+                  {/* Left Sidebar */}
+                  <Col lg={3} className="leftside d-none d-lg-block">
+                    <div className="left-fixed">
+                      <Card className="shadow-sm rounded-xl filtersection">
+                        <Card.Body className="p-2">
+                          <div className="map-preview-wrapper mb-2">
+                            <img
+                              src="/images/map.jpg"
+                              alt="Map preview"
+                              className="map-preview-img"
+                            />
+                            <button className="map-overlay-btn" type="button">
+                              EXPLORE ON MAP 📍
+                            </button>
+                          </div>
+
+                          <Form.Control
+                            type="text"
+                            placeholder="Search Hotel Name..."
+                            className="ps-3 mb-2"
+                            value={hotelSearchTerm}
+                            onChange={(e) =>
+                              setHotelSearchTerm(e.target.value)
+                            }
+                          />
+
+                          <Form.Group className="mb-2">
+                            <Form.Label className="fw-semibold small">
+                              Hotel Type
+                            </Form.Label>
+                            <div className="filter-checkbox-list">
+                              {hotelTypeOptions.map((item) => (
+                                <Form.Check
+                                  key={item.value}
+                                  type="checkbox"
+                                  id={`gov-hotel-type-${item.value}`}
+                                  label={item.label}
+                                  checked={hotelType.some(
+                                    (t) => t.value === item.value,
+                                  )}
+                                  onChange={(e) => {
+                                    if (e.target.checked)
+                                      setHotelType([...hotelType, item]);
+                                    else
+                                      setHotelType(
+                                        hotelType.filter(
+                                          (t) => t.value !== item.value,
+                                        ),
+                                      );
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </Form.Group>
+
+                          <hr />
+
+                          <Form.Group>
+                            <Form.Label className="fw-semibold small">
+                              Channel
+                            </Form.Label>
+                            <div className="filter-checkbox-list">
+                              {channelTypeOptions.map((item) => (
+                                <Form.Check
+                                  key={item.value}
+                                  type="checkbox"
+                                  id={`gov-channel-${item.value}`}
+                                  label={item.label}
+                                  checked={channelType.some(
+                                    (c) => c.value === item.value,
+                                  )}
+                                  onChange={(e) => {
+                                    if (e.target.checked)
+                                      setChannelType([...channelType, item]);
+                                    else
+                                      setChannelType(
+                                        channelType.filter(
+                                          (c) => c.value !== item.value,
+                                        ),
+                                      );
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </Form.Group>
+                        </Card.Body>
+                      </Card>
+                    </div>
+                  </Col>
+
+                  {/* Right Content */}
+                  <Col lg={9}>
+                    {/* Filter / Sort strip */}
+                    <Card className="shadow-sm rounded-xl mb-3 filtersection">
+                      <Card.Body className="p-2">
+                        <div className="d-flex align-items-center gap-3 flex-wrap">
+                          <Select
+                            options={starOptions}
+                            value={starRating}
+                            onChange={setStarRating}
+                            placeholder="All Stars"
+                            className="modern-select-sm"
+                            isClearable
+                            menuPortalTarget={document.body}
+                            styles={{
+                              control: (base) => ({
+                                ...base,
+                                height: "36px",
+                                minHeight: "36px",
+                                width: "180px",
+                                background: "#ffffff",
+                                color: "#000000",
+                                marginLeft: "30px",
+                              }),
+                              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                              menu: (base) => ({ ...base, zIndex: 9999 }),
+                            }}
+                          />
+
+                          <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              className={`sort-pill ${
+                                sortBy === "priceAsc" ? "active" : ""
+                              }`}
+                              onClick={() => setSortBy("priceAsc")}
+                            >
+                              Low to High
+                            </Button>
+                            <Button
+                              size="sm"
+                              className={`sort-pill ${
+                                sortBy === "priceDesc" ? "active" : ""
+                              }`}
+                              onClick={() => setSortBy("priceDesc")}
+                            >
+                              High to Low
+                            </Button>
+                          </div>
+
+                          <Button
+                            className="clear-pill"
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={clearFilters}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </Card.Body>
+                    </Card>
+
+                    {/* Result-count line + loading spinner */}
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <small className="text-muted fw-semibold">
+                        Showing {filteredResults.length} of {results.length}{" "}
+                        hotels
+                      </small>
+                      {isLoading && (
+                        <small className="text-muted d-flex align-items-center">
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Searching with government discount applied…
+                        </small>
                       )}
-                    </Col>
-                    <Col md={6}>
-                      <h6 className="mb-1">{h.hotelName}</h6>
-                      <div className="text-muted small">{h.hotelAddress}</div>
-                      <div>
-                        {Array.from({ length: h.starRating || 0 }).map((_, i) => (
-                          <FaStar key={i} className="text-warning" />
-                        ))}
+                    </div>
+
+                    {!isLoading && filteredResults.length === 0 && (
+                      <div className="text-muted">
+                        No hotels match the current filters.
                       </div>
-                    </Col>
-                    <Col md={2}>
-                      <div className="text-muted small">Govt-Discounted Rate</div>
-                      <div className="h5 mb-0 text-success">
-                        {h.baseRate != null ? h.baseRate.toFixed(2) : "-"}
-                      </div>
-                    </Col>
-                    <Col md={2} className="text-end">
-                      <Button size="sm" variant="primary" onClick={() => handleBookHotel(h)}>
-                        View Rooms
-                      </Button>
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
-            ))}
-          </div>
+                    )}
+
+                    {filteredResults.map((h, idx) => (
+                      <Card key={idx} className="mb-2 shadow-sm">
+                        <Card.Body>
+                          <Row className="align-items-center">
+                            <Col md={2}>
+                              {h.hotelImage ? (
+                                <img
+                                  src={h.hotelImage}
+                                  alt={h.hotelName}
+                                  className="img-fluid rounded"
+                                />
+                              ) : (
+                                <div className="bg-light p-3 text-center text-muted">
+                                  No Image
+                                </div>
+                              )}
+                            </Col>
+                            <Col md={6}>
+                              <h6 className="mb-1">{h.hotelName}</h6>
+                              <div className="text-muted small">
+                                {h.hotelAddress}
+                              </div>
+                              <div>
+                                {Array.from({ length: h.starRating || 0 }).map(
+                                  (_, i) => (
+                                    <FaStar key={i} className="text-warning" />
+                                  ),
+                                )}
+                              </div>
+                            </Col>
+                            <Col md={2}>
+                              <div className="text-muted small">
+                                Govt-Discounted Rate
+                              </div>
+                              <div className="h5 mb-0 text-success">
+                                {h.baseRate != null
+                                  ? h.baseRate.toFixed(2)
+                                  : "-"}
+                              </div>
+                            </Col>
+                            <Col md={2} className="text-end">
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={() => handleBookHotel(h)}
+                              >
+                                View Rooms
+                              </Button>
+                            </Col>
+                          </Row>
+                        </Card.Body>
+                      </Card>
+                    ))}
+                  </Col>
+                </Row>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

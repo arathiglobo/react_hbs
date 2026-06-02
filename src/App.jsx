@@ -48,6 +48,7 @@ import CabRates from "./pages/Registration/CabRates";
 import ActivityProviderReg from "./pages/Registration/ActivityProviderReg";
 import ActivityRates from "./pages/Registration/ActivityRates";
 import PackageReg from "./pages/Registration/PackageReg";
+import PackageDetailedView from "./pages/Registration/PackageDetailedView";
 import PackageRates from "./pages/Registration/PackageRates";
 import SupplierReg from "./pages/Registration/SupplierReg";
 import CompulsoryEventsPage from "./pages/HotelActions/Compulsery/CompulsoryEventsPage";
@@ -401,7 +402,7 @@ export default function App() {
         <Route path="/api-booking-page-hotels" element={<PrivateRoute><ApiBookingPageForHotels /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/booking-page" element={<PrivateRoute><MakePkgBookingPage /></PrivateRoute>} />
-        <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} />
+        <Route path="/room-list" element={<PrivateRoute><RoomList /></PrivateRoute>} /> 
         <Route path="/api-room-list" element={<PrivateRoute><ExternalApiRoomList /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/search" element={<PrivateRoute><MakePkgCombineSearch /></PrivateRoute>} />
         {/* v2 flow — add-ons first, then search, cart, booking */}
@@ -458,6 +459,7 @@ export default function App() {
         <Route path="/registration/activityProvider" element={<PrivateRoute><ActivityProviderReg /></PrivateRoute>} />
         <Route path="/activity-rates" element={<PrivateRoute><ActivityRates /></PrivateRoute>} />
         <Route path="/registration/package" element={<PrivateRoute><PackageReg /></PrivateRoute>} />
+        <Route path="/registration/package/view/:id" element={<PrivateRoute><PackageDetailedView /></PrivateRoute>} />
         <Route path="/package-rates" element={<PrivateRoute><PackageRates /></PrivateRoute>} />
         <Route path="/registration/supplier" element={<PrivateRoute><SupplierReg /></PrivateRoute>} />
         <Route path="/registration/hotel" element={<PrivateRoute><HotelList /></PrivateRoute>} />

@@ -14,8 +14,18 @@
  */
 
 import React, { useEffect, useState, useMemo } from "react";
-import { Card, Table, Button, Spinner, Form, Row, Col, Badge } from "react-bootstrap";
-import { FaEye, FaDownload, FaTrash } from "react-icons/fa";
+import {
+  Card,
+  Table,
+  Button,
+  Spinner,
+  Form,
+  Row,
+  Col,
+  Badge,
+  InputGroup,
+} from "react-bootstrap";
+import { FaEye, FaDownload, FaTrash, FaSearch } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -31,6 +41,23 @@ export default function GovEmployeeBookingList() {
   const [totalPages, setTotalPages] = useState(0);
   const [agentId, setAgentId] = useState("");
   const [search, setSearch] = useState("");
+
+  // ── Booking Types + Time Period filters (mirrors
+  //    /booking-details/long-stay-booking-list). Applied client-side
+  //    over the already-fetched page so the backend pagination and
+  //    cancel / voucher endpoints keep working unchanged.
+  const [status, setStatus] = useState("all"); // all | upcoming | completed | cancelled
+  const [selectedMonth, setSelectedMonth] = useState(""); // "" | 1..12
+  const [selectedYear, setSelectedYear] = useState("");
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const years = useMemo(() => {
+    const current = new Date().getFullYear();
+    return [current - 1, current, current + 1, current + 2];
+  }, []);
 
   // If the current role is an agent, restrict to their own bookings.
   useEffect(() => {
@@ -61,17 +88,62 @@ export default function GovEmployeeBookingList() {
     // eslint-disable-next-line
   }, [page, size, agentId]);
 
-  // ── client-side search filter on already-loaded page rows ──────────
+  // ── client-side filter on already-loaded page rows. Combines
+  //    free-text search + Booking Types + Time Period in one pass
+  //    (same shape as LongStayBookingList.filteredBookings).
   const filtered = useMemo(() => {
-    if (!search.trim()) return rows;
-    const q = search.toLowerCase();
-    return rows.filter((r) =>
-      (r.bookingCode || "").toLowerCase().includes(q) ||
-      (r.customerName || "").toLowerCase().includes(q) ||
-      (r.hotelName || "").toLowerCase().includes(q) ||
-      (r.govEmployeeCode || "").toLowerCase().includes(q)
-    );
-  }, [rows, search]);
+    const now = new Date();
+    const needle = search.trim().toLowerCase();
+    return (rows || []).filter((r) => {
+      // ── Booking-Types filter ────────────────────────────────────
+      const isCancelled =
+        r.cancelled === true ||
+        String(r.bookingStatus || "").toUpperCase() === "CANCELLED";
+      const checkIn = r.checkInDate ? new Date(r.checkInDate) : null;
+      const checkOut = r.checkOutDate ? new Date(r.checkOutDate) : null;
+
+      if (status === "cancelled" && !isCancelled) return false;
+      if (status === "upcoming") {
+        if (isCancelled) return false;
+        if (!checkIn || checkIn < now) return false;
+      }
+      if (status === "completed") {
+        if (isCancelled) return false;
+        if (!checkOut || checkOut > now) return false;
+      }
+      // "all" → no status restriction
+
+      // ── Time-Period filter (month / year of check-in date) ─────
+      if (checkIn && (selectedMonth || selectedYear)) {
+        const m = checkIn.getMonth() + 1;
+        const y = checkIn.getFullYear();
+        if (selectedMonth && Number(selectedMonth) !== m) return false;
+        if (selectedYear && Number(selectedYear) !== y) return false;
+      }
+
+      // ── Free-text search ───────────────────────────────────────
+      if (needle) {
+        const hay = [
+          r.bookingCode,
+          r.customerName,
+          r.hotelName,
+          r.govEmployeeCode,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+
+      return true;
+    });
+  }, [rows, search, status, selectedMonth, selectedYear]);
+
+  // Reset to page 0 whenever any filter changes — keeps the
+  // pagination footer in step with the visible row set.
+  useEffect(() => {
+    setPage(0);
+  }, [search, status, selectedMonth, selectedYear]);
 
   // ── Cancel: same UX as HotelBookingList — gated by refund status ──
   const handleCancel = async (row) => {
@@ -114,18 +186,162 @@ export default function GovEmployeeBookingList() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm border-0">
           <Card.Body>
-            <h5 className="mb-3">Government Employee Bookings</h5>
-            <Row className="g-2 mb-3 align-items-end">
-              <Col md={4}>
-                <Form.Label>Search</Form.Label>
-                <Form.Control placeholder="Booking code / customer / hotel / employee code"
-                              value={search} onChange={(e) => setSearch(e.target.value)} />
-              </Col>
-              <Col md={2}>
-                <Form.Label>Page Size</Form.Label>
-                <Form.Select value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }}>
-                  {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-                </Form.Select>
+            {/* Header: Title + Search (left) | Time Period (right) —
+                same shape as /booking-details/long-stay-booking-list. */}
+            <div className="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+              <div>
+                <h5 className="fw-bold text-dark mb-2">
+                  Government Employee Bookings
+                </h5>
+                <InputGroup style={{ height: "45px", width: "320px" }}>
+                  <InputGroup.Text
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRight: "none",
+                      borderColor: "#dee2e6",
+                    }}
+                  >
+                    <FaSearch style={{ color: "#6c757d" }} />
+                  </InputGroup.Text>
+                  <Form.Control
+                    type="text"
+                    placeholder="Booking code / customer / hotel / employee code"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                      borderLeft: "none",
+                      fontSize: "0.85rem",
+                      borderColor: "#dee2e6",
+                      height: "45px",
+                    }}
+                  />
+                </InputGroup>
+              </div>
+
+              <Card
+                className="shadow-sm border-0"
+                style={{ borderRadius: "8px", minWidth: "260px" }}
+              >
+                <Card.Body className="p-3">
+                  <h6
+                    className="mb-2 fw-bold text-dark"
+                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                  >
+                    Time Period
+                  </h6>
+                  <Row className="g-2">
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "40px" }}
+                      >
+                        <option value="">Month</option>
+                        {months.map((month, index) => (
+                          <option key={month} value={index + 1}>
+                            {month.slice(0, 3)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(e.target.value)}
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Year</option>
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
+            </div>
+
+            {/* Booking Types radio bar (mirrors long-stay list). */}
+            <Row className="mb-3 g-1">
+              <Col xs={12}>
+                <Card
+                  className="shadow-sm border-0 w-100"
+                  style={{ borderRadius: "8px" }}
+                >
+                  <Card.Body className="p-3">
+                    <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                      <h6
+                        className="mb-0 fw-bold text-dark"
+                        style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                      >
+                        Booking Types
+                      </h6>
+                      {/* Page-size selector preserved from the previous
+                          layout — moved here so the row above can host
+                          the Time Period card without crowding. */}
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="text-muted small">Page Size</span>
+                        <Form.Select
+                          size="sm"
+                          value={size}
+                          onChange={(e) => {
+                            setSize(Number(e.target.value));
+                            setPage(0);
+                          }}
+                          style={{ width: "90px" }}
+                        >
+                          {[10, 25, 50, 100].map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </div>
+                    </div>
+                    <div className="row g-2">
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="All"
+                          name="geBookingType"
+                          checked={status === "all"}
+                          onChange={() => setStatus("all")}
+                        />
+                      </div>
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="Upcoming"
+                          name="geBookingType"
+                          checked={status === "upcoming"}
+                          onChange={() => setStatus("upcoming")}
+                        />
+                      </div>
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="Completed"
+                          name="geBookingType"
+                          checked={status === "completed"}
+                          onChange={() => setStatus("completed")}
+                        />
+                      </div>
+                      <div className="col-6 col-md-4 col-lg-2">
+                        <Form.Check
+                          type="radio"
+                          label="Cancelled"
+                          name="geBookingType"
+                          checked={status === "cancelled"}
+                          onChange={() => setStatus("cancelled")}
+                        />
+                      </div>
+                    </div>
+                  </Card.Body>
+                </Card>
               </Col>
             </Row>
 
@@ -169,9 +385,9 @@ export default function GovEmployeeBookingList() {
                           <div className="small text-muted">{r.checkOutDate?.slice(0, 10)}</div>
                         </td>
                         <td className="text-decoration-line-through">
-                          {r.totalRateBeforeDiscount ?? "-"}
+                          AED {r.totalRateBeforeDiscount ?? "-"}
                         </td>
-                        <td><strong className="text-success">{r.totalRate ?? "-"}</strong></td>
+                        <td><strong className="text-success">AED {r.totalRate ?? "-"}</strong></td>
                         <td>
                           {r.cancelled ? (
                             <Badge bg="danger">Cancelled</Badge>

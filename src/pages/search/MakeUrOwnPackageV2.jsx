@@ -712,7 +712,7 @@ export default function MakeUrOwnPackageV2() {
                 </div>
                 <div>
                   <h2 className="fw-bold text-dark mb-1">
-                    Make Your Own Package
+                    Build Your Own Package
                   </h2>
                   <p className="text-muted mb-0">
                     Plan your perfect vacation package

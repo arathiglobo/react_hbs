@@ -299,8 +299,19 @@ const OccupancyAndMinimumLength = () => {
   //   loadHotelRoomDatas();
   // }, []);
 
+  // Seed the form's hotelRooms list when the hotel's master rooms
+  // resolve — but ONLY when the modal is being opened for Create
+  // (neither editingOcc nor isViewModeOcc is set).
+  //
+  // Without this guard the effect re-fires after openEditOcc /
+  // handleViewOcc have already populated the form with the real
+  // occupancy values, and overwrites them with the empty defaults
+  // (totalAdult/extraChild/etc. = 0). That's the "Edit modal doesn't
+  // preview existing data" bug: the rooms ARE fetched correctly, then
+  // wiped a moment later when /api/hotelRoomDetailsController/{id}
+  // resolves.
   useEffect(() => {
-    if (hotelRoomsData.length > 0) {
+    if (hotelRoomsData.length > 0 && !editingOcc && !isViewModeOcc) {
       setFormDataOcc((prev) => ({
         ...prev,
         hotelRooms: hotelRoomsData.map((room) => ({
@@ -315,7 +326,7 @@ const OccupancyAndMinimumLength = () => {
         })),
       }));
     }
-  }, [hotelRoomsData]);
+  }, [hotelRoomsData, editingOcc, isViewModeOcc]);
 
   const fetchOccupancyList = async (pageNum = 0, searchTerm = searchOcc) => {
     setIsLoading(true);

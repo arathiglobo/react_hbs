@@ -2321,12 +2321,10 @@ const [activeAccordion, setActiveAccordion] = useState({});
               {wizardSteps[currentStepIdx]?.type === "select" && (
                 <Card className="border-0 shadow-sm rounded-4">
                   <Card.Body className="p-4">
-                    <h5 className="fw-bold mb-1">Choose services for this Package</h5>
-                    {/* <div className="text-muted mb-4" style={{ fontSize: "0.95rem" }}>
-                      Pick the services you want to include. You can come
-                      back to this step anytime to enable more — already
-                      entered details will not be lost.
-                    </div> */}
+                    <h5 className="fw-bold mb-1">Choose services for your  Package</h5>
+                    <div className="text-muted mb-4" style={{ fontSize: "0.95rem" }}>
+                      Inorder to Build Your Own Package ,Tours and activities and Hotels are mandatory
+                    </div>
                     {/* Vertical list — one service per row, with a
                         checkbox on the right. Order: addon catalogue
                         first (visa, meet & greet, ...), then Cab /
@@ -2353,8 +2351,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
                           {
                             key: "tour",
                             label: "Tours & Activities",
-                            // description: "Sightseeing, day trips, attractions.",
+                            description: "Sightseeing, day trips, attractions.",
                             checked: !!v2Services.tour,
+                            mandatory: true,
                           },
                           {
                             key: "hotel",

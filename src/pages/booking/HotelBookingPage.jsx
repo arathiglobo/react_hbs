@@ -114,6 +114,22 @@ const HotelBookingPage = () => {
     };
   }, [bookingData]);
 
+  // Non-refundable rates have no "Book Now & Voucher later" option —
+  // the booking always proceeds as "Book & Voucher" because the rate is
+  // already locked-in with the supplier. If the user previously chose
+  // "Book Now & Voucher later" on a refundable rate and switched rooms,
+  // reset the selection so the downstream payload stays consistent with
+  // what the UI shows (the radio block is hidden in this case too).
+  useEffect(() => {
+    const sel = bookingData?.selectedRate;
+    if (!sel) return;
+    const isNonRefundable =
+      sel.nonRefundable === true || sel.nonRefundable === "true";
+    if (isNonRefundable && bookingConfirmation !== "Book & Voucher") {
+      setBookingConfirmation("Book & Voucher");
+    }
+  }, [bookingData, bookingConfirmation]);
+
   // Load bookingData once
   useEffect(() => {
     const storedData = sessionStorage.getItem("bookingData");
@@ -1030,45 +1046,62 @@ const HotelBookingPage = () => {
                           </div>
                         </Form.Group>
                       </Col>
-                      {selectedRate?.roomStatus !== "On Request" && (
-                        <Col md={12}>
-                          <Form.Group className="mb-3">
-                            <Form.Label className="mb-2 fw-semibold">
-                              Are you sure to continue booking?
-                            </Form.Label>
-                            <div className="d-flex gap-4 mt-2">
-                              <Form.Check
-                                type="radio"
-                                id="book-voucher"
-                                name="bookingConfirmation"
-                                label="Book & Voucher"
-                                value="Book & Voucher"
-                                checked={
-                                  bookingConfirmation === "Book & Voucher"
-                                }
-                                onChange={(e) =>
-                                  setBookingConfirmation(e.target.value)
-                                }
-                                className="mb-2"
-                              />
-                              <Form.Check
-                                type="radio"
-                                id="book-now-voucher-later"
-                                name="bookingConfirmation"
-                                label="Book Now & Voucher later"
-                                value="Book Now & Voucher later"
-                                checked={
-                                  bookingConfirmation ===
-                                  "Book Now & Voucher later"
-                                }
-                                onChange={(e) =>
-                                  setBookingConfirmation(e.target.value)
-                                }
-                              />
-                            </div>
-                          </Form.Group>
-                        </Col>
-                      )}
+                      {/*
+                        Booking-confirmation prompt — only renders for
+                        cancellable rates that are NOT "On Request":
+                          • "On Request" → no upfront confirmation (the
+                            supplier still has to confirm availability).
+                          • Non-refundable → the supplier already locks the
+                            rate at booking, so the "Book Now & Voucher
+                            later" option is meaningless. We proceed
+                            directly as "Book & Voucher" (state default;
+                            also enforced by the useEffect above so a
+                            previously-set "later" choice is reset).
+                        Refundable + available rates still see the radio.
+                      */}
+                      {selectedRate?.roomStatus !== "On Request" &&
+                        !(
+                          selectedRate?.nonRefundable === true ||
+                          selectedRate?.nonRefundable === "true"
+                        ) && (
+                          <Col md={12}>
+                            <Form.Group className="mb-3">
+                              <Form.Label className="mb-2 fw-semibold">
+                                Are you sure to continue booking?
+                              </Form.Label>
+                              <div className="d-flex gap-4 mt-2">
+                                <Form.Check
+                                  type="radio"
+                                  id="book-voucher"
+                                  name="bookingConfirmation"
+                                  label="Book & Voucher"
+                                  value="Book & Voucher"
+                                  checked={
+                                    bookingConfirmation === "Book & Voucher"
+                                  }
+                                  onChange={(e) =>
+                                    setBookingConfirmation(e.target.value)
+                                  }
+                                  className="mb-2"
+                                />
+                                <Form.Check
+                                  type="radio"
+                                  id="book-now-voucher-later"
+                                  name="bookingConfirmation"
+                                  label="Book Now & Voucher later"
+                                  value="Book Now & Voucher later"
+                                  checked={
+                                    bookingConfirmation ===
+                                    "Book Now & Voucher later"
+                                  }
+                                  onChange={(e) =>
+                                    setBookingConfirmation(e.target.value)
+                                  }
+                                />
+                              </div>
+                            </Form.Group>
+                          </Col>
+                        )}
                     </Row>
                   </Card>
 

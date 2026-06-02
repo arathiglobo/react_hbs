@@ -956,6 +956,36 @@
   z-index: 4;
 }
 
+/* ============================================================
+   Flash-sale IMAGE badge (replaces the text pill on hotel cards).
+   The image lives at /public/images/flash-sale.png. The corner
+   variant positions it the same way as the legacy pill so the
+   layout doesn't shift.
+   ============================================================ */
+.flash-sale-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.flash-sale-badge.flash-sale-corner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  pointer-events: none;
+}
+.flash-sale-img {
+  width: 72px;
+  height: auto;
+  max-height: 72px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+@media (max-width: 768px) {
+  .flash-sale-img { width: 56px; max-height: 56px; }
+}
+
 /* ── Per-hotel available deals section ── */
 .available-deals-wrap {
   margin: 4px 0 2px;

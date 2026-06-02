@@ -30,19 +30,30 @@ import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+// Column widths — increased so every cell can render its content
+// without truncation. Total ~1560px; the surrounding wrapper has
+// `overflowX: "auto"` so on narrower viewports a horizontal scrollbar
+// kicks in. Pair this with the table's `minWidth` (see the <Table>
+// `style` below) so `tableLayout: "fixed"` doesn't shrink columns to
+// fit a small viewport.
 const COLUMN_WIDTHS = {
-  sn: "45px",
-  agentName: "85px",
-  customerName: "115px",
-  bookingCode: "85px",
-  referenceCode: "140px",
-  bookDate: "80px",
-  bookingDetails: "155px",
-  deadlineDate: "90px",
-  paymentMode: "110px",
-  notification: "95px",
-  action: "110px",
+  sn: "55px",
+  agentName: "110px",
+  customerName: "150px",
+  bookingCode: "110px",
+  referenceCode: "210px",
+  bookDate: "105px",
+  bookingDetails: "290px",
+  deadlineDate: "130px",
+  paymentMode: "160px",
+  notification: "130px",
+  action: "130px",
 };
+
+// Minimum total table width — sum of COLUMN_WIDTHS so the table never
+// gets squeezed below the point where columns become unreadable. The
+// wrapper container scrolls horizontally past this width.
+const TABLE_MIN_WIDTH = "1580px";
 
 // Resolve a human-readable Payment Mode label from whatever shape the
 // backend sends. Most rows will have `paymentMode` directly; older
@@ -1135,7 +1146,13 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                       className="mb-0 align-middle table-bordered"
                       style={{
                         tableLayout: "fixed",
+                        // Use the wider of 100% or the column-sum minimum.
+                        // The wrapper has `overflowX: "auto"` so on narrower
+                        // viewports the table extends past the visible area
+                        // and the user can scroll horizontally instead of
+                        // seeing truncated cells.
                         width: "100%",
+                        minWidth: TABLE_MIN_WIDTH,
                         fontSize: "0.82rem",
                         borderCollapse: "separate",
                         borderSpacing: 0,
@@ -1362,15 +1379,22 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                               return dateString.split("T")[0] || "-";
                             };
 
+                            // Cells now wrap instead of truncating so the
+                            // Reference Code / Deadline Date / Payment Mode
+                            // badge / Notification / Booking Details (hotel
+                            // + dates) all render in full. Pair with the
+                            // wider COLUMN_WIDTHS above; the table's
+                            // minWidth ensures horizontal scroll on small
+                            // screens rather than column-squash.
                             const baseCellStyle = {
-                              padding: "0.4rem 0.5rem",
+                              padding: "0.5rem 0.6rem",
                               fontSize: "0.8rem",
                               border: "1px solid #dee2e6",
                               verticalAlign: "middle",
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              lineHeight: 1.35,
+                              whiteSpace: "normal",
+                              overflow: "visible",
+                              wordBreak: "break-word",
+                              lineHeight: 1.4,
                             };
 
                             return (
@@ -1506,9 +1530,8 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                 </td>
                                 {/* Payment Mode cell — Credit Limit
                                     Payment vs Online Payment, rendered
-                                    from `paymentMode` on the booking
-                                    row (with fallbacks for legacy
-                                    shapes). */}
+                                    as plain black text (per spec — no
+                                    coloured badge). */}
                                 <td
                                   style={{
                                     ...baseCellStyle,
@@ -1523,15 +1546,10 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                         <span className="text-muted">-</span>
                                       );
                                     }
-                                    const isOnline = label === "Online Payment";
                                     return (
-                                      <Badge
-                                        bg={isOnline ? "info" : "success"}
-                                        className="px-2 py-1"
-                                        style={{ fontSize: "0.7rem" }}
-                                      >
+                                      <span style={{ color: "#000" }}>
                                         {label}
-                                      </Badge>
+                                      </span>
                                     );
                                   })()}
                                 </td>
@@ -1677,98 +1695,33 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                     width: COLUMN_WIDTHS.action,
                                   }}
                                 >
-                                  <div className="d-flex gap-3 justify-content-center align-items-center flex-wrap">
-                                    {/* View Icon - SHOWN FOR ALL */}
-                                    {loadingBookingId === b.bookingId ? (
-                                      <Spinner
-                                        animation="border"
-                                        size="sm"
-                                        style={{ color: "#007bff" }}
-                                      />
-                                    ) : (
-                                      <FaEye
-                                        style={{
-                                          fontSize: "14px",
-                                          color: "#007bff",
-                                          cursor: "pointer",
-                                        }}
-                                        title="View"
-                                        onClick={() =>
-                                          fetchBookingDetails(b.bookingId)
-                                        }
-                                      />
-                                    )}
-
-                                    {/* View More link */}
-                                    <span
-                                      style={{
-                                        fontSize: "0.75rem",
-                                        color: "#c0392b",
-                                        cursor: "pointer",
-                                        fontWeight: "600",
-                                        textDecoration: "underline",
-                                        whiteSpace: "nowrap",
-                                      }}
+                                  <div className="d-flex justify-content-center align-items-center">
+                                    {/* Single view action — opens the full
+                                        booking details page. Plain eye icon
+                                        per spec (no labelled button). */}
+                                    <FaEye
+                                      role="button"
+                                      tabIndex={0}
                                       title="View full booking details"
+                                      style={{
+                                        fontSize: "18px",
+                                        color: "#007bff",
+                                        cursor: "pointer",
+                                      }}
                                       onClick={() =>
-                                        navigate(`/booking-details/hotel-booking/${b.bookingId}`)
+                                        navigate(
+                                          `/booking-details/hotel-booking/${b.bookingId}`,
+                                        )
                                       }
-                                    >
-                                      View More
-                                    </span>
-
-                                    {/* Message Icon (Voucher Modal) - SHOWN FOR UPCOMING & COMPLETED */}
-                                    {(status === "upcoming" ||
-                                      status === "completed") && (
-                                      <FaEnvelope
-                                        style={{
-                                          fontSize: "14px",
-                                          color: "#28a745",
-                                          cursor: "pointer",
-                                        }}
-                                        title="Send request or confirmation"
-                                        onClick={async () => {
-                                          setSelectedBooking(b);
-                                          setShowVoucherModal(true);
-                                          setSelectedVoucherType("Request");
-                                          await fetchVoucherDetails(
-                                            b.bookingId,
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          navigate(
+                                            `/booking-details/hotel-booking/${b.bookingId}`,
                                           );
-                                        }}
-                                      />
-                                    )}
-
-                                    {/* Download Icon - SHOWN FOR COMPLETED ONLY */}
-                                    {status === "completed" && (
-                                      <FaDownload
-                                        style={{
-                                          fontSize: "14px",
-                                          color: "#333",
-                                          cursor: "pointer",
-                                        }}
-                                        title="Download Completed PDF"
-                                        onClick={() =>
-                                          handleDownloadPdf(
-                                            b.bookingId,
-                                            "COMPLETED",
-                                          )
                                         }
-                                      />
-                                    )}
-
-                                    {/* Delete/Cancel Icon - SHOWN FOR UPCOMING ONLY */}
-                                    {status === "upcoming" &&
-                                      isCancellationAllowed(b) && (
-                                        <FaTrash
-                                          style={{
-                                            fontSize: "14px",
-                                            color: "#dc3545",
-                                            cursor: "pointer",
-                                          }}
-                                          title="Delete"
-                                          onClick={() => handleDeleteBooking(b)}
-                                        />
-                                      )}
+                                      }}
+                                    />
                                   </div>
                                 </td>
                               </tr>

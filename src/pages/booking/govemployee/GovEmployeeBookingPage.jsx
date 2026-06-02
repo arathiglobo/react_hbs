@@ -3,25 +3,24 @@
  *
  * Booking page for the gov-employee flow.
  *
- * Layout / look-and-feel mirrors /hotel-booking-page
- * (pages/booking/HotelBookingPage.jsx) — same Booking Summary card
- * at the top, per-room guest accordion, primary guest section,
- * remarks / special requests block, "Booking Done By" footer,
- * Confirm Booking button + confirmation modal showing the booking
- * summary again.
+ * Layout / UX mirrors /hotel-booking-page (HotelBookingPage.jsx):
+ *  - Right-sticky Booking Summary + Price Details column.
+ *  - Confirm Booking → fetches policies + T&C → consent modal →
+ *    Proceed → order-summary modal → Confirm → spinner → POST.
+ *  - Validation errors highlight fields on Confirm click.
+ *  - Per-passenger "Lead" radio in the Guest Details grid replaces
+ *    the separate Primary Guest card. The lead guest's name + the
+ *    contact-info card (email / phone / passport / agent LPO) below
+ *    are sent as the booking's primary-guest data.
  *
- * Differences from the normal flow:
- *   1) Adds a "Government Employee Verification" block with two
- *      options (radio toggle):
- *         ◯ Employee Code  → text input
- *         ◯ Government ID Upload → file picker (uploads to
- *           /api/gov-employee-id-upload first, then submits the
- *           returned path with the booking).
- *   2) Shows both standard (struck-through) and discounted prices
- *      everywhere the rate appears, including the modal.
- *   3) Posts to /api/gov-employee-booking/create — the server
- *      re-applies the discount authoritatively, checks the agent
- *      credit limit and decrements it.
+ * Gov-employee specifics preserved:
+ *  - Government Employee Verification block (Employee Code OR
+ *    Government ID Upload).
+ *  - Standard / discounted price display (struck-through + new
+ *    total in green when a discount is active).
+ *  - POST /api/gov-employee-booking/create — the server re-applies
+ *    the discount authoritatively, checks the agent credit limit,
+ *    and decrements it.
  */
 
 import React, { useEffect, useState } from "react";
@@ -34,6 +33,7 @@ import {
   FaUserTie,
   FaIdBadge,
   FaFileUpload,
+  FaArrowLeft,
 } from "react-icons/fa";
 import {
   Container,
@@ -69,6 +69,15 @@ const SPECIAL_REQUEST_OPTIONS = [
 const METHOD_CODE = "EMPLOYEE_CODE";
 const METHOD_UPLOAD = "GOVT_ID_UPLOAD";
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return "-";
+  // Accept either "YYYY-MM-DD" or full ISO; render as "YYYY-MM-DD"
+  // so the summary matches HotelBookingPage's style.
+  const s = String(dateStr);
+  if (s.length >= 10) return s.slice(0, 10);
+  return s;
+};
+
 const GovEmployeeBookingPage = () => {
   const navigate = useNavigate();
   const activeUserRole = localStorage.getItem("currentActiveRole");
@@ -80,12 +89,15 @@ const GovEmployeeBookingPage = () => {
   // ── Per-room guest details (one row per adult / child) ──────────
   const [rooms, setRooms] = useState([]);
 
-  // ── Primary guest details ───────────────────────────────────────
-  const [primaryGuest, setPrimaryGuest] = useState({
-    salutation: "",
-    firstName: "",
-    middleName: "",
-    lastName: "",
+  // ── Lead passenger marker — { roomIdx, guestIdx } pointing at the
+  //    single guest the user has flagged as Lead. Replaces the
+  //    separate Primary Guest card.
+  const [leadIndex, setLeadIndex] = useState({ roomIdx: 0, guestIdx: 0 });
+
+  // ── Contact info for the lead guest — the name fields come from
+  //    the guest grid itself; only email / phone / passport / agent
+  //    LPO live here.
+  const [contactInfo, setContactInfo] = useState({
     email: "",
     phone: "",
     passportNo: "",
@@ -114,13 +126,19 @@ const GovEmployeeBookingPage = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
 
+  // ── Policy + T&C consent flow (mirrors HotelBookingPage) ────────
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [policyData, setPolicyData] = useState(null);
+  const [termsAndConditions, setTermsAndConditions] = useState("");
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+
   // ── Load bookingData from sessionStorage ────────────────────────
   useEffect(() => {
     const stored = sessionStorage.getItem("govEmployeeBookingData");
     if (!stored) return;
     const parsed = JSON.parse(stored);
     setBookingData(parsed);
-    // Initial rooms structure — one guest per adult + child, matches HotelBookingPage.
     const payloadRooms = parsed?.payload?.rooms || [];
     setRooms(
       payloadRooms.map((room) => ({
@@ -134,9 +152,9 @@ const GovEmployeeBookingPage = () => {
             lastName: "",
             gender: "",
             isChild: i >= (room.adults || 0),
-          })
+          }),
         ),
-      }))
+      })),
     );
   }, []);
 
@@ -146,46 +164,77 @@ const GovEmployeeBookingPage = () => {
       try {
         const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
         if (Array.isArray(res.data)) setEmployees(res.data);
-      } catch (e) { /* silent */ }
+      } catch (e) {
+        /* silent */
+      }
     })();
   }, []);
 
   // ── Agent credit balance ───────────────────────────────────────
   useEffect(() => {
     const aId = bookingData?.payload?.agentId;
-    if (!aId) { setAgentAvailableBalance(null); return; }
+    if (!aId) {
+      setAgentAvailableBalance(null);
+      return;
+    }
     let cancelled = false;
     axiosInstance
       .get(`/api/agent-credit-limit/agent/${aId}`)
       .then((res) => {
-        if (!cancelled) setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
+        if (!cancelled)
+          setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
       })
-      .catch(() => { if (!cancelled) setAgentAvailableBalance(null); });
-    return () => { cancelled = true; };
+      .catch(() => {
+        if (!cancelled) setAgentAvailableBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [bookingData]);
 
-  // ── Guest input handlers (mirrors HotelBookingPage.jsx) ─────────
+  // ── Guest input handlers ────────────────────────────────────────
   const handleGuestChange = (roomIndex, guestIndex, field, value) => {
     setRooms((prev) => {
       const next = [...prev];
-      next[roomIndex].guests[guestIndex][field] = value;
+      next[roomIndex] = {
+        ...next[roomIndex],
+        guests: next[roomIndex].guests.map((g, i) =>
+          i === guestIndex ? { ...g, [field]: value } : g,
+        ),
+      };
       return next;
     });
-    // Auto-populate primary guest from Room 1 / Adult 1.
-    if (roomIndex === 0 && guestIndex === 0 &&
-        ["salutation", "firstName", "lastName"].includes(field)) {
-      setPrimaryGuest((p) => ({ ...p, [field]: value }));
+    const k = `room_${roomIndex}_guest_${guestIndex}_${field}`;
+    if (validationErrors[k]) {
+      setValidationErrors((e) => {
+        const n = { ...e };
+        delete n[k];
+        return n;
+      });
     }
   };
-  const handlePrimaryGuestChange = (field, value) => {
-    setPrimaryGuest((p) => ({ ...p, [field]: value }));
+
+  // Children can't be the lead — silently ignore the change.
+  const handleLeadSelect = (roomIdx, guestIdx) => {
+    const g = rooms[roomIdx]?.guests[guestIdx];
+    if (g?.isChild) return;
+    setLeadIndex({ roomIdx, guestIdx });
+  };
+
+  const handleContactChange = (field, value) => {
+    setContactInfo((p) => ({ ...p, [field]: value }));
     if (validationErrors[field]) {
-      setValidationErrors((e) => { const n = { ...e }; delete n[field]; return n; });
+      setValidationErrors((e) => {
+        const n = { ...e };
+        delete n[field];
+        return n;
+      });
     }
   };
+
   const toggleSpecialRequest = (req) => {
     setSpecialRequests((prev) =>
-      prev.includes(req) ? prev.filter((r) => r !== req) : [...prev, req]
+      prev.includes(req) ? prev.filter((r) => r !== req) : [...prev, req],
     );
   };
 
@@ -196,14 +245,19 @@ const GovEmployeeBookingPage = () => {
     setUploadedFileName("");
   };
   const handleUpload = async () => {
-    if (!idFile) { toast.error("Please choose a file first"); return; }
+    if (!idFile) {
+      toast.error("Please choose a file first");
+      return;
+    }
     setUploading(true);
     try {
       const fd = new FormData();
       fd.append("file", idFile);
-      const { data } = await axiosInstance.post("/api/gov-employee-id-upload", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data } = await axiosInstance.post(
+        "/api/gov-employee-id-upload",
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
       if (data?.success) {
         setUploadedFilePath(data.filePath);
         setUploadedFileName(data.fileName);
@@ -220,49 +274,58 @@ const GovEmployeeBookingPage = () => {
 
   // ── Helpers ────────────────────────────────────────────────────
   const formatPrice = (price) =>
-    new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED" })
-      .format(Number(price) || 0);
+    new Intl.NumberFormat("en-AE", {
+      style: "currency",
+      currency: "AED",
+    }).format(Number(price) || 0);
 
-  const isVerificationReady =
-    verificationMethod === METHOD_CODE
-      ? govEmployeeCode.trim().length > 0
-      : !!uploadedFilePath;
-
-  // ── Validation (matches HotelBookingPage's required fields) ────
+  // ── Validation ─────────────────────────────────────────────────
+  // Per spec: the Confirm Booking button is always enabled — pressing
+  // it runs validation and surfaces missing-field errors inline so the
+  // user knows exactly what's wrong. The verification block (employee
+  // code OR uploaded govt-ID) is validated here too instead of gating
+  // the button.
   const validateForm = () => {
     const errors = {};
-    if (!primaryGuest.salutation) errors.salutation = "Salutation is required";
-    if (!primaryGuest.firstName)  errors.firstName  = "First Name is required";
-    if (!primaryGuest.lastName)   errors.lastName   = "Last Name is required";
-    if (!primaryGuest.email) {
-      errors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.email)) {
-      errors.email = "Please enter a valid email address";
+
+    // Verification block
+    if (verificationMethod === METHOD_CODE) {
+      if (!govEmployeeCode.trim()) {
+        errors.govEmployeeCode = "Government Employee Code is required";
+      }
+    } else if (verificationMethod === METHOD_UPLOAD) {
+      if (!uploadedFilePath) {
+        errors.govtIdFile = "Please upload the government ID document";
+      }
     }
-    if (!primaryGuest.phone) errors.phone = "Phone is required";
-    if (!primaryGuest.agentLpo) errors.agentLpo = "Agent LPO is required";
 
     rooms.forEach((room, ri) => {
       room.guests.forEach((g, gi) => {
         const k = `room_${ri}_guest_${gi}`;
         if (!g.salutation) errors[`${k}_salutation`] = "Required";
-        if (!g.firstName)  errors[`${k}_firstName`]  = "Required";
-        if (!g.lastName)   errors[`${k}_lastName`]   = "Required";
-        if (!g.gender)     errors[`${k}_gender`]     = "Required";
+        if (!g.firstName) errors[`${k}_firstName`] = "Required";
+        if (!g.lastName) errors[`${k}_lastName`] = "Required";
+        if (!g.gender) errors[`${k}_gender`] = "Required";
       });
     });
+
+    // Lead must point at a real, adult guest.
+    const lead = rooms[leadIndex.roomIdx]?.guests[leadIndex.guestIdx];
+    if (!lead) {
+      errors.lead = "Please mark a guest as Lead";
+    } else if (lead.isChild) {
+      errors.lead = "The lead must be an adult";
+    }
 
     return { errors, hasErrors: Object.keys(errors).length > 0 };
   };
 
-  // ── Build payload + open confirmation modal ────────────────────
-  const handleSubmit = (e) => {
-    e?.preventDefault?.();
-    if (!isVerificationReady) {
-      toast.error(verificationMethod === METHOD_CODE
-        ? "Enter the employee code" : "Upload the government ID document first");
-      return;
-    }
+  // ── Step 1: Confirm Booking → validate + fetch policies + open
+  //            T&C consent modal. Mirrors HotelBookingPage.
+  const openPolicyConsent = async () => {
+    // Validation only — no button disabling. Errors are surfaced
+    // inline (red borders + helper text) so the user can see exactly
+    // which mandatory field is missing.
     const { errors, hasErrors } = validateForm();
     if (hasErrors) {
       setValidationErrors(errors);
@@ -271,63 +334,154 @@ const GovEmployeeBookingPage = () => {
     }
     setValidationErrors({});
 
-    const { selectedRate, hotelStaticData, payload, activePromotion, searchCtx } = bookingData;
+    const hotelId =
+      bookingData?.selectedRate?.hotelId ||
+      bookingData?.searchCtx?.hotelCode ||
+      null;
 
-    // Nights
+    setPolicyAccepted(false);
+    setShowPolicyModal(true);
+    setPoliciesLoading(true);
+
+    try {
+      const calls = hotelId
+        ? [
+            axiosInstance.get(`/api/hotels/${hotelId}/policies`),
+            axiosInstance.get(`/api/hotels/${hotelId}/terms-and-conditions`),
+          ]
+        : [Promise.resolve({ data: null }), Promise.resolve({ data: "" })];
+      const [policiesRes, termsRes] = await Promise.allSettled(calls);
+
+      setPolicyData(
+        policiesRes.status === "fulfilled"
+          ? policiesRes.value?.data || null
+          : null,
+      );
+
+      if (termsRes.status === "fulfilled") {
+        const d = termsRes.value?.data;
+        let tc = "";
+        if (Array.isArray(d)) {
+          tc = d
+            .map((row) =>
+              typeof row === "string" ? row : row?.description || "",
+            )
+            .filter(Boolean)
+            .join("\n\n");
+        } else if (typeof d === "string") {
+          tc = d;
+        } else {
+          tc =
+            d?.termsAndConditions || d?.terms || d?.data || d?.message || "";
+        }
+        setTermsAndConditions(tc);
+      } else {
+        setTermsAndConditions("");
+      }
+    } catch (err) {
+      console.error("policies/T&C fetch error", err);
+    } finally {
+      setPoliciesLoading(false);
+    }
+  };
+
+  // ── Step 2: build payload + open the order-summary confirm modal.
+  const handleSubmit = (e) => {
+    e?.preventDefault?.();
+
+    const { errors, hasErrors } = validateForm();
+    if (hasErrors) {
+      setValidationErrors(errors);
+      toast.error("Please complete the highlighted fields");
+      return;
+    }
+    setValidationErrors({});
+
+    const { selectedRate, hotelStaticData, payload, activePromotion, searchCtx } =
+      bookingData;
     const ci = new Date(payload.checkInDate);
     const co = new Date(payload.checkOutDate);
     const nights = Math.max(1, Math.round((co - ci) / 86400000));
 
-    // Per-room rate breakdown — replicated for each room in the search
+    // Per-room rate breakdown — replicate for each room.
     const allRooms = (rooms || []).map((room, idx) => ({
       roomNo: idx + 1,
       roomCategory: selectedRate.roomCategory,
       mealPlan: selectedRate.mealPlan,
       nonRefundable: !!selectedRate.nonRefundable,
       rate: Number(selectedRate.rate || 0),
-      rateBeforeDiscount: Number(selectedRate.rateBeforeDiscount || selectedRate.rate || 0),
+      rateBeforeDiscount: Number(
+        selectedRate.rateBeforeDiscount || selectedRate.rate || 0,
+      ),
       rateWithoutMarkup: Number(selectedRate.rate || 0),
       adults: room.adults,
       children: room.children,
       childAges: room.childAges || [],
       currency: selectedRate.currency || "AED",
-      guests: (room.guests || []).map((g) => ({
+      guests: (room.guests || []).map((g, gi) => ({
         salutation: g.salutation,
         firstName: g.firstName,
+        middleName: g.middleName || "",
         lastName: g.lastName,
         gender: g.gender,
         isChild: !!g.isChild,
+        // Mark the lead guest so the backend knows who the primary
+        // contact is on the booking.
+        isLead:
+          idx === leadIndex.roomIdx && gi === leadIndex.guestIdx,
       })),
     }));
+
+    // Derive the primary-guest block from the lead guest + the
+    // contact-info card. Keeps the backend contract from the previous
+    // version of this page intact.
+    const leadGuest =
+      rooms[leadIndex.roomIdx]?.guests[leadIndex.guestIdx] || {};
+    const primaryGuest = {
+      salutation: leadGuest.salutation || "",
+      firstName: leadGuest.firstName || "",
+      middleName: leadGuest.middleName || "",
+      lastName: leadGuest.lastName || "",
+      email: contactInfo.email,
+      phone: contactInfo.phone,
+      passportNo: contactInfo.passportNo,
+      agentLpo: contactInfo.agentLpo,
+      nativeCountry: "",
+    };
 
     const built = {
       agentId: String(payload.agentId || searchCtx?.agentId || ""),
       apiId: String(payload.apiId || searchCtx?.apiId || 1),
-      hotelId: String(selectedRate.hotelId || searchCtx?.hotelCode || ""),
+      hotelId: String(
+        selectedRate.hotelId || searchCtx?.hotelCode || "",
+      ),
       hotelName: hotelStaticData.hotelName,
       address: hotelStaticData.address,
       starRating: hotelStaticData.starRating,
       checkInDate: payload.checkInDate,
       checkOutDate: payload.checkOutDate,
       nights,
-      primaryGuest: { ...primaryGuest, nativeCountry: "" },
+      primaryGuest,
       rooms: allRooms,
       remarks,
       specialRequests,
       source: "WEB",
       createdByRole: activeUserRole || "agent",
-      // Verification
       verificationMethod,
-      govEmployeeCode: verificationMethod === METHOD_CODE ? govEmployeeCode.trim() : null,
-      govtIdFilePath: verificationMethod === METHOD_UPLOAD ? uploadedFilePath : null,
-      govtIdFileName: verificationMethod === METHOD_UPLOAD ? uploadedFileName : null,
+      govEmployeeCode:
+        verificationMethod === METHOD_CODE ? govEmployeeCode.trim() : null,
+      govtIdFilePath:
+        verificationMethod === METHOD_UPLOAD ? uploadedFilePath : null,
+      govtIdFileName:
+        verificationMethod === METHOD_UPLOAD ? uploadedFileName : null,
       govEmployeeName: govEmployeeName.trim() || null,
       govEmployeeDepartment: govEmployeeDepartment.trim() || null,
-      // Discount snapshot (server re-resolves and re-applies)
       discountPercent: activePromotion?.discountPercent ?? null,
       discountAmount: activePromotion?.discountAmount ?? null,
-      totalRateBeforeDiscount: allRooms.reduce((s, r) => s + Number(r.rateBeforeDiscount || 0), 0),
-      // Employee who is doing the booking (separate from gov employee)
+      totalRateBeforeDiscount: allRooms.reduce(
+        (s, r) => s + Number(r.rateBeforeDiscount || 0),
+        0,
+      ),
       employeeId: bookingDoneByEmployeeId || null,
     };
 
@@ -335,14 +489,14 @@ const GovEmployeeBookingPage = () => {
     setShowConfirmModal(true);
   };
 
-  // ── Confirm modal → submit ─────────────────────────────────────
+  // ── Step 3: Confirm modal → POST + spinner ─────────────────────
   const confirmBooking = async () => {
     if (!pendingPayload) return;
     setIsSubmitting(true);
     try {
       const { data } = await axiosInstance.post(
         "/api/gov-employee-booking/create",
-        pendingPayload
+        pendingPayload,
       );
       if (data?.success) {
         setShowConfirmModal(false);
@@ -373,472 +527,900 @@ const GovEmployeeBookingPage = () => {
     );
   }
 
-  const { hotelStaticData, payload, selectedRate, activePromotion } = bookingData;
-  const totalBefore = Number(selectedRate.rateBeforeDiscount || 0) * (rooms.length || 1);
-  const totalAfter  = Number(selectedRate.rate || 0) * (rooms.length || 1);
+  const { hotelStaticData, payload, selectedRate, activePromotion } =
+    bookingData;
+  const totalBefore =
+    Number(selectedRate.rateBeforeDiscount || 0) * (rooms.length || 1);
+  const totalAfter =
+    Number(selectedRate.rate || 0) * (rooms.length || 1);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hotel-booking-container">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="content-wrapper py-4 flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
+        <main
+          className="content-wrapper py-3 flex-grow-1"
+          style={{ minWidth: 0, overflowX: "hidden" }}
+        >
           <Container fluid="xl">
-            {/* ── Booking Summary card (top) ──────────────────── */}
-            <Row>
-              <Col>
-                <Card className="shadow-lg rounded-xl mb-3 booking-summary-card border-0 overflow-hidden">
-                  <Card.Header className="bg-gradient-secondary text-black py-2 rounded-top">
-                    <div className="d-flex justify-content-between align-items-center">
-                      <h4 className="mb-0 d-flex align-items-center">
-                        <FaHotel className="me-1 fs-4" /> Booking Summary
-                      </h4>
-                      <div className="d-flex align-items-center gap-3">
-                        {activePromotion && (
-                          <Badge bg="success" className="d-inline-flex align-items-center">
-                            <FaIdBadge className="me-1" />
-                            Gov Discount:
-                            {activePromotion.discountPercent ? ` ${activePromotion.discountPercent}%` : ""}
-                            {activePromotion.discountAmount ? ` + ${activePromotion.discountAmount}` : ""}
-                          </Badge>
-                        )}
-                        {agentAvailableBalance != null && (
-                          <span className="fw-bold" style={{ color: "#dc3545", fontSize: "0.95rem" }}>
-                            Available Balance: {Number(agentAvailableBalance).toFixed(2)}
-                          </span>
-                        )}
+            {/* Top action bar — Back to Room List + Available Balance.
+                Using navigate(-1) preserves the room-list page's
+                in-memory state (selected dates, agent, occupancy)
+                instead of remounting it fresh. */}
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => navigate(-1)}
+                title="Back to Room List"
+              >
+                <FaArrowLeft className="me-2" />
+                Back to Room List
+              </Button>
+              {agentAvailableBalance != null && (
+                <span
+                  className="fw-bold"
+                  style={{ color: "#dc3545", fontSize: "0.95rem" }}
+                >
+                  Available Balance:{" "}
+                  {Number(agentAvailableBalance).toFixed(2)}
+                </span>
+              )}
+            </div>
+
+            <Form onSubmit={(e) => e.preventDefault()}>
+              <Row>
+                {/* ─────────── Left main column ─────────── */}
+                <Col lg={8}>
+                  {/* Government Employee Verification block */}
+                  <Card className="mb-2 shadow-sm border-0">
+                    <Card.Header className="bg-primary text-white py-2">
+                      <h6 className="mb-0 fw-bold d-flex align-items-center">
+                        <FaIdBadge className="me-2" /> Government Employee
+                        Verification
+                      </h6>
+                    </Card.Header>
+                    <Card.Body className="p-2">
+                      <div className="d-flex gap-4 mb-2">
+                        <Form.Check
+                          type="radio"
+                          id="vm-code"
+                          name="verificationMethod"
+                          label="Employee Code"
+                          checked={verificationMethod === METHOD_CODE}
+                          onChange={() => setVerificationMethod(METHOD_CODE)}
+                        />
+                        <Form.Check
+                          type="radio"
+                          id="vm-upload"
+                          name="verificationMethod"
+                          label="Government ID Upload"
+                          checked={verificationMethod === METHOD_UPLOAD}
+                          onChange={() => setVerificationMethod(METHOD_UPLOAD)}
+                        />
                       </div>
+
+                      {verificationMethod === METHOD_CODE && (
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <Form.Label className="fw-semibold">
+                              Government Employee Code *
+                            </Form.Label>
+                            <Form.Control
+                              placeholder="e.g. GOV-1001"
+                              isInvalid={!!validationErrors.govEmployeeCode}
+                              value={govEmployeeCode}
+                              onChange={(e) => {
+                                setGovEmployeeCode(e.target.value);
+                                if (validationErrors.govEmployeeCode) {
+                                  setValidationErrors((errs) => {
+                                    const n = { ...errs };
+                                    delete n.govEmployeeCode;
+                                    return n;
+                                  });
+                                }
+                              }}
+                            />
+                            {validationErrors.govEmployeeCode && (
+                              <Form.Control.Feedback type="invalid">
+                                {validationErrors.govEmployeeCode}
+                              </Form.Control.Feedback>
+                            )}
+                          </Col>
+                        </Row>
+                      )}
+
+                      {verificationMethod === METHOD_UPLOAD && (
+                        <Row className="g-3 align-items-end">
+                          <Col md={6}>
+                            <Form.Label className="fw-semibold">
+                              Government ID Document *
+                            </Form.Label>
+                            <Form.Control
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg"
+                              isInvalid={!!validationErrors.govtIdFile}
+                              onChange={(e) => {
+                                onFileChange(e);
+                                if (validationErrors.govtIdFile) {
+                                  setValidationErrors((errs) => {
+                                    const n = { ...errs };
+                                    delete n.govtIdFile;
+                                    return n;
+                                  });
+                                }
+                              }}
+                            />
+                            {validationErrors.govtIdFile ? (
+                              <Form.Control.Feedback type="invalid">
+                                {validationErrors.govtIdFile}
+                              </Form.Control.Feedback>
+                            ) : (
+                              <Form.Text className="text-muted">
+                                PDF, PNG or JPG. Max ~5 MB.
+                              </Form.Text>
+                            )}
+                          </Col>
+                          <Col md={3}>
+                            <Button
+                              variant="outline-primary"
+                              onClick={handleUpload}
+                              disabled={!idFile || uploading}
+                            >
+                              {uploading ? (
+                                <Spinner size="sm" />
+                              ) : (
+                                <>
+                                  <FaFileUpload className="me-1" /> Upload
+                                </>
+                              )}
+                            </Button>
+                          </Col>
+                          <Col md={3}>
+                            {uploadedFilePath ? (
+                              <Badge bg="success" className="p-2">
+                                ✓ Uploaded: {uploadedFileName}
+                              </Badge>
+                            ) : idFile ? (
+                              <span className="text-muted small">
+                                Click Upload to save
+                              </span>
+                            ) : null}
+                          </Col>
+                        </Row>
+                      )}
+
+                      <Row className="g-2 mt-1">
+                        <Col md={6}>
+                          <Form.Label>Employee Name (optional)</Form.Label>
+                          <Form.Control
+                            value={govEmployeeName}
+                            onChange={(e) =>
+                              setGovEmployeeName(e.target.value)
+                            }
+                          />
+                        </Col>
+                        <Col md={6}>
+                          <Form.Label>Department (optional)</Form.Label>
+                          <Form.Control
+                            value={govEmployeeDepartment}
+                            onChange={(e) =>
+                              setGovEmployeeDepartment(e.target.value)
+                            }
+                          />
+                        </Col>
+                      </Row>
+                    </Card.Body>
+                  </Card>
+
+                  {/* Per-room guest details with Lead radio per row */}
+                  <Card className="mb-2 shadow-sm border-0">
+                    <Card.Header className="bg-light py-2">
+                      <h6 className="mb-0 fw-bold text-dark">
+                        Guest Details
+                      </h6>
+                      {validationErrors.lead && (
+                        <small className="text-danger d-block mt-1">
+                          {validationErrors.lead}
+                        </small>
+                      )}
+                    </Card.Header>
+                    <Card.Body className="p-0">
+                      <Accordion defaultActiveKey="0" alwaysOpen>
+                        {rooms.map((room, roomIndex) => (
+                          <Accordion.Item
+                            key={roomIndex}
+                            eventKey={String(roomIndex)}
+                          >
+                            <Accordion.Header>
+                              <span className="fw-bold">
+                                Room {roomIndex + 1} —{" "}
+                                {selectedRate.roomCategory}
+                              </span>
+                            </Accordion.Header>
+                            <Accordion.Body className="p-3">
+                              {/* Column headers — match the screenshot
+                                  the user referenced: Room # | Title |
+                                  First Name | Surname | Gender | Lead. */}
+                              <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                                <Col md={2}>Passenger</Col>
+                                <Col md={2}>Title *</Col>
+                                <Col md={3}>First Name *</Col>
+                                <Col md={3}>Surname *</Col>
+                                <Col md={1}>Gender *</Col>
+                                <Col md={1} className="text-center">
+                                  Lead
+                                </Col>
+                              </Row>
+                              {room.guests.map((guest, guestIndex) => {
+                                const k = `room_${roomIndex}_guest_${guestIndex}`;
+                                const isLead =
+                                  leadIndex.roomIdx === roomIndex &&
+                                  leadIndex.guestIdx === guestIndex;
+                                return (
+                                  <Row
+                                    key={guestIndex}
+                                    className="align-items-center g-2 mb-2"
+                                  >
+                                    <Col md={2}>
+                                      <span className="fw-semibold text-muted">
+                                        {guest.isChild
+                                          ? `Child ${
+                                              guestIndex - room.adults + 1
+                                            }`
+                                          : `Adult ${guestIndex + 1}`}
+                                      </span>
+                                    </Col>
+                                    <Col md={2}>
+                                      <Form.Select
+                                        isInvalid={
+                                          !!validationErrors[`${k}_salutation`]
+                                        }
+                                        value={guest.salutation}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            roomIndex,
+                                            guestIndex,
+                                            "salutation",
+                                            e.target.value,
+                                          )
+                                        }
+                                      >
+                                        <option value="">Title</option>
+                                        <option>Mr</option>
+                                        <option>Mrs</option>
+                                        <option>Ms</option>
+                                        <option>Dr</option>
+                                      </Form.Select>
+                                    </Col>
+                                    <Col md={3}>
+                                      <Form.Control
+                                        placeholder="First Name"
+                                        isInvalid={
+                                          !!validationErrors[`${k}_firstName`]
+                                        }
+                                        value={guest.firstName}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            roomIndex,
+                                            guestIndex,
+                                            "firstName",
+                                            e.target.value,
+                                          )
+                                        }
+                                      />
+                                    </Col>
+                                    <Col md={3}>
+                                      <Form.Control
+                                        placeholder="Surname"
+                                        isInvalid={
+                                          !!validationErrors[`${k}_lastName`]
+                                        }
+                                        value={guest.lastName}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            roomIndex,
+                                            guestIndex,
+                                            "lastName",
+                                            e.target.value,
+                                          )
+                                        }
+                                      />
+                                    </Col>
+                                    <Col md={1}>
+                                      <Form.Select
+                                        isInvalid={
+                                          !!validationErrors[`${k}_gender`]
+                                        }
+                                        value={guest.gender}
+                                        onChange={(e) =>
+                                          handleGuestChange(
+                                            roomIndex,
+                                            guestIndex,
+                                            "gender",
+                                            e.target.value,
+                                          )
+                                        }
+                                      >
+                                        <option value="">—</option>
+                                        <option value="MALE">M</option>
+                                        <option value="FEMALE">F</option>
+                                      </Form.Select>
+                                    </Col>
+                                    <Col md={1} className="text-center">
+                                      {/* Lead radio — only adults can be
+                                          lead. Disabled+greyed for children
+                                          so the row still aligns. */}
+                                      <Form.Check
+                                        type="radio"
+                                        name="lead-guest"
+                                        id={`lead-${roomIndex}-${guestIndex}`}
+                                        checked={isLead}
+                                        disabled={guest.isChild}
+                                        onChange={() =>
+                                          handleLeadSelect(
+                                            roomIndex,
+                                            guestIndex,
+                                          )
+                                        }
+                                        title={
+                                          guest.isChild
+                                            ? "Children cannot be the lead"
+                                            : "Mark as Lead passenger"
+                                        }
+                                      />
+                                    </Col>
+                                  </Row>
+                                );
+                              })}
+                            </Accordion.Body>
+                          </Accordion.Item>
+                        ))}
+                      </Accordion>
+                    </Card.Body>
+                  </Card>
+
+                  {/* Contact Details card hidden per spec — the lead
+                      guest's name fields (from the Guest Details grid
+                      above) are sent as the primary-guest data; the
+                      contact channels (email / phone / passport / agent
+                      LPO) ride along as empty strings until the
+                      operator decides to capture them. */}
+
+                  {/* Special Requests + Remarks */}
+                  <Card className="p-2 mb-2 shadow-sm border-0">
+                    <h6 className="mb-2 fw-bold text-primary">
+                      Special Requests &amp; Remarks
+                    </h6>
+                    <div className="mb-2 d-flex flex-wrap gap-2">
+                      {SPECIAL_REQUEST_OPTIONS.map((req) => (
+                        <Form.Check
+                          key={req}
+                          type="checkbox"
+                          id={`sr-${req}`}
+                          label={req}
+                          checked={specialRequests.includes(req)}
+                          onChange={() => toggleSpecialRequest(req)}
+                        />
+                      ))}
                     </div>
-                  </Card.Header>
-                  <Card.Body className="p-4 bg-light">
-                    <Row className="gy-4">
-                      <Col md={6} lg={4}>
-                        <div className="hotel-info-card p-3 bg-white rounded shadow-sm h-100">
-                          <h5 className="fw-bold text-primary mb-3">
+                    <Form.Label>Remarks</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={2}
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                    />
+                  </Card>
+
+                  {/* Booking Done By */}
+                  <Card className="p-2 mb-2 shadow-sm border-0 bg-light">
+                    <h6 className="mb-2 fw-bold text-primary d-flex align-items-center">
+                      <FaUserTie className="me-2" /> Booking Done By
+                    </h6>
+                    <Row>
+                      <Col md={4}>
+                        <Form.Label>Employee</Form.Label>
+                        <Form.Select
+                          value={bookingDoneByEmployeeId}
+                          onChange={(e) =>
+                            setBookingDoneByEmployeeId(e.target.value)
+                          }
+                        >
+                          <option value="">Select Employee</option>
+                          {employees.map((emp) => (
+                            <option
+                              key={emp.employeeId}
+                              value={emp.employeeId}
+                            >
+                              {emp.firstName} {emp.lastName}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </Card>
+                </Col>
+
+                {/* ─────────── Right sticky summary column ─────────── */}
+                <Col lg={4} className="hbp-right-col">
+                  <div className="hbp-sticky-summary">
+                    <Card className="shadow-sm rounded-3 mb-2 booking-summary-card border-0 overflow-hidden">
+                      <Card.Header className="bg-primary text-white py-2 rounded-top">
+                        <h6 className="mb-0 d-flex align-items-center">
+                          <FaHotel className="me-2" /> Booking Summary
+                        </h6>
+                      </Card.Header>
+                      <Card.Body className="p-2">
+                        <div className="mb-2">
+                          <div className="fw-bold text-primary mb-1">
                             {hotelStaticData.hotelName}
-                          </h5>
-                          <p className="text-muted mb-2">{hotelStaticData.address}</p>
-                          <div className="d-flex align-items-center mb-2">
-                            <span className="badge bg-warning text-dark me-2">
+                          </div>
+                          <div className="text-muted small mb-2">
+                            {hotelStaticData.address}
+                          </div>
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <span className="badge bg-warning text-dark">
                               ⭐ {hotelStaticData.starRating} Star
                             </span>
                             {selectedRate?.nonRefundable !== undefined && (
-                              <Badge bg={selectedRate.nonRefundable === true || selectedRate.nonRefundable === "true" ? "danger" : "success"}>
-                                {selectedRate.nonRefundable === true || selectedRate.nonRefundable === "true" ? "Non-Refundable" : "Flexible"}
+                              <Badge
+                                bg={
+                                  selectedRate.nonRefundable === true ||
+                                  selectedRate.nonRefundable === "true"
+                                    ? "danger"
+                                    : "success"
+                                }
+                              >
+                                {selectedRate.nonRefundable === true ||
+                                selectedRate.nonRefundable === "true"
+                                  ? "Non-Refundable"
+                                  : "Flexible"}
+                              </Badge>
+                            )}
+                            {activePromotion && (
+                              <Badge
+                                bg="success"
+                                className="d-inline-flex align-items-center"
+                              >
+                                <FaIdBadge className="me-1" /> Gov Discount
+                                {activePromotion.discountPercent
+                                  ? ` ${activePromotion.discountPercent}%`
+                                  : ""}
+                                {activePromotion.discountAmount
+                                  ? ` + ${activePromotion.discountAmount}`
+                                  : ""}
                               </Badge>
                             )}
                           </div>
                         </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Check-in</h6>
-                          <p className="mb-0 fw-semibold text-dark">{payload.checkInDate}</p>
+
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaCalendarAlt className="me-2 text-primary" />
+                            Check-in
+                          </div>
+                          <div className="hbp-summary-value">
+                            {formatDateTime(payload.checkInDate)}
+                          </div>
                         </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Check-out</h6>
-                          <p className="mb-0 fw-semibold text-dark">{payload.checkOutDate}</p>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaCalendarAlt className="me-2 text-primary" />
+                            Check-out
+                          </div>
+                          <div className="hbp-summary-value">
+                            {formatDateTime(payload.checkOutDate)}
+                          </div>
                         </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaUsers className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Guests</h6>
-                          <div className="text-start">
+                        <div className="hbp-summary-row align-items-start">
+                          <div className="hbp-summary-label">
+                            <FaUsers className="me-2 text-primary" />
+                            Guests
+                          </div>
+                          <div className="hbp-summary-value text-end">
                             {payload.rooms.map((room, i) => (
-                              <small key={i} className="d-block fw-semibold text-dark">
-                                Room {i + 1}: {room.adults} Adults
-                                {room.children ? `, ${room.children} Children` : ""}
-                              </small>
+                              <div key={i} className="small">
+                                Room {i + 1}: {room.adults} Adult
+                                {room.adults > 1 ? "s" : ""}
+                                {room.children
+                                  ? `, ${room.children} Child${
+                                      room.children > 1 ? "ren" : ""
+                                    }`
+                                  : ""}
+                              </div>
                             ))}
                           </div>
                         </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaUtensils className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Meal Plan</h6>
-                          <p className="mb-0 fw-semibold text-dark">{selectedRate.mealPlan}</p>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaUtensils className="me-2 text-primary" />
+                            Meal Plan
+                          </div>
+                          <div className="hbp-summary-value">
+                            {selectedRate.mealPlan}
+                          </div>
                         </div>
-                      </Col>
-                    </Row>
-                    <hr className="my-4" />
-                    {/* Total before / after with strike-through */}
-                    {activePromotion && totalBefore !== totalAfter && (
-                      <div className="pricing-section p-3 bg-white rounded shadow-sm mb-2">
-                        <div className="d-flex justify-content-between align-items-center">
-                          <h6 className="mb-0 text-muted">Standard Total</h6>
-                          <h5 className="mb-0 text-decoration-line-through text-muted">
-                            {formatPrice(totalBefore)}
-                          </h5>
+                      </Card.Body>
+                    </Card>
+
+                    <Card className="shadow-sm rounded-3 border-0 hbp-price-card">
+                      <Card.Header className="bg-light py-2">
+                        <h6 className="mb-0 fw-bold">Price Details</h6>
+                      </Card.Header>
+                      <Card.Body className="p-2">
+                        {activePromotion && totalBefore !== totalAfter && (
+                          <div className="hbp-summary-row">
+                            <div className="hbp-summary-label">
+                              Standard Total
+                            </div>
+                            <div className="hbp-summary-value text-decoration-line-through text-muted">
+                              {formatPrice(totalBefore)}
+                            </div>
+                          </div>
+                        )}
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">Rate</div>
+                          <div className="hbp-summary-value">
+                            {formatPrice(selectedRate.rate || 0)} ×{" "}
+                            {rooms.length || 1}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    <div className="pricing-section p-3 bg-gradient-success text-white rounded shadow-sm">
-                      <div className="d-flex justify-content-between align-items-center">
-                        <h5 className="mb-0">
-                          Total Payable {activePromotion ? "(after Gov discount)" : ""}
-                        </h5>
-                        <h4 className="mb-0 fw-bold">{formatPrice(totalAfter)}</h4>
+                        <hr className="my-2" />
+                        <div className="hbp-summary-row fw-bold">
+                          <div className="hbp-summary-label text-danger">
+                            New Total
+                            {activePromotion ? " (after Gov discount)" : ""}
+                          </div>
+                          <div className="hbp-summary-value text-danger">
+                            {formatPrice(totalAfter)}
+                          </div>
+                        </div>
+                      </Card.Body>
+                    </Card>
+
+                    <div className="hbp-action-bar mt-2 d-flex gap-2">
+                      <Button
+                        variant="outline-secondary"
+                        onClick={() => navigate(-1)}
+                        className="flex-grow-1"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        variant="primary"
+                        type="button"
+                        onClick={openPolicyConsent}
+                        className="flex-grow-1"
+                      >
+                        Confirm Booking
+                      </Button>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+
+              {/* ─────────── Policy + T&C consent modal ─────────── */}
+              <Modal
+                show={showPolicyModal}
+                onHide={() => setShowPolicyModal(false)}
+                centered
+                backdrop="static"
+                size="lg"
+                scrollable
+                dialogClassName="policy-modal"
+              >
+                <Modal.Header closeButton className="policy-modal-header">
+                  <Modal.Title className="policy-modal-title">
+                    Hotel Policies &amp; Terms
+                  </Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="policy-modal-body">
+                  {policiesLoading ? (
+                    <div className="text-center py-4">
+                      <div className="spinner-border spinner-border-sm text-secondary" />
+                      <div className="mt-2 text-muted small">
+                        Loading policies &amp; terms…
                       </div>
                     </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
+                  ) : (
+                    <>
+                      <section className="policy-section">
+                        <h6 className="policy-section-title">
+                          Cancellation Policy
+                        </h6>
+                        {policyData?.policies?.cancellationPolicy?.length ? (
+                          policyData.policies.cancellationPolicy.map(
+                            (p, idx) => (
+                              <div key={idx} className="policy-item">
+                                <div className="policy-text">
+                                  {p.policyText || "—"}
+                                </div>
+                              </div>
+                            ),
+                          )
+                        ) : (
+                          <div className="policy-empty">
+                            No cancellation policy specified.
+                          </div>
+                        )}
+                      </section>
 
-            {/* ── Form ────────────────────────────────────────── */}
-            <Form onSubmit={handleSubmit}>
-              {/* Government Employee Verification block */}
-              <Card className="mb-3 shadow-sm border-0">
-                <Card.Header className="bg-primary text-white py-3">
-                  <h5 className="mb-0 fw-bold d-flex align-items-center">
-                    <FaIdBadge className="me-2" /> Government Employee Verification
-                  </h5>
-                </Card.Header>
-                <Card.Body className="p-4">
-                  <div className="d-flex gap-4 mb-3">
-                    <Form.Check
-                      type="radio"
-                      id="vm-code"
-                      name="verificationMethod"
-                      label="Employee Code"
-                      checked={verificationMethod === METHOD_CODE}
-                      onChange={() => setVerificationMethod(METHOD_CODE)}
-                    />
-                    <Form.Check
-                      type="radio"
-                      id="vm-upload"
-                      name="verificationMethod"
-                      label="Government ID Upload"
-                      checked={verificationMethod === METHOD_UPLOAD}
-                      onChange={() => setVerificationMethod(METHOD_UPLOAD)}
-                    />
-                  </div>
+                      <section className="policy-section">
+                        <h6 className="policy-section-title">
+                          Amendment Policy
+                        </h6>
+                        {policyData?.policies?.amendmentPolicy?.length ? (
+                          policyData.policies.amendmentPolicy.map((p, idx) => (
+                            <div key={idx} className="policy-item">
+                              <div className="policy-text">
+                                {p.policyText || "—"}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="policy-empty">
+                            No amendment policy specified.
+                          </div>
+                        )}
+                      </section>
 
-                  {verificationMethod === METHOD_CODE && (
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Label className="fw-semibold">Government Employee Code *</Form.Label>
-                        <Form.Control
-                          placeholder="e.g. GOV-1001"
-                          value={govEmployeeCode}
-                          onChange={(e) => setGovEmployeeCode(e.target.value)}
-                        />
-                      </Col>
-                    </Row>
+                      <section className="policy-section">
+                        <h6 className="policy-section-title">Child Policy</h6>
+                        {policyData?.policies?.childPolicy?.length &&
+                        policyData.policies.childPolicy.some(
+                          (p) => p.policyText,
+                        ) ? (
+                          policyData.policies.childPolicy.map((p, idx) => (
+                            <div key={idx} className="policy-item">
+                              <div className="policy-text">
+                                {p.policyText || "—"}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="policy-empty">
+                            No child policy specified.
+                          </div>
+                        )}
+                      </section>
+
+                      <section className="policy-section policy-section-last">
+                        <h6 className="policy-section-title">
+                          Terms &amp; Conditions
+                        </h6>
+                        {termsAndConditions ? (
+                          <div
+                            className="terms-content"
+                            dangerouslySetInnerHTML={{
+                              __html: termsAndConditions,
+                            }}
+                          />
+                        ) : (
+                          <div className="policy-empty">
+                            No terms &amp; conditions configured for this
+                            hotel.
+                          </div>
+                        )}
+                      </section>
+                    </>
                   )}
+                </Modal.Body>
+                <Modal.Footer className="policy-modal-footer">
+                  <Form.Check
+                    type="checkbox"
+                    id="policy-accept"
+                    className="me-auto policy-accept-check"
+                    label="I have read and accept the policies and terms & conditions"
+                    checked={policyAccepted}
+                    onChange={(e) => setPolicyAccepted(e.target.checked)}
+                  />
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() => setShowPolicyModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={!policyAccepted || policiesLoading}
+                    onClick={() => {
+                      setShowPolicyModal(false);
+                      handleSubmit();
+                    }}
+                  >
+                    Proceed
+                  </Button>
+                </Modal.Footer>
+              </Modal>
 
-                  {verificationMethod === METHOD_UPLOAD && (
-                    <Row className="g-3 align-items-end">
-                      <Col md={6}>
-                        <Form.Label className="fw-semibold">Government ID Document *</Form.Label>
-                        <Form.Control type="file"
-                                      accept=".pdf,.png,.jpg,.jpeg"
-                                      onChange={onFileChange} />
-                        <Form.Text className="text-muted">PDF, PNG or JPG. Max ~5 MB.</Form.Text>
-                      </Col>
-                      <Col md={3}>
-                        <Button variant="outline-primary" onClick={handleUpload}
-                                disabled={!idFile || uploading}>
-                          {uploading ? <Spinner size="sm" /> : <><FaFileUpload className="me-1" /> Upload</>}
-                        </Button>
-                      </Col>
-                      <Col md={3}>
-                        {uploadedFilePath ? (
-                          <Badge bg="success" className="p-2">✓ Uploaded: {uploadedFileName}</Badge>
-                        ) : idFile ? (
-                          <span className="text-muted small">Click Upload to save</span>
-                        ) : null}
-                      </Col>
-                    </Row>
-                  )}
-
-                  <Row className="g-3 mt-2">
-                    <Col md={6}>
-                      <Form.Label>Employee Name (optional)</Form.Label>
-                      <Form.Control value={govEmployeeName}
-                                    onChange={(e) => setGovEmployeeName(e.target.value)} />
-                    </Col>
-                    <Col md={6}>
-                      <Form.Label>Department (optional)</Form.Label>
-                      <Form.Control value={govEmployeeDepartment}
-                                    onChange={(e) => setGovEmployeeDepartment(e.target.value)} />
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
-
-              {/* Per-room guest details */}
-              <Card className="mb-3 shadow-sm border-0">
-                <Card.Header className="bg-light text-center py-3">
-                  <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
-                </Card.Header>
-                <Card.Body className="p-0">
-                  <Accordion defaultActiveKey="0">
-                    {rooms.map((room, roomIndex) => (
-                      <Accordion.Item key={roomIndex} eventKey={String(roomIndex)} className="mb-3">
-                        <Accordion.Header>
-                          <h6 className="mb-0 fw-bold">
-                            Room {roomIndex + 1} — {selectedRate.roomCategory}
-                          </h6>
-                        </Accordion.Header>
-                        <Accordion.Body className="p-4">
-                          {room.guests.map((guest, guestIndex) => {
-                            const k = `room_${roomIndex}_guest_${guestIndex}`;
-                            return (
-                              <Row key={guestIndex} className="align-items-center g-2 mb-2">
-                                <Col md={2}>
-                                  <span className="fw-semibold text-muted">
-                                    {guest.isChild
-                                      ? `Child ${guestIndex - room.adults + 1}`
-                                      : `Adult ${guestIndex + 1}`} *
-                                  </span>
-                                </Col>
-                                <Col md={2}>
-                                  <Form.Select
-                                    isInvalid={!!validationErrors[`${k}_salutation`]}
-                                    value={guest.salutation}
-                                    onChange={(e) => handleGuestChange(roomIndex, guestIndex, "salutation", e.target.value)}>
-                                    <option value="">Title</option>
-                                    <option>Mr</option><option>Mrs</option>
-                                    <option>Ms</option><option>Dr</option>
-                                  </Form.Select>
-                                </Col>
-                                <Col md={3}>
-                                  <Form.Control
-                                    placeholder="First Name"
-                                    isInvalid={!!validationErrors[`${k}_firstName`]}
-                                    value={guest.firstName}
-                                    onChange={(e) => handleGuestChange(roomIndex, guestIndex, "firstName", e.target.value)} />
-                                </Col>
-                                <Col md={3}>
-                                  <Form.Control
-                                    placeholder="Last Name"
-                                    isInvalid={!!validationErrors[`${k}_lastName`]}
-                                    value={guest.lastName}
-                                    onChange={(e) => handleGuestChange(roomIndex, guestIndex, "lastName", e.target.value)} />
-                                </Col>
-                                <Col md={2}>
-                                  <Form.Select
-                                    isInvalid={!!validationErrors[`${k}_gender`]}
-                                    value={guest.gender}
-                                    onChange={(e) => handleGuestChange(roomIndex, guestIndex, "gender", e.target.value)}>
-                                    <option value="">Gender</option>
-                                    <option value="MALE">Male</option>
-                                    <option value="FEMALE">Female</option>
-                                  </Form.Select>
-                                </Col>
-                              </Row>
-                            );
-                          })}
-                        </Accordion.Body>
-                      </Accordion.Item>
-                    ))}
-                  </Accordion>
-                </Card.Body>
-              </Card>
-
-              {/* Primary Guest */}
-              <Card className="p-4 mb-3 shadow-sm border-0">
-                <h6 className="mb-3 fw-bold text-primary">Primary Guest Details</h6>
-                <Row className="g-2">
-                  <Col md={2}>
-                    <Form.Label>Salutation *</Form.Label>
-                    <Form.Select
-                      isInvalid={!!validationErrors.salutation}
-                      value={primaryGuest.salutation}
-                      onChange={(e) => handlePrimaryGuestChange("salutation", e.target.value)}>
-                      <option value="">Select</option>
-                      <option>Mr</option><option>Mrs</option><option>Ms</option><option>Dr</option>
-                    </Form.Select>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>First Name *</Form.Label>
-                    <Form.Control
-                      isInvalid={!!validationErrors.firstName}
-                      value={primaryGuest.firstName}
-                      onChange={(e) => handlePrimaryGuestChange("firstName", e.target.value)} />
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>Last Name *</Form.Label>
-                    <Form.Control
-                      isInvalid={!!validationErrors.lastName}
-                      value={primaryGuest.lastName}
-                      onChange={(e) => handlePrimaryGuestChange("lastName", e.target.value)} />
-                  </Col>
-                  <Col md={4}>
-                    <Form.Label>Email *</Form.Label>
-                    <Form.Control type="email"
-                      isInvalid={!!validationErrors.email}
-                      value={primaryGuest.email}
-                      onChange={(e) => handlePrimaryGuestChange("email", e.target.value)} />
-                    {validationErrors.email && <small className="text-danger">{validationErrors.email}</small>}
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>Phone *</Form.Label>
-                    <Form.Control
-                      isInvalid={!!validationErrors.phone}
-                      value={primaryGuest.phone}
-                      onChange={(e) => handlePrimaryGuestChange("phone", e.target.value)} />
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>Passport No</Form.Label>
-                    <Form.Control value={primaryGuest.passportNo}
-                      onChange={(e) => handlePrimaryGuestChange("passportNo", e.target.value)} />
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>Agent LPO *</Form.Label>
-                    <Form.Control
-                      isInvalid={!!validationErrors.agentLpo}
-                      value={primaryGuest.agentLpo}
-                      onChange={(e) => handlePrimaryGuestChange("agentLpo", e.target.value)} />
-                  </Col>
-                </Row>
-              </Card>
-
-              {/* Special Requests + Remarks */}
-              <Card className="p-4 mb-3 shadow-sm border-0">
-                <h6 className="mb-3 fw-bold text-primary">Special Requests & Remarks</h6>
-                <div className="mb-3 d-flex flex-wrap gap-2">
-                  {SPECIAL_REQUEST_OPTIONS.map((req) => (
-                    <Form.Check key={req} type="checkbox" id={`sr-${req}`}
-                                label={req}
-                                checked={specialRequests.includes(req)}
-                                onChange={() => toggleSpecialRequest(req)} />
-                  ))}
-                </div>
-                <Form.Label>Remarks</Form.Label>
-                <Form.Control as="textarea" rows={2} value={remarks}
-                              onChange={(e) => setRemarks(e.target.value)} />
-              </Card>
-
-              {/* Booking Done By */}
-              <Card className="p-4 mb-4 shadow-sm border-0 bg-light">
-                <h6 className="mb-3 fw-bold text-primary d-flex align-items-center">
-                  <FaUserTie className="me-2" /> Booking Done By
-                </h6>
-                <Row>
-                  <Col md={4}>
-                    <Form.Label>Employee</Form.Label>
-                    <Form.Select
-                      value={bookingDoneByEmployeeId}
-                      onChange={(e) => setBookingDoneByEmployeeId(e.target.value)}>
-                      <option value="">Select Employee</option>
-                      {employees.map((emp) => (
-                        <option key={emp.employeeId} value={emp.employeeId}>
-                          {emp.firstName} {emp.lastName}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Col>
-                </Row>
-              </Card>
-
-              {/* Action bar */}
-              <div className="d-flex justify-content-end gap-2 mt-4">
-                <div className="d-flex align-items-center me-2 fw-bold text-danger">
-                  New Total: {formatPrice(totalAfter)}
-                </div>
-                <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-                <Button
-                  variant="primary"
-                  type="submit"
-                  disabled={!isVerificationReady}
-                  title={!isVerificationReady ? "Complete verification first" : ""}
+              {/* ─────────── Order-summary confirm modal ─────────── */}
+              <Modal
+                show={showConfirmModal}
+                onHide={() => !isSubmitting && setShowConfirmModal(false)}
+                centered
+                backdrop="static"
+              >
+                <Modal.Header
+                  closeButton={!isSubmitting}
+                  className="bg-primary text-white py-2"
+                  style={{ borderBottom: "none" }}
                 >
-                  Confirm Booking
-                </Button>
-              </div>
-
-              {/* ── Confirmation Modal (shown on Confirm Booking click) ─ */}
-              <Modal show={showConfirmModal} onHide={() => setShowConfirmModal(false)}
-                     centered backdrop="static" size="md">
-                <Modal.Header closeButton className="bg-primary text-white py-2"
-                              style={{ borderBottom: "none" }}>
                   <Modal.Title className="fw-semibold d-flex align-items-center">
                     <FaHotel className="me-2" /> Confirm Your Booking
                   </Modal.Title>
                 </Modal.Header>
-                <Modal.Body className="px-4 py-3 bg-light">
+                <Modal.Body className="px-3 py-2 bg-light">
                   {pendingPayload && (
-                    <div className="border rounded-3 bg-white shadow-sm p-3">
-                      <h5 className="fw-bold text-primary mb-2">{pendingPayload.hotelName}</h5>
-                      <p className="text-muted mb-0">{pendingPayload.address}</p>
-                      <hr />
+                    <div className="border rounded-3 bg-white shadow-sm p-2">
+                      <div className="mb-2">
+                        <p className="mb-0 d-flex align-items-center flex-wrap">
+                          <span className="fw-bold text-primary fs-5">
+                            {pendingPayload.hotelName}
+                          </span>
+                          {pendingPayload.address && (
+                            <span className="text-muted small ms-1">
+                              , {pendingPayload.address}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <hr className="my-2" />
+
                       <Row className="gy-2">
                         <Col xs={6}>
-                          <strong>Check-In:</strong><br />
-                          <span>{pendingPayload.checkInDate}</span>
+                          <p className="mb-1">
+                            <strong>Check-In:</strong>
+                            <br />
+                            <span className="text-dark">
+                              {formatDateTime(pendingPayload.checkInDate)}
+                            </span>
+                          </p>
                         </Col>
                         <Col xs={6}>
-                          <strong>Check-Out:</strong><br />
-                          <span>{pendingPayload.checkOutDate}</span>
+                          <p className="mb-1">
+                            <strong>Check-Out:</strong>
+                            <br />
+                            <span className="text-dark">
+                              {formatDateTime(pendingPayload.checkOutDate)}
+                            </span>
+                          </p>
                         </Col>
                         <Col xs={6}>
-                          <strong>Rooms:</strong> {pendingPayload.rooms.length}
+                          <p className="mb-1">
+                            <strong>Rooms:</strong>{" "}
+                            {pendingPayload.rooms.length}
+                          </p>
                         </Col>
                         <Col xs={6}>
-                          <strong>Nights:</strong> {pendingPayload.nights}
+                          <p className="mb-1">
+                            <strong>Nights:</strong> {pendingPayload.nights}
+                          </p>
                         </Col>
                         <Col xs={12}>
-                          <strong>Verification:</strong>{" "}
-                          {pendingPayload.verificationMethod === METHOD_UPLOAD
-                            ? `Government ID Upload (${pendingPayload.govtIdFileName || "uploaded"})`
-                            : `Employee Code (${pendingPayload.govEmployeeCode || "-"})`}
+                          <p className="mb-1">
+                            <strong>Lead Passenger:</strong>{" "}
+                            {[
+                              pendingPayload.primaryGuest.salutation,
+                              pendingPayload.primaryGuest.firstName,
+                              pendingPayload.primaryGuest.lastName,
+                            ]
+                              .filter(Boolean)
+                              .join(" ") || "-"}
+                          </p>
+                          <p className="mb-1">
+                            <strong>Verification:</strong>{" "}
+                            {pendingPayload.verificationMethod ===
+                            METHOD_UPLOAD
+                              ? `Government ID Upload (${
+                                  pendingPayload.govtIdFileName || "uploaded"
+                                })`
+                              : `Employee Code (${
+                                  pendingPayload.govEmployeeCode || "-"
+                                })`}
+                          </p>
                         </Col>
                       </Row>
 
-                      {/* Pricing block */}
-                      <div className="mt-3 p-3 bg-white border rounded">
-                        <h6 className="fw-bold mb-2">Rate Split</h6>
-                        {pendingPayload.totalRateBeforeDiscount > pendingPayload.rooms.reduce((s, r) => s + r.rate, 0) && (
+                      <div className="mt-2 p-2 bg-white border rounded">
+                        <h6 className="fw-bold mb-1">Rate Split</h6>
+                        {pendingPayload.totalRateBeforeDiscount >
+                          pendingPayload.rooms.reduce(
+                            (s, r) => s + r.rate,
+                            0,
+                          ) && (
                           <div className="d-flex justify-content-between">
-                            <span>Standard total</span>
+                            <span>Standard Total</span>
                             <span className="text-decoration-line-through text-muted">
-                              {formatPrice(pendingPayload.totalRateBeforeDiscount)}
+                              {formatPrice(
+                                pendingPayload.totalRateBeforeDiscount,
+                              )}
                             </span>
                           </div>
                         )}
-                        {(pendingPayload.discountPercent || pendingPayload.discountAmount) && (
+                        {(pendingPayload.discountPercent ||
+                          pendingPayload.discountAmount) && (
                           <div className="d-flex justify-content-between text-success">
                             <span>Government Discount</span>
                             <span>
-                              {pendingPayload.discountPercent ? `${pendingPayload.discountPercent}%` : ""}
-                              {pendingPayload.discountAmount ? ` + ${pendingPayload.discountAmount}` : ""}
+                              {pendingPayload.discountPercent
+                                ? `${pendingPayload.discountPercent}%`
+                                : ""}
+                              {pendingPayload.discountAmount
+                                ? ` + ${pendingPayload.discountAmount}`
+                                : ""}
                             </span>
                           </div>
                         )}
-                        <hr className="my-2" />
-                        <div className="d-flex justify-content-between fw-bold text-success">
+                        <hr className="my-1" />
+                        <div className="d-flex justify-content-between fw-bold">
                           <span>Total Payable</span>
                           <span>
-                            {formatPrice(pendingPayload.rooms.reduce((s, r) => s + r.rate, 0))}
+                            {formatPrice(
+                              pendingPayload.rooms.reduce(
+                                (s, r) => s + r.rate,
+                                0,
+                              ),
+                            )}
                           </span>
                         </div>
                       </div>
 
-                      <div className="mt-3 text-center">
+                      <div className="mt-2 p-2 bg-white border rounded d-flex align-items-center">
+                        <span
+                          className="me-2 d-inline-flex align-items-center justify-content-center"
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: "50%",
+                            background: "#16a34a",
+                            color: "#fff",
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            lineHeight: 1,
+                          }}
+                        >
+                          ✓
+                        </span>
+                        <span className="small text-dark">
+                          Hotel policies and terms &amp; conditions accepted
+                        </span>
+                      </div>
+
+                      <div className="mt-2 text-center">
                         <p className="text-muted small mb-0">
-                          Please review the booking details carefully before confirming.
+                          Please review the booking details carefully before
+                          confirming.
                         </p>
                       </div>
                     </div>
                   )}
                 </Modal.Body>
                 <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
-                  <Button variant="outline-secondary"
-                          onClick={() => setShowConfirmModal(false)}
-                          disabled={isSubmitting}>
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowConfirmModal(false)}
+                    disabled={isSubmitting}
+                  >
                     Cancel
                   </Button>
-                  <Button variant="primary" onClick={confirmBooking}
-                          disabled={isSubmitting} className="px-4 fw-semibold">
-                    {isSubmitting ? <><Spinner size="sm" className="me-2" /> Processing…</> : "Confirm"}
+                  <Button
+                    variant="primary"
+                    onClick={confirmBooking}
+                    disabled={isSubmitting}
+                    className="px-4 fw-semibold"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Spinner size="sm" className="me-2" /> Processing
+                        booking…
+                      </>
+                    ) : (
+                      "Confirm"
+                    )}
                   </Button>
                 </Modal.Footer>
               </Modal>

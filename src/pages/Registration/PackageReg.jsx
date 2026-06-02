@@ -1211,7 +1211,9 @@ const PackageReg = () => {
                           <FaEye
                             className="text-info view"
                             style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => fetchAndShowDetail(item, true)}
+                            onClick={() =>
+                              navigate(`/registration/package/view/${item.packageId}`)
+                            }
                             title="View"
                           />
                           <FaCopy
