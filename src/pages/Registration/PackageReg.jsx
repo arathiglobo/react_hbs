@@ -496,7 +496,11 @@ const PackageReg = () => {
     packageItinearyDTOList.forEach((itinerary, index) => {
       formDataPayload.append(`packageItinearyDTOList[${index}].day`, itinerary.day);
       formDataPayload.append(`packageItinearyDTOList[${index}].heading`, itinerary.heading || "");
-      formDataPayload.append(`packageItinearyDTOList[${index}].placeId`, itinerary.placeId);
+      // Only append placeId when a real value is set — sending an empty string
+      // makes Spring try to convert "" to Long and fail with a 500.
+      if (itinerary.placeId !== null && itinerary.placeId !== undefined && itinerary.placeId !== "") {
+        formDataPayload.append(`packageItinearyDTOList[${index}].placeId`, itinerary.placeId);
+      }
       formDataPayload.append(`packageItinearyDTOList[${index}].dayActivities`, itinerary.dayActivities || "");
       // Only append the binary if the local state holds an actual File object.
       // String values represent an already-uploaded image path that the backend
@@ -505,6 +509,11 @@ const PackageReg = () => {
       // the same `packageImageFile` pattern used for the main package image).
       if (itinerary.packageItinearyImage && typeof itinerary.packageItinearyImage !== "string") {
         formDataPayload.append(`packageItinearyDTOList[${index}].packageItinearyImageFile`, itinerary.packageItinearyImage);
+      } else if (typeof itinerary.packageItinearyImage === "string" && itinerary.packageItinearyImage) {
+        // No new file picked, but an existing image path is known — echo it back
+        // as `packageItinearyImagePath` so the backend's editTravelPackage can
+        // preserve it (it falls back to this when no MultipartFile is uploaded).
+        formDataPayload.append(`packageItinearyDTOList[${index}].packageItinearyImagePath`, itinerary.packageItinearyImage);
       }
     });
 
@@ -516,7 +525,13 @@ const PackageReg = () => {
 
     formDataPayload.append("liveStatus", formData.status === "true" ? 1 : 0);
 
-    if (formData.packageImage) {
+    // Only send the main package image as a binary when the user picked a new
+    // file (File object). On edit, formData.packageImage may be the string
+    // returned by getTravelPackageById (packageImagePath) — sending that as
+    // `packageImageFile` would fail Spring's String→MultipartFile conversion.
+    // When no new file is picked, the backend preserves the existing
+    // packageImage column, so nothing else needs to be sent.
+    if (formData.packageImage && typeof formData.packageImage !== "string") {
       formDataPayload.append("packageImageFile", formData.packageImage);
     }
 

@@ -2321,102 +2321,108 @@ const [activeAccordion, setActiveAccordion] = useState({});
               {wizardSteps[currentStepIdx]?.type === "select" && (
                 <Card className="border-0 shadow-sm rounded-4">
                   <Card.Body className="p-4">
-                    <h5 className="fw-bold mb-1">Choose services for this booking</h5>
-                    <div className="text-muted mb-4" style={{ fontSize: "0.95rem" }}>
+                    <h5 className="fw-bold mb-1">Choose services for this Package</h5>
+                    {/* <div className="text-muted mb-4" style={{ fontSize: "0.95rem" }}>
                       Pick the services you want to include. You can come
                       back to this step anytime to enable more — already
                       entered details will not be lost.
-                    </div>
-                    <Row className="g-3">
+                    </div> */}
+                    {/* Vertical list — one service per row, with a
+                        checkbox on the right. Order: addon catalogue
+                        first (visa, meet & greet, ...), then Cab /
+                        Transfer and Tours, then Hotel last (mandatory,
+                        always ticked & disabled). Descriptions only
+                        render when the catalogue actually provides one
+                        — addon rows without a `question` show name only. */}
+                    <div className="d-flex flex-column">
                       {(() => {
                         const rows = [
-                          {
-                            key: "hotel",
-                            label: "Hotel",
-                            description: "Hotel accommodation for the trip.",
-                            Icon: FaHotel,
-                            checked: true,
-                            mandatory: true,
-                          },
                           ...ADDON_SERVICES_CATALOG.map((svc) => ({
                             key: `addon:${svc.key}`,
                             addonKey: svc.key,
                             label: svc.label,
-                            description: svc.question || `Add ${svc.label} to this booking.`,
-                            Icon: FaConciergeBell,
+                            // description: svc.question || "",
                             checked: !!addonFlags[svc.key],
                           })),
                           {
                             key: "transfer",
                             label: "Cab / Transfer",
-                            description: "Airport, inter-city or hourly transfers.",
-                            Icon: FaCar,
+                            // description: "Airport, inter-city or hourly transfers.",
                             checked: !!v2Services.transfer,
                           },
                           {
                             key: "tour",
                             label: "Tours & Activities",
-                            description: "Sightseeing, day trips, attractions.",
-                            Icon: FaTicketAlt,
+                            // description: "Sightseeing, day trips, attractions.",
                             checked: !!v2Services.tour,
                           },
+                          {
+                            key: "hotel",
+                            label: "Hotel",
+                            // description: "Hotel accommodation for the trip.",
+                            checked: true,
+                            mandatory: true,
+                          },
                         ];
-                        return rows.map((row) => {
-                          const RowIcon = row.Icon;
+                        const applyChoice = (row, wantChecked) => {
+                          if (row.mandatory) return;
+                          if (row.addonKey) {
+                            toggleAddonService(row.addonKey, wantChecked);
+                          } else if (row.key === "transfer" || row.key === "tour") {
+                            toggleServiceGate(row.key, wantChecked);
+                          }
+                        };
+                        return rows.map((row, idx) => {
+                          const isYes = !!row.checked;
+                          const isNo = !row.checked;
+                          const isLast = idx === rows.length - 1;
+                          // Native radios grouped by `name` so picking Yes
+                          // auto-clears No and vice-versa. Each row uses
+                          // its own group name so rows don't interfere.
+                          const groupName = `svc-select-${row.key}`;
                           return (
-                            <Col xs={12} md={6} key={row.key}>
-                              <div
-                                className="d-flex align-items-start border rounded-3 p-3 h-100"
-                                style={{
-                                  background: row.checked ? "#f8f7ff" : "#ffffff",
-                                  borderColor: row.checked ? "#c7d2fe" : "#e5e7eb",
-                                  transition: "background 0.15s ease, border-color 0.15s ease",
-                                }}
-                              >
-                                <span
-                                  className="me-3 d-inline-flex align-items-center justify-content-center"
-                                  style={{
-                                    width: 40,
-                                    height: 40,
-                                    borderRadius: "50%",
-                                    background: row.checked ? "#6366f1" : "#e5e7eb",
-                                    color: row.checked ? "#fff" : "#6b7280",
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  <RowIcon />
-                                </span>
-                                <div className="flex-grow-1 me-2">
-                                  <div className="d-flex align-items-center gap-2">
-                                    <span className="fw-semibold">{row.label}</span>
-                                    {row.mandatory && (
-                                      <Badge bg="warning" text="dark" className="text-uppercase" style={{ fontSize: "0.65rem" }}>
-                                        Mandatory
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="small text-muted mt-1">{row.description}</div>
+                            <div
+                              key={row.key}
+                              className={`d-flex align-items-center justify-content-between py-3 ${isLast ? "" : "border-bottom"}`}
+                            >
+                              <div className="flex-grow-1 me-3">
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="fw-semibold">{row.label}</span>
+                                  {row.mandatory && (
+                                    <Badge bg="warning" text="dark" className="text-uppercase" style={{ fontSize: "0.65rem" }}>
+                                      Mandatory
+                                    </Badge>
+                                  )}
                                 </div>
+                                {row.description && (
+                                  <div className="small text-muted mt-1">{row.description}</div>
+                                )}
+                              </div>
+                              <div className="d-flex flex-shrink-0 gap-3" role="radiogroup" aria-label={`Include ${row.label}?`}>
                                 <Form.Check
-                                  type="switch"
-                                  id={`svc-select-${row.key}`}
-                                  checked={row.checked}
+                                  type="radio"
+                                  id={`${groupName}-yes`}
+                                  name={groupName}
+                                  label="Yes"
+                                  checked={isYes}
                                   disabled={row.mandatory}
-                                  onChange={(e) => {
-                                    if (row.mandatory) return;
-                                    if (row.addonKey) {
-                                      toggleAddonService(row.addonKey, e.target.checked);
-                                    } else if (row.key === "transfer" || row.key === "tour") {
-                                      toggleServiceGate(row.key, e.target.checked);
-                                    }
-                                  }}
+                                  onChange={() => applyChoice(row, true)}
+                                />
+                                <Form.Check
+                                  type="radio"
+                                  id={`${groupName}-no`}
+                                  name={groupName}
+                                  label="No"
+                                  checked={isNo}
+                                  disabled={row.mandatory}
+                                  onChange={() => applyChoice(row, false)}
                                 />
                               </div>
-                            </Col>
+                            </div>
                           );
                         });
                       })()}
-                    </Row>
+                    </div>
                     <div className="text-muted small mt-3 fst-italic">
                       Hotel is mandatory and is always included in the package.
                     </div>

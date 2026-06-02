@@ -3541,148 +3541,380 @@ const MakePkgBookingPageV2 = () => {
                           Edit
                         </button>
                       </div>
-                      <div style={{ maxHeight: "50vh", overflowY: "auto", marginLeft: -4, marginRight: -4 }}>
+                      {/* Slim, modern scrollbar — replaces the chunky
+                          default. Scoped to this scroll container via
+                          the `pkg-summary-scroll` class so it doesn't
+                          touch the rest of the page. */}
+                      <style>{`
+                        .pkg-summary-scroll {
+                          scrollbar-width: thin;
+                          scrollbar-color: #cbd5e1 transparent;
+                        }
+                        .pkg-summary-scroll::-webkit-scrollbar {
+                          width: 6px;
+                        }
+                        .pkg-summary-scroll::-webkit-scrollbar-track {
+                          background: transparent;
+                        }
+                        .pkg-summary-scroll::-webkit-scrollbar-thumb {
+                          background-color: #cbd5e1;
+                          border-radius: 999px;
+                        }
+                        .pkg-summary-scroll::-webkit-scrollbar-thumb:hover {
+                          background-color: #94a3b8;
+                        }
+                      `}</style>
+                      <div className="pkg-summary-scroll" style={{ maxHeight: "60vh", overflowY: "auto", marginLeft: -4, marginRight: -4, paddingRight: 6 }}>
                         {(() => {
-                          const hotels    = cartData.filter((it) => it.hotel);
-                          const transfers = cartData.filter((it) => it.cab);
+                          // ── Data sources already populated by earlier
+                          // steps — every value below is read-only. No
+                          // editing UI lives in this panel; it only
+                          // reflects what was already captured.
+                          const hotels = cartData.filter((it) => it.hotel);
                           const activities = cartData.filter((it) => it.activity);
-                          const addons = (() => {
-                            try {
-                              const all = readAddOnServices();
-                              return Object.entries(all || {})
-                                .filter(([, v]) => v && v.enabled)
-                                .map(([k]) => {
-                                  const meta = ADDON_SERVICES_CATALOG.find((s) => s.key === k);
-                                  return meta ? meta.label : k;
-                                });
-                            } catch {
-                              return [];
-                            }
-                          })();
-                          const SummaryRow = ({ Icon, iconBg, iconColor, title, lines, price, muted }) => (
-                            <div
-                              className="d-flex align-items-start"
-                              style={{ gap: 12, padding: "14px 4px" }}
-                            >
-                              <span
-                                style={{
-                                  width: 34, height: 34, borderRadius: 8,
-                                  background: iconBg,
-                                  color: iconColor,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  flexShrink: 0,
-                                  fontSize: "0.9rem",
-                                }}
-                              >
-                                <Icon />
-                              </span>
-                              <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                                <div
-                                  className="fw-bold"
-                                  style={{ fontSize: "0.92rem", color: "#111827", marginBottom: 2 }}
-                                >
-                                  {title}
-                                </div>
-                                {lines.length > 0 ? (
-                                  lines.map((line, i) => (
-                                    <div
-                                      key={i}
-                                      style={{
-                                        fontSize: "0.78rem",
-                                        color: "#6b7280",
-                                        lineHeight: 1.45,
-                                        whiteSpace: "nowrap",
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
-                                      }}
-                                      title={line}
-                                    >
-                                      {line}
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
-                                    Not Selected
-                                  </div>
-                                )}
-                              </div>
-                              <div
-                                className="fw-bold text-end"
-                                style={{
-                                  fontSize: "0.92rem",
-                                  color: muted ? "#9ca3af" : "#111827",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {price}
-                              </div>
-                            </div>
+                          const allCabs = cartData.filter((it) => it.cab);
+                          // travelType: "1" = Arrival & Departure, "2" =
+                          // Arrival, "3" = Departure. A round-trip cab
+                          // (type 1) counts as BOTH an arrival and a
+                          // departure entry in the summary, with the
+                          // price split evenly so the package total
+                          // doesn't double-count.
+                          const arrivalCabs = allCabs.filter((it) => {
+                            const t = String(it.cab?.travelType || "");
+                            return t === "1" || t === "2";
+                          });
+                          const departureCabs = allCabs.filter((it) => {
+                            const t = String(it.cab?.travelType || "");
+                            return t === "1" || t === "3";
+                          });
+                          const cabSliceRate = (cabItem) => {
+                            const rate = Number(cabItem.cab?.totalRate || 0);
+                            const t = String(cabItem.cab?.travelType || "");
+                            // Round-trip: split rate across the two rows
+                            return t === "1" ? rate / 2 : rate;
+                          };
+
+                          let svcMap = {};
+                          try {
+                            svcMap = JSON.parse(
+                              sessionStorage.getItem("mypkg_addon_services") || "{}"
+                            );
+                          } catch {
+                            svcMap = {};
+                          }
+                          const visaSvc = svcMap?.visa;
+                          const mgSvc = svcMap?.meetAndGreet;
+                          const visaSelected = !!(visaSvc && visaSvc.enabled) || !!visaRequired;
+                          const mgSelected = !!(mgSvc && mgSvc.enabled);
+
+                          // Visa price is sourced from the booking-page
+                          // visaDetails state — adult/child/infant heads
+                          // × per-head rate. Same formula the save
+                          // payload uses, so the row total matches.
+                          const visaPrice =
+                            (parseInt(visaDetails.visaAdult || "0") || 0) * (parseFloat(visaDetails.visaAdultRate || "0") || 0) +
+                            (parseInt(visaDetails.visaChild || "0") || 0) * (parseFloat(visaDetails.visaChildRate || "0") || 0) +
+                            (parseInt(visaDetails.visaInfant || "0") || 0) * (parseFloat(visaDetails.visaInfantRate || "0") || 0);
+                          // Catalogue doesn't carry a price column for
+                          // M&G or the other miscellaneous add-ons, so
+                          // those rows show "Yes" + captured details
+                          // without a per-row price contribution.
+                          const mgPrice = 0;
+
+                          // Other add-ons: everything in the catalogue
+                          // EXCEPT visa / meetAndGreet (which have their
+                          // own rows above) that the operator turned on.
+                          const otherAddons = ADDON_SERVICES_CATALOG.filter(
+                            (svc) => svc.key !== "visa" && svc.key !== "meetAndGreet" && svcMap?.[svc.key]?.enabled
                           );
+
+                          const hotelsPrice = hotels.reduce((s, it) => s + Number(it.hotel?.totalRate || 0), 0);
+                          const activitiesPrice = activities.reduce((s, it) => s + Number(it.activity?.totalRate || 0), 0);
+                          const arrivalPrice = arrivalCabs.reduce((s, it) => s + cabSliceRate(it), 0);
+                          const departurePrice = departureCabs.reduce((s, it) => s + cabSliceRate(it), 0);
+                          const otherAddonsPrice = 0;
+
+                          // ── Row shell — one unified look used by every
+                          // entry below: title + No (red) or Yes (green)
+                          // + price on the right, optional details list
+                          // underneath.
+                          const SectionRow = ({ Icon, iconBg, iconColor, title, selected, price, details, lastInGroup, hideYesNo }) => {
+                            // hideYesNo: skip the Yes/No fallback on the
+                            // right side — used by the Add-on Services
+                            // row, which the operator only wants to see
+                            // as the list of selected services (no
+                            // Yes/No badge). Right column then shows the
+                            // price string when supplied, or nothing.
+                            const rightContent = hideYesNo
+                              ? (price || "")
+                              : (selected ? (price || "Yes") : "No");
+                            const detailsVisible = hideYesNo
+                              ? !!(details && details.length > 0)
+                              : (selected && details && details.length > 0);
+                            return (
+                              <div
+                                className={lastInGroup ? "" : "border-bottom"}
+                                style={{ padding: "12px 4px" }}
+                              >
+                                <div className="d-flex align-items-start" style={{ gap: 12 }}>
+                                  <span
+                                    style={{
+                                      width: 30, height: 30, borderRadius: 8,
+                                      background: iconBg,
+                                      color: iconColor,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      flexShrink: 0,
+                                      fontSize: "0.82rem",
+                                    }}
+                                  >
+                                    <Icon />
+                                  </span>
+                                  <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                                    <div className="d-flex justify-content-between align-items-baseline">
+                                      <div className="fw-bold" style={{ fontSize: "0.9rem", color: "#111827" }}>
+                                        {title}
+                                      </div>
+                                      {rightContent !== "" && (
+                                        <div
+                                          className="fw-bold text-end"
+                                          style={{
+                                            fontSize: "0.88rem",
+                                            color: (hideYesNo ? true : selected) ? "#111827" : "#9ca3af",
+                                            whiteSpace: "nowrap",
+                                            marginLeft: 8,
+                                          }}
+                                        >
+                                          {rightContent}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {detailsVisible && (
+                                      <div className="mt-1" style={{ fontSize: "0.76rem", color: "#6b7280", lineHeight: 1.5 }}>
+                                        {details.map((d, i) => (
+                                          <div key={i} style={{ whiteSpace: "normal" }}>{d}</div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          };
+
+                          // Visa details — surface only the fields the
+                          // operator actually filled in, so we don't show
+                          // empty rows for blank inputs.
+                          const visaDetailLines = [];
+                          if (visaSelected) {
+                            if (visaSvc?.visaType) visaDetailLines.push(`Type: ${visaSvc.visaType}`);
+                            if (visaSvc?.visaStatus) visaDetailLines.push(`Status: ${visaSvc.visaStatus}`);
+                            if (visaSvc?.visaNumber) visaDetailLines.push(`Visa #: ${visaSvc.visaNumber}`);
+                            if (visaSvc?.visaExpiryDate) visaDetailLines.push(`Expiry: ${formatDate(visaSvc.visaExpiryDate)}`);
+                            const heads = [
+                              (parseInt(visaDetails.visaAdult || "0") || 0) ? `${visaDetails.visaAdult} Adult` : "",
+                              (parseInt(visaDetails.visaChild || "0") || 0) ? `${visaDetails.visaChild} Child` : "",
+                              (parseInt(visaDetails.visaInfant || "0") || 0) ? `${visaDetails.visaInfant} Infant` : "",
+                            ].filter(Boolean);
+                            if (heads.length > 0) visaDetailLines.push(heads.join(" • "));
+                          }
+
+                          const mgDetailLines = [];
+                          if (mgSelected) {
+                            if (mgSvc?.airportName) mgDetailLines.push(`Airport: ${mgSvc.airportName}`);
+                            if (mgSvc?.flightNumber) mgDetailLines.push(`Flight: ${mgSvc.flightNumber}`);
+                            if (mgSvc?.arrivalTime) mgDetailLines.push(`Arrival: ${mgSvc.arrivalTime}`);
+                            if (mgSvc?.passengerCount) mgDetailLines.push(`Pax: ${mgSvc.passengerCount}`);
+                            if (mgSvc?.vipAssistance) mgDetailLines.push(`VIP: ${mgSvc.vipAssistance}`);
+                          }
+
+                          // Arrival / Departure transfer details — pull
+                          // flight # and time from the Meet & Greet
+                          // addon if the operator captured them there
+                          // (the cab record itself doesn't carry a flight
+                          // number field, but the M&G addon does and
+                          // semantically describes the same arrival).
+                          const buildCabDetails = (cabItem, kind) => {
+                            const cab = cabItem.cab || {};
+                            const lines = [];
+                            const date = kind === "arrival" ? cab.pickupDate : cab.dropoffDate;
+                            if (date) lines.push(`Date: ${formatDate(date)}`);
+                            const vName = cab.vehicleName || cab.cabName;
+                            if (vName) lines.push(`Vehicle: ${vName}`);
+                            if (kind === "arrival" && mgSvc?.flightNumber) lines.push(`Flight: ${mgSvc.flightNumber}`);
+                            if (kind === "arrival" && mgSvc?.arrivalTime) lines.push(`ETA: ${mgSvc.arrivalTime}`);
+                            return lines;
+                          };
+                          const arrivalDetailLines = arrivalCabs.flatMap((it, i) => {
+                            const head = arrivalCabs.length > 1 ? [`Transfer ${i + 1}`] : [];
+                            return [...head, ...buildCabDetails(it, "arrival")];
+                          });
+                          const departureDetailLines = departureCabs.flatMap((it, i) => {
+                            const head = departureCabs.length > 1 ? [`Transfer ${i + 1}`] : [];
+                            return [...head, ...buildCabDetails(it, "departure")];
+                          });
+
+                          const hotelDetailLines = hotels.flatMap((it) => {
+                            const h = it.hotel || {};
+                            const checkIn = h.checkIn || h.checkInDate || "";
+                            const checkOut = h.checkOut || h.checkOutDate || "";
+                            const nights = calculateNights(checkIn, checkOut);
+                            const lines = [];
+                            if (h.hotelName) lines.push(h.hotelName);
+                            const nightLabel = String(nights).padStart(2, "0");
+                            lines.push(`${nightLabel} ${nights === 1 ? "night" : "nights"}`);
+                            if (checkIn) lines.push(`Check-in: ${formatDate(checkIn)}`);
+                            if (checkOut) lines.push(`Check-out: ${formatDate(checkOut)}`);
+                            return lines;
+                          });
+
+                          // Tours: one line per activity — name — date.
+                          // Headline still summarises the count + total.
+                          const tourDetailLines = activities.map((it) => {
+                            const a = it.activity || {};
+                            const name = a.activityName || a.activityname || "Activity";
+                            const date = a.activityDate ? formatDate(a.activityDate) : "";
+                            return date ? `${name} — ${date}` : name;
+                          });
+
+                          const otherAddonDetailLines = otherAddons.map((svc) => svc.label);
+
+                          const fmtAed = (n) =>
+                            `AED ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
                           return (
                             <>
-                              <SummaryRow
-                                Icon={FaHotel}
+                              <SectionRow
+                                Icon={FaPlus}
                                 iconBg="#eef2ff"
                                 iconColor="#6366f1"
-                                title="Accommodation"
-                                lines={hotels.map((it) => it.hotel?.hotelName || it.hotel?.name || "Hotel")}
-                                price={
-                                  hotels.length > 0
-                                    ? `AED ${hotels.reduce((s, it) => s + Number(it.hotel?.totalRate || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                                    : "—"
-                                }
-                                muted={hotels.length === 0}
+                                title="Visa"
+                                selected={visaSelected}
+                                price={visaPrice > 0 ? fmtAed(visaPrice) : "Yes"}
+                                details={visaDetailLines}
                               />
-                              <SummaryRow
+                              <SectionRow
+                                Icon={FaUsers}
+                                iconBg="#fef3c7"
+                                iconColor="#d97706"
+                                title="Meet & Greet"
+                                selected={mgSelected}
+                                price={mgPrice > 0 ? fmtAed(mgPrice) : "Yes"}
+                                details={mgDetailLines}
+                              />
+                              <SectionRow
                                 Icon={FaCar}
                                 iconBg="#ecfdf5"
                                 iconColor="#059669"
-                                title="Transfers"
-                                lines={transfers.map((it) => it.cab?.cabName || it.cab?.cabname || "Transfer")}
-                                price={
-                                  transfers.length > 0
-                                    ? `AED ${transfers.reduce((s, it) => s + Number(it.cab?.totalRate || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                                    : "—"
-                                }
-                                muted={transfers.length === 0}
+                                title="Arrival Transfer"
+                                selected={arrivalCabs.length > 0}
+                                price={arrivalCabs.length > 0 ? fmtAed(arrivalPrice) : null}
+                                details={arrivalDetailLines}
                               />
-                              <SummaryRow
+                              <SectionRow
+                                Icon={FaHotel}
+                                iconBg="#eef2ff"
+                                iconColor="#6366f1"
+                                title="Hotel"
+                                selected={hotels.length > 0}
+                                price={hotels.length > 0 ? fmtAed(hotelsPrice) : null}
+                                details={hotelDetailLines}
+                              />
+                              <SectionRow
                                 Icon={FaTicketAlt}
                                 iconBg="#fef3c7"
                                 iconColor="#d97706"
                                 title="Tours & Activities"
-                                lines={activities.map((it) => it.activity?.activityName || it.activity?.activityname || "Activity")}
-                                price={
-                                  activities.length > 0
-                                    ? `AED ${activities.reduce((s, it) => s + Number(it.activity?.totalRate || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                                    : "—"
-                                }
-                                muted={activities.length === 0}
+                                selected={activities.length > 0}
+                                price={activities.length > 0 ? fmtAed(activitiesPrice) : null}
+                                details={tourDetailLines}
                               />
-                              <SummaryRow
+                              <SectionRow
+                                Icon={FaCar}
+                                iconBg="#ecfdf5"
+                                iconColor="#059669"
+                                title="Departure Transfer"
+                                selected={departureCabs.length > 0}
+                                price={departureCabs.length > 0 ? fmtAed(departurePrice) : null}
+                                details={departureDetailLines}
+                              />
+                              <SectionRow
                                 Icon={FaPlus}
                                 iconBg="#fce7f3"
                                 iconColor="#db2777"
                                 title="Add-on Services"
-                                lines={addons.length > 0 ? addons : []}
-                                price={addons.length > 0 ? `${addons.length} on` : "AED 0"}
-                                muted={addons.length === 0}
+                                hideYesNo
+                                // Empty string when nothing was picked
+                                // so the row simply reads "Add-on
+                                // Services" with no Yes/No / price chip.
+                                price={otherAddons.length > 0 ? fmtAed(otherAddonsPrice) : ""}
+                                details={otherAddonDetailLines}
+                                lastInGroup
                               />
                             </>
                           );
                         })()}
                       </div>
                       {(() => {
-                        // Right-rail "Total Package Price" — sums BOTH
-                        // per-hotel TD inputs and the booking-level TD
-                        // so the operator sees a true grand total as
-                        // they type. (Previously only the booking-level
-                        // input fed this value, so per-hotel TD edits
-                        // were silently dropped from the headline figure.)
+                        // Right-rail "Total Package Price" — sums the
+                        // tourism-dirham aggregate on top of the line-
+                        // item total. The per-row prices above use
+                        // exactly the same `totalRate` figures that feed
+                        // `totalPrice`, so the headline equals the sum
+                        // of the rows above plus TD.
                         const tdNum = aggregateTourismDirham;
                         const totalWithTd = totalPrice + tdNum;
+
+                        // Non-refundable detection — if ANY single
+                        // selected service is non-refundable, the whole
+                        // package must be labelled non-refundable.
+                        const isNonRefundable = (() => {
+                          const flag = (rec) =>
+                            rec?.refundstatus === "N" ||
+                            rec?.nonRefundable === true ||
+                            rec?.nonRefundable === "true";
+                          return cartData.some(
+                            (it) => flag(it.hotel) || flag(it.cab) || flag(it.activity)
+                          );
+                        })();
+
+                        // Time limit — the earliest cancellation-policy
+                        // fromDate across every hotel in the cart,
+                        // minus 2 days (mirrors the deadline rule the
+                        // save payload uses). Non-refundable items
+                        // fall back to "today − 2 days" per spec.
+                        const timeLimit = (() => {
+                          try {
+                            const hotelsArr = cartData.filter((it) => it.hotel);
+                            if (hotelsArr.length === 0) return null;
+                            if (isNonRefundable) {
+                              const d = new Date();
+                              d.setDate(d.getDate() - 2);
+                              return d;
+                            }
+                            const dates = [];
+                            hotelsArr.forEach((it) => {
+                              const policies = it.hotel?.cancellationPolicy || [];
+                              policies.forEach((p) => {
+                                if (p && p.fromDate) {
+                                  const dd = new Date(p.fromDate);
+                                  if (!isNaN(dd.getTime())) dates.push(dd);
+                                }
+                              });
+                            });
+                            if (dates.length === 0) return null;
+                            const earliest = new Date(Math.min(...dates.map((d) => d.getTime())));
+                            earliest.setDate(earliest.getDate() - 2);
+                            return earliest;
+                          } catch {
+                            return null;
+                          }
+                        })();
+                        const timeLimitText = timeLimit
+                          ? timeLimit.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                          : null;
+
                         return (
                           <>
                             <div
@@ -3719,6 +3951,53 @@ const MakePkgBookingPageV2 = () => {
                               >
                                 View Price Breakup
                               </button>
+                            </div>
+
+                            {/* ── Terms & Conditions block ──
+                                Tick-to-accept + price/availability time
+                                limit + non-refundable badge. The
+                                `acceptedTerms` flag is already in scope
+                                (used by the existing Order Summary modal
+                                gate) — wiring the checkbox here keeps a
+                                single source of truth for acceptance. */}
+                            <div
+                              className="mt-3 pt-3"
+                              style={{ borderTop: "1px solid #e5e7eb" }}
+                            >
+                              <div className="fw-bold mb-2" style={{ color: "#111827", fontSize: "0.9rem" }}>
+                                Terms & Conditions
+                              </div>
+                              <Form.Check
+                                type="checkbox"
+                                id="pkg-summary-accept-terms"
+                                checked={!!acceptedTerms}
+                                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                                label={
+                                  <span style={{ fontSize: "0.8rem", color: "#374151" }}>
+                                    I accept the terms and conditions
+                                  </span>
+                                }
+                              />
+                              {timeLimitText && (
+                                <div className="mt-2" style={{ fontSize: "0.78rem", color: "#6b7280" }}>
+                                  <span className="fw-semibold">Time limit:</span> Quoted price &amp; availability valid until <span className="fw-semibold">{timeLimitText}</span>
+                                </div>
+                              )}
+                              {isNonRefundable && (
+                                <div
+                                  className="mt-2 px-2 py-1 rounded"
+                                  style={{
+                                    background: "#fef2f2",
+                                    border: "1px solid #fecaca",
+                                    color: "#b91c1c",
+                                    fontSize: "0.76rem",
+                                  }}
+                                >
+                                  <span className="fw-bold">Non-Refundable:</span> One or more selected services
+                                  are non-refundable, so the entire package is
+                                  treated as non-refundable.
+                                </div>
+                              )}
                             </div>
                           </>
                         );

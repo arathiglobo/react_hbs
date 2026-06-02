@@ -593,6 +593,19 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     return Array.isArray(flags.features) ? flags.features : [];
   };
 
+  // Maps each canonical feature label to a CSS modifier class.
+  // Unknown labels degrade to the default pill styling.
+  const DEAL_PILL_META = {
+    "Last Minute":             { cls: "deal-last-minute" },
+    "Long Stay":               { cls: "deal-long-stay"   },
+    "Day Stay":                { cls: "deal-day-stay"    },
+    "24 Hour Check-In":        { cls: "deal-24h"         },
+    "Govt Employee Discount":  { cls: "deal-gov"         },
+    "Student Discount":        { cls: "deal-student"     },
+    "Meeting & Space":         { cls: "deal-meeting"     },
+    "Honeymoon":               { cls: "deal-honeymoon"   },
+  };
+
   const filteredResults = useMemo(() => {
     let results = allResults;
 
@@ -1595,7 +1608,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                     Employee Discount, Student Discount) across the hotels
                     in view. Suppressed entirely when no hotel has any flag
                     set so we don't render an empty marquee. */}
-              {activeFeatureLabels.length > 0 && (
+              {/* Exclusive Deals marquee hidden — per-hotel deal pills on each
+                  card now surface the same information in context. */}
+              {false && activeFeatureLabels.length > 0 && (
   <div style={{ overflow: "hidden", width: "100%", marginBottom: "14px" }}>
     <div className="deals-banner" style={{ marginBottom: 0 }}>
       <div className="deals-banner-tag">
@@ -1809,6 +1824,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                           <Col xs={12} key={hotel.id}>
                             <div
                               style={{
+                                position: "relative",
                                 backgroundColor: "white",
                                 border: "1px solid #dee2e6",
                                 borderRadius: "12px",
@@ -1816,13 +1832,22 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                 overflow: "hidden",
                               }}
                             >
+                              {getHotelFeatureLabels(hotel).length > 0 && (
+                                <span
+                                  className="flash-sale-pill flash-sale-corner"
+                                  title="Limited-time deals available — see the badges below."
+                                >
+                                  <span className="flash-dot" />
+                                  Flash Sale
+                                </span>
+                              )}
                               <Row className="g-0">
                                 <Col md={4}>
                                   <div
                                     style={{
                                       position: "relative",
                                       height: "100%",
-                                      padding: "15px",
+                                      padding: "10px",
                                     }}
                                   >
                                     <LazyImage
@@ -1869,12 +1894,19 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                 </Col>
 
                                 <Col md={8}>
-                                  <div style={{ padding: "16px" }}>
+                                  <div
+                                    style={{
+                                      padding: "12px 14px",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      height: "100%",
+                                    }}
+                                  >
                                     <h6
                                       style={{
                                         fontSize: "1.0rem",
                                         fontWeight: "600",
-                                        marginBottom: "8px",
+                                        marginBottom: "4px",
                                         color: "#333",
                                       }}
                                     >
@@ -1885,7 +1917,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                       style={{
                                         fontSize: "0.875rem",
                                         color: "#666",
-                                        marginBottom: "8px",
+                                        marginBottom: "4px",
                                       }}
                                     >
                                       📍{" "}
@@ -1903,11 +1935,38 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                           borderRadius: "4px",
                                           fontSize: "0.75rem",
                                           display: "inline-block",
-                                          marginBottom: "12px",
+                                          marginBottom: "6px",
+                                          alignSelf: "flex-start",
                                         }}
                                       >
                                         {hotel.badge}
                                       </span>
+                                    )}
+
+                                    {/* Per-hotel available deals — replaces the
+                                        global marquee for in-card discovery so
+                                        each row clearly shows which feature
+                                        flags apply to that specific hotel. */}
+                                    {getHotelFeatureLabels(hotel).length > 0 && (
+                                      <div className="available-deals-wrap">
+                                        <div className="available-deals-label">
+                                          Available Deals
+                                        </div>
+                                        <div className="deal-pills-row">
+                                          {getHotelFeatureLabels(hotel).map((label) => {
+                                            const meta = DEAL_PILL_META[label] || { cls: "" };
+                                            return (
+                                              <span
+                                                key={label}
+                                                className={`deal-pill ${meta.cls}`}
+                                                title={label}
+                                              >
+                                                {label}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
                                     )}
 
                                     <div
@@ -1915,8 +1974,8 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                         display: "flex",
                                         justifyContent: "space-between",
                                         alignItems: "center",
-                                        marginTop: "16px",
-                                        paddingTop: "12px",
+                                        marginTop: "auto",
+                                        paddingTop: "8px",
                                         borderTop: "1px solid #eee",
                                       }}
                                     >
@@ -1940,15 +1999,6 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                           gap: "6px",
                                         }}
                                       >
-                                        {getHotelFeatureLabels(hotel).length > 0 && (
-                                          <span
-                                            className="flash-sale-pill"
-                                            title="We have new features in Booking section — take a look there!"
-                                          >
-                                            <span className="flash-dot" />
-                                            Flash Sale
-                                          </span>
-                                        )}
                                       <Button
                                         size="sm"
                                         variant={
