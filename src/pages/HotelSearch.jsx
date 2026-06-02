@@ -1853,10 +1853,10 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                               }}
                             >
                               {/* Flash-deal badge — image placed at
-                                   /images/flash-sale.png (in public/). Falls
-                                   back to the legacy text pill if the asset
-                                   isn't found so the deal indicator never
-                                   disappears silently. */}
+                                   /images/flash-sale-logo.png (in public/).
+                                   Falls back to the legacy text pill if the
+                                   asset isn't found so the deal indicator
+                                   never disappears silently. */}
                               {getHotelFeatureLabels(hotel).length > 0 && (
                                 <span
                                   className="flash-sale-badge flash-sale-corner"
@@ -1864,7 +1864,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                   aria-label="Flash Sale"
                                 >
                                   <img
-                                    src="/images/flash-sale.png"
+                                    src="/images/flash-sale-logo.png"
                                     alt="Flash Sale"
                                     className="flash-sale-img"
                                     onError={(e) => {
