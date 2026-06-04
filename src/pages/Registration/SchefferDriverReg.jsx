@@ -527,6 +527,7 @@ const SchefferDriverReg = () => {
     email: "",
     cabCode: "",
     cabName: "",
+    cabType: "",
     countryId: "",
     placeId: "",
     pickup: "",
@@ -1022,6 +1023,7 @@ const SchefferDriverReg = () => {
       cabId: editingCab ? editingCab.cabId : Date.now(), // Keep existing ID if editing
       cabCode: formData.cabCode,
       name: formData.cabName, // Use 'name' to match your data structure
+      cabType: formData.cabType || "", // chauffeur-rental vehicle class
       countryid: formData.countryId, // Use 'countryid' to match your data structure
       placeid: formData.placeId, // Use 'placeid' to match your data structure
       placeName: selectedPlaceName,
@@ -1054,6 +1056,7 @@ const SchefferDriverReg = () => {
       ...prev,
       cabCode: "",
       cabName: "",
+      cabType: "",
       countryId: "",
       placeId: "",
       pickup: "",
@@ -1082,6 +1085,7 @@ const SchefferDriverReg = () => {
       ...prev,
       cabCode: cab.cabCode || "",
       cabName: cab.name || "",
+      cabType: cab.cabType || "",
       countryId: String(cab.countryid || ""),
       placeId: String(cab.placeid || ""),
       cabImage: cab.cabImage || null,
@@ -1274,6 +1278,7 @@ const SchefferDriverReg = () => {
         formDataPayload.append(`${prefix}.name`, cab.name || cab.cabName || '');
         formDataPayload.append(`${prefix}.cabprovider`, '');
         formDataPayload.append(`${prefix}.cabCode`, cab.cabCode || '');
+        formDataPayload.append(`${prefix}.cabType`, cab.cabType || '');
         formDataPayload.append(`${prefix}.countryid`, cab.countryid || cab.countryId || '');
         formDataPayload.append(`${prefix}.placeid`, String(cab.placeid || cab.placeId || ''));
         formDataPayload.append(`${prefix}.providername`, '');
@@ -1374,6 +1379,7 @@ const SchefferDriverReg = () => {
         formDataPayload.append(`${prefix}.name`, cab.name || cab.cabName || '');
         formDataPayload.append(`${prefix}.cabprovider`, '');
         formDataPayload.append(`${prefix}.cabCode`, cab.cabCode || '');
+        formDataPayload.append(`${prefix}.cabType`, cab.cabType || '');
         formDataPayload.append(`${prefix}.countryid`, cab.countryid || cab.countryId || '');
         formDataPayload.append(`${prefix}.placeid`, String(cab.placeid || cab.placeId || ''));
         formDataPayload.append(`${prefix}.providername`, '');
@@ -1924,6 +1930,24 @@ const SchefferDriverReg = () => {
                                   {}
                                 )}
                               />
+                            </Form.Group>
+                          </Col>
+                      <Col md={3}>
+                            <Form.Group className="mb-3">
+                          <Form.Label>Cab Type</Form.Label>
+                              <Form.Select
+                            value={formData.cabType || ""}
+                            disabled={isViewMode}
+                            onChange={(e) =>
+                              setFormData({ ...formData, cabType: e.target.value })
+                            }
+                          >
+                            <option value="">Select type</option>
+                            <option value="Sedan">Sedan</option>
+                            <option value="SUV">SUV</option>
+                            <option value="Luxury">Luxury</option>
+                            <option value="Van">Van</option>
+                          </Form.Select>
                             </Form.Group>
                           </Col>
                       <Col md={3}>

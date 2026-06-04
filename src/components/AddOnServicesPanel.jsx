@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Form, Row, Col, Badge, Accordion } from "react-bootstrap";
 import { FaChevronDown } from "react-icons/fa";
+import axiosInstance from "./AxiosInstance";
 
 // ── Storage key ──────────────────────────────────────────────────────
 // The Make Your Own Package flow spans three pages (search → results →
@@ -222,6 +223,124 @@ export const collectEnabledAddOnServices = () => {
   return Object.keys(out).length > 0 ? out : null;
 };
 
+// ── Dynamic catalog (loaded from /api/package-addon/active) ──────────
+//
+// Server-side codes (UPPER_SNAKE) ↔ existing static-catalog keys. When a
+// server entry's code maps to a known key we reuse the rich field schema
+// above so VISA / MEET_GREET keep their detailed forms. Anything else
+// gets a generic three-field form so the operator can still capture a
+// date, quantity, and notes for it.
+const CODE_TO_STATIC_KEY = {
+  VISA: "visa",
+  MEET_GREET: "meetAndGreet",
+  TRAVEL_INSURANCE: "travelInsurance",
+  SIM_CARD: "simCard",
+  FAST_TRACK_IMMIGRATION: "fastTrackImmigration",
+};
+
+const buildGenericFields = () => ([
+  { name: "serviceDate", label: "Service Date", kind: "date" },
+  { name: "quantity",    label: "Quantity",     kind: "number" },
+  { name: "notes",       label: "Notes",        kind: "textarea" },
+]);
+
+/**
+ * Build a runtime catalog entry by merging a server row with the static
+ * field schema (when there is one). Output shape matches the static
+ * entries so the wizard / panel renderers can treat both kinds uniformly.
+ *
+ *   serverItem: { addonId, code, name, description, hasDetails, displayOrder,
+ *                 discountText, rateId, unitPrice, childPrice, infantPrice, currency }
+ */
+const buildCatalogEntry = (serverItem) => {
+  const code = (serverItem.code || "").toUpperCase();
+  const staticKey = CODE_TO_STATIC_KEY[code];
+  const staticEntry = staticKey
+    ? ADDON_SERVICES_CATALOG.find((s) => s.key === staticKey)
+    : null;
+  const key = staticKey || code.toLowerCase();
+  return {
+    key,
+    label: serverItem.name || (staticEntry && staticEntry.label) || code,
+    question: staticEntry
+      ? staticEntry.question
+      : `Add ${serverItem.name || code} to this package?`,
+    description: serverItem.description || null,
+    discountText: serverItem.discountText || null,
+    fields: staticEntry ? staticEntry.fields : buildGenericFields(),
+    // Pricing snapshot — what to display on the search/booking summary
+    // and what to send back as the booking line-item.
+    addonId: serverItem.addonId,
+    rateId: serverItem.rateId,
+    unitPrice: serverItem.unitPrice,
+    childPrice: serverItem.childPrice,
+    infantPrice: serverItem.infantPrice,
+    currency: serverItem.currency || "AED",
+    hasDetails: serverItem.hasDetails !== false,
+    displayOrder: serverItem.displayOrder ?? 100,
+    code,
+  };
+};
+
+/**
+ * Fetch the active add-on catalog from the backend. `pickupDateIso` is
+ * optional (YYYY-MM-DD) and lets the backend pick the right rate window.
+ * Returns [] if the endpoint isn't deployed yet — callers should treat
+ * an empty catalog as "no add-on toggles" rather than as an error.
+ */
+export const loadActiveAddOnCatalog = async (pickupDateIso) => {
+  try {
+    const q = pickupDateIso ? `?pickupDate=${encodeURIComponent(pickupDateIso)}` : "";
+    const res = await axiosInstance.get(`/api/package-addon/active${q}`);
+    const list = Array.isArray(res.data) ? res.data : [];
+    return list
+      .map(buildCatalogEntry)
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  } catch (e) {
+    // Surface errors to the console; calling pages should still render
+    // the rest of the search form with an empty add-on list.
+    console.warn("loadActiveAddOnCatalog failed:", e?.message || e);
+    return [];
+  }
+};
+
+/**
+ * Booking-payload helper — builds the snapshot of priced line-items for the
+ * server. Pairs each enabled add-on key with the price from the catalog
+ * passed in (so future rate changes can't affect the values that the FE
+ * showed the operator at confirm time). Returns null when nothing was
+ * enabled.
+ */
+export const buildAddOnLineItemsForPayload = (catalog) => {
+  if (!Array.isArray(catalog) || catalog.length === 0) return null;
+  const all = readAddOnServices();
+  const out = [];
+  for (const entry of catalog) {
+    const slot = all[entry.key];
+    if (!slot || slot.enabled !== true) continue;
+    const qty = Number(slot.quantity) > 0 ? Number(slot.quantity) : 1;
+    const unit = entry.unitPrice != null ? Number(entry.unitPrice) : null;
+    out.push({
+      addonId: entry.addonId,
+      addonCode: entry.code,
+      addonName: entry.label,
+      addonRateId: entry.rateId,
+      quantity: qty,
+      unitPrice: unit,
+      currency: entry.currency || "AED",
+      lineTotal: unit != null ? unit * qty : null,
+    });
+  }
+  return out.length > 0 ? out : null;
+};
+
+/** Sums catalog-priced enabled add-ons for the booking summary line. */
+export const sumEnabledAddOnPrices = (catalog) => {
+  const items = buildAddOnLineItemsForPayload(catalog);
+  if (!items) return 0;
+  return items.reduce((s, i) => s + (Number(i.lineTotal) || 0), 0);
+};
+
 /**
  * Single-service form — renders just one entry from
  * ADDON_SERVICES_CATALOG as a Yes/No toggle plus its fields. Reads and
@@ -229,11 +348,29 @@ export const collectEnabledAddOnServices = () => {
  * wizard that splits each service into its own step stays in sync with
  * any panel rendered elsewhere on the page.
  */
+/**
+ * Looks up the schema for a serviceKey — checks the rich static catalog
+ * first (visa, meetAndGreet, …), then falls back to the dynamic catalog
+ * cached by the search page in sessionStorage under
+ * `mypkg_addon_catalog_v2`. Lets admin-added add-ons that have no static
+ * field schema still render their generic detail form.
+ */
+const lookupAnyCatalogEntry = (serviceKey) => {
+  const fromStatic = ADDON_SERVICES_CATALOG.find((s) => s.key === serviceKey);
+  if (fromStatic) return fromStatic;
+  try {
+    const raw = sessionStorage.getItem("mypkg_addon_catalog_v2");
+    if (!raw) return null;
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return null;
+    return list.find((s) => s && s.key === serviceKey) || null;
+  } catch {
+    return null;
+  }
+};
+
 export function SingleAddOnService({ serviceKey }) {
-  const svc = useMemo(
-    () => ADDON_SERVICES_CATALOG.find((s) => s.key === serviceKey),
-    [serviceKey]
-  );
+  const svc = useMemo(() => lookupAnyCatalogEntry(serviceKey), [serviceKey]);
   const [current, setCurrent] = useState(() => {
     const all = readAddOnServices();
     return all[serviceKey] || (svc ? blankService(svc) : { enabled: false });

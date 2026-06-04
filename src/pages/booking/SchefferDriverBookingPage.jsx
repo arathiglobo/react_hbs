@@ -311,8 +311,32 @@ const SchefferDriverBookingPage = () => {
       noOfCabs: cab.noOfCabs || 1,
       pickupDate: formatDateToDDMMYYYY(searchCriteria.pickupDate),
       dropOffDate: formatDateToDDMMYYYY(searchCriteria.dropoffDate || searchCriteria.pickupDate),
-      travelType: parseInt(selectedOption.travelType) || 1,
+      travelType: 2, // 2 = chauffeur rental
       locationId: parseInt(selectedOption.locationId) || 0,
+      hourDetails: selectedOption.hoursIncluded != null ? parseInt(selectedOption.hoursIncluded) : null,
+      // Implicit policy acceptance — the Confirm Booking button shows
+      // "By confirming, you agree to the Terms and Conditions" right above
+      // it, so clicking Confirm is the user's acceptance. The backend
+      // (SchefferBookingService.save) rejects the request otherwise.
+      policyAccepted: true,
+      acceptedTermsAndConditions: true,
+      acceptedCancellationPolicies: true,
+      // ----- Chauffeur-rental package snapshot (frozen onto the booking) -----
+      rentalRateId: selectedOption.rentalRateId || null,
+      rentalPackageId: selectedOption.packageId || null,
+      cityId: selectedOption.cityId || searchCriteria.cityId || null,
+      cityName: selectedOption.cityName || searchCriteria.cityName || null,
+      cabType: selectedOption.cabType || searchCriteria.cabType || null,
+      packageName: selectedOption.packageName || null,
+      includedHours: selectedOption.hoursIncluded != null ? parseInt(selectedOption.hoursIncluded) : null,
+      includedKm: selectedOption.kmIncluded != null ? parseInt(selectedOption.kmIncluded) : null,
+      basePrice: selectedOption.basePrice != null ? Number(selectedOption.basePrice) : null,
+      extraHourRate: selectedOption.extraHourRate != null ? Number(selectedOption.extraHourRate) : null,
+      extraKmRate: selectedOption.extraKmRate != null ? Number(selectedOption.extraKmRate) : null,
+      nightCharge: selectedOption.nightCharge != null ? Number(selectedOption.nightCharge) : null,
+      waitingCharge: selectedOption.waitingCharge != null ? Number(selectedOption.waitingCharge) : null,
+      airportPickupCharge: selectedOption.airportPickupCharge != null ? Number(selectedOption.airportPickupCharge) : null,
+      airportDropCharge: selectedOption.airportDropCharge != null ? Number(selectedOption.airportDropCharge) : null,
       noOfAdult: parseInt(searchCriteria.adults) || 1,
       noOfChild: parseInt(searchCriteria.children) || 0,
       childAgeArray: (searchCriteria.childAges || []).map(age => parseInt(age)),
@@ -360,32 +384,24 @@ const SchefferDriverBookingPage = () => {
       // finally the legacy hidden-form fields. Without this, all four
       // columns end up null in the DB because the modern search page no
       // longer populates the legacy pickupName / pickupType fields.
-      pickupType:
-        searchCriteria.originSource || searchCriteria.pickupType || null,
+      // Operational pickup / dropoff captured on the search page (zone /
+      // hotel / airport). Falls back to the city for rentals where the user
+      // didn't specify anything — the package is still city-based so the
+      // city is a sensible default.
+      pickupType: searchCriteria.pickupType || "CITY",
       pickupName:
-        selectedOption.pickup ||
-        searchCriteria.originLocationName ||
         searchCriteria.pickupName ||
+        selectedOption.cityName ||
+        searchCriteria.cityName ||
         null,
-      pickupTime:
-        selectedOption.pickupTime ||
-        searchCriteria.departureTime ||
-        (searchCriteria.pickupType === "AIRPORT" && searchCriteria.pickupTime
-          ? searchCriteria.pickupTime
-          : null),
-      dropoffType:
-        searchCriteria.destinationSource || searchCriteria.dropoffType || null,
+      pickupTime: searchCriteria.pickupTime || null,
+      dropoffType: searchCriteria.dropoffType || "CITY",
       dropoffName:
-        selectedOption.dropOff ||
-        selectedOption.dropoff ||
-        searchCriteria.destinationLocationName ||
         searchCriteria.dropoffName ||
+        selectedOption.cityName ||
+        searchCriteria.cityName ||
         null,
-      dropoffTime:
-        selectedOption.dropoffTime ||
-        searchCriteria.returnTime ||
-        searchCriteria.dropoffTime ||
-        null,
+      dropoffTime: searchCriteria.dropoffTime || null,
     };
 
     setPendingPayload(payload);
@@ -945,16 +961,13 @@ const SchefferDriverBookingPage = () => {
         <div className="flex-grow-1">
           <h6 className="fw-bold mb-1 text-dark">{cab.cabname}</h6>
 
-          <div className="mb-2">
-          <span
-  className={`fw-semibold ${
-    selectedOption.types === "Private"
-      ? "text-success"
-      : "text-info"
-  }`}
->
-  {selectedOption.types}
-</span>
+          <div className="mb-2 d-flex flex-wrap gap-1">
+            {selectedOption.cabType && (
+              <Badge bg="info" className="text-dark">{selectedOption.cabType}</Badge>
+            )}
+            {selectedOption.packageName && (
+              <Badge bg="primary">{selectedOption.packageName}</Badge>
+            )}
           </div>
 
           {cab.cabdetails && (
@@ -981,17 +994,24 @@ const SchefferDriverBookingPage = () => {
           </div>
         </div>
 
-        {/* Route */}
+        {/* Rental package details */}
         <div className="d-flex align-items-start gap-2">
           <FaMapMarkerAlt className="text-danger mt-1" />
           <div>
             <small className="text-muted fw-semibold d-block">
-              Route Details
+              Rental Package
             </small>
             <span className="fw-medium text-dark">
-              {selectedOption.location || "N/A"} →{" "}
-              {selectedOption.dropOff || "N/A"}
+              {selectedOption.cityName || "—"}
+              {selectedOption.packageName ? ` · ${selectedOption.packageName}` : ""}
             </span>
+            <div className="text-muted small">
+              {selectedOption.hoursIncluded != null ? `${selectedOption.hoursIncluded} hrs` : ""}
+              {selectedOption.kmIncluded != null ? ` · ${selectedOption.kmIncluded} km included` : ""}
+            </div>
+            {selectedOption.pickupTime && (
+              <div className="text-muted small">Pickup @ {searchCriteria.pickupTime}</div>
+            )}
           </div>
         </div>
 
@@ -1076,7 +1096,7 @@ const SchefferDriverBookingPage = () => {
         return (
           <>
             <div className="d-flex justify-content-between mb-2 text-muted">
-              <span>Transfer Fare</span>
+              <span>Package Fare</span>
               <span className="fw-medium">{formatPrice(totalRate)}</span>
             </div>
 
@@ -1174,9 +1194,12 @@ const SchefferDriverBookingPage = () => {
             </Col>
             <Col md={10}>
               <h6 className="fw-bold mb-1">{cab.cabname}</h6>
-              <Badge bg={selectedOption?.types === "Private" ? "success" : "info"}>
-                {selectedOption?.types}
-              </Badge>
+              {selectedOption?.cabType && (
+                <Badge bg="info" className="text-dark me-1">{selectedOption.cabType}</Badge>
+              )}
+              {selectedOption?.packageName && (
+                <Badge bg="primary">{selectedOption.packageName}</Badge>
+              )}
               {cab.cabdetails && (
                 <div className="text-muted small mt-1">{cab.cabdetails}</div>
               )}

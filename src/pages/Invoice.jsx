@@ -65,8 +65,8 @@ export default function Invoice() {
     setError("");
     try {
       const params = new URLSearchParams();
-      if (fromDate) params.append("fromDate", `${fromDate}T00:00:00`);
-      if (toDate) params.append("toDate", `${toDate}T23:59:59`);
+      if (fromDate) params.append("fromDate", fromDate);
+      if (toDate) params.append("toDate", toDate);
       if (agent) params.append("agent", agent);
       params.append("page", String(pageNumber));
       params.append("limit", String(itemsPerPage));

@@ -261,6 +261,8 @@ import SeniorCitizenRoomList from "./pages/roomlist/SeniorCitizenRoomList";
 import SeniorCitizenBookingPage from "./pages/booking/seniorcitizen/SeniorCitizenBookingPage";
 import SeniorCitizenBookingList from "./pages/list/SeniorCitizenBookingList";
 import SeniorCitizenBookingDetailView from "./pages/list/SeniorCitizenBookingDetailView";
+import PackageAddOnReg from "./pages/Registration/PackageAddOnReg";
+import PackageAddOnRates from "./pages/Registration/PackageAddOnRates";
 
 
 export default function App() {
@@ -473,7 +475,11 @@ export default function App() {
         <Route path="/scheffer-driver-booking-page" element={<PrivateRoute><SchefferDriverBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/scheffer-driver-booking-list" element={<PrivateRoute><SchefferDriverBookingList /></PrivateRoute>} />
 
-
+        {/* MYOP Package Add-Ons (dynamic catalog used by /new-booking/make-your-own-package-v2/search) */}
+        <Route path="/registration/package-addons" element={<PrivateRoute><PackageAddOnReg /></PrivateRoute>} />
+        <Route path="/package-addons-rates/:addonId" element={<PrivateRoute><PackageAddOnRates /></PrivateRoute>} />
+                
+        
         {/* Restaurant Module */}
         <Route path="/restaurant/register" element={<PrivateRoute><RestaurantRegistration /></PrivateRoute>} />
         <Route path="/restaurant/edit/:id" element={<PrivateRoute><RestaurantRegistration /></PrivateRoute>} />

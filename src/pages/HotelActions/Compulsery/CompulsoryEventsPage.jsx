@@ -19,6 +19,7 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import Select from "react-select";
 
 const CompulsoryEventsPage = () => {
@@ -575,6 +576,7 @@ const CompulsoryEventsPage = () => {
                   <div className="fw-semibold fs-4 text-dark">
                     Compulsory Events
                   </div>
+                  <HotelTitleBadge hotelId={id} className="ms-2" />
                 </div>
 
                 <div className="d-flex align-items-center gap-2 flex-grow-1 justify-content-end">

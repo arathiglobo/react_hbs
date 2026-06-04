@@ -4,6 +4,7 @@ import { Card, Button, Table, Spinner, Badge } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -77,6 +78,7 @@ export default function Hotel24HourCheckin() {
                 <FaArrowLeft /> Back
               </Button>
               <h5 className="mb-0">24 Hour Check-In Configurations</h5>
+              <HotelTitleBadge hotelId={hotelId} className="ms-2" />
             </div>
             <Button
               style={{ backgroundColor: "#0d6efd", border: "none" }}

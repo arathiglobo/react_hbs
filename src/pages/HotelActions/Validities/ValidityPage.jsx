@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, Button, Row, Col, Badge, Spinner, Table } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import {
@@ -217,6 +218,7 @@ export default function ValidityPage() {
               <h4 className="mb-0 fw-bold text-dark">
                 Hotel Validity Period Details
               </h4>
+              <HotelTitleBadge hotelId={id} className="ms-2" />
             </div>
             <small className="text-muted">Hotel ID: {id}</small>
           </div>

@@ -28,6 +28,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import axiosInstance from "../../../components/AxiosInstance";
 
 const EMPTY_FORM = {
@@ -203,6 +204,7 @@ export default function SeniorCitizenList() {
                     <FaUserClock className="me-2 text-primary" />
                     Senior Citizen Discount
                   </h5>
+                  <HotelTitleBadge hotelId={hotelId} className="ms-2" />
                   <div className="text-muted small mt-1">Hotel ID: {hotelId}</div>
                   <div className="text-muted small">
                     The configured discount/markup is applied to the contract rate

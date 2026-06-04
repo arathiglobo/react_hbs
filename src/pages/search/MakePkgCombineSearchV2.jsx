@@ -40,6 +40,7 @@ import {
   ADDON_SERVICES_CATALOG,
   ADDON_SERVICES_STORAGE_KEY,
   readAddOnServices,
+  loadActiveAddOnCatalog,
 } from "../../components/AddOnServicesPanel";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
@@ -487,6 +488,39 @@ export default function MakePkgCombineSearchV2() {
     return out;
   });
 
+  // Dynamic add-on catalog — fetched from /api/package-addon/active on
+  // mount. Drives the "Choose services" toggle list AND the per-add-on
+  // wizard step generation. Until the request returns the list is empty,
+  // so the search page renders without any add-on toggles (Hotel /
+  // Transfer / Tour gates still work normally).
+  const [dynamicAddonCatalog, setDynamicAddonCatalog] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await loadActiveAddOnCatalog();
+      if (cancelled) return;
+      setDynamicAddonCatalog(list);
+      // Hydrate addonFlags for any newly-discovered catalog keys so the
+      // toggle rows reflect the current sessionStorage state.
+      const all = readAddOnServices();
+      setAddonFlags((prev) => {
+        const next = { ...prev };
+        list.forEach((svc) => {
+          if (!(svc.key in next)) next[svc.key] = !!all[svc.key]?.enabled;
+        });
+        return next;
+      });
+      // Persist the catalog so the booking page can read it without an
+      // extra round-trip when the operator clicks Continue.
+      try {
+        sessionStorage.setItem("mypkg_addon_catalog_v2", JSON.stringify(list));
+      } catch {
+        /* private mode — non-fatal */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Persist gate flags whenever the operator flips one (booking page
   // reads `makePkgV2Services` on save). Hotel stays mandatory ON.
   useEffect(() => {
@@ -515,7 +549,11 @@ export default function MakePkgCombineSearchV2() {
     setAddonFlags((prev) => ({ ...prev, [addonKey]: !!value }));
     try {
       const all = readAddOnServices();
-      const svc = ADDON_SERVICES_CATALOG.find((s) => s.key === addonKey);
+      // Look the schema up first in the dynamic catalog, then in the static
+      // catalog. Dynamic entries reuse the static schema for VISA / MEET_GREET
+      // (see CODE_TO_STATIC_KEY in AddOnServicesPanel) so this is consistent.
+      const svc = dynamicAddonCatalog.find((s) => s.key === addonKey)
+        || ADDON_SERVICES_CATALOG.find((s) => s.key === addonKey);
       const blank = svc
         ? (() => {
             const f = {};
@@ -528,7 +566,7 @@ export default function MakePkgCombineSearchV2() {
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [dynamicAddonCatalog]);
 
   // Wizard steps — Step 0 is the new "Select Services" picker; every
   // following step is gated by the corresponding flag, so disabled
@@ -546,7 +584,7 @@ export default function MakePkgCombineSearchV2() {
         Icon: FaConciergeBell,
         type: "select",
       },
-      ...ADDON_SERVICES_CATALOG
+      ...dynamicAddonCatalog
         .filter((svc) => addonFlags[svc.key])
         .map((svc) => ({
           key: `addon-${svc.key}`,
@@ -566,7 +604,7 @@ export default function MakePkgCombineSearchV2() {
       steps.push({ key: "tours", label: "Activities", Icon: FaTicketAlt, type: "search" });
     }
     return steps;
-  }, [v2Services, addonFlags]);
+  }, [v2Services, addonFlags, dynamicAddonCatalog]);
   const location = useLocation();
   // Pull search criteria from location.state first; fall back to the
   // sessionStorage snapshot written by MakeUrOwnPackageV2 / addons page
@@ -658,15 +696,29 @@ const [activeAccordion, setActiveAccordion] = useState({});
   }, [wizardSteps.length, currentStepIdx]);
 
   // <SingleAddOnService/> can flip an addon's gate from inside its own
-  // step (the Yes/No radio writes to mypkg_addon_services). Re-pull the
-  // canonical gates on every navigation tick so the Step 0 toggles and
-  // the wizardSteps memo stay in sync with what was just clicked.
+  // step (the Yes/No radio writes to mypkg_addon_services). When the
+  // operator picks "No" mid-flow we MUST NOT shrink wizardSteps
+  // underneath their feet — otherwise the very next "Next" click skips
+  // over remaining add-on steps and jumps straight to Hotel (because the
+  // step that used to live at the next index has just been filtered out).
+  //
+  // So this resync only runs when the operator is back on Step 0 (the
+  // "Select Services" picker). That's enough to keep the Step 0
+  // checkboxes truthful when they navigate back to review, while leaving
+  // the in-progress wizard journey stable.
   useEffect(() => {
+    if (currentStepIdx !== 0) return;
     const all = readAddOnServices();
     setAddonFlags((prev) => {
       let changed = false;
       const next = { ...prev };
-      ADDON_SERVICES_CATALOG.forEach((svc) => {
+      // Hydrate against the dynamic catalog (admin-managed). Falls back to
+      // the static catalog when the dynamic load hasn't completed yet so
+      // the wizard step builder still sees a coherent picture on first paint.
+      const catalog = dynamicAddonCatalog.length > 0
+        ? dynamicAddonCatalog
+        : ADDON_SERVICES_CATALOG;
+      catalog.forEach((svc) => {
         const enabled = !!all[svc.key]?.enabled;
         if (next[svc.key] !== enabled) {
           next[svc.key] = enabled;
@@ -675,7 +727,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
       });
       return changed ? next : prev;
     });
-  }, [currentStepIdx]);
+  }, [currentStepIdx, dynamicAddonCatalog]);
   const [isProceeding, setIsProceeding] = useState(false);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [rooms, setRooms] = useState([
@@ -2335,11 +2387,13 @@ const [activeAccordion, setActiveAccordion] = useState({});
                     <div className="d-flex flex-column">
                       {(() => {
                         const rows = [
-                          ...ADDON_SERVICES_CATALOG.map((svc) => ({
+                          ...dynamicAddonCatalog.map((svc) => ({
                             key: `addon:${svc.key}`,
                             addonKey: svc.key,
                             label: svc.label,
-                            // description: svc.question || "",
+                            description: svc.description || svc.discountText || "",
+                            unitPrice: svc.unitPrice,
+                            currency: svc.currency,
                             checked: !!addonFlags[svc.key],
                           })),
                           {
@@ -2351,7 +2405,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                           {
                             key: "tour",
                             label: "Tours & Activities",
-                            description: "Sightseeing, day trips, attractions.",
+                            description: "Minimum three tours are mandatory",
                             checked: !!v2Services.tour,
                             mandatory: true,
                           },
@@ -2385,11 +2439,16 @@ const [activeAccordion, setActiveAccordion] = useState({});
                               className={`d-flex align-items-center justify-content-between py-3 ${isLast ? "" : "border-bottom"}`}
                             >
                               <div className="flex-grow-1 me-3">
-                                <div className="d-flex align-items-center gap-2">
+                                <div className="d-flex align-items-center gap-2 flex-wrap">
                                   <span className="fw-semibold">{row.label}</span>
                                   {row.mandatory && (
                                     <Badge bg="warning" text="dark" className="text-uppercase" style={{ fontSize: "0.65rem" }}>
                                       Mandatory
+                                    </Badge>
+                                  )}
+                                  {row.unitPrice != null && row.unitPrice > 0 && (
+                                    <Badge bg="info" className="text-dark" style={{ fontSize: "0.7rem" }}>
+                                      {(row.currency || "AED")} {Number(row.unitPrice).toLocaleString()}
                                     </Badge>
                                   )}
                                 </div>

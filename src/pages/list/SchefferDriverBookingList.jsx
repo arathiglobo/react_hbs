@@ -22,6 +22,7 @@ import {
   FaPhoneAlt,
   FaEnvelope,
   FaIdCard,
+  FaRoad,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -65,6 +66,33 @@ const SchefferDriverBookingList = ({
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
 
+  // Actual-usage modal (post-trip hours/km + intercity → final amount)
+  const [showUsage, setShowUsage] = useState(false);
+  const [usageBooking, setUsageBooking] = useState(null);
+  const [savingUsage, setSavingUsage] = useState(false);
+  const [usageForm, setUsageForm] = useState({
+    actualHoursUsed: "",
+    actualKmUsed: "",
+    intercityFromCityId: "",
+    intercityToCityId: "",
+  });
+  const [cityList, setCityList] = useState([]);
+
+  const loadCities = async () => {
+    try {
+      const r = await axiosInstance.get("/api/province", { params: { limit: 500 } });
+      const items = Array.isArray(r.data) ? r.data : r.data?.content || [];
+      setCityList(
+        items.map((it) => ({
+          id: it.id ?? it.stateId ?? it.placeid ?? it.provinceId,
+          name: it.name ?? it.stateName ?? it.placeName ?? it.provinceName,
+        }))
+      );
+    } catch (e) {
+      console.error("Error loading cities:", e);
+    }
+  };
+
   const fetchList = async () => {
     setLoading(true);
     try {
@@ -103,7 +131,61 @@ const SchefferDriverBookingList = ({
 
   useEffect(() => {
     fetchList();
+    loadCities();
   }, [apiBase]); // eslint-disable-line
+
+  const cityName = (id) => {
+    const c = cityList.find((x) => String(x.id) === String(id));
+    return c ? c.name : "";
+  };
+
+  const onUsage = (b) => {
+    setUsageBooking(b);
+    setUsageForm({
+      actualHoursUsed: b.actualHoursUsed != null ? b.actualHoursUsed : "",
+      actualKmUsed: b.actualKmUsed != null ? b.actualKmUsed : "",
+      intercityFromCityId: "",
+      intercityToCityId: "",
+    });
+    setShowUsage(true);
+  };
+
+  const saveUsage = async () => {
+    const b = usageBooking;
+    if (!b) return;
+    const id = b.id || b.custombookingId;
+    setSavingUsage(true);
+    try {
+      const payload = {
+        actualHoursUsed:
+          usageForm.actualHoursUsed === "" ? null : Number(usageForm.actualHoursUsed),
+        actualKmUsed:
+          usageForm.actualKmUsed === "" ? null : Number(usageForm.actualKmUsed),
+        intercityFromCityId: usageForm.intercityFromCityId
+          ? Number(usageForm.intercityFromCityId)
+          : null,
+        intercityFromCity: usageForm.intercityFromCityId
+          ? cityName(usageForm.intercityFromCityId)
+          : null,
+        intercityToCityId: usageForm.intercityToCityId
+          ? Number(usageForm.intercityToCityId)
+          : null,
+        intercityToCity: usageForm.intercityToCityId
+          ? cityName(usageForm.intercityToCityId)
+          : null,
+      };
+      await axiosInstance.put(`${apiBase}/${id}/usage`, payload);
+      toast.success("Usage updated — final amount recalculated");
+      setShowUsage(false);
+      setUsageBooking(null);
+      fetchList();
+    } catch (e) {
+      console.error("Usage update error:", e);
+      toast.error("Failed to update usage");
+    } finally {
+      setSavingUsage(false);
+    }
+  };
 
   const rows = useMemo(() => {
     const arr = data[status] || [];
@@ -310,7 +392,12 @@ const SchefferDriverBookingList = ({
                             </Badge>
                           </td>
                           <td>
-                            <div className="fw-semibold">AED {b.totalPrice || b.totalRate || "-"}</div>
+                            <div className="fw-semibold">
+                              AED {b.finalAmount != null ? b.finalAmount : (b.totalPrice || b.totalRate || "-")}
+                            </div>
+                            {b.packageName && (
+                              <small className="text-muted d-block">{b.packageName}</small>
+                            )}
                           </td>
                           <td>
                             <div className="d-flex gap-2 align-items-center">
@@ -326,6 +413,14 @@ const SchefferDriverBookingList = ({
                                   role="button"
                                   className="text-danger"
                                   onClick={() => onCancelClick(b)}
+                                />
+                              )}
+                              {b.packageName && b.status !== "CANCELLED" && (
+                                <FaRoad
+                                  title="Record actual usage"
+                                  role="button"
+                                  className="text-warning"
+                                  onClick={() => onUsage(b)}
                                 />
                               )}
                               <FaFileAlt
@@ -497,6 +592,58 @@ const SchefferDriverBookingList = ({
                       </tbody>
                     </Table>
 
+                    {details.packageName && (
+                      <>
+                        <h6 className="mt-3">Rental Package</h6>
+                        <Table size="sm" borderless>
+                          <tbody>
+                            <tr>
+                              <th style={{ width: 180 }}>City / Cab Type</th>
+                              <td>{details.cityName || "-"} · {details.cabType || "-"}</td>
+                            </tr>
+                            <tr>
+                              <th>Package</th>
+                              <td>{details.packageName}</td>
+                            </tr>
+                            <tr>
+                              <th>Included</th>
+                              <td>{details.includedHours ?? "-"} hrs · {details.includedKm ?? "-"} km</td>
+                            </tr>
+                            <tr>
+                              <th>Extra Rates</th>
+                              <td>
+                                Hour: AED {details.extraHourRate ?? "-"} · KM: AED {details.extraKmRate ?? "-"}
+                              </td>
+                            </tr>
+                            <tr>
+                              <th>Actual Used</th>
+                              <td>
+                                {details.actualHoursUsed != null ? `${details.actualHoursUsed} hrs` : "—"}
+                                {details.actualKmUsed != null ? ` · ${details.actualKmUsed} km` : ""}
+                              </td>
+                            </tr>
+                            {(details.extraHoursCharge > 0 || details.extraKmCharge > 0 || details.intercityCharge > 0) && (
+                              <tr>
+                                <th>Extra Charges</th>
+                                <td>
+                                  {details.extraHoursCharge > 0 && <span className="me-2">Hours: AED {details.extraHoursCharge}</span>}
+                                  {details.extraKmCharge > 0 && <span className="me-2">KM: AED {details.extraKmCharge}</span>}
+                                  {details.intercityCharge > 0 && (
+                                    <span>
+                                      Intercity: AED {details.intercityCharge}
+                                      {details.intercityFromCity && details.intercityToCity
+                                        ? ` (${details.intercityFromCity} → ${details.intercityToCity})`
+                                        : ""}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </Table>
+                      </>
+                    )}
+
                     <h6 className="mt-3">Pricing</h6>
                     <Table size="sm" borderless>
                       <tbody>
@@ -526,6 +673,16 @@ const SchefferDriverBookingList = ({
                             <strong>AED {details.totalPrice || details.totalRate || "-"}</strong>
                           </td>
                         </tr>
+                        {details.finalAmount != null && (
+                          <tr>
+                            <th>
+                              <strong className="text-success">Final Amount</strong>
+                            </th>
+                            <td>
+                              <strong className="text-success">AED {details.finalAmount}</strong>
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </Table>
                   </>
@@ -581,6 +738,96 @@ const SchefferDriverBookingList = ({
                 )}
                 <Button variant="secondary" onClick={closePdf}>
                   Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Actual usage modal — records post-trip hours/km + optional
+                intercity leg; backend recomputes extra charges + final amount. */}
+            <Modal show={showUsage} onHide={() => setShowUsage(false)} centered>
+              <Modal.Header closeButton>
+                <Modal.Title>
+                  <FaRoad className="me-2 text-warning" />
+                  Record Actual Usage
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {usageBooking && (
+                  <>
+                    <p className="text-muted small mb-3">
+                      Package <strong>{usageBooking.packageName}</strong> —{" "}
+                      {usageBooking.includedHours ?? "-"} hrs / {usageBooking.includedKm ?? "-"} km included.
+                      Extra hour: AED {usageBooking.extraHourRate ?? "-"}, Extra km: AED {usageBooking.extraKmRate ?? "-"}.
+                    </p>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Label>Actual Hours Used</Form.Label>
+                        <Form.Control
+                          type="number"
+                          min="0"
+                          value={usageForm.actualHoursUsed}
+                          onChange={(e) =>
+                            setUsageForm((p) => ({ ...p, actualHoursUsed: e.target.value }))
+                          }
+                        />
+                      </Col>
+                      <Col md={6}>
+                        <Form.Label>Actual KM Used</Form.Label>
+                        <Form.Control
+                          type="number"
+                          min="0"
+                          value={usageForm.actualKmUsed}
+                          onChange={(e) =>
+                            setUsageForm((p) => ({ ...p, actualKmUsed: e.target.value }))
+                          }
+                        />
+                      </Col>
+                      <Col md={12}>
+                        <hr className="my-2" />
+                        <small className="text-muted">Intercity leg (optional — adds surcharge)</small>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Label>From City</Form.Label>
+                        <Form.Select
+                          value={usageForm.intercityFromCityId}
+                          onChange={(e) =>
+                            setUsageForm((p) => ({ ...p, intercityFromCityId: e.target.value }))
+                          }
+                        >
+                          <option value="">None</option>
+                          {cityList.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Label>To City</Form.Label>
+                        <Form.Select
+                          value={usageForm.intercityToCityId}
+                          onChange={(e) =>
+                            setUsageForm((p) => ({ ...p, intercityToCityId: e.target.value }))
+                          }
+                        >
+                          <option value="">None</option>
+                          {cityList.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </>
+                )}
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowUsage(false)} disabled={savingUsage}>
+                  Cancel
+                </Button>
+                <Button variant="success" onClick={saveUsage} disabled={savingUsage}>
+                  {savingUsage ? "Saving..." : "Save & Recalculate"}
                 </Button>
               </Modal.Footer>
             </Modal>

@@ -214,6 +214,7 @@ export default function Sidebar() {
         { label: "Honeymoon Packages", to: "/honeymoon/list" },
         { label: "Ayurveda", to: "/registration/ayurveda" },
         { label: "Scheffer Driver and Limousine", to: "/registration/schefferDriver" },
+        { label: "MYOP Package Add-Ons", to: "/registration/package-addons" },
       ],
     },
     {

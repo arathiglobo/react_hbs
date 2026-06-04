@@ -14,6 +14,7 @@ import {
 } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -1445,6 +1446,7 @@ const OccupancyAndMinimumLength = () => {
               Back
             </Button>
             <h3 className="mb-0">Occupancy And Minimum Length</h3>
+            <HotelTitleBadge hotelId={id} className="ms-2" />
           </div>
 
           <Tabs
@@ -1903,6 +1905,7 @@ const OccupancyAndMinimumLength = () => {
                                   <Form.Label>Total Adults</Form.Label>
                                   <Form.Control
                                     type="number"
+                                    min={0}
                                     value={occ.totalAdult || 0}
                                     onChange={(e) => {
                                       const newRooms = [
@@ -1926,6 +1929,7 @@ const OccupancyAndMinimumLength = () => {
                                   <Form.Label>Total Children</Form.Label>
                                   <Form.Control
                                     type="number"
+                                    min={0}
                                     value={occ.totalChild || 0}
                                     onChange={(e) => {
                                       const newRooms = [
@@ -1949,6 +1953,7 @@ const OccupancyAndMinimumLength = () => {
                                   <Form.Label>Extra Adults</Form.Label>
                                   <Form.Control
                                     type="number"
+                                    min={0}
                                     value={occ.extraAdult || 0}
                                     onChange={(e) => {
                                       const newRooms = [
@@ -1972,6 +1977,7 @@ const OccupancyAndMinimumLength = () => {
                                   <Form.Label>Extra Children</Form.Label>
                                   <Form.Control
                                     type="number"
+                                    min={0}
                                     value={occ.extraChild || 0}
                                     onChange={(e) => {
                                       const newRooms = [

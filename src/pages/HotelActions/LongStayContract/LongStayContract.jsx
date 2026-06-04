@@ -15,6 +15,7 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 
 export default function LongStayContract() {
   const navigate = useNavigate();
@@ -94,6 +95,7 @@ export default function LongStayContract() {
               Back
             </Button>
             <h4 className="m-0">Long Stay Contracts</h4>
+            <HotelTitleBadge hotelId={id} className="ms-2" />
             <Button
               variant="success"
               onClick={() =>

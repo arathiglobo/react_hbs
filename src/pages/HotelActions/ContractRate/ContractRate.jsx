@@ -15,6 +15,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import Swal from "sweetalert2";
 
 export default function ContractRate() {
@@ -222,6 +223,7 @@ export default function ContractRate() {
               Back
             </Button>
             <h3 className="mb-0">Contract Rates</h3>
+            <HotelTitleBadge hotelId={id} className="ms-2" />
           </div>
 
           <Card className="shadow-sm rounded-xl mb-3">

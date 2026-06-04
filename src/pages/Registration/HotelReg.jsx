@@ -799,19 +799,21 @@ const loadHotelData = async () => {
     });
   };
 
-  // Function to get image preview URL
-  const getImagePreviewUrl = (imagePath) => {
-    if (!imagePath) return null;
-    
-    // If it's already a URL, return as is
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath;
+  // Build the preview URL for the 360 image.
+  //   - When the operator just picked a new file, blob it via createObjectURL
+  //     so the page shows it immediately (no server round-trip).
+  //   - Otherwise return the path the backend gave us VERBATIM. The hotel
+  //     listing page (HotelList) renders `<img src={hotel.image360}>` straight
+  //     out of /api/hotels/{id}, so the same string works here. The previous
+  //     implementation stripped the path to just a filename and prepended
+  //     `/api/images/{filename}` — an endpoint that doesn't exist — which
+  //     is why the image disappeared when re-opening edit.
+  const getImagePreviewUrl = (imagePath, file) => {
+    if (file && typeof file !== "string") {
+      try { return URL.createObjectURL(file); } catch { /* unsupported */ }
     }
-    
-    // If it's a local file path, try to construct a proper URL
-    // This assumes the backend serves images from a specific endpoint
-    const fileName = imagePath.split(/[/\\]/).pop();
-    return `/api/images/${fileName}`; // Adjust this endpoint based on your backend
+    if (!imagePath) return null;
+    return imagePath;
   };
 
   const handleWeekdayChange = (e) => {
@@ -1472,7 +1474,16 @@ const handleAmenityChange = (e) => {
         );
       });
 
-      // Image file (if selected)
+      // Always send the EXISTING image path. The backend's HotelMapper
+      // unconditionally writes `hotel.image360 = dto.image360` and only
+      // overrides it when a new file is uploaded — so omitting this field
+      // on edit wipes the saved image. Sending the current path keeps the
+      // image intact when the operator just edits other fields, and is
+      // harmlessly overwritten by the uploaded URL when a new file IS
+      // picked (see HotelMapper line 386 in HotelMapper.java).
+      formDataToSend.append("image360", formData.image360 || "");
+
+      // New image file (only when the operator picked one this session).
       if (formData.image360File) {
         formDataToSend.append("image360File", formData.image360File);
       }
@@ -1791,9 +1802,9 @@ const handleAmenityChange = (e) => {
                                           margin: "0 auto"
                                         }}
                                       >
-                                        {getImagePreviewUrl(formData.image360) ? (
+                                        {getImagePreviewUrl(formData.image360, formData.image360File) ? (
                                           <img
-                                            src={getImagePreviewUrl(formData.image360)}
+                                            src={getImagePreviewUrl(formData.image360, formData.image360File)}
                                             alt="Hotel 360° Image"
                                             style={{
                                               maxWidth: "100%",
@@ -1810,7 +1821,7 @@ const handleAmenityChange = (e) => {
                                         ) : null}
                                         <div 
                                           className="text-center"
-                                          style={{ display: getImagePreviewUrl(formData.image360) ? 'none' : 'block' }}
+                                          style={{ display: getImagePreviewUrl(formData.image360, formData.image360File) ? 'none' : 'block' }}
                                         >
                                           <i className="fas fa-image fa-3x text-muted mb-2"></i>
                                           <div className="text-muted small">
@@ -1976,6 +1987,7 @@ const handleAmenityChange = (e) => {
                               </Form.Label>
                               <Form.Control
                                 type="number"
+                                min={0}
                                 name="childComAgeMin"
                                 value={formData.childComAgeMin}
                                 onChange={handleInputChange}
@@ -1995,6 +2007,7 @@ const handleAmenityChange = (e) => {
                               </Form.Label>
                               <Form.Control
                                 type="number"
+                                min={0}
                                 name="childComAgeMax"
                                 value={formData.childComAgeMax}
                                 onChange={handleInputChange}
@@ -2014,6 +2027,7 @@ const handleAmenityChange = (e) => {
                               </Form.Label>
                               <Form.Control
                                 type="number"
+                                min={0}
                                 name="childChargeableAgeMin"
                                 value={formData.childChargeableAgeMin}
                                 onChange={handleInputChange}
@@ -2035,6 +2049,7 @@ const handleAmenityChange = (e) => {
                               </Form.Label>
                               <Form.Control
                                 type="number"
+                                min={0}
                                 name="childChargeableAgeMax"
                                 value={formData.childChargeableAgeMax}
                                 onChange={handleInputChange}

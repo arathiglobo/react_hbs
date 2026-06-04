@@ -38,6 +38,8 @@ import AddOnServicesPanel, {
   ADDON_SERVICES_CATALOG,
   collectEnabledAddOnServices,
   readAddOnServices,
+  loadActiveAddOnCatalog,
+  buildAddOnLineItemsForPayload,
 } from "../../../components/AddOnServicesPanel";
 import axiosInstance from "../../../components/AxiosInstance";
 import toast from "react-hot-toast";
@@ -140,6 +142,55 @@ const MakePkgBookingPageV2 = () => {
       // ignore — sessionStorage rejected in private mode etc.
     }
   };
+
+  // Dynamic add-on catalog — read from the sessionStorage cache that the
+  // search page populates on mount (key `mypkg_addon_catalog_v2`). Falls
+  // back to a fresh API call when the booking page is opened directly via
+  // a deep link. Drives the add-on price line in the summary and the
+  // line-items array on the booking POST payload.
+  const [addOnCatalog, setAddOnCatalog] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("mypkg_addon_catalog_v2");
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    if (addOnCatalog.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      const list = await loadActiveAddOnCatalog();
+      if (!cancelled) setAddOnCatalog(list);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Single source of truth for the figure that gets rolled into the grand
+  // total + the bumped totalPrice / sellingPrice on the booking payload.
+  // Sums EVERY enabled add-on's unit price (including Visa and Meet &
+  // Greet, whose dedicated summary rows below show the same amount —
+  // they're not double-counted because `otherAddonsPrice` further down
+  // filters them out from the "Add-on Services" row.) Recomputed whenever
+  // the catalog changes OR the toggle count changes.
+  const addOnsTotal = React.useMemo(() => {
+    if (!Array.isArray(addOnCatalog) || addOnCatalog.length === 0) return 0;
+    let svcMap = {};
+    try { svcMap = readAddOnServices(); } catch { svcMap = {}; }
+    return addOnCatalog.reduce((sum, svc) => {
+      const slot = svcMap?.[svc.key];
+      if (!slot || slot.enabled !== true) return sum;
+      const unit = Number(svc.unitPrice) || 0;
+      const qty = Number(slot.quantity) > 0 ? Number(slot.quantity) : 1;
+      return sum + unit * qty;
+    }, 0);
+    // addOnsCount is intentionally listed so the memo recomputes whenever
+    // the operator flips a toggle (the count is bumped by the panel each
+    // time). eslint can't see the indirect read via readAddOnServices().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addOnCatalog, addOnsCount]);
 
   // Itinerary state
   const [itineraryList, setItineraryList] = useState([]);
@@ -1565,7 +1616,23 @@ const MakePkgBookingPageV2 = () => {
         // toggled ON are forwarded; null when none → backend persists
         // null and the booking-details view simply skips the section.
         addOnServices: collectEnabledAddOnServices(),
+        // Priced line-items for the new dynamic add-on catalog. Each entry
+        // carries the rate snapshotted on the search page so the backend
+        // persists exactly what the operator was billed for. Null when no
+        // priced add-on is selected.
+        selectedAddOnLineItems: buildAddOnLineItemsForPayload(addOnCatalog),
       };
+
+      // Bump the headline prices to include the priced add-on extras BEFORE
+      // they flow into the v2 transform below. Hotel + cab + activity sums
+      // (sellingPrice / totalPrice) plus tourism dirham already line up;
+      // adding `addOnsTotal` is the only thing missing today.
+      if (addOnsTotal > 0) {
+        const bumpedTotal = (Number(bookingPayload.totalPrice) || 0) + addOnsTotal;
+        const bumpedSelling = (Number(bookingPayload.sellingPrice) || 0) + addOnsTotal;
+        bookingPayload.totalPrice = String(bumpedTotal.toFixed(2));
+        bookingPayload.sellingPrice = String(bumpedSelling.toFixed(2));
+      }
 
       console.log("Makepkg Booking payload (legacy shape):", bookingPayload);
 
@@ -3608,23 +3675,44 @@ const MakePkgBookingPageV2 = () => {
                           const mgSelected = !!(mgSvc && mgSvc.enabled);
 
                           // Visa price is sourced from the booking-page
-                          // visaDetails state — adult/child/infant heads
-                          // × per-head rate. Same formula the save
-                          // payload uses, so the row total matches.
-                          const visaPrice =
+                          // Resolve the catalog source FIRST — visa/M&G
+                          // pricing and the "other add-ons" filter both
+                          // depend on it, so declaring it before either is
+                          // required to dodge the temporal-dead-zone trap.
+                          // Source the catalog dynamically so admin-added
+                          // entries (yacht, jet ski, …) appear here too, with
+                          // the static catalog as a fallback for backwards
+                          // compatibility with the 5 legacy hard-coded ones.
+                          const dynCatalog = addOnCatalog.length > 0 ? addOnCatalog : ADDON_SERVICES_CATALOG;
+
+                          // Visa / Meet & Greet pricing — prefer the unit
+                          // price set on the new dynamic add-on catalog
+                          // (admin-managed via /registration/package-addons).
+                          // Falls back to the legacy adult/child/infant
+                          // adult-rate breakdown when no catalog rate has
+                          // been registered yet — keeps existing bookings
+                          // that relied on the legacy form working.
+                          const catalogPriceFor = (key) => {
+                            const entry = dynCatalog.find((s) => s.key === key);
+                            if (!entry || !svcMap?.[key]?.enabled) return 0;
+                            const unit = Number(entry.unitPrice) || 0;
+                            const qty = Number(svcMap[key].quantity) > 0
+                              ? Number(svcMap[key].quantity) : 1;
+                            return unit * qty;
+                          };
+                          const visaPriceFromCatalog = catalogPriceFor("visa");
+                          const visaPriceLegacy =
                             (parseInt(visaDetails.visaAdult || "0") || 0) * (parseFloat(visaDetails.visaAdultRate || "0") || 0) +
                             (parseInt(visaDetails.visaChild || "0") || 0) * (parseFloat(visaDetails.visaChildRate || "0") || 0) +
                             (parseInt(visaDetails.visaInfant || "0") || 0) * (parseFloat(visaDetails.visaInfantRate || "0") || 0);
-                          // Catalogue doesn't carry a price column for
-                          // M&G or the other miscellaneous add-ons, so
-                          // those rows show "Yes" + captured details
-                          // without a per-row price contribution.
-                          const mgPrice = 0;
+                          const visaPrice = visaPriceFromCatalog > 0
+                            ? visaPriceFromCatalog
+                            : visaPriceLegacy;
+                          const mgPrice = catalogPriceFor("meetAndGreet");
 
-                          // Other add-ons: everything in the catalogue
-                          // EXCEPT visa / meetAndGreet (which have their
-                          // own rows above) that the operator turned on.
-                          const otherAddons = ADDON_SERVICES_CATALOG.filter(
+                          // Other add-ons: every enabled add-on EXCEPT visa /
+                          // meetAndGreet (those have dedicated rows above).
+                          const otherAddons = dynCatalog.filter(
                             (svc) => svc.key !== "visa" && svc.key !== "meetAndGreet" && svcMap?.[svc.key]?.enabled
                           );
 
@@ -3632,7 +3720,15 @@ const MakePkgBookingPageV2 = () => {
                           const activitiesPrice = activities.reduce((s, it) => s + Number(it.activity?.totalRate || 0), 0);
                           const arrivalPrice = arrivalCabs.reduce((s, it) => s + cabSliceRate(it), 0);
                           const departurePrice = departureCabs.reduce((s, it) => s + cabSliceRate(it), 0);
-                          const otherAddonsPrice = 0;
+                          // Sum the unit price × quantity for every enabled
+                          // OTHER add-on (visa keeps its bespoke maths above).
+                          const otherAddonsPrice = otherAddons.reduce((s, svc) => {
+                            const unit = Number(svc.unitPrice) || 0;
+                            const qty = Number(svcMap?.[svc.key]?.quantity) > 0
+                              ? Number(svcMap[svc.key].quantity)
+                              : 1;
+                            return s + unit * qty;
+                          }, 0);
 
                           // ── Row shell — one unified look used by every
                           // entry below: title + No (red) or Yes (green)
@@ -3785,24 +3881,32 @@ const MakePkgBookingPageV2 = () => {
 
                           return (
                             <>
-                              <SectionRow
-                                Icon={FaPlus}
-                                iconBg="#eef2ff"
-                                iconColor="#6366f1"
-                                title="Visa"
-                                selected={visaSelected}
-                                price={visaPrice > 0 ? fmtAed(visaPrice) : "Yes"}
-                                details={visaDetailLines}
-                              />
-                              <SectionRow
-                                Icon={FaUsers}
-                                iconBg="#fef3c7"
-                                iconColor="#d97706"
-                                title="Meet & Greet"
-                                selected={mgSelected}
-                                price={mgPrice > 0 ? fmtAed(mgPrice) : "Yes"}
-                                details={mgDetailLines}
-                              />
+                              {/* Add-on rows are hidden entirely when the
+                                  operator picked "No" — only services that
+                                  are part of the package belong in the
+                                  Package Summary. */}
+                              {visaSelected && (
+                                <SectionRow
+                                  Icon={FaPlus}
+                                  iconBg="#eef2ff"
+                                  iconColor="#6366f1"
+                                  title="Visa"
+                                  selected={visaSelected}
+                                  price={visaPrice > 0 ? fmtAed(visaPrice) : "Yes"}
+                                  details={visaDetailLines}
+                                />
+                              )}
+                              {mgSelected && (
+                                <SectionRow
+                                  Icon={FaUsers}
+                                  iconBg="#fef3c7"
+                                  iconColor="#d97706"
+                                  title="Meet & Greet"
+                                  selected={mgSelected}
+                                  price={mgPrice > 0 ? fmtAed(mgPrice) : "Yes"}
+                                  details={mgDetailLines}
+                                />
+                              )}
                               <SectionRow
                                 Icon={FaCar}
                                 iconBg="#ecfdf5"
@@ -3839,19 +3943,18 @@ const MakePkgBookingPageV2 = () => {
                                 price={departureCabs.length > 0 ? fmtAed(departurePrice) : null}
                                 details={departureDetailLines}
                               />
-                              <SectionRow
-                                Icon={FaPlus}
-                                iconBg="#fce7f3"
-                                iconColor="#db2777"
-                                title="Add-on Services"
-                                hideYesNo
-                                // Empty string when nothing was picked
-                                // so the row simply reads "Add-on
-                                // Services" with no Yes/No / price chip.
-                                price={otherAddons.length > 0 ? fmtAed(otherAddonsPrice) : ""}
-                                details={otherAddonDetailLines}
-                                lastInGroup
-                              />
+                              {otherAddons.length > 0 && (
+                                <SectionRow
+                                  Icon={FaPlus}
+                                  iconBg="#fce7f3"
+                                  iconColor="#db2777"
+                                  title="Add-on Services"
+                                  hideYesNo
+                                  price={fmtAed(otherAddonsPrice)}
+                                  details={otherAddonDetailLines}
+                                  lastInGroup
+                                />
+                              )}
                             </>
                           );
                         })()}
@@ -3864,7 +3967,10 @@ const MakePkgBookingPageV2 = () => {
                         // `totalPrice`, so the headline equals the sum
                         // of the rows above plus TD.
                         const tdNum = aggregateTourismDirham;
-                        const totalWithTd = totalPrice + tdNum;
+                        // Roll dynamic add-on prices into the grand total so
+                        // the headline reflects exactly what the operator
+                        // sees in the rows above AND what gets billed.
+                        const totalWithTd = totalPrice + tdNum + addOnsTotal;
 
                         // Non-refundable detection — if ANY single
                         // selected service is non-refundable, the whole
@@ -4468,8 +4574,8 @@ const MakePkgBookingPageV2 = () => {
               // Selling + TD and Total + TD reflect every TD source
               // typed on the page, not just the booking-level field.
               const tdAmount = aggregateTourismDirham;
-              const sellingWithTd = sellingPrice + tdAmount;
-              const totalWithTd = totalPrice + tdAmount;
+              const sellingWithTd = sellingPrice + tdAmount + addOnsTotal;
+              const totalWithTd = totalPrice + tdAmount + addOnsTotal;
               const formatAed = (n) =>
                 `AED ${Number(n || 0).toLocaleString(undefined, {
                   minimumFractionDigits: 2,

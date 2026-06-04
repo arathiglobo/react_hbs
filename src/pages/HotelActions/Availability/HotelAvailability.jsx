@@ -19,6 +19,7 @@ import Swal from "sweetalert2";
 import axiosInstance from "../../../components/AxiosInstance";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 
 const HotelAvailability = () => {
   const { id } = useParams();
@@ -1477,6 +1478,7 @@ const HotelAvailability = () => {
               Back
             </Button>
             <h3 className="mb-0">Hotel Availability</h3>
+            <HotelTitleBadge hotelId={id} className="ms-2" />
           </div>
 
           <Tabs

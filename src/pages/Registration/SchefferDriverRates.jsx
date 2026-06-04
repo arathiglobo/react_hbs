@@ -1,28 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import {
-  Card,
-  Button,
-  Table,
-  Modal,
-  Form,
-  Row,
-  Col,
-} from "react-bootstrap";
+import { Card, Button, Table, Modal, Form, Row, Col } from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import {
-  FaEdit,
-  FaTrash,
-  FaEye,
-  FaPlus,
-  FaDollarSign,
-  FaBackward,
-} from "react-icons/fa";
+import { FaEdit, FaTrash, FaEye, FaPlus, FaDollarSign, FaBackward } from "react-icons/fa";
 
+/**
+ * Chauffeur-rental rate management. Completely redesigned from the old
+ * transfer-style rate page: a rate header (Cab Type / Market / Rate Code /
+ * Validity) plus a Rental Packages grid, and a separate Intercity Charges
+ * section. Talks to the new /api/scheffer-rental-rates endpoints.
+ */
 const SchefferDriverRates = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,167 +31,77 @@ const SchefferDriverRates = () => {
   const [cabProviderName, setCabProviderName] = useState(
     () => location.state?.cabProviderName || ""
   );
+
   const [rates, setRates] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [search, setSearch] = useState("");
-  const [searchTimeout, setSearchTimeout] = useState(null);
   const [marketTypeList, setMarketTypeList] = useState([]);
   const [cabFullList, setCabFullList] = useState([]);
+  const [cityList, setCityList] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
-  const [cabZonePickup, setCabZonePickup] = useState([]);
-  const [cabZoneDropoff, setCabZoneDropoff] = useState([]);
 
-  const fetchCabZone = async (cabId) => {
-    if (!cabId) {
-      setCabZonePickup([]);
-      setCabZoneDropoff([]);
-      return;
-    }
-    try {
-      const res = await axiosInstance.get(`/api/scheffer-zones/by-cab/${cabId}`);
-      const zone = res.data || {};
-      setCabZonePickup(Array.isArray(zone.pickupLocations) ? zone.pickupLocations : []);
-      setCabZoneDropoff(Array.isArray(zone.dropoffLocations) ? zone.dropoffLocations : []);
-    } catch (err) {
-      console.error("Error loading scheffer zone:", err);
-      setCabZonePickup([]);
-      setCabZoneDropoff([]);
-    }
-  };
+  // ---- Rate header + packages form ----
+  const newPackageRow = (id) => ({
+    id,
+    packageId: null,
+    packageName: "",
+    hoursIncluded: "",
+    kmIncluded: "",
+    basePrice: "",
+    extraHourRate: "",
+    extraKmRate: "",
+    nightCharge: "",
+    waitingCharge: "",
+    airportPickupCharge: "",
+    airportDropCharge: "",
+    isActive: true,
+  });
 
-  const [formData, setFormData] = useState({
+  const emptyHeader = {
+    rentalRateId: "",
     cabId: "",
     rateCode: "",
-    marketType: [],
-    cabProviderId: cabProviderId,
-    cabratesId: "",
-  });
-
-  useEffect(() => {
-    if (formData.cabId) fetchCabZone(formData.cabId);
-    else {
-      setCabZonePickup([]);
-      setCabZoneDropoff([]);
-    }
-  }, [formData.cabId]);
-
-  // Car Rental rows — daily-hours-based rate; has Hours field.
-  const newCarRentalRow = (id) => ({
-    id,
-    pickupZoneLocationId: "",
-    dropoffZoneLocationId: "",
-    pickupTime: "",
-    dropoffTime: "",
-    minPax: "",
-    maxPax: "",
-    sicPerWay: "",
-    privateTotal: "",
-    privatePerPax: "",
-    luggage: false,
-    hours: "",
-  });
-  const [carRentalRows, setCarRentalRows] = useState([newCarRentalRow(1)]);
-
-  const [validityDates, setValidityDates] = useState([
-    { id: 1, validityFrom: "", validityTo: "" },
-  ]);
-
-  const openCreate = () => {
-    setEditing(null);
-    setIsViewMode(false);
-    setValidationErrors({});
-    setShowModal(true);
+    marketTypeId: "",
+    validityFrom: "",
+    validityTo: "",
+    isActive: true,
   };
+  const [formData, setFormData] = useState(emptyHeader);
+  const [packageRows, setPackageRows] = useState([newPackageRow(1)]);
 
-  const closeModal = () => {
-    setShowModal(false);
-    setEditing(null);
-    setIsViewMode(false);
-    setValidationErrors({});
-    setFormData({
-      cabId: "",
-      rateCode: "",
-      marketType: [],
-      cabProviderId: cabProviderId,
-      cabratesId: "",
-    });
-    setCarRentalRows([newCarRentalRow(1)]);
-    setCabZonePickup([]);
-    setCabZoneDropoff([]);
-    setValidityDates([{ id: 1, validityFrom: "", validityTo: "" }]);
+  // ---- Intercity charges ----
+  const [intercityList, setIntercityList] = useState([]);
+  const emptyIntercity = {
+    intercityChargeId: null,
+    fromCityId: "",
+    toCityId: "",
+    cabType: "",
+    additionalCharge: "",
+    isActive: true,
   };
+  const [intercityForm, setIntercityForm] = useState(emptyIntercity);
+  const [savingIntercity, setSavingIntercity] = useState(false);
 
-  const addCarRentalRow = () =>
-    setCarRentalRows((prev) => [...prev, newCarRentalRow(Date.now())]);
-  const removeCarRentalRow = (id) =>
-    setCarRentalRows((prev) =>
-      prev.length > 1 ? prev.filter((r) => r.id !== id) : prev
-    );
-  const updateCarRentalRow = (id, field, value) =>
-    setCarRentalRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
-    );
+  const selectedCab = cabFullList.find(
+    (c) => String(c.cabId) === String(formData.cabId)
+  );
 
-  const addValidityDate = () =>
-    setValidityDates([
-      ...validityDates,
-      { id: Date.now(), validityFrom: "", validityTo: "" },
-    ]);
-  const removeValidityDate = (id) => {
-    if (validityDates.length > 1)
-      setValidityDates(validityDates.filter((d) => d.id !== id));
-  };
-  const updateValidityDate = (id, field, value) =>
-    setValidityDates(
-      validityDates.map((d) => (d.id === id ? { ...d, [field]: value } : d))
-    );
+  // distinct cab types available to this provider (for intercity dropdown)
+  const cabTypeOptions = Array.from(
+    new Set(cabFullList.map((c) => c.cabType).filter(Boolean))
+  );
 
-  const updateFormData = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (field === "cabId") {
-      fetchCabZone(value);
-      setCarRentalRows((rows) =>
-        rows.map((row) => ({
-          ...row,
-          pickupZoneLocationId: "",
-          dropoffZoneLocationId: "",
-        }))
-      );
-    }
-    if (validationErrors[field]) {
-      setValidationErrors((prev) => ({ ...prev, [field]: "" }));
-    }
-  };
-
-  const validateForm = (data) => {
-    const errs = {};
-    const s = (v) => (v ? String(v).trim() : "");
-    if (!s(data.cabId)) errs.cabId = "Cab is required";
-    if (!s(data.rateCode)) errs.rateCode = "Rate code is required";
-    if (!data.marketType || data.marketType.length === 0)
-      errs.marketType = "Market is required";
-    return errs;
-  };
-
-  const validateValidityDates = () => {
-    const errors = [];
-    validityDates.forEach((date, i) => {
-      if (date.validityFrom && date.validityTo) {
-        if (new Date(date.validityTo) <= new Date(date.validityFrom))
-          errors.push(`Validity period ${i + 1}: "To" date must be after "From" date`);
-      }
-    });
-    return errors;
-  };
-
+  // ---------------- date helpers (dd/MM/yyyy for the API) ----------------
   const formatDateForAPI = (s) => {
     if (!s) return "";
     const d = new Date(s);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    return `${String(d.getDate()).padStart(2, "0")}/${String(
+      d.getMonth() + 1
+    ).padStart(2, "0")}/${d.getFullYear()}`;
   };
   const convertDateFromAPI = (s) => {
     if (!s) return "";
@@ -216,133 +117,7 @@ const SchefferDriverRates = () => {
     return d.toISOString().split("T")[0];
   };
 
-  const transformToPayload = () => ({
-    marketype: formData.marketType,
-    cabId: parseInt(formData.cabId) || 0,
-    cabratesId: editing ? parseInt(editing.cabratesId) : null,
-    rateCode: formData.rateCode,
-    cabproviderId: formData.cabProviderId ? parseInt(formData.cabProviderId) : null,
-    cabRateValidityDTOList: validityDates.map((d) => ({
-      cabValidityId: editing ? d.cabValidityId || null : null,
-      validityFrom: formatDateForAPI(d.validityFrom),
-      validityTo: formatDateForAPI(d.validityTo),
-    })),
-    cabRateDetailsDTOList: carRentalRows.map((row) => ({
-      minpax: parseInt(row.minPax) || 0,
-      maxpax: parseInt(row.maxPax) || 0,
-      locationId: 0,
-      sicRate: parseFloat(row.sicPerWay) || 0,
-      luggage: Boolean(row.luggage),
-      hourDetails: row.hours || "",
-      cabRatesdetailsId: editing ? row.cabRatesdetailsId || null : null,
-      travelType: "2",
-      pickupZoneLocationId: row.pickupZoneLocationId
-        ? parseInt(row.pickupZoneLocationId)
-        : null,
-      dropoffZoneLocationId: row.dropoffZoneLocationId
-        ? parseInt(row.dropoffZoneLocationId)
-        : null,
-      pickupTime: row.pickupTime || "",
-      dropoffTime: row.dropoffTime || "",
-      privateTotalRate:
-        row.privateTotal !== "" && row.privateTotal != null
-          ? parseFloat(row.privateTotal)
-          : null,
-      privatePerPaxRate:
-        row.privatePerPax !== "" && row.privatePerPax != null
-          ? parseFloat(row.privatePerPax)
-          : null,
-    })),
-  });
-
-  const rowInvalid = (row) =>
-    !row.minPax ||
-    !row.maxPax ||
-    !row.sicPerWay ||
-    !row.privateTotal ||
-    !row.privatePerPax ||
-    !row.hours;
-
-  const saveRate = async () => {
-    try {
-      const errors = validateForm(formData);
-      if (Object.keys(errors).length > 0) {
-        setValidationErrors(errors);
-        return;
-      }
-      if (!formData.cabProviderId) {
-        toast.error("No Provider selected. Please navigate from registration page.");
-        return;
-      }
-      if (validityDates.some((d) => !d.validityFrom || !d.validityTo)) {
-        toast.error("Please fill in all validity date ranges");
-        return;
-      }
-      const vErrs = validateValidityDates();
-      if (vErrs.length > 0) {
-        toast.error(vErrs[0]);
-        return;
-      }
-      if (carRentalRows.some(rowInvalid)) {
-        toast.error("Please fill in all rate grid fields (including Hours)");
-        return;
-      }
-      setLoading(true);
-      const response = await axiosInstance.post(
-        "/api/SchefferDriverRates/register",
-        transformToPayload()
-      );
-      if (response.data) {
-        toast.success("Rate saved successfully!");
-        closeModal();
-        fetchRatesList(search);
-      }
-    } catch (error) {
-      console.error("Error saving rate:", error);
-      toast.error("Failed to save rate. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateRate = async () => {
-    try {
-      const errors = validateForm(formData);
-      if (Object.keys(errors).length > 0) {
-        setValidationErrors(errors);
-        return;
-      }
-      if (validityDates.some((d) => !d.validityFrom || !d.validityTo)) {
-        toast.error("Please fill in all validity date ranges");
-        return;
-      }
-      const vErrs = validateValidityDates();
-      if (vErrs.length > 0) {
-        toast.error(vErrs[0]);
-        return;
-      }
-      if (carRentalRows.some(rowInvalid)) {
-        toast.error("Please fill in all rate grid fields (including Hours)");
-        return;
-      }
-      setLoading(true);
-      const response = await axiosInstance.put(
-        `/api/SchefferDriverRates/${editing.cabratesId}`,
-        transformToPayload()
-      );
-      if (response.data) {
-        toast.success("Rate updated successfully!");
-        closeModal();
-        fetchRatesList(search);
-      }
-    } catch (error) {
-      console.error("Error updating rate:", error);
-      toast.error("Failed to update rate. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // ---------------- data loads ----------------
   const loadMarketTypes = async () => {
     try {
       const r = await axiosInstance.get("/api/marketType");
@@ -352,23 +127,19 @@ const SchefferDriverRates = () => {
     }
   };
 
-  const fetchRatesList = async (s = "") => {
-    if (!cabProviderId) {
-      setRates([]);
-      return;
-    }
+  const loadCities = async () => {
     try {
-      setIsLoading(true);
-      setRates([]);
-      const r = await axiosInstance.get(`/api/SchefferDriverRates`, {
-        params: { providerId: cabProviderId, page: 0, limit: 20, search: s || "" },
-      });
-      setRates(r.data || []);
+      const r = await axiosInstance.get("/api/province", { params: { limit: 500 } });
+      const items = Array.isArray(r.data) ? r.data : r.data?.content || [];
+      setCityList(
+        items.map((it) => ({
+          id: it.id ?? it.stateId ?? it.placeid ?? it.provinceId,
+          name: it.name ?? it.stateName ?? it.placeName ?? it.provinceName,
+        }))
+      );
     } catch (e) {
-      console.error("Error loading scheffer rates:", e);
-      setRates([]);
-    } finally {
-      setIsLoading(false);
+      console.error("Error loading cities:", e);
+      // Fallback: derive cities from the provider's cabs.
     }
   };
 
@@ -382,8 +153,44 @@ const SchefferDriverRates = () => {
     }
   };
 
+  const fetchRatesList = async (s = "") => {
+    if (!cabProviderId) {
+      setRates([]);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const r = await axiosInstance.get(`/api/scheffer-rental-rates`, {
+        params: { providerId: cabProviderId, page: 0, limit: 50, search: s || "" },
+      });
+      setRates(r.data || []);
+    } catch (e) {
+      console.error("Error loading rental rates:", e);
+      setRates([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchIntercity = async () => {
+    if (!cabProviderId) {
+      setIntercityList([]);
+      return;
+    }
+    try {
+      const r = await axiosInstance.get(`/api/scheffer-rental-rates/intercity`, {
+        params: { providerId: cabProviderId },
+      });
+      setIntercityList(r.data || []);
+    } catch (e) {
+      console.error("Error loading intercity charges:", e);
+      setIntercityList([]);
+    }
+  };
+
   useEffect(() => {
     loadMarketTypes();
+    loadCities();
   }, []);
 
   useEffect(() => {
@@ -409,88 +216,179 @@ const SchefferDriverRates = () => {
   useEffect(() => {
     if (cabProviderId) {
       fetchRatesList();
+      fetchIntercity();
       cabsList();
     } else {
       setRates([]);
       setCabFullList([]);
+      setIntercityList([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cabProviderId]);
 
   useEffect(() => {
-    if (searchTimeout) clearTimeout(searchTimeout);
     const t = setTimeout(() => fetchRatesList(search), 500);
-    setSearchTimeout(t);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  useEffect(() => {
-    if (cabProviderId)
-      setFormData((prev) => ({ ...prev, cabProviderId: cabProviderId }));
-  }, [cabProviderId]);
+  // ---------------- form helpers ----------------
+  const updateFormData = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (validationErrors[field]) {
+      setValidationErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+  };
 
-  const populateGridsFromRateDetails = (list) => {
-    if (!Array.isArray(list) || list.length === 0) {
-      setCarRentalRows([newCarRentalRow(1)]);
+  const addPackageRow = () =>
+    setPackageRows((prev) => [...prev, newPackageRow(Date.now())]);
+  const removePackageRow = (id) =>
+    setPackageRows((prev) =>
+      prev.length > 1 ? prev.filter((r) => r.id !== id) : prev
+    );
+  const updatePackageRow = (id, field, value) =>
+    setPackageRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
+
+  const openCreate = () => {
+    setEditing(null);
+    setIsViewMode(false);
+    setValidationErrors({});
+    setFormData(emptyHeader);
+    setPackageRows([newPackageRow(1)]);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditing(null);
+    setIsViewMode(false);
+    setValidationErrors({});
+    setFormData(emptyHeader);
+    setPackageRows([newPackageRow(1)]);
+  };
+
+  const validateForm = () => {
+    const errs = {};
+    if (!formData.cabId) errs.cabId = "Cab Type is required";
+    if (!formData.rateCode || !formData.rateCode.trim())
+      errs.rateCode = "Rate code is required";
+    if (!formData.marketTypeId) errs.marketTypeId = "Market is required";
+    if (!formData.validityFrom) errs.validityFrom = "Validity From is required";
+    if (!formData.validityTo) errs.validityTo = "Validity To is required";
+    return errs;
+  };
+
+  const packageInvalid = (row) =>
+    !row.packageName || !row.hoursIncluded || !row.kmIncluded || row.basePrice === "";
+
+  const num = (v) => (v === "" || v == null ? null : parseFloat(v));
+  const int = (v) => (v === "" || v == null ? null : parseInt(v, 10));
+
+  const transformToPayload = () => ({
+    rentalRateId: editing ? editing.rentalRateId : null,
+    cabId: parseInt(formData.cabId, 10),
+    cabProviderId: cabProviderId ? parseInt(cabProviderId, 10) : null,
+    rateCode: formData.rateCode,
+    marketTypeId: formData.marketTypeId ? parseInt(formData.marketTypeId, 10) : null,
+    validityFrom: formatDateForAPI(formData.validityFrom),
+    validityTo: formatDateForAPI(formData.validityTo),
+    isActive: formData.isActive,
+    packages: packageRows.map((r) => ({
+      packageId: r.packageId || null,
+      packageName: r.packageName,
+      hoursIncluded: int(r.hoursIncluded),
+      kmIncluded: int(r.kmIncluded),
+      basePrice: num(r.basePrice),
+      extraHourRate: num(r.extraHourRate),
+      extraKmRate: num(r.extraKmRate),
+      nightCharge: num(r.nightCharge),
+      waitingCharge: num(r.waitingCharge),
+      airportPickupCharge: num(r.airportPickupCharge),
+      airportDropCharge: num(r.airportDropCharge),
+      isActive: Boolean(r.isActive),
+    })),
+  });
+
+  const saveRate = async () => {
+    const errs = validateForm();
+    if (Object.keys(errs).length) {
+      setValidationErrors(errs);
       return;
     }
-    const rows = list.map((detail, index) => ({
-      id: index + 1,
-      minPax: detail.minpax != null ? detail.minpax.toString() : "",
-      maxPax: detail.maxpax != null ? detail.maxpax.toString() : "",
-      sicPerWay: detail.sicRate != null ? detail.sicRate.toString() : "",
-      privateTotal:
-        detail.privateTotalRate != null ? detail.privateTotalRate.toString() : "",
-      privatePerPax:
-        detail.privatePerPaxRate != null ? detail.privatePerPaxRate.toString() : "",
-      luggage: detail.luggage || false,
-      pickupZoneLocationId: detail.pickupZoneLocationId
-        ? detail.pickupZoneLocationId.toString()
-        : "",
-      dropoffZoneLocationId: detail.dropoffZoneLocationId
-        ? detail.dropoffZoneLocationId.toString()
-        : "",
-      pickupTime: detail.pickupTime || "",
-      dropoffTime: detail.dropoffTime || "",
-      cabRatesdetailsId: detail.cabRatesdetailsId || null,
-      hours: detail.hourDetails || "",
-    }));
-    setCarRentalRows(rows.length > 0 ? rows : [newCarRentalRow(1)]);
-  };
-
-  const handleEdit = (rate) => {
-    setEditing(rate);
-    setIsViewMode(false);
-    setShowModal(true);
-    setFormData({
-      cabId: rate.cabId ? rate.cabId.toString() : "",
-      rateCode: rate.rateCode || "",
-      marketType: rate.marketype || [],
-      cabProviderId: rate.cabproviderId || cabProviderId,
-      cabratesId: rate.cabratesId ? rate.cabratesId.toString() : "",
-    });
-    if (rate.cabId) fetchCabZone(rate.cabId);
-    if (rate.cabRateValidityDTOList && rate.cabRateValidityDTOList.length > 0) {
-      setValidityDates(
-        rate.cabRateValidityDTOList.map((date, index) => ({
-          id: index + 1,
-          validityFrom: date.validityFrom ? convertDateFromAPI(date.validityFrom) : "",
-          validityTo: date.validityTo ? convertDateFromAPI(date.validityTo) : "",
-        }))
-      );
-    } else {
-      setValidityDates([{ id: 1, validityFrom: "", validityTo: "" }]);
+    if (formData.validityTo && formData.validityFrom &&
+      new Date(formData.validityTo) <= new Date(formData.validityFrom)) {
+      toast.error('"Validity To" must be after "Validity From"');
+      return;
     }
-    populateGridsFromRateDetails(rate.cabRateDetailsDTOList);
+    if (packageRows.some(packageInvalid)) {
+      toast.error("Each package needs a name, hours, km and base price");
+      return;
+    }
+    try {
+      setLoading(true);
+      if (editing) {
+        await axiosInstance.put(
+          `/api/scheffer-rental-rates/${editing.rentalRateId}`,
+          transformToPayload()
+        );
+        toast.success("Rental rate updated successfully!");
+      } else {
+        await axiosInstance.post(
+          "/api/scheffer-rental-rates/register",
+          transformToPayload()
+        );
+        toast.success("Rental rate saved successfully!");
+      }
+      closeModal();
+      fetchRatesList(search);
+    } catch (e) {
+      console.error("Error saving rental rate:", e);
+      toast.error("Failed to save rental rate. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleView = (rate) => {
-    handleEdit(rate);
-    setIsViewMode(true);
+  const handleEdit = (rate, viewMode = false) => {
+    setEditing(rate);
+    setIsViewMode(viewMode);
+    setValidationErrors({});
+    setFormData({
+      rentalRateId: rate.rentalRateId,
+      cabId: rate.cabId ? String(rate.cabId) : "",
+      rateCode: rate.rateCode || "",
+      marketTypeId: rate.marketTypeId ? String(rate.marketTypeId) : "",
+      validityFrom: convertDateFromAPI(rate.validityFrom),
+      validityTo: convertDateFromAPI(rate.validityTo),
+      isActive: rate.isActive !== false,
+    });
+    const pkgs =
+      Array.isArray(rate.packages) && rate.packages.length
+        ? rate.packages.map((p, i) => ({
+            id: i + 1,
+            packageId: p.packageId || null,
+            packageName: p.packageName || "",
+            hoursIncluded: p.hoursIncluded ?? "",
+            kmIncluded: p.kmIncluded ?? "",
+            basePrice: p.basePrice ?? "",
+            extraHourRate: p.extraHourRate ?? "",
+            extraKmRate: p.extraKmRate ?? "",
+            nightCharge: p.nightCharge ?? "",
+            waitingCharge: p.waitingCharge ?? "",
+            airportPickupCharge: p.airportPickupCharge ?? "",
+            airportDropCharge: p.airportDropCharge ?? "",
+            isActive: p.isActive !== false,
+          }))
+        : [newPackageRow(1)];
+    setPackageRows(pkgs);
+    setShowModal(true);
   };
 
   const handleDelete = (rate) => {
     Swal.fire({
-      title: `Are you sure? You want to delete rate: ${rate.rateCode}`,
+      title: `Delete rental rate: ${rate.rateCode}?`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -499,12 +397,83 @@ const SchefferDriverRates = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await axiosInstance.delete(`/api/SchefferDriverRates/${rate.cabratesId}`);
-          toast.success("Rate deleted successfully");
+          await axiosInstance.delete(`/api/scheffer-rental-rates/${rate.rentalRateId}`);
+          toast.success("Rental rate deleted");
           fetchRatesList(search);
         } catch (e) {
           console.error("Delete error:", e);
           toast.error("Failed to delete rate");
+        }
+      }
+    });
+  };
+
+  // ---------------- intercity handlers ----------------
+  const cityName = (id) => {
+    const c = cityList.find((x) => String(x.id) === String(id));
+    return c ? c.name : "";
+  };
+
+  const saveIntercity = async () => {
+    if (!intercityForm.fromCityId || !intercityForm.toCityId) {
+      toast.error("From City and To City are required");
+      return;
+    }
+    if (intercityForm.additionalCharge === "" || isNaN(parseFloat(intercityForm.additionalCharge))) {
+      toast.error("Additional charge is required");
+      return;
+    }
+    try {
+      setSavingIntercity(true);
+      await axiosInstance.post("/api/scheffer-rental-rates/intercity", {
+        intercityChargeId: intercityForm.intercityChargeId,
+        cabProviderId: parseInt(cabProviderId, 10),
+        fromCityId: parseInt(intercityForm.fromCityId, 10),
+        fromCityName: cityName(intercityForm.fromCityId),
+        toCityId: parseInt(intercityForm.toCityId, 10),
+        toCityName: cityName(intercityForm.toCityId),
+        cabType: intercityForm.cabType || null,
+        additionalCharge: parseFloat(intercityForm.additionalCharge),
+        isActive: Boolean(intercityForm.isActive),
+      });
+      toast.success("Intercity charge saved");
+      setIntercityForm(emptyIntercity);
+      fetchIntercity();
+    } catch (e) {
+      console.error("Error saving intercity charge:", e);
+      toast.error("Failed to save intercity charge");
+    } finally {
+      setSavingIntercity(false);
+    }
+  };
+
+  const editIntercity = (c) => {
+    setIntercityForm({
+      intercityChargeId: c.intercityChargeId,
+      fromCityId: c.fromCityId ? String(c.fromCityId) : "",
+      toCityId: c.toCityId ? String(c.toCityId) : "",
+      cabType: c.cabType || "",
+      additionalCharge: c.additionalCharge ?? "",
+      isActive: c.isActive !== false,
+    });
+  };
+
+  const deleteIntercity = (c) => {
+    Swal.fire({
+      title: `Delete intercity charge ${c.fromCityName} → ${c.toCityName}?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      confirmButtonText: "Delete",
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await axiosInstance.delete(`/api/scheffer-rental-rates/intercity/${c.intercityChargeId}`);
+          toast.success("Intercity charge deleted");
+          fetchIntercity();
+        } catch (e) {
+          console.error("Delete intercity error:", e);
+          toast.error("Failed to delete intercity charge");
         }
       }
     });
@@ -516,8 +485,9 @@ const SchefferDriverRates = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex justify-content-between align-items-center">
+          {/* ---- Rental Rates ---- */}
+          <Card className="shadow-sm rounded-xl mb-4">
+            <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <div>
                 <Button
                   variant="outline-primary"
@@ -530,10 +500,10 @@ const SchefferDriverRates = () => {
                 </Button>
                 <span className="fw-semibold">
                   <FaDollarSign className="me-2 text-success" />
-                  Scheffer Driver & Limousine Rates
+                  Chauffeur Rental Rates
                   {cabProviderId ? (
                     <span className="text-muted ms-2">
-                      (Provider ID: {cabProviderId})
+                      ({cabProviderName || "Provider"} #{cabProviderId})
                     </span>
                   ) : (
                     <span className="text-warning ms-2">(No Provider Selected)</span>
@@ -547,10 +517,10 @@ const SchefferDriverRates = () => {
                   placeholder="Search rates..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  style={{ width: "250px" }}
+                  style={{ width: "220px" }}
                 />
                 <Button className="btn-green" onClick={openCreate}>
-                  + Create
+                  + Create Rate
                 </Button>
               </div>
             </Card.Header>
@@ -558,66 +528,66 @@ const SchefferDriverRates = () => {
               <Table responsive hover striped className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th style={{ width: 100 }}>S/N</th>
+                    <th style={{ width: 60 }}>S/N</th>
                     <th>Rate Code</th>
-                    <th>Provider</th>
-                    <th>Cab</th>
+                    <th>Cab Type</th>
+                    <th>City</th>
                     <th>Market</th>
+                    <th>Packages</th>
                     <th>Validity From</th>
                     <th>Validity To</th>
+                    <th>Active</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading && (
                     <tr>
-                      <td colSpan="8" className="text-center text-muted py-4">
+                      <td colSpan="10" className="text-center text-muted py-4">
                         Loading rates...
                       </td>
                     </tr>
                   )}
                   {!isLoading && rates.length === 0 && (
                     <tr>
-                      <td colSpan="8" className="text-center text-muted py-4">
-                        No rates found. Click "Create" to add new rates.
+                      <td colSpan="10" className="text-center text-muted py-4">
+                        No rental rates yet. Click "Create Rate" to add one.
                       </td>
                     </tr>
                   )}
                   {!isLoading &&
                     rates.map((rate, index) => (
-                      <tr key={rate.cabratesId || index}>
+                      <tr key={rate.rentalRateId || index}>
                         <td>{index + 1}</td>
                         <td>{rate.rateCode || "N/A"}</td>
-                        <td>{cabProviderName || "N/A"}</td>
-                        <td>{rate.cabId || "N/A"}</td>
+                        <td>{rate.cabType || rate.cabName || "N/A"}</td>
+                        <td>{rate.cityName || "N/A"}</td>
+                        <td>{rate.marketTypeName || rate.marketTypeId || "N/A"}</td>
+                        <td>{rate.packages ? rate.packages.length : 0}</td>
+                        <td>{rate.validityFrom || "N/A"}</td>
+                        <td>{rate.validityTo || "N/A"}</td>
                         <td>
-                          {rate.marketype && rate.marketype.length > 0
-                            ? rate.marketype.join(", ")
-                            : "N/A"}
-                        </td>
-                        <td>
-                          {rate.cabRateValidityDTOList?.[0]?.validityFrom || "N/A"}
-                        </td>
-                        <td>
-                          {rate.cabRateValidityDTOList?.[0]?.validityTo || "N/A"}
+                          <span className={`badge bg-${rate.isActive !== false ? "success" : "secondary"}`}>
+                            {rate.isActive !== false ? "Active" : "Inactive"}
+                          </span>
                         </td>
                         <td>
                           <div className="d-flex gap-2">
                             <FaEdit
                               className="text-primary"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
-                              onClick={() => handleEdit(rate)}
+                              style={{ cursor: "pointer", fontSize: 18 }}
+                              onClick={() => handleEdit(rate, false)}
                               title="Edit"
                             />
                             <FaEye
                               className="text-info"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
-                              onClick={() => handleView(rate)}
+                              style={{ cursor: "pointer", fontSize: 18 }}
+                              onClick={() => handleEdit(rate, true)}
                               title="View"
                             />
                             <FaTrash
                               className="text-danger"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                              style={{ cursor: "pointer", fontSize: 18 }}
                               onClick={() => handleDelete(rate)}
                               title="Delete"
                             />
@@ -630,9 +600,143 @@ const SchefferDriverRates = () => {
             </Card.Body>
           </Card>
 
+          {/* ---- Intercity Charges ---- */}
+          <Card className="shadow-sm rounded-xl">
+            <Card.Header className="fw-semibold">
+              Intercity Charges
+              <span className="text-muted ms-2" style={{ fontSize: 13 }}>
+                (surcharge when travel crosses into another city)
+              </span>
+            </Card.Header>
+            <Card.Body>
+              <Row className="g-2 align-items-end mb-3">
+                <Col md={3}>
+                  <Form.Label>From City</Form.Label>
+                  <Form.Select
+                    value={intercityForm.fromCityId}
+                    onChange={(e) =>
+                      setIntercityForm((p) => ({ ...p, fromCityId: e.target.value }))
+                    }
+                  >
+                    <option value="">Select</option>
+                    {cityList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={3}>
+                  <Form.Label>To City</Form.Label>
+                  <Form.Select
+                    value={intercityForm.toCityId}
+                    onChange={(e) =>
+                      setIntercityForm((p) => ({ ...p, toCityId: e.target.value }))
+                    }
+                  >
+                    <option value="">Select</option>
+                    {cityList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={2}>
+                  <Form.Label>Cab Type</Form.Label>
+                  <Form.Select
+                    value={intercityForm.cabType}
+                    onChange={(e) =>
+                      setIntercityForm((p) => ({ ...p, cabType: e.target.value }))
+                    }
+                  >
+                    <option value="">All</option>
+                    {cabTypeOptions.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={2}>
+                  <Form.Label>Additional Charge</Form.Label>
+                  <Form.Control
+                    type="number"
+                    placeholder="AED"
+                    value={intercityForm.additionalCharge}
+                    onChange={(e) =>
+                      setIntercityForm((p) => ({ ...p, additionalCharge: e.target.value }))
+                    }
+                  />
+                </Col>
+                <Col md={2}>
+                  <Button
+                    className="btn-green w-100"
+                    onClick={saveIntercity}
+                    disabled={savingIntercity || !cabProviderId}
+                  >
+                    {intercityForm.intercityChargeId ? "Update" : "Add"}
+                  </Button>
+                </Col>
+              </Row>
+
+              <Table responsive hover striped size="sm" className="align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>From City</th>
+                    <th>To City</th>
+                    <th>Cab Type</th>
+                    <th>Additional Charge</th>
+                    <th>Active</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {intercityList.length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="text-center text-muted py-3">
+                        No intercity charges configured.
+                      </td>
+                    </tr>
+                  )}
+                  {intercityList.map((c) => (
+                    <tr key={c.intercityChargeId}>
+                      <td>{c.fromCityName}</td>
+                      <td>{c.toCityName}</td>
+                      <td>{c.cabType || "All"}</td>
+                      <td>{c.additionalCharge} AED</td>
+                      <td>
+                        <span className={`badge bg-${c.isActive !== false ? "success" : "secondary"}`}>
+                          {c.isActive !== false ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="d-flex gap-2">
+                          <FaEdit
+                            className="text-primary"
+                            style={{ cursor: "pointer" }}
+                            onClick={() => editIntercity(c)}
+                            title="Edit"
+                          />
+                          <FaTrash
+                            className="text-danger"
+                            style={{ cursor: "pointer" }}
+                            onClick={() => deleteIntercity(c)}
+                            title="Delete"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Card.Body>
+          </Card>
+
+          {/* ---- Rate create/edit modal ---- */}
           <style>{`
-            .scheffer-rate-modal-wide { max-width: 95vw; }
-            .scheffer-rate-modal-wide .rate-grid-table { min-width: 1500px; }
+            .scheffer-rate-modal-wide { max-width: 96vw; }
+            .scheffer-rate-modal-wide .rate-grid-table { min-width: 1400px; }
             .scheffer-rate-modal-wide .rate-grid-table th,
             .scheffer-rate-modal-wide .rate-grid-table td { vertical-align: middle; }
           `}</style>
@@ -645,20 +749,17 @@ const SchefferDriverRates = () => {
           >
             <Modal.Header closeButton>
               <Modal.Title>
-                {isViewMode
-                  ? "View Scheffer Driver & Limousine Rate"
-                  : editing
-                  ? "Edit Scheffer Driver & Limousine Rate"
-                  : "Save Scheffer Driver & Limousine Rate"}
+                {isViewMode ? "View" : editing ? "Edit" : "Create"} Chauffeur Rental Rate
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <Form>
+                <h6 className="text-muted mb-3">Rate Information</h6>
                 <Row>
-                  <Col md={4}>
+                  <Col md={3}>
                     <Form.Group className="mb-3">
                       <Form.Label>
-                        Cab <span className="text-danger">*</span>
+                        Cab Type <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Select
                         value={formData.cabId}
@@ -670,20 +771,30 @@ const SchefferDriverRates = () => {
                         {cabFullList.map((cab) => (
                           <option key={cab.cabId} value={cab.cabId}>
                             {cab.cabName}
+                            {cab.cabType ? ` — ${cab.cabType}` : ""}
                           </option>
                         ))}
                       </Form.Select>
-                      {validationErrors.cabId && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.cabId}
-                        </Form.Control.Feedback>
-                      )}
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.cabId}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col md={3}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>City</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={selectedCab?.placeName || ""}
+                        placeholder="Derived from cab"
+                        disabled
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
                     <Form.Group className="mb-3">
                       <Form.Label>
-                        Rate code <span className="text-danger">*</span>
+                        Rate Code <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Control
                         type="text"
@@ -693,24 +804,20 @@ const SchefferDriverRates = () => {
                         isInvalid={!!validationErrors.rateCode}
                         disabled={isViewMode}
                       />
-                      {validationErrors.rateCode && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.rateCode}
-                        </Form.Control.Feedback>
-                      )}
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.rateCode}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col md={3}>
                     <Form.Group className="mb-3">
                       <Form.Label>
-                        Market<span className="text-danger">*</span>
+                        Market <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Select
-                        value={formData.marketType[0] || ""}
-                        onChange={(e) =>
-                          updateFormData("marketType", [e.target.value])
-                        }
-                        isInvalid={!!validationErrors.marketType}
+                        value={formData.marketTypeId}
+                        onChange={(e) => updateFormData("marketTypeId", e.target.value)}
+                        isInvalid={!!validationErrors.marketTypeId}
                         disabled={isViewMode}
                       >
                         <option value="">Select Market</option>
@@ -720,78 +827,71 @@ const SchefferDriverRates = () => {
                           </option>
                         ))}
                       </Form.Select>
-                      {validationErrors.marketType && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.marketType}
-                        </Form.Control.Feedback>
-                      )}
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.marketTypeId}
+                      </Form.Control.Feedback>
                     </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>
+                        Validity From <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={formData.validityFrom}
+                        onChange={(e) => {
+                          updateFormData("validityFrom", e.target.value);
+                          if (formData.validityTo && e.target.value &&
+                            new Date(formData.validityTo) <= new Date(e.target.value))
+                            updateFormData("validityTo", "");
+                        }}
+                        isInvalid={!!validationErrors.validityFrom}
+                        disabled={isViewMode}
+                      />
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.validityFrom}
+                      </Form.Control.Feedback>
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>
+                        Validity To <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={formData.validityTo}
+                        min={getMinToDate(formData.validityFrom)}
+                        onChange={(e) => updateFormData("validityTo", e.target.value)}
+                        isInvalid={!!validationErrors.validityTo}
+                        disabled={isViewMode}
+                      />
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.validityTo}
+                      </Form.Control.Feedback>
+                    </Form.Group>
+                  </Col>
+                  <Col md={3} className="d-flex align-items-center">
+                    <Form.Check
+                      type="switch"
+                      label="Active"
+                      checked={formData.isActive}
+                      onChange={(e) => updateFormData("isActive", e.target.checked)}
+                      disabled={isViewMode}
+                      className="mt-3"
+                    />
                   </Col>
                 </Row>
 
-                <div className="mb-3">
-                  <h6 className="text-muted mb-3">Validity Periods</h6>
-                  {validityDates.map((date) => (
-                    <Row key={date.id} className="mb-2">
-                      <Col md={5}>
-                        <Form.Group>
-                          <Form.Label>Validity From </Form.Label>
-                          <Form.Control
-                            type="date"
-                            value={date.validityFrom}
-                            onChange={(e) => {
-                              updateValidityDate(date.id, "validityFrom", e.target.value);
-                              if (date.validityTo && e.target.value && new Date(date.validityTo) <= new Date(e.target.value))
-                                updateValidityDate(date.id, "validityTo", "");
-                            }}
-                            disabled={isViewMode}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={5}>
-                        <Form.Group>
-                          <Form.Label>Validity To </Form.Label>
-                          <Form.Control
-                            type="date"
-                            value={date.validityTo}
-                            min={getMinToDate(date.validityFrom)}
-                            onChange={(e) =>
-                              updateValidityDate(date.id, "validityTo", e.target.value)
-                            }
-                            disabled={isViewMode}
-                          />
-                        </Form.Group>
-                      </Col>
-                      {!isViewMode && (
-                        <Col md={2}>
-                          <div className="d-flex gap-1 mt-4">
-                            <Button variant="outline-primary" size="sm" onClick={addValidityDate}>
-                              <FaPlus size={10} />
-                            </Button>
-                            {validityDates.length > 1 && (
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                onClick={() => removeValidityDate(date.id)}
-                              >
-                                <FaTrash size={10} />
-                              </Button>
-                            )}
-                          </div>
-                        </Col>
-                      )}
-                    </Row>
-                  ))}
-                </div>
-
-                {/* ── Rate Grid — Car Rental (daily hours-based) ──────── */}
-                <div className="border-top pt-3 mt-3">
+                {/* Rental Packages grid */}
+                <div className="border-top pt-3 mt-2">
                   <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6 className="text-muted mb-0">Rate Grid — Car Rental</h6>
+                    <h6 className="text-muted mb-0">Rental Packages</h6>
                     {!isViewMode && (
-                      <Button variant="outline-primary" size="sm" onClick={addCarRentalRow}>
+                      <Button variant="outline-primary" size="sm" onClick={addPackageRow}>
                         <FaPlus className="me-2" />
-                        Add Row
+                        Add Package
                       </Button>
                     )}
                   </div>
@@ -799,193 +899,123 @@ const SchefferDriverRates = () => {
                     <Table striped bordered hover size="sm" className="rate-grid-table">
                       <thead className="table-light">
                         <tr>
-                          <th style={{ minWidth: 170 }}>Pickup</th>
-                          <th style={{ minWidth: 110 }}>Pickup Time</th>
-                          <th style={{ minWidth: 170 }}>Dropoff</th>
-                          <th style={{ minWidth: 110 }}>Dropoff Time</th>
-                          <th style={{ minWidth: 80 }}>Min Pax</th>
-                          <th style={{ minWidth: 80 }}>Max Pax</th>
-                          <th style={{ minWidth: 110 }}>SIC</th>
-                          <th style={{ minWidth: 130 }}>Private (Total)</th>
-                          <th style={{ minWidth: 130 }}>Private Per Pax</th>
-                          <th style={{ minWidth: 70 }}>Luggage</th>
-                          <th style={{ minWidth: 110 }}>Hours</th>
+                          <th style={{ minWidth: 150 }}>Package Name</th>
+                          <th style={{ minWidth: 90 }}>Hours</th>
+                          <th style={{ minWidth: 90 }}>KM</th>
+                          <th style={{ minWidth: 110 }}>Base Price</th>
+                          <th style={{ minWidth: 110 }}>Extra Hour</th>
+                          <th style={{ minWidth: 110 }}>Extra KM</th>
+                          <th style={{ minWidth: 110 }}>Night</th>
+                          <th style={{ minWidth: 110 }}>Waiting</th>
+                          <th style={{ minWidth: 120 }}>Airport Pickup</th>
+                          <th style={{ minWidth: 120 }}>Airport Drop</th>
+                          <th style={{ minWidth: 70 }}>Active</th>
                           {!isViewMode && <th style={{ minWidth: 90 }}>Actions</th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {carRentalRows.map((row) => (
+                        {packageRows.map((row) => (
                           <tr key={row.id}>
                             <td>
-                              <Form.Select
-                                size="sm"
-                                value={row.pickupZoneLocationId || ""}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "pickupZoneLocationId", e.target.value)
-                                }
-                                disabled={isViewMode || !formData.cabId}
-                              >
-                                <option value="">
-                                  {!formData.cabId
-                                    ? "Select cab first"
-                                    : cabZonePickup.length === 0
-                                    ? "No pickup zones"
-                                    : "Select pickup"}
-                                </option>
-                                {cabZonePickup.map((loc) => (
-                                  <option key={loc.id} value={loc.id}>
-                                    {loc.locationName}
-                                  </option>
-                                ))}
-                              </Form.Select>
-                            </td>
-                            <td>
                               <Form.Control
-                                type="time"
                                 size="sm"
-                                value={row.pickupTime || ""}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "pickupTime", e.target.value)
-                                }
-                                disabled={isViewMode}
-                              />
-                            </td>
-                            <td>
-                              <Form.Select
-                                size="sm"
-                                value={row.dropoffZoneLocationId || ""}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "dropoffZoneLocationId", e.target.value)
-                                }
-                                disabled={isViewMode || !formData.cabId}
-                              >
-                                <option value="">
-                                  {!formData.cabId
-                                    ? "Select cab first"
-                                    : cabZoneDropoff.length === 0
-                                    ? "No dropoff zones"
-                                    : "Select dropoff"}
-                                </option>
-                                {cabZoneDropoff.map((loc) => (
-                                  <option key={loc.id} value={loc.id}>
-                                    {loc.locationName}
-                                  </option>
-                                ))}
-                              </Form.Select>
-                            </td>
-                            <td>
-                              <Form.Control
-                                type="time"
-                                size="sm"
-                                value={row.dropoffTime || ""}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "dropoffTime", e.target.value)
-                                }
+                                placeholder="Half Day"
+                                value={row.packageName}
+                                onChange={(e) => updatePackageRow(row.id, "packageName", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
                               <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="Min"
-                                value={row.minPax}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "minPax", e.target.value)
-                                }
+                                type="number" size="sm" placeholder="4"
+                                value={row.hoursIncluded}
+                                onChange={(e) => updatePackageRow(row.id, "hoursIncluded", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
                               <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="Max"
-                                value={row.maxPax}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "maxPax", e.target.value)
-                                }
+                                type="number" size="sm" placeholder="100"
+                                value={row.kmIncluded}
+                                onChange={(e) => updatePackageRow(row.id, "kmIncluded", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
                               <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="SIC"
-                                value={row.sicPerWay}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "sicPerWay", e.target.value)
-                                }
+                                type="number" size="sm" placeholder="120"
+                                value={row.basePrice}
+                                onChange={(e) => updatePackageRow(row.id, "basePrice", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
                               <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="Total"
-                                value={row.privateTotal || ""}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "privateTotal", e.target.value)
-                                }
+                                type="number" size="sm" placeholder="20"
+                                value={row.extraHourRate}
+                                onChange={(e) => updatePackageRow(row.id, "extraHourRate", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
                               <Form.Control
-                                type="number"
-                                size="sm"
-                                placeholder="Per Pax"
-                                value={row.privatePerPax || ""}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "privatePerPax", e.target.value)
-                                }
+                                type="number" size="sm" placeholder="2"
+                                value={row.extraKmRate}
+                                onChange={(e) => updatePackageRow(row.id, "extraKmRate", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
                             <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="0"
+                                value={row.nightCharge}
+                                onChange={(e) => updatePackageRow(row.id, "nightCharge", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="0"
+                                value={row.waitingCharge}
+                                onChange={(e) => updatePackageRow(row.id, "waitingCharge", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="0"
+                                value={row.airportPickupCharge}
+                                onChange={(e) => updatePackageRow(row.id, "airportPickupCharge", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" size="sm" placeholder="0"
+                                value={row.airportDropCharge}
+                                onChange={(e) => updatePackageRow(row.id, "airportDropCharge", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td className="text-center">
                               <Form.Check
                                 type="checkbox"
-                                checked={row.luggage}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "luggage", e.target.checked)
-                                }
+                                checked={row.isActive}
+                                onChange={(e) => updatePackageRow(row.id, "isActive", e.target.checked)}
                                 disabled={isViewMode}
                               />
-                            </td>
-                            <td>
-                              <Form.Select
-                                size="sm"
-                                value={row.hours || ""}
-                                onChange={(e) =>
-                                  updateCarRentalRow(row.id, "hours", e.target.value)
-                                }
-                                disabled={isViewMode}
-                              >
-                                <option value="">Select</option>
-                                {Array.from({ length: 20 }, (_, i) => i + 1).map((h) => (
-                                  <option key={h} value={h}>
-                                    {h} Hour{h > 1 ? "s" : ""}
-                                  </option>
-                                ))}
-                              </Form.Select>
                             </td>
                             {!isViewMode && (
                               <td>
                                 <div className="d-flex gap-1">
-                                  <Button
-                                    variant="outline-primary"
-                                    size="sm"
-                                    onClick={addCarRentalRow}
-                                  >
+                                  <Button variant="outline-primary" size="sm" onClick={addPackageRow}>
                                     <FaPlus size={10} />
                                   </Button>
-                                  {carRentalRows.length > 1 && (
+                                  {packageRows.length > 1 && (
                                     <Button
                                       variant="outline-danger"
                                       size="sm"
-                                      onClick={() => removeCarRentalRow(row.id)}
+                                      onClick={() => removePackageRow(row.id)}
                                     >
                                       <FaTrash size={10} />
                                     </Button>
@@ -1006,18 +1036,8 @@ const SchefferDriverRates = () => {
                 {isViewMode ? "Close" : "Cancel"}
               </Button>
               {!isViewMode && (
-                <Button
-                  variant="success"
-                  onClick={editing ? updateRate : saveRate}
-                  disabled={loading}
-                >
-                  {loading
-                    ? editing
-                      ? "Updating..."
-                      : "Saving..."
-                    : editing
-                    ? "Update"
-                    : "Create"}
+                <Button variant="success" onClick={saveRate} disabled={loading}>
+                  {loading ? (editing ? "Updating..." : "Saving...") : editing ? "Update" : "Create"}
                 </Button>
               )}
             </Modal.Footer>
