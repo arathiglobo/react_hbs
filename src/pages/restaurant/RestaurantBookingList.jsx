@@ -11,6 +11,7 @@ import {
   Pagination,
   Button,
   Modal,
+  Container,
 } from "react-bootstrap";
 import {
   FaSearch,
@@ -66,6 +67,9 @@ const RestaurantBookingList = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  // Booking Types radio (mirrors SeniorCitizenBookingList shell).
+  // "upcoming" = anything not Cancelled / Completed.
+  const [bookingType, setBookingType] = useState("upcoming");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
   // The booking that's having its status / rate edited via the modal.
@@ -123,13 +127,25 @@ const RestaurantBookingList = () => {
         b.bookingNumber?.toLowerCase().includes(q) ||
         b.restaurantName?.toLowerCase().includes(q) ||
         b.customerName?.toLowerCase().includes(q);
-      const matchStatus = statusFilter === "all" || b.bookingStatus === statusFilter;
-      return matchQ && matchStatus;
+      const matchStatus =
+        statusFilter === "all" || b.bookingStatus === statusFilter;
+      // Booking-type radio (Upcoming / Completed / Cancelled). Sliced
+      // by the bookingStatus column so cancelled/completed rows go to
+      // their own tabs and everything else shows under Upcoming.
+      const isCancelled = b.bookingStatus === "Cancelled";
+      const isCompleted = b.bookingStatus === "Completed";
+      let matchType = true;
+      if (bookingType === "cancelled") matchType = isCancelled;
+      else if (bookingType === "completed") matchType = isCompleted;
+      else matchType = !isCancelled && !isCompleted; // upcoming
+      return matchQ && matchStatus && matchType;
     });
-  }, [items, search, statusFilter]);
+  }, [items, search, statusFilter, bookingType]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const pageData = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const displayStart = filtered.length === 0 ? 0 : (page - 1) * PER_PAGE + 1;
+  const displayEnd = Math.min(filtered.length, page * PER_PAGE);
 
   /** Edit → reopen the booking page with the saved fields pre-loaded.
    *  Useful for fixing customer details / menu before approval. */
@@ -431,39 +447,91 @@ const RestaurantBookingList = () => {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
-        <div className="p-3 p-md-4" style={{ background: "#f5f7fb", minHeight: "calc(100vh - 60px)" }}>
-          <Card className="shadow-sm">
-            <Card.Header className="bg-white">
-              <h5 className="mb-0">
-                <FaUtensils className="me-2 text-warning" />
-                Restaurant Bookings
-              </h5>
+        <main
+          className="flex-grow-1 p-4"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+        <Container
+          fluid
+          style={{
+            maxWidth: "100%",
+            paddingLeft: "1rem",
+            paddingRight: "1rem",
+          }}
+        >
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div className="d-flex align-items-center gap-3">
+              <h4 className="mb-0 text-dark">Restaurant Bookings</h4>
+            </div>
+          </div>
+
+          <Card className="border mb-3" style={{ borderRadius: "8px" }}>
+            <Card.Header
+              className="d-flex justify-content-between align-items-center text-dark border-bottom"
+              style={{
+                borderRadius: "8px 8px 0 0",
+                backgroundColor: "#f1f3f5",
+              }}
+            >
+              <span>List of Bookings</span>
             </Card.Header>
             <Card.Body>
-              <Row className="mb-3 g-2">
-                <Col md={4}>
-                  <InputGroup>
-                    <InputGroup.Text>
-                      <FaSearch />
-                    </InputGroup.Text>
-                    <Form.Control
-                      placeholder="Search by booking #, restaurant, customer"
-                      value={search}
-                      onChange={(e) => {
-                        setSearch(e.target.value);
-                        setPage(1);
-                      }}
-                    />
-                  </InputGroup>
+              {/* Booking Types radio filter */}
+              <Row className="mb-4">
+                <Col md={6}>
+                  <Card
+                    className="border"
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <Card.Body className="p-3">
+                      <h6
+                        className="mb-3 text-dark"
+                        style={{ fontSize: "0.85rem" }}
+                      >
+                        Booking Types
+                      </h6>
+                      <div className="d-flex flex-wrap gap-4">
+                        {[
+                          { value: "upcoming", label: "Upcoming" },
+                          { value: "completed", label: "Completed" },
+                          { value: "cancelled", label: "Cancelled" },
+                        ].map((opt) => (
+                          <Form.Check
+                            key={opt.value}
+                            type="radio"
+                            id={`bookingType-${opt.value}`}
+                            name="bookingType"
+                            label={opt.label}
+                            checked={bookingType === opt.value}
+                            onChange={() => {
+                              setBookingType(opt.value);
+                              setPage(1);
+                            }}
+                            style={{
+                              fontSize: "0.85rem",
+                              cursor: "pointer",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </Card.Body>
+                  </Card>
                 </Col>
-                <Col md={3}>
+              </Row>
+
+              <Row className="mb-3 align-items-center g-2">
+                <Col md="auto">
                   <Form.Select
+                    size="sm"
                     value={statusFilter}
                     onChange={(e) => {
                       setStatusFilter(e.target.value);
                       setPage(1);
                     }}
+                    style={{ width: "auto" }}
                   >
                     <option value="all">All Statuses</option>
                     {BOOKING_STATUS_OPTIONS.map((s) => (
@@ -472,6 +540,21 @@ const RestaurantBookingList = () => {
                       </option>
                     ))}
                   </Form.Select>
+                </Col>
+                <Col md={4} className="ms-auto">
+                  <InputGroup>
+                    <InputGroup.Text>
+                      <FaSearch />
+                    </InputGroup.Text>
+                    <Form.Control
+                      placeholder="Search:"
+                      value={search}
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        setPage(1);
+                      }}
+                    />
+                  </InputGroup>
                 </Col>
               </Row>
 
@@ -681,25 +764,47 @@ const RestaurantBookingList = () => {
                 </Table>
               )}
 
-              {totalPages > 1 && (
-                <div className="d-flex justify-content-end">
+              <div className="d-flex justify-content-between align-items-center mt-3">
+                <div className="text-muted small">
+                  Showing {displayStart} to {displayEnd} of {filtered.length}{" "}
+                  entries
+                </div>
+                {totalPages > 1 && (
                   <Pagination size="sm" className="mb-0">
-                    <Pagination.Prev disabled={page === 1} onClick={() => setPage(page - 1)} />
-                    {Array.from({ length: totalPages }).map((_, i) => (
-                      <Pagination.Item key={i} active={page === i + 1} onClick={() => setPage(i + 1)}>
-                        {i + 1}
-                      </Pagination.Item>
-                    ))}
+                    <Pagination.Prev
+                      disabled={page === 1}
+                      onClick={() => setPage(page - 1)}
+                    />
+                    {Array.from(
+                      { length: Math.min(5, totalPages) },
+                      (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) pageNum = i + 1;
+                        else if (page <= 3) pageNum = i + 1;
+                        else if (page >= totalPages - 2)
+                          pageNum = totalPages - 4 + i;
+                        else pageNum = page - 2 + i;
+                        return (
+                          <Pagination.Item
+                            key={pageNum}
+                            active={page === pageNum}
+                            onClick={() => setPage(pageNum)}
+                          >
+                            {pageNum}
+                          </Pagination.Item>
+                        );
+                      },
+                    )}
                     <Pagination.Next
                       disabled={page === totalPages}
                       onClick={() => setPage(page + 1)}
                     />
                   </Pagination>
-                </div>
-              )}
+                )}
+              </div>
             </Card.Body>
           </Card>
-        </div>
+        </Container>
         </main>
       </div>
 

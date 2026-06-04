@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Card,
   Table,
@@ -11,8 +11,11 @@ import {
   Col,
   Pagination,
   Container,
+  InputGroup,
 } from "react-bootstrap";
-import { FaEye, FaTimesCircle, FaFileAlt, FaSearch } from "react-icons/fa";
+import { FaEye, FaTimesCircle, FaFileAlt, FaSearch, FaTrashAlt } from "react-icons/fa";
+
+const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
@@ -29,7 +32,8 @@ export default function DayStayBookingList() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
-  const pageSize = 10;
+  const [size, setSize] = useState(10);
+  const [bookingType, setBookingType] = useState("upcoming");
 
   // View
   const [showDetails, setShowDetails] = useState(false);
@@ -63,19 +67,41 @@ export default function DayStayBookingList() {
     fetchRows();
   }, []);
 
-  const filtered = (() => {
+  const filtered = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const byType = rows.filter((r) => {
+      if (bookingType === "cancelled") return !!r.isCancelled;
+      if (r.isCancelled) return false;
+      const ref = r.checkInDate;
+      const refDate = ref ? new Date(ref) : null;
+      if (refDate && !isNaN(refDate.getTime())) {
+        refDate.setHours(0, 0, 0, 0);
+        if (bookingType === "completed") return refDate < today;
+        if (bookingType === "upcoming") return refDate >= today;
+      }
+      return bookingType === "upcoming";
+    });
     const q = (search || "").trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
+    if (!q) return byType;
+    return byType.filter(
       (r) =>
         (r.bookingCode || "").toLowerCase().includes(q) ||
         (r.hotelName || "").toLowerCase().includes(q) ||
         (r.primaryGuest?.firstName || "").toLowerCase().includes(q) ||
-        (r.primaryGuest?.lastName || "").toLowerCase().includes(q)
+        (r.primaryGuest?.lastName || "").toLowerCase().includes(q),
     );
-  })();
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageData = filtered.slice(page * pageSize, (page + 1) * pageSize);
+  }, [rows, search, bookingType]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / size));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageData = filtered.slice(safePage * size, (safePage + 1) * size);
+  const displayStart = filtered.length === 0 ? 0 : safePage * size + 1;
+  const displayEnd = Math.min(filtered.length, (safePage + 1) * size);
+
+  useEffect(() => {
+    setPage(0);
+  }, [search, bookingType]);
 
   const handleView = async (row) => {
     setShowDetails(true);
@@ -140,157 +166,278 @@ export default function DayStayBookingList() {
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <Container fluid>
+        <main
+          className="flex-grow-1 p-4"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "1rem",
+              paddingRight: "1rem",
+            }}
+          >
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <h3 className="mb-0">Day Stay Bookings</h3>
-              <div style={{ width: 300 }}>
-                <Form.Control
-                  type="text"
-                  placeholder="Search by code, hotel or guest..."
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(0);
-                  }}
-                />
+              <div className="d-flex align-items-center gap-3">
+                <h4 className="mb-0 text-dark">Day Stay Booking</h4>
               </div>
             </div>
 
-            <Card className="shadow-sm">
-              <Card.Body className="p-0">
-                <Table
-                  striped
-                  bordered
-                  hover
-                  responsive
-                  className="mb-0 align-middle"
-                >
-                  <thead>
-                    <tr>
-                      <th style={{ width: 70 }}>S/N</th>
-                      <th>Booking Code</th>
-                      <th>Hotel</th>
-                      <th>Guest</th>
-                      <th>Date / Time</th>
-                      <th>Rooms</th>
-                      <th>Total</th>
-                      <th>Status</th>
-                      <th style={{ width: 150 }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr>
-                        <td colSpan={9} className="text-center py-4">
-                          <Spinner animation="border" />
-                        </td>
-                      </tr>
-                    ) : pageData.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="text-center text-muted py-4">
-                          <FaSearch className="mb-2 opacity-50" />
-                          <div>No Day Stay bookings found.</div>
-                        </td>
-                      </tr>
-                    ) : (
-                      pageData.map((r, i) => (
-                        <tr key={r.id}>
-                          <td>{i + 1 + page * pageSize}</td>
-                          <td>{r.bookingCode || "-"}</td>
-                          <td>{r.hotelName || "-"}</td>
-                          <td>
-                            {r.primaryGuest
-                              ? `${r.primaryGuest.salutation || ""} ${
-                                  r.primaryGuest.firstName || ""
-                                } ${r.primaryGuest.lastName || ""}`.trim()
-                              : "-"}
-                          </td>
-                          <td>
-                            {r.checkInDate}
-                            <br />
-                            <small className="text-muted">
-                              {(r.checkInTime || "").slice(0, 5)} –{" "}
-                              {(r.checkOutTime || "").slice(0, 5)}
-                            </small>
-                          </td>
-                          <td>{r.noOfRooms || 1}</td>
-                          <td>
-                            {r.totalAmount != null
-                              ? `AED ${Number(r.totalAmount).toFixed(2)}`
-                              : "—"}
-                          </td>
-                          <td>{statusBadge(r)}</td>
-                          <td>
-                            <div className="d-flex gap-2">
-                              <FaEye
-                                className="text-primary"
-                                style={{ cursor: "pointer", fontSize: 18 }}
-                                onClick={() => handleView(r)}
-                                title="View"
-                              />
-                              {!r.isCancelled && (
-                                <FaTimesCircle
-                                  className="text-danger"
-                                  style={{ cursor: "pointer", fontSize: 18 }}
-                                  onClick={() => openCancel(r)}
-                                  title="Cancel"
-                                />
-                              )}
-                              <FaFileAlt
-                                className={
-                                  r.isCancelled
-                                    ? "text-muted"
-                                    : "text-success"
-                                }
-                                style={{
-                                  cursor: r.isCancelled
-                                    ? "not-allowed"
-                                    : "pointer",
-                                  fontSize: 18,
-                                }}
-                                onClick={() => {
-                                  if (!r.isCancelled) handleVoucher(r);
-                                }}
-                                title={
-                                  r.isCancelled
-                                    ? "Cancelled bookings have no voucher"
-                                    : "Voucher"
-                                }
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </Table>
+            {/* List of Bookings Section */}
+            <Card className="border mb-3" style={{ borderRadius: "8px" }}>
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom"
+                style={{
+                  borderRadius: "8px 8px 0 0",
+                  backgroundColor: "#f1f3f5",
+                }}
+              >
+                <span>List of Bookings</span>
+              </Card.Header>
+              <Card.Body>
+                {/* Booking Types radio filter */}
+                <Row className="mb-4">
+                  <Col md={6}>
+                    <Card
+                      className="border"
+                      style={{
+                        backgroundColor: "#f8f9fa",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <Card.Body className="p-3">
+                        <h6
+                          className="mb-3 text-dark"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          Booking Types
+                        </h6>
+                        <div className="d-flex flex-wrap gap-4">
+                          {[
+                            { value: "upcoming", label: "Upcoming" },
+                            { value: "completed", label: "Completed" },
+                            { value: "cancelled", label: "Cancelled" },
+                          ].map((opt) => (
+                            <Form.Check
+                              key={opt.value}
+                              type="radio"
+                              id={`bookingType-${opt.value}`}
+                              name="bookingType"
+                              label={opt.label}
+                              checked={bookingType === opt.value}
+                              onChange={() => {
+                                setBookingType(opt.value);
+                                setPage(0);
+                              }}
+                              style={{
+                                fontSize: "0.85rem",
+                                cursor: "pointer",
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+
+                {/* Display + Search */}
+                <Row className="mb-3 align-items-center">
+                  <Col md={3}>
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="small text-muted">Display</span>
+                      <Form.Select
+                        value={size}
+                        onChange={(e) => {
+                          setSize(Number(e.target.value));
+                          setPage(0);
+                        }}
+                        size="sm"
+                        style={{ width: "auto" }}
+                      >
+                        {PER_PAGE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option} records
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  </Col>
+                  <Col md={4} className="ms-auto">
+                    <InputGroup>
+                      <InputGroup.Text>
+                        <FaSearch />
+                      </InputGroup.Text>
+                      <Form.Control
+                        type="text"
+                        placeholder="Search:"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                      />
+                    </InputGroup>
+                  </Col>
+                </Row>
+
+                {/* Table */}
+                {loading ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-3 text-muted">Loading bookings...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="table-responsive">
+                      <Table striped bordered hover className="mb-0 align-middle">
+                        <thead className="table-light">
+                          <tr>
+                            <th style={{ width: "60px" }}>S.N</th>
+                            <th>Booking Code</th>
+                            <th>Hotel</th>
+                            <th>Guest</th>
+                            <th>Date / Time</th>
+                            <th>Rooms</th>
+                            <th className="text-end">Total</th>
+                            <th>Status</th>
+                            <th style={{ width: "150px" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pageData.length > 0 ? (
+                            pageData.map((r, i) => (
+                              <tr key={r.id}>
+                                <td>{safePage * size + i + 1}</td>
+                                <td className="text-dark">
+                                  {r.bookingCode || "-"}
+                                </td>
+                                <td>{r.hotelName || "-"}</td>
+                                <td>
+                                  {r.primaryGuest
+                                    ? `${r.primaryGuest.salutation || ""} ${
+                                        r.primaryGuest.firstName || ""
+                                      } ${r.primaryGuest.lastName || ""}`.trim()
+                                    : "-"}
+                                </td>
+                                <td>
+                                  {r.checkInDate || "-"}
+                                  <div className="small text-muted">
+                                    {(r.checkInTime || "").slice(0, 5)} –{" "}
+                                    {(r.checkOutTime || "").slice(0, 5)}
+                                  </div>
+                                </td>
+                                <td>{r.noOfRooms || 1}</td>
+                                <td className="text-end text-dark">
+                                  {r.totalAmount != null
+                                    ? `AED ${Number(r.totalAmount).toFixed(2)}`
+                                    : "—"}
+                                </td>
+                                <td>
+                                  {r.isCancelled
+                                    ? "Cancelled"
+                                    : r.status || "—"}
+                                </td>
+                                <td>
+                                  <div className="d-flex gap-3 align-items-center flex-wrap">
+                                    <FaEye
+                                      style={{
+                                        cursor: "pointer",
+                                        fontSize: "14px",
+                                        color: "#007bff",
+                                      }}
+                                      onClick={() => handleView(r)}
+                                      title="View Details"
+                                    />
+                                    <FaFileAlt
+                                      style={{
+                                        cursor: r.isCancelled
+                                          ? "not-allowed"
+                                          : "pointer",
+                                        fontSize: "14px",
+                                        color: r.isCancelled
+                                          ? "#6c757d"
+                                          : "#198754",
+                                      }}
+                                      onClick={() => {
+                                        if (!r.isCancelled) handleVoucher(r);
+                                      }}
+                                      title={
+                                        r.isCancelled
+                                          ? "Cancelled bookings have no voucher"
+                                          : "Voucher"
+                                      }
+                                    />
+                                    {!r.isCancelled && (
+                                      <FaTrashAlt
+                                        style={{
+                                          cursor: "pointer",
+                                          fontSize: "14px",
+                                          color: "#dc3545",
+                                        }}
+                                        onClick={() => openCancel(r)}
+                                        title="Cancel Booking"
+                                      />
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td
+                                colSpan={9}
+                                className="text-center py-4 text-muted"
+                              >
+                                No data available in table
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </Table>
+                    </div>
+
+                    {/* Pagination */}
+                    <div className="d-flex justify-content-between align-items-center mt-3">
+                      <div className="text-muted small">
+                        Showing {displayStart} to {displayEnd} of{" "}
+                        {filtered.length} entries
+                      </div>
+                      {totalPages > 1 && (
+                        <Pagination className="mb-0">
+                          <Pagination.Prev
+                            disabled={safePage === 0}
+                            onClick={() => setPage((p) => Math.max(0, p - 1))}
+                          />
+                          {Array.from(
+                            { length: Math.min(5, totalPages) },
+                            (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) pageNum = i;
+                              else if (safePage <= 2) pageNum = i;
+                              else if (safePage >= totalPages - 3)
+                                pageNum = totalPages - 5 + i;
+                              else pageNum = safePage - 2 + i;
+                              return (
+                                <Pagination.Item
+                                  key={pageNum}
+                                  active={pageNum === safePage}
+                                  onClick={() => setPage(pageNum)}
+                                >
+                                  {pageNum + 1}
+                                </Pagination.Item>
+                              );
+                            },
+                          )}
+                          <Pagination.Next
+                            disabled={safePage + 1 >= totalPages}
+                            onClick={() => setPage((p) => p + 1)}
+                          />
+                        </Pagination>
+                      )}
+                    </div>
+                  </>
+                )}
               </Card.Body>
             </Card>
-
-            {totalPages > 1 && (
-              <div className="d-flex justify-content-center mt-3">
-                <Pagination className="mb-0">
-                  <Pagination.Prev
-                    disabled={page === 0}
-                    onClick={() => setPage((p) => p - 1)}
-                  />
-                  {[...Array(totalPages).keys()].map((n) => (
-                    <Pagination.Item
-                      key={n}
-                      active={n === page}
-                      onClick={() => setPage(n)}
-                    >
-                      {n + 1}
-                    </Pagination.Item>
-                  ))}
-                  <Pagination.Next
-                    disabled={page === totalPages - 1}
-                    onClick={() => setPage((p) => p + 1)}
-                  />
-                </Pagination>
-              </div>
-            )}
           </Container>
         </main>
       </div>

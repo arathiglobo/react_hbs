@@ -3,7 +3,6 @@ import {
   Container,
   Card,
   Table,
-  Badge,
   Button,
   Spinner,
   Pagination,
@@ -13,7 +12,7 @@ import {
   Row,
   Col,
 } from "react-bootstrap";
-import { FaLeaf, FaEye, FaTimesCircle, FaSearch, FaSpa, FaUserMd, FaBookOpen } from "react-icons/fa";
+import { FaEye, FaTimesCircle, FaSearch, FaSpa, FaUserMd, FaBookOpen, FaTrashAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -41,7 +40,10 @@ const AyurvedaBookingList = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
+  // Booking-type filter: upcoming / completed / cancelled. Filtered
+  // client-side against isCancelled + endDate so we don't need a new
+  // backend endpoint (mirrors SeniorCitizenBookingList).
+  const [bookingType, setBookingType] = useState("upcoming");
 
   // Modals
   const [detailsBooking, setDetailsBooking] = useState(null);
@@ -72,9 +74,20 @@ const AyurvedaBookingList = () => {
 
   const filtered = bookings.filter((b) => {
     if (filterType && b.bookingType !== filterType) return false;
-    if (filterStatus) {
-      if (filterStatus === "ACTIVE" && b.isCancelled) return false;
-      if (filterStatus === "CANCELLED" && !b.isCancelled) return false;
+    // Booking-type filter (Upcoming / Completed / Cancelled).
+    if (bookingType === "cancelled") {
+      if (!b.isCancelled) return false;
+    } else {
+      if (b.isCancelled) return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const ref = b.endDate || b.startDate;
+      const refDate = ref ? new Date(ref) : null;
+      if (refDate && !isNaN(refDate.getTime())) {
+        refDate.setHours(0, 0, 0, 0);
+        if (bookingType === "completed" && refDate >= today) return false;
+        if (bookingType === "upcoming" && refDate < today) return false;
+      }
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -113,200 +126,292 @@ const AyurvedaBookingList = () => {
     }
   };
 
+  const totalElements =
+    bookings.length === 0
+      ? 0
+      : totalPages > 1
+        ? totalPages * size
+        : filtered.length;
+  const displayStart = filtered.length === 0 ? 0 : page * size + 1;
+  const displayEnd = page * size + filtered.length;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
-        <div className="ayurveda-page">
-          <Container fluid className="p-3">
-            <div className="ayurveda-header">
-              <div>
-                <h2 className="ayurveda-title">
-                  <FaLeaf /> Ayurveda Bookings
-                </h2>
-                <p className="ayurveda-subtitle">
-                  All ayurveda packages, consultations & courses bookings
-                </p>
+        <main
+          className="flex-grow-1 p-4"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "1rem",
+              paddingRight: "1rem",
+            }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <div className="d-flex align-items-center gap-3">
+                <h4 className="mb-0 text-dark">Ayurveda Booking</h4>
               </div>
             </div>
 
-            <div className="ayurveda-filter-bar">
-              <InputGroup style={{ maxWidth: 300 }}>
-                <InputGroup.Text>
-                  <FaSearch />
-                </InputGroup.Text>
-                <Form.Control
-                  placeholder="Search by ref, name..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </InputGroup>
-              <Form.Select
-                style={{ maxWidth: 200 }}
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-              >
-                <option value="">All Types</option>
-                <option value="PACKAGE">Package</option>
-                <option value="CONSULTATION">Consultation</option>
-                <option value="COURSE">Course</option>
-              </Form.Select>
-              <Form.Select
-                style={{ maxWidth: 180 }}
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-              >
-                <option value="">All Statuses</option>
-                <option value="ACTIVE">Active</option>
-                <option value="CANCELLED">Cancelled</option>
-              </Form.Select>
-              <Form.Select
-                style={{ maxWidth: 130 }}
-                value={size}
-                onChange={(e) => {
-                  setSize(Number(e.target.value));
-                  setPage(0);
+            {/* List of Bookings Section */}
+            <Card className="border mb-3" style={{ borderRadius: "8px" }}>
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom"
+                style={{
+                  borderRadius: "8px 8px 0 0",
+                  backgroundColor: "#f1f3f5",
                 }}
               >
-                {PAGE_SIZE_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s} / page
-                  </option>
-                ))}
-              </Form.Select>
-            </div>
+                <span>List of Bookings</span>
+              </Card.Header>
+              <Card.Body>
+                {/* Booking Types radio filter (Upcoming / Completed /
+                    Cancelled). Filters rows client-side. */}
+                <Row className="mb-4">
+                  <Col md={6}>
+                    <Card
+                      className="border"
+                      style={{
+                        backgroundColor: "#f8f9fa",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <Card.Body className="p-3">
+                        <h6
+                          className="mb-3 text-dark"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          Booking Types
+                        </h6>
+                        <div className="d-flex flex-wrap gap-4">
+                          {[
+                            { value: "upcoming", label: "Upcoming" },
+                            { value: "completed", label: "Completed" },
+                            { value: "cancelled", label: "Cancelled" },
+                          ].map((opt) => (
+                            <Form.Check
+                              key={opt.value}
+                              type="radio"
+                              id={`bookingType-${opt.value}`}
+                              name="bookingType"
+                              label={opt.label}
+                              checked={bookingType === opt.value}
+                              onChange={() => {
+                                setBookingType(opt.value);
+                                setPage(0);
+                              }}
+                              style={{
+                                fontSize: "0.85rem",
+                                cursor: "pointer",
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
 
-            <Card className="ayurveda-card-body">
-              {loading ? (
-                <div className="text-center py-5">
-                  <Spinner animation="border" variant="success" />
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="ayurveda-empty">No bookings to show.</div>
-              ) : (
-                <Table responsive striped hover size="sm">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Reference</th>
-                      <th>Type</th>
-                      <th>Item</th>
-                      <th>Booking Date</th>
-                      <th>Start</th>
-                      <th>End</th>
-                      <th>Pax</th>
-                      <th>Total</th>
-                      <th>Status</th>
-                      <th>Payment</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((b, idx) => (
-                      <tr key={b.id}>
-                        <td>{idx + 1 + page * size}</td>
-                        <td>
-                          <strong>{b.bookingReference}</strong>
-                        </td>
-                        <td>
-                          <Badge bg="info">
-                            {typeIcon(b.bookingType)}
-                            {b.bookingType}
-                          </Badge>
-                        </td>
-                        <td>
-                          {b.packageName || b.doctorName || b.courseName || "-"}
-                        </td>
-                        <td>{formatDate(b.bookingDate)}</td>
-                        <td>{formatDate(b.startDate)}</td>
-                        <td>{formatDate(b.endDate)}</td>
-                        <td>{b.numberOfParticipants}</td>
-                        <td>{formatAmount(b.totalPrice)}</td>
-                        <td>
-                          <span
-                            className={`ayurveda-status-badge ayurveda-status-${b.status}`}
-                          >
-                            {b.status}
-                          </span>
-                        </td>
-                        <td>
-                          <Badge
-                            bg={
-                              b.paymentStatus === "PAID"
-                                ? "success"
-                                : b.paymentStatus === "PENDING"
-                                ? "warning"
-                                : "secondary"
-                            }
-                          >
-                            {b.paymentStatus}
-                          </Badge>
-                        </td>
-                        <td>
-                          <Button
-                            size="sm"
-                            variant="outline-primary"
-                            className="me-1"
-                            onClick={() => setDetailsBooking(b)}
-                          >
-                            <FaEye />
-                          </Button>
-                          {!b.isCancelled && (
-                            <Button
-                              size="sm"
-                              variant="outline-danger"
-                              onClick={() => setCancelBooking(b)}
-                            >
-                              <FaTimesCircle />
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              )}
-            </Card>
-
-            {totalPages > 1 && (
-              <div className="d-flex justify-content-center mt-3">
-                <Pagination>
-                  <Pagination.First
-                    onClick={() => setPage(0)}
-                    disabled={page === 0}
-                  />
-                  <Pagination.Prev
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={page === 0}
-                  />
-                  {[...Array(totalPages).keys()]
-                    .slice(Math.max(0, page - 2), Math.min(totalPages, page + 3))
-                    .map((p) => (
-                      <Pagination.Item
-                        key={p}
-                        active={p === page}
-                        onClick={() => setPage(p)}
+                {/* Display + Type + Search */}
+                <Row className="mb-3 align-items-center g-2">
+                  <Col md="auto">
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="small text-muted">Display</span>
+                      <Form.Select
+                        value={size}
+                        onChange={(e) => {
+                          setSize(Number(e.target.value));
+                          setPage(0);
+                        }}
+                        size="sm"
+                        style={{ width: "auto" }}
                       >
-                        {p + 1}
-                      </Pagination.Item>
-                    ))}
-                  <Pagination.Next
-                    onClick={() =>
-                      setPage((p) => Math.min(totalPages - 1, p + 1))
-                    }
-                    disabled={page >= totalPages - 1}
-                  />
-                  <Pagination.Last
-                    onClick={() => setPage(totalPages - 1)}
-                    disabled={page >= totalPages - 1}
-                  />
-                </Pagination>
-              </div>
-            )}
+                        {PAGE_SIZE_OPTIONS.map((s) => (
+                          <option key={s} value={s}>
+                            {s} records
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  </Col>
+                  <Col md="auto">
+                    <Form.Select
+                      size="sm"
+                      value={filterType}
+                      onChange={(e) => setFilterType(e.target.value)}
+                      style={{ width: "auto" }}
+                    >
+                      <option value="">All Types</option>
+                      <option value="PACKAGE">Package</option>
+                      <option value="CONSULTATION">Consultation</option>
+                      <option value="COURSE">Course</option>
+                    </Form.Select>
+                  </Col>
+                  <Col md={4} className="ms-auto">
+                    <InputGroup>
+                      <InputGroup.Text>
+                        <FaSearch />
+                      </InputGroup.Text>
+                      <Form.Control
+                        type="text"
+                        placeholder="Search:"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                      />
+                    </InputGroup>
+                  </Col>
+                </Row>
+
+                {/* Table */}
+                {loading ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-3 text-muted">Loading bookings...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="table-responsive">
+                      <Table striped bordered hover className="mb-0">
+                        <thead className="table-light">
+                          <tr>
+                            <th style={{ width: "60px" }}>S.N</th>
+                            <th>Reference</th>
+                            <th>Type</th>
+                            <th>Item</th>
+                            <th>Booking Date</th>
+                            <th>Start</th>
+                            <th>End</th>
+                            <th>Pax</th>
+                            <th className="text-end">Total</th>
+                            <th>Status</th>
+                            <th>Payment</th>
+                            <th style={{ width: "120px" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.length > 0 ? (
+                            filtered.map((b, idx) => (
+                              <tr key={b.id}>
+                                <td>{idx + 1 + page * size}</td>
+                                <td className="text-dark">
+                                  {b.bookingReference || "-"}
+                                </td>
+                                <td>
+                                  <span className="text-dark">
+                                    {typeIcon(b.bookingType)}
+                                    {b.bookingType || "-"}
+                                  </span>
+                                </td>
+                                <td>
+                                  {b.packageName ||
+                                    b.doctorName ||
+                                    b.courseName ||
+                                    "-"}
+                                </td>
+                                <td>{formatDate(b.bookingDate)}</td>
+                                <td>{formatDate(b.startDate)}</td>
+                                <td>{formatDate(b.endDate)}</td>
+                                <td>{b.numberOfParticipants ?? "-"}</td>
+                                <td className="text-end text-dark">
+                                  {formatAmount(b.totalPrice)}
+                                </td>
+                                <td>{b.status || "-"}</td>
+                                <td>{b.paymentStatus || "-"}</td>
+                                <td>
+                                  <div className="d-flex gap-3 align-items-center flex-wrap">
+                                    <FaEye
+                                      style={{
+                                        cursor: "pointer",
+                                        fontSize: "14px",
+                                        color: "#007bff",
+                                      }}
+                                      onClick={() => setDetailsBooking(b)}
+                                      title="View Details"
+                                    />
+                                    {!b.isCancelled && (
+                                      <FaTrashAlt
+                                        style={{
+                                          cursor: "pointer",
+                                          fontSize: "14px",
+                                          color: "#dc3545",
+                                        }}
+                                        onClick={() => setCancelBooking(b)}
+                                        title="Cancel Booking"
+                                      />
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td
+                                colSpan={12}
+                                className="text-center py-4 text-muted"
+                              >
+                                No data available in table
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </Table>
+                    </div>
+
+                    {/* Pagination */}
+                    <div className="d-flex justify-content-between align-items-center mt-3">
+                      <div className="text-muted small">
+                        Showing {displayStart} to {displayEnd} of {totalElements}{" "}
+                        entries
+                      </div>
+                      {totalPages > 1 && (
+                        <Pagination className="mb-0">
+                          <Pagination.Prev
+                            disabled={page === 0}
+                            onClick={() =>
+                              setPage((p) => Math.max(0, p - 1))
+                            }
+                          />
+                          {Array.from(
+                            { length: Math.min(5, totalPages) },
+                            (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i;
+                              } else if (page <= 2) {
+                                pageNum = i;
+                              } else if (page >= totalPages - 3) {
+                                pageNum = totalPages - 5 + i;
+                              } else {
+                                pageNum = page - 2 + i;
+                              }
+                              return (
+                                <Pagination.Item
+                                  key={pageNum}
+                                  active={pageNum === page}
+                                  onClick={() => setPage(pageNum)}
+                                >
+                                  {pageNum + 1}
+                                </Pagination.Item>
+                              );
+                            },
+                          )}
+                          <Pagination.Next
+                            disabled={page + 1 >= totalPages}
+                            onClick={() => setPage((p) => p + 1)}
+                          />
+                        </Pagination>
+                      )}
+                    </div>
+                  </>
+                )}
+              </Card.Body>
+            </Card>
           </Container>
-        </div>
         </main>
       </div>
 

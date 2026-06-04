@@ -278,22 +278,6 @@ const CabBookingPage = () => {
     } else if (lead.isChild) {
       errors.lead = "The lead must be an adult passenger";
       hasErrors = true;
-    } else {
-      if (!lead.contactNumber || !lead.contactNumber.trim()) {
-        errors.contactNumber = "Contact Number is required for lead";
-        hasErrors = true;
-      }
-      if (!lead.emailId || !lead.emailId.trim()) {
-        errors.emailId = "Email Id is required for lead";
-        hasErrors = true;
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.emailId)) {
-        errors.emailId = "Please enter a valid email address";
-        hasErrors = true;
-      }
-      if (!lead.lpo || !lead.lpo.trim()) {
-        errors.lpo = "LPO is required for lead";
-        hasErrors = true;
-      }
     }
 
     // Each pax row needs at least a first + last name. Salutation is
@@ -459,25 +443,105 @@ const CabBookingPage = () => {
                 >
                   <FaArrowLeft /> Back
                 </Button>
-                <h4 className="fw-bold mb-0 text-primary">
-                  Cab Booking Checkout
-                </h4>
+                <h5 className="mb-0 text-dark">Cab Booking Checkout</h5>
               </div>
               <AgentBalanceDisplay agentId={selectedAgentId} />
             </div>
 
             <Row className="g-4">
-              {/* Left Column: Guest Details */}
+              {/* Left Column: Booking Summary → Passenger Details */}
               <Col lg={8}>
+                {/* ── Booking Summary — shown FIRST so the operator can
+                     verify the cab/route/date before entering pax data. */}
+                <Card className="rounded-3 mb-4 border overflow-hidden">
+                  <Card.Header
+                    className="py-2 px-4 text-dark d-flex align-items-center border-bottom"
+                    style={{ backgroundColor: "#f1f3f5" }}
+                  >
+                    Booking Summary
+                  </Card.Header>
+                  <Card.Body className="p-4">
+                    <Row className="g-3">
+                      <Col md={4}>
+                        <div className="text-muted small">Vehicle</div>
+                        <div className="text-dark">{cab.cabname}</div>
+                        {cab.cabdetails && (
+                          <div className="text-muted small">{cab.cabdetails}</div>
+                        )}
+                        <div className="text-muted small">
+                          {selectedOption.types}
+                          {cab.cabProviderName ? ` · ${cab.cabProviderName}` : ""}
+                        </div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small">Pickup Date</div>
+                        <div className="text-dark">
+                          {searchCriteria.pickupDate || "—"}
+                        </div>
+                      </Col>
+                      <Col md={4}>
+                        <div className="text-muted small">Guests</div>
+                        <div className="text-dark">
+                          {searchCriteria.adults || 0} Adult
+                          {Number(searchCriteria.adults) !== 1 ? "s" : ""}
+                          {Number(searchCriteria.children) > 0
+                            ? `, ${searchCriteria.children} Child${
+                                Number(searchCriteria.children) !== 1
+                                  ? "ren"
+                                  : ""
+                              }`
+                            : ""}
+                        </div>
+                      </Col>
+                      <Col md={12}>
+                        <div className="text-muted small">Route</div>
+                        <div className="text-dark">
+                          {selectedOption.location || "N/A"} →{" "}
+                          {selectedOption.dropOff || "N/A"}
+                        </div>
+                      </Col>
+                      {searchCriteria.pickupType && (
+                        <Col md={6}>
+                          <div className="text-muted small">Pickup</div>
+                          <div className="text-dark">
+                            {searchCriteria.pickupName || "—"}
+                            {searchCriteria.pickupType === "AIRPORT" &&
+                              searchCriteria.pickupTime && (
+                                <span className="text-muted small ms-1">
+                                  @ {searchCriteria.pickupTime}
+                                </span>
+                              )}
+                          </div>
+                        </Col>
+                      )}
+                      {searchCriteria.dropoffType && (
+                        <Col md={6}>
+                          <div className="text-muted small">Dropoff</div>
+                          <div className="text-dark">
+                            {searchCriteria.dropoffName || "—"}
+                            {searchCriteria.dropoffTime && (
+                              <span className="text-muted small ms-1">
+                                @ {searchCriteria.dropoffTime}
+                              </span>
+                            )}
+                          </div>
+                        </Col>
+                      )}
+                    </Row>
+                  </Card.Body>
+                </Card>
+
                 {/* ── Passenger Details — single source of truth for
                      traveller data. The row marked "Lead" is also
                      persisted as the customer/lead-passenger record;
                      all other rows go to the guest table. */}
                 {guests.length > 0 && (
-                  <Card className="shadow border-0 rounded-4 mb-4">
-                    <Card.Header className="bg-white border-0 pt-3 px-4 pb-2">
-                      <h6 className="fw-semibold text-dark d-flex align-items-center mb-0">
-                        <FaUserAlt className="me-2 text-primary" />
+                  <Card className="border rounded-3 mb-4 overflow-hidden">
+                    <Card.Header
+                      className="py-2 px-4 text-dark d-flex align-items-center border-bottom"
+                      style={{ backgroundColor: "#f1f3f5" }}
+                    >
+                      <span className="d-flex align-items-center">
                         Passenger Details
                         <span className="text-muted small ms-2">
                           ({totalAdults} Adult{totalAdults !== 1 ? "s" : ""}
@@ -488,7 +552,7 @@ const CabBookingPage = () => {
                             : ""}
                           )
                         </span>
-                      </h6>
+                      </span>
                       {validationErrors.lead && (
                         <small className="text-danger d-block mt-1">
                           {validationErrors.lead}
@@ -496,7 +560,7 @@ const CabBookingPage = () => {
                       )}
                     </Card.Header>
                     <Card.Body className="px-4 pt-2 pb-3">
-                      <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                      <Row className="small text-muted px-2 mb-1 d-none d-md-flex">
                         <Col md={2}>Passenger</Col>
                         <Col md={2}>Title</Col>
                         <Col md={2}>First Name</Col>
@@ -519,7 +583,7 @@ const CabBookingPage = () => {
                           <React.Fragment key={idx}>
                             <Row className="g-2 align-items-center mb-2">
                               <Col xs={12} md={2}>
-                                <span className="fw-semibold text-muted small">
+                                <span className="text-muted small">
                                   {label}
                                 </span>
                               </Col>
@@ -626,7 +690,7 @@ const CabBookingPage = () => {
                             {/* Inline lead contact fields — only the
                                 Lead row collects contact + LPO; these
                                 go to the customer record on save. */}
-                            {isLead && !g.isChild && (
+                            {false && isLead && !g.isChild && (
                               <div className="bg-light border rounded-3 p-3 mb-3">
                                 <div className="small text-muted fw-semibold mb-2">
                                   Lead passenger contact
@@ -743,224 +807,18 @@ const CabBookingPage = () => {
                   </Card>
                 )}
 
-                {/* Price Details Card */}
-               <Card className="shadow border-0 rounded-4 mb-4">
-
-  {/* Header */}
-  <Card.Header className="bg-white border-0 pt-4 px-4">
-    <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
-      <FaCar className="me-2 text-primary" />
-      Price Details
-    </h5>
-  </Card.Header>
-
-  <Card.Body className="px-4 pb-4">
-
-    {/* ===== Price Section ===== */}
-    <div>
-
-      <Row className="g-3">
-
-        {/* Selling Price */}
-        <Col xs={12} md={6}>
-          <div className="bg-light border rounded-3 p-3 h-100">
-            <small className="text-muted fw-semibold d-block mb-1">
-              Selling Price
-            </small>
-
-            <div className="d-flex align-items-center">
-              <span className="text-muted me-2">AED</span>
-
-              <Form.Control
-                type="text"
-                className="border-0 bg-transparent p-0 fw-bold text-success"
-                value={prices.sellingPrice}
-                onChange={(e) =>
-                  handlePriceChange("sellingPrice", e.target.value)
-                }
-              />
-            </div>
-          </div>
-        </Col>
-
-        {/* Total Price */}
-        <Col xs={12} md={6}>
-          <div className="bg-light border rounded-3 p-3 h-100">
-            <small className="text-muted fw-semibold d-block mb-1">
-              Total Price
-            </small>
-
-            <div className="d-flex align-items-center">
-              <span className="text-muted me-2">AED</span>
-
-              <Form.Control
-                type="text"
-                className="border-0 bg-transparent p-0 fw-bold text-success"
-                value={prices.totalPrice}
-                onChange={(e) =>
-                  handlePriceChange("totalPrice", e.target.value)
-                }
-              />
-            </div>
-          </div>
-        </Col>
-
-        {/* Tourism Dirham */}
-        <Col xs={12} md={6}>
-          <div className="bg-light border rounded-3 p-3 h-100">
-            <small className="text-muted fw-semibold d-block mb-1">
-              Tourism Dirham
-            </small>
-
-            <div className="d-flex align-items-center">
-              <span className="text-muted me-2">AED</span>
-
-              <Form.Control
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                className="border-0 bg-transparent p-0 fw-bold text-primary"
-                value={tourismDirham}
-                onChange={(e) => setTourismDirham(e.target.value)}
-              />
-            </div>
-            <small className="text-muted">
-              Optional — added to Selling &amp; Total Price.
-            </small>
-          </div>
-        </Col>
-
-      </Row>
-
-    </div>
-
-  </Card.Body>
-</Card>
               </Col>
 
-              {/* Right sticky column — Booking Summary + Price Details,
-                   matched to HotelBookingPage.jsx (hbp-* classes from
-                   HotelBookingPage.css, already imported above). */}
+              {/* Right sticky column — Price Details + Confirm action.
+                   Booking Summary moved to the top of the left column. */}
               <Col lg={4} className="hbp-right-col">
                 <div className="hbp-sticky-summary">
-                  <Card className="shadow-sm rounded-3 mb-3 booking-summary-card border-0 overflow-hidden">
-                    <Card.Header className="bg-primary text-white py-2 rounded-top">
-                      <h6 className="mb-0 d-flex align-items-center">
-                        <FaCar className="me-2" /> Booking Summary
-                      </h6>
-                    </Card.Header>
-                    <Card.Body className="p-3">
-                      <div className="mb-3">
-                        <div className="fw-bold text-primary mb-1">
-                          {cab.cabname}
-                        </div>
-                        {cab.cabdetails && (
-                          <div className="text-muted small mb-2">
-                            {cab.cabdetails}
-                          </div>
-                        )}
-                        <div className="d-flex flex-wrap align-items-center gap-2">
-                          <Badge
-                            bg={
-                              selectedOption.types === "Private"
-                                ? "success"
-                                : "info"
-                            }
-                          >
-                            {selectedOption.types}
-                          </Badge>
-                          {cab.cabProviderName && (
-                            <small className="text-muted">
-                              {cab.cabProviderName}
-                            </small>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="hbp-summary-row">
-                        <div className="hbp-summary-label">
-                          <FaCalendarAlt className="me-2 text-primary" />
-                          Pickup Date
-                        </div>
-                        <div className="hbp-summary-value">
-                          {searchCriteria.pickupDate || "—"}
-                        </div>
-                      </div>
-                      <div className="hbp-summary-row align-items-start">
-                        <div className="hbp-summary-label">
-                          <FaMapMarkerAlt className="me-2 text-primary" />
-                          Route
-                        </div>
-                        <div className="hbp-summary-value text-end">
-                          {selectedOption.location || "N/A"} →{" "}
-                          {selectedOption.dropOff || "N/A"}
-                        </div>
-                      </div>
-                      {searchCriteria.pickupType && (
-                        <div className="hbp-summary-row align-items-start">
-                          <div className="hbp-summary-label">
-                            <FaMapMarkerAlt className="me-2 text-success" />
-                            Pickup
-                          </div>
-                          <div className="hbp-summary-value text-end">
-                            <Badge bg="success" className="me-1">
-                              {searchCriteria.pickupType}
-                            </Badge>
-                            {searchCriteria.pickupName || "—"}
-                            {searchCriteria.pickupType === "AIRPORT" &&
-                              searchCriteria.pickupTime && (
-                                <div className="small text-muted">
-                                  @ {searchCriteria.pickupTime}
-                                </div>
-                              )}
-                          </div>
-                        </div>
-                      )}
-                      {searchCriteria.dropoffType && (
-                        <div className="hbp-summary-row align-items-start">
-                          <div className="hbp-summary-label">
-                            <FaMapMarkerAlt className="me-2 text-warning" />
-                            Dropoff
-                          </div>
-                          <div className="hbp-summary-value text-end">
-                            <Badge bg="warning" text="dark" className="me-1">
-                              {searchCriteria.dropoffType}
-                            </Badge>
-                            {searchCriteria.dropoffName || "—"}
-                            {searchCriteria.dropoffTime && (
-                              <div className="small text-muted">
-                                @ {searchCriteria.dropoffTime}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      <div className="hbp-summary-row align-items-start">
-                        <div className="hbp-summary-label">
-                          <FaUserAlt className="me-2 text-primary" />
-                          Guests
-                        </div>
-                        <div className="hbp-summary-value text-end">
-                          <div className="small">
-                            {searchCriteria.adults || 0} Adult
-                            {Number(searchCriteria.adults) !== 1 ? "s" : ""}
-                            {Number(searchCriteria.children) > 0
-                              ? `, ${searchCriteria.children} Child${
-                                  Number(searchCriteria.children) !== 1
-                                    ? "ren"
-                                    : ""
-                                }`
-                              : ""}
-                          </div>
-                        </div>
-                      </div>
-                    </Card.Body>
-                  </Card>
-
-                  <Card className="shadow-sm rounded-3 border-0 hbp-price-card">
-                    <Card.Header className="bg-light py-2">
-                      <h6 className="mb-0 fw-bold">Price Details</h6>
+                  <Card className="rounded-3 border hbp-price-card">
+                    <Card.Header
+                      className="py-2 text-dark border-bottom"
+                      style={{ backgroundColor: "#f1f3f5" }}
+                    >
+                      Price Details
                     </Card.Header>
                     <Card.Body className="p-3">
                       {(() => {
@@ -972,27 +830,27 @@ const CabBookingPage = () => {
                         return (
                           <>
                             <div className="hbp-summary-row">
-                              <div className="hbp-summary-label">
-                                Transfer Fare
+                              <div className="hbp-summary-label text-muted">
+                                Selling Price
                               </div>
                               <div className="hbp-summary-value">
                                 {formatPrice(totalRate)}
                               </div>
                             </div>
                             <div className="hbp-summary-row">
-                              <div className="hbp-summary-label">
-                                Tourism Dirham
+                              <div className="hbp-summary-label text-muted">
+                                Tourism Dirhams
                               </div>
                               <div className="hbp-summary-value">
                                 {formatPrice(tdNum)}
                               </div>
                             </div>
                             <hr className="my-2" />
-                            <div className="hbp-summary-row fw-bold">
-                              <div className="hbp-summary-label text-danger">
-                                New Total
+                            <div className="hbp-summary-row">
+                              <div className="hbp-summary-label text-dark">
+                                Total
                               </div>
-                              <div className="hbp-summary-value text-danger">
+                              <div className="hbp-summary-value text-dark">
                                 {formatPrice(grandTotal)}
                               </div>
                             </div>

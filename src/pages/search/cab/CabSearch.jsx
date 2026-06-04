@@ -1126,7 +1126,12 @@ export const CabSearch = () => {
         ? Number(detail.totalRateWithoutMarkup)
         : null;
 
-    if (transferType === "Shared") {
+    const rowType = String(detail.types || "").toUpperCase();
+    const isSharedRow =
+      rowType === "SIC" ||
+      (rowType === "" && transferType === "Shared");
+
+    if (isSharedRow) {
       const per = Number(detail.sicRate) || 0;
       const fallbackTotal = per * sicPayingPax;
       // Prefer backend's markup-applied total; fall back to per-seat × pax.
@@ -1190,9 +1195,18 @@ export const CabSearch = () => {
     // to the markup-applied total, since that's the field it reads as
     // its initial billable amount.
     const { total: rowTotal, baseTotal } = priceDetail(cabDetail);
+    const detailType = String(cabDetail.types || "").toUpperCase();
+    const resolvedType =
+      detailType === "SIC" || detailType === "PRIVATE"
+        ? detailType === "SIC"
+          ? "SIC"
+          : "Private"
+        : transferType === "Shared"
+          ? "SIC"
+          : "Private";
     const enrichedSelectedOption = {
       ...cabDetail,
-      types: transferType === "Shared" ? "SIC" : "Private",
+      types: resolvedType,
       // New, explicitly named fields:
       totalRate: rowTotal, // billable price WITH agent markup
       totalRateWithoutMarkup: baseTotal, // base price WITHOUT agent markup
@@ -2597,11 +2611,12 @@ export const CabSearch = () => {
                   const rows = [];
                   transferResults.forEach((cab) => {
                     const details = Array.isArray(cab.searchCabDetailsDTO)
-                      ? cab.searchCabDetailsDTO.filter((d) =>
-                          transferType === "Shared"
-                            ? String(d.types || "").toUpperCase() === "SIC"
-                            : String(d.types || "").toLowerCase() === "private",
-                        )
+                      ? cab.searchCabDetailsDTO.filter((d) => {
+                          const t = String(d.types || "").toUpperCase();
+                          if (transferType === "Shared") return t === "SIC";
+                          if (transferType === "Private") return t === "PRIVATE";
+                          return t === "SIC" || t === "PRIVATE";
+                        })
                       : [];
                     details.forEach((d) => rows.push({ cab, detail: d }));
                   });
@@ -2680,7 +2695,7 @@ export const CabSearch = () => {
                           <Button
                             key={p}
                             size="sm"
-                            variant={p === safePage ? "danger" : "outline-secondary"}
+                            variant={p === safePage ? "primary" : "outline-secondary"}
                             className="px-2 py-0"
                             onClick={() => setCurrentPage(p)}
                           >
@@ -2716,7 +2731,7 @@ export const CabSearch = () => {
                         <Col lg={3} md={4}>
                           <Card className="border-0 shadow-sm rounded-3 mb-3">
                             <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
-                              <span className="text-danger">
+                              <span className="text-primary">
                                 Search by Transfer Name
                               </span>
                               <span className="text-muted small">▾</span>
@@ -2741,7 +2756,7 @@ export const CabSearch = () => {
                                 />
                                 <Button
                                   size="sm"
-                                  variant="danger"
+                                  variant="primary"
                                   className="px-3"
                                   onClick={() => {
                                     setNameFilter(pendingNameFilter);
@@ -2756,7 +2771,7 @@ export const CabSearch = () => {
 
                           <Card className="border-0 shadow-sm rounded-3 mb-3">
                             <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
-                              <span className="text-danger">Suppliers</span>
+                              <span className="text-primary">Suppliers</span>
                               <span className="text-muted small">▾</span>
                             </Card.Header>
                             <Card.Body className="p-3">
@@ -2788,10 +2803,22 @@ export const CabSearch = () => {
 
                           <Card className="border-0 shadow-sm rounded-3 mb-3">
                             <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
-                              <span className="text-danger">Transfer Type</span>
+                              <span className="text-primary">Transfer Type</span>
                               <span className="text-muted small">▾</span>
                             </Card.Header>
                             <Card.Body className="p-3">
+                              <Form.Check
+                                type="radio"
+                                id="filter-all"
+                                name="filterTransferType"
+                                label="All"
+                                className="small"
+                                checked={transferType === "All"}
+                                onChange={() => {
+                                  setTransferType("All");
+                                  setCurrentPage(1);
+                                }}
+                              />
                               <Form.Check
                                 type="radio"
                                 id="filter-shared"
@@ -2820,7 +2847,7 @@ export const CabSearch = () => {
                           </Card>
 
                           <Button
-                            variant="danger"
+                            variant="primary"
                             className="w-100 fw-bold"
                             onClick={() => {
                               setNameFilter(pendingNameFilter);
@@ -2843,7 +2870,7 @@ export const CabSearch = () => {
                               <Button
                                 size="sm"
                                 variant={
-                                  sortBy === "price" ? "danger" : "light"
+                                  sortBy === "price" ? "primary" : "light"
                                 }
                                 className="px-3"
                                 onClick={() => setSortBy("price")}
@@ -2853,7 +2880,7 @@ export const CabSearch = () => {
                               <Button
                                 size="sm"
                                 variant={
-                                  sortBy === "name" ? "danger" : "light"
+                                  sortBy === "name" ? "primary" : "light"
                                 }
                                 className="px-3"
                                 onClick={() => setSortBy("name")}
@@ -2872,10 +2899,11 @@ export const CabSearch = () => {
                             {totalPages > 1 && renderPagination()}
                           </div>
 
-                          {transferType === "Shared" && (
+                          {(transferType === "Shared" ||
+                            transferType === "All") && (
                             <div className="text-muted small mb-2">
                               Pricing for {sicPayingPax} paying pax (adults +
-                              children aged &gt; 3).
+                              children aged &gt; 3) for shared transfers.
                             </div>
                           )}
 
@@ -2884,7 +2912,9 @@ export const CabSearch = () => {
                               No{" "}
                               {transferType === "Shared"
                                 ? "shared (SIC)"
-                                : "private"}{" "}
+                                : transferType === "Private"
+                                  ? "private"
+                                  : ""}{" "}
                               transfers match your filters.
                             </div>
                           ) : (
@@ -2922,22 +2952,28 @@ export const CabSearch = () => {
 
                                           {/* Details */}
                                           <Col xs={12} md={6}>
-                                            <div className="small mb-1">
-                                              <span className="text-muted">
-                                                Transfer Type:{" "}
-                                              </span>
-                                              <span
-                                                className={`fw-medium ${
-                                                  transferType === "Private"
-                                                    ? "text-success"
-                                                    : "text-primary"
-                                                }`}
-                                              >
-                                                {transferType === "Private"
-                                                  ? "Private Transfer"
-                                                  : "Shared (SIC)"}
-                                              </span>
-                                            </div>
+                                            {(() => {
+                                              const rowType = String(detail.types || "").toUpperCase();
+                                              const isPrivate = rowType === "PRIVATE";
+                                              return (
+                                                <div className="small mb-1">
+                                                  <span className="text-muted">
+                                                    Transfer Type:{" "}
+                                                  </span>
+                                                  <span
+                                                    className={`fw-medium ${
+                                                      isPrivate
+                                                        ? "text-success"
+                                                        : "text-primary"
+                                                    }`}
+                                                  >
+                                                    {isPrivate
+                                                      ? "Private Transfer"
+                                                      : "Shared (SIC)"}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })()}
                                             <div className="small mb-1">
                                               <span className="text-muted">
                                                 Vehicle:{" "}
@@ -2978,15 +3014,6 @@ export const CabSearch = () => {
                                                 by {cab.cabProviderName}
                                               </div>
                                             )}
-                                            <a
-                                              href="#more-info"
-                                              onClick={(e) =>
-                                                e.preventDefault()
-                                              }
-                                              className="small text-decoration-underline text-primary"
-                                            >
-                                              More Info
-                                            </a>
                                           </Col>
 
                                           {/* Price + action */}
@@ -3015,7 +3042,7 @@ export const CabSearch = () => {
                                               </div>
                                             )}
                                             <Button
-                                              variant="danger"
+                                              variant="primary"
                                               className="px-4 fw-semibold"
                                               onClick={() =>
                                                 handleBookNow(cab, detail)

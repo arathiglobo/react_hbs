@@ -3,11 +3,6 @@
  *
  * Booking-list page for the gov-employee flow.
  *
- * Reference: HotelBookingList.jsx — same columns and actions
- * (View, Voucher, Cancel) but reading from the dedicated
- * /api/gov-employee-booking/list endpoint and writing to the
- * gov-employee-only tables.
- *
  * Cancel: DELETE /api/gov-employee-booking/{id}   (server refunds credit)
  * View  : navigate to /booking-details/gov-employee-booking/{id}
  * Voucher: GET /api/gov-employee-booking/{id}/voucher (PDF stream)
@@ -17,13 +12,13 @@ import React, { useEffect, useState, useMemo } from "react";
 import {
   Card,
   Table,
-  Button,
   Spinner,
   Form,
   Row,
   Col,
-  Badge,
+  Container,
   InputGroup,
+  Pagination,
 } from "react-bootstrap";
 import { FaEye, FaDownload, FaTrash, FaSearch } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
@@ -31,6 +26,8 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+
+const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 export default function GovEmployeeBookingList() {
   const navigate = useNavigate();
@@ -41,28 +38,16 @@ export default function GovEmployeeBookingList() {
   const [totalPages, setTotalPages] = useState(0);
   const [agentId, setAgentId] = useState("");
   const [search, setSearch] = useState("");
-
-  // ── Booking Types + Time Period filters (mirrors
-  //    /booking-details/long-stay-booking-list). Applied client-side
-  //    over the already-fetched page so the backend pagination and
-  //    cancel / voucher endpoints keep working unchanged.
-  const [status, setStatus] = useState("all"); // all | upcoming | completed | cancelled
-  const [selectedMonth, setSelectedMonth] = useState(""); // "" | 1..12
-  const [selectedYear, setSelectedYear] = useState("");
-
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-  ];
-  const years = useMemo(() => {
-    const current = new Date().getFullYear();
-    return [current - 1, current, current + 1, current + 2];
-  }, []);
+  const [bookingType, setBookingType] = useState("upcoming");
+  const [role, setRole] = useState(
+    (localStorage.getItem("currentActiveRole") || "").toLowerCase(),
+  );
 
   // If the current role is an agent, restrict to their own bookings.
   useEffect(() => {
-    const role = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
-    if (role === "agent") {
+    const r = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
+    setRole(r);
+    if (r === "agent") {
       const uid = localStorage.getItem("userId");
       if (uid && uid !== "null") setAgentId(uid);
     }
@@ -73,7 +58,9 @@ export default function GovEmployeeBookingList() {
     try {
       const params = new URLSearchParams({ page, size });
       if (agentId) params.append("agentId", agentId);
-      const { data } = await axiosInstance.get(`/api/gov-employee-booking/list?${params.toString()}`);
+      const { data } = await axiosInstance.get(
+        `/api/gov-employee-booking/list?${params.toString()}`,
+      );
       setRows(data?.content || []);
       setTotalPages(data?.totalPages || 0);
     } catch (e) {
@@ -88,46 +75,38 @@ export default function GovEmployeeBookingList() {
     // eslint-disable-next-line
   }, [page, size, agentId]);
 
-  // ── client-side filter on already-loaded page rows. Combines
-  //    free-text search + Booking Types + Time Period in one pass
-  //    (same shape as LongStayBookingList.filteredBookings).
+  // Client-side filter combining Booking Types (Upcoming / Completed /
+  // Cancelled) + free-text search against the already-fetched page.
   const filtered = useMemo(() => {
-    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const needle = search.trim().toLowerCase();
     return (rows || []).filter((r) => {
-      // ── Booking-Types filter ────────────────────────────────────
       const isCancelled =
         r.cancelled === true ||
-        String(r.bookingStatus || "").toUpperCase() === "CANCELLED";
-      const checkIn = r.checkInDate ? new Date(r.checkInDate) : null;
-      const checkOut = r.checkOutDate ? new Date(r.checkOutDate) : null;
+        String(r.bookingStatus || "").toUpperCase() === "CANCELLED" ||
+        String(r.confirmationStatus || "").toUpperCase() === "CANCELLED";
 
-      if (status === "cancelled" && !isCancelled) return false;
-      if (status === "upcoming") {
+      if (bookingType === "cancelled") {
+        if (!isCancelled) return false;
+      } else {
         if (isCancelled) return false;
-        if (!checkIn || checkIn < now) return false;
-      }
-      if (status === "completed") {
-        if (isCancelled) return false;
-        if (!checkOut || checkOut > now) return false;
-      }
-      // "all" → no status restriction
-
-      // ── Time-Period filter (month / year of check-in date) ─────
-      if (checkIn && (selectedMonth || selectedYear)) {
-        const m = checkIn.getMonth() + 1;
-        const y = checkIn.getFullYear();
-        if (selectedMonth && Number(selectedMonth) !== m) return false;
-        if (selectedYear && Number(selectedYear) !== y) return false;
+        const ref = r.checkOutDate || r.checkInDate;
+        const refDate = ref ? new Date(ref) : null;
+        if (refDate && !isNaN(refDate.getTime())) {
+          refDate.setHours(0, 0, 0, 0);
+          if (bookingType === "completed" && refDate >= today) return false;
+          if (bookingType === "upcoming" && refDate < today) return false;
+        }
       }
 
-      // ── Free-text search ───────────────────────────────────────
       if (needle) {
         const hay = [
           r.bookingCode,
           r.customerName,
           r.hotelName,
           r.govEmployeeCode,
+          r.govEmployeeName,
         ]
           .filter(Boolean)
           .join(" ")
@@ -137,23 +116,29 @@ export default function GovEmployeeBookingList() {
 
       return true;
     });
-  }, [rows, search, status, selectedMonth, selectedYear]);
+  }, [rows, search, bookingType]);
 
-  // Reset to page 0 whenever any filter changes — keeps the
-  // pagination footer in step with the visible row set.
+  // Reset to page 0 whenever any filter changes.
   useEffect(() => {
     setPage(0);
-  }, [search, status, selectedMonth, selectedYear]);
+  }, [search, bookingType]);
 
-  // ── Cancel: same UX as HotelBookingList — gated by refund status ──
+  // ── Cancel: same UX as HotelBookingList — gated by refund status.
   const handleCancel = async (row) => {
     if ((row.refundStatus || "").toLowerCase() === "non-refundable") {
       toast.error("This booking is non-refundable and cannot be cancelled.");
       return;
     }
-    if (!window.confirm(`Cancel booking ${row.bookingCode}? Agent credit will be restored.`)) return;
+    if (
+      !window.confirm(
+        `Cancel booking ${row.bookingCode}? Agent credit will be restored.`,
+      )
+    )
+      return;
     try {
-      await axiosInstance.delete(`/api/gov-employee-booking/${row.bookingId}?reason=Cancelled%20by%20user`);
+      await axiosInstance.delete(
+        `/api/gov-employee-booking/${row.bookingId}?reason=Cancelled%20by%20user`,
+      );
       toast.success("Booking cancelled");
       fetchPage();
     } catch (e) {
@@ -161,13 +146,16 @@ export default function GovEmployeeBookingList() {
     }
   };
 
-  // ── Voucher download (PDF) ─────────────────────────────────────────
+  // ── Voucher download (PDF).
   const handleVoucher = async (row) => {
     try {
-      const res = await axiosInstance.get(`/api/gov-employee-booking/${row.bookingId}/voucher`, {
-        responseType: "blob",
-      });
-      const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const res = await axiosInstance.get(
+        `/api/gov-employee-booking/${row.bookingId}/voucher`,
+        { responseType: "blob" },
+      );
+      const url = URL.createObjectURL(
+        new Blob([res.data], { type: "application/pdf" }),
+      );
       const a = document.createElement("a");
       a.href = url;
       a.download = `gov-employee-voucher-${row.bookingId}.pdf`;
@@ -178,267 +166,304 @@ export default function GovEmployeeBookingList() {
     }
   };
 
+  const totalElements =
+    rows.length === 0
+      ? 0
+      : totalPages > 1
+        ? totalPages * size
+        : filtered.length;
+  const displayStart = filtered.length === 0 ? 0 : page * size + 1;
+  const displayEnd = page * size + filtered.length;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm border-0">
-          <Card.Body>
-            {/* Header: Title + Search (left) | Time Period (right) —
-                same shape as /booking-details/long-stay-booking-list. */}
-            <div className="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
-              <div>
-                <h5 className="fw-bold text-dark mb-2">
-                  Government Employee Bookings
-                </h5>
-                <InputGroup style={{ height: "45px", width: "320px" }}>
-                  <InputGroup.Text
-                    style={{
-                      backgroundColor: "#f8f9fa",
-                      borderRight: "none",
-                      borderColor: "#dee2e6",
-                    }}
-                  >
-                    <FaSearch style={{ color: "#6c757d" }} />
-                  </InputGroup.Text>
-                  <Form.Control
-                    type="text"
-                    placeholder="Booking code / customer / hotel / employee code"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    style={{
-                      borderLeft: "none",
-                      fontSize: "0.85rem",
-                      borderColor: "#dee2e6",
-                      height: "45px",
-                    }}
-                  />
-                </InputGroup>
+        <main
+          className="flex-grow-1 p-4"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "1rem",
+              paddingRight: "1rem",
+            }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <div className="d-flex align-items-center gap-3">
+                <h4 className="mb-0 text-dark">Government Employee Booking</h4>
               </div>
+            </div>
 
-              <Card
-                className="shadow-sm border-0"
-                style={{ borderRadius: "8px", minWidth: "260px" }}
+            {/* List of Bookings Section */}
+            <Card className="border mb-3" style={{ borderRadius: "8px" }}>
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom"
+                style={{
+                  borderRadius: "8px 8px 0 0",
+                  backgroundColor: "#f1f3f5",
+                }}
               >
-                <Card.Body className="p-3">
-                  <h6
-                    className="mb-2 fw-bold text-dark"
-                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                  >
-                    Time Period
-                  </h6>
-                  <Row className="g-2">
-                    <Col xs={6}>
-                      <Form.Select
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        size="sm"
-                        style={{ fontSize: "0.82rem", height: "40px" }}
-                      >
-                        <option value="">Month</option>
-                        {months.map((month, index) => (
-                          <option key={month} value={index + 1}>
-                            {month.slice(0, 3)}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Col>
-                    <Col xs={6}>
-                      <Form.Select
-                        value={selectedYear}
-                        onChange={(e) => setSelectedYear(e.target.value)}
-                        size="sm"
-                        style={{ fontSize: "0.82rem", height: "45px" }}
-                      >
-                        <option value="">Year</option>
-                        {years.map((year) => (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
-            </div>
-
-            {/* Booking Types radio bar (mirrors long-stay list). */}
-            <Row className="mb-3 g-1">
-              <Col xs={12}>
-                <Card
-                  className="shadow-sm border-0 w-100"
-                  style={{ borderRadius: "8px" }}
-                >
-                  <Card.Body className="p-3">
-                    <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                      <h6
-                        className="mb-0 fw-bold text-dark"
-                        style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                      >
-                        Booking Types
-                      </h6>
-                      {/* Page-size selector preserved from the previous
-                          layout — moved here so the row above can host
-                          the Time Period card without crowding. */}
-                      <div className="d-flex align-items-center gap-2">
-                        <span className="text-muted small">Page Size</span>
-                        <Form.Select
-                          size="sm"
-                          value={size}
-                          onChange={(e) => {
-                            setSize(Number(e.target.value));
-                            setPage(0);
-                          }}
-                          style={{ width: "90px" }}
+                <span>List of Bookings</span>
+              </Card.Header>
+              <Card.Body>
+                {/* Booking Types radio filter. */}
+                <Row className="mb-4">
+                  <Col md={6}>
+                    <Card
+                      className="border"
+                      style={{
+                        backgroundColor: "#f8f9fa",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <Card.Body className="p-3">
+                        <h6
+                          className="mb-3 text-dark"
+                          style={{ fontSize: "0.85rem" }}
                         >
-                          {[10, 25, 50, 100].map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
+                          Booking Types
+                        </h6>
+                        <div className="d-flex flex-wrap gap-4">
+                          {[
+                            { value: "upcoming", label: "Upcoming" },
+                            { value: "completed", label: "Completed" },
+                            { value: "cancelled", label: "Cancelled" },
+                          ].map((opt) => (
+                            <Form.Check
+                              key={opt.value}
+                              type="radio"
+                              id={`bookingType-${opt.value}`}
+                              name="bookingType"
+                              label={opt.label}
+                              checked={bookingType === opt.value}
+                              onChange={() => {
+                                setBookingType(opt.value);
+                                setPage(0);
+                              }}
+                              style={{
+                                fontSize: "0.85rem",
+                                cursor: "pointer",
+                              }}
+                            />
                           ))}
-                        </Form.Select>
-                      </div>
-                    </div>
-                    <div className="row g-2">
-                      <div className="col-6 col-md-4 col-lg-2">
-                        <Form.Check
-                          type="radio"
-                          label="All"
-                          name="geBookingType"
-                          checked={status === "all"}
-                          onChange={() => setStatus("all")}
-                        />
-                      </div>
-                      <div className="col-6 col-md-4 col-lg-2">
-                        <Form.Check
-                          type="radio"
-                          label="Upcoming"
-                          name="geBookingType"
-                          checked={status === "upcoming"}
-                          onChange={() => setStatus("upcoming")}
-                        />
-                      </div>
-                      <div className="col-6 col-md-4 col-lg-2">
-                        <Form.Check
-                          type="radio"
-                          label="Completed"
-                          name="geBookingType"
-                          checked={status === "completed"}
-                          onChange={() => setStatus("completed")}
-                        />
-                      </div>
-                      <div className="col-6 col-md-4 col-lg-2">
-                        <Form.Check
-                          type="radio"
-                          label="Cancelled"
-                          name="geBookingType"
-                          checked={status === "cancelled"}
-                          onChange={() => setStatus("cancelled")}
-                        />
-                      </div>
-                    </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
 
-            {loading ? (
-              <div className="text-center py-5"><Spinner animation="border" /></div>
-            ) : (
-              <Table striped bordered hover responsive size="sm">
-                <thead className="table-light">
-                  <tr>
-                    <th>#</th>
-                    <th>Agent</th>
-                    <th>Customer</th>
-                    <th>Govt Emp</th>
-                    <th>Hotel</th>
-                    <th>Booking Code</th>
-                    <th>Stay</th>
-                    <th>Before</th>
-                    <th>After</th>
-                    <th>Status</th>
-                    <th>Refund</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr><td colSpan={12} className="text-center text-muted py-4">No bookings yet.</td></tr>
-                  ) : (
-                    filtered.map((r, i) => (
-                      <tr key={r.bookingId}>
-                        <td>{page * size + i + 1}</td>
-                        <td>{r.agentName || r.agentId}</td>
-                        <td>{r.customerName}</td>
-                        <td>
-                          <strong>{r.govEmployeeCode}</strong>
-                          <div className="text-muted small">{r.govEmployeeName}</div>
-                        </td>
-                        <td>{r.hotelName}</td>
-                        <td><strong>{r.bookingCode}</strong></td>
-                        <td>
-                          <div className="small">{r.checkInDate?.slice(0, 10)}</div>
-                          <div className="small text-muted">{r.checkOutDate?.slice(0, 10)}</div>
-                        </td>
-                        <td className="text-decoration-line-through">
-                          AED {r.totalRateBeforeDiscount ?? "-"}
-                        </td>
-                        <td><strong className="text-success">AED {r.totalRate ?? "-"}</strong></td>
-                        <td>
-                          {r.cancelled ? (
-                            <Badge bg="danger">Cancelled</Badge>
+                {/* Display + Search */}
+                <Row className="mb-3 align-items-center">
+                  <Col md={3}>
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="small text-muted">Display</span>
+                      <Form.Select
+                        value={size}
+                        onChange={(e) => {
+                          setSize(Number(e.target.value));
+                          setPage(0);
+                        }}
+                        size="sm"
+                        style={{ width: "auto" }}
+                      >
+                        {PER_PAGE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option} records
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  </Col>
+                  <Col md={4} className="ms-auto">
+                    <InputGroup>
+                      <InputGroup.Text>
+                        <FaSearch />
+                      </InputGroup.Text>
+                      <Form.Control
+                        type="text"
+                        placeholder="Search:"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                      />
+                    </InputGroup>
+                  </Col>
+                </Row>
+
+                {/* Table */}
+                {loading ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-3 text-muted">Loading bookings...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="table-responsive">
+                      <Table striped bordered hover className="mb-0">
+                        <thead className="table-light">
+                          <tr>
+                            <th style={{ width: "60px" }}>S.N</th>
+                            <th>Booking Code</th>
+                            {role === "admin" && <th>Agent</th>}
+                            <th>Customer</th>
+                            <th>Govt Emp</th>
+                            <th>Hotel</th>
+                            <th>Stay</th>
+                            <th className="text-end">Before</th>
+                            <th className="text-end">After</th>
+                            <th>Status</th>
+                            <th>Refund</th>
+                            <th style={{ width: "120px" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.length > 0 ? (
+                            filtered.map((r, i) => {
+                              const statusText = r.cancelled
+                                ? "Cancelled"
+                                : r.confirmationStatus || "-";
+                              return (
+                                <tr key={r.bookingId}>
+                                  <td>{page * size + i + 1}</td>
+                                  <td className="text-dark">
+                                    {r.bookingCode || "-"}
+                                  </td>
+                                  {role === "admin" && (
+                                    <td>{r.agentName || r.agentId || "-"}</td>
+                                  )}
+                                  <td>{r.customerName || "-"}</td>
+                                  <td>
+                                    <div>{r.govEmployeeCode || "-"}</div>
+                                    <div className="text-muted small">
+                                      {r.govEmployeeName || ""}
+                                    </div>
+                                  </td>
+                                  <td>{r.hotelName || "-"}</td>
+                                  <td>
+                                    <div className="small">
+                                      {r.checkInDate?.slice(0, 10) || "-"}
+                                    </div>
+                                    <div className="small text-muted">
+                                      {r.checkOutDate?.slice(0, 10) || "-"}
+                                    </div>
+                                  </td>
+                                  <td className="text-end text-decoration-line-through">
+                                    {r.totalRateBeforeDiscount != null
+                                      ? `AED ${r.totalRateBeforeDiscount}`
+                                      : "-"}
+                                  </td>
+                                  <td className="text-end text-dark">
+                                    {r.totalRate != null
+                                      ? `AED ${r.totalRate}`
+                                      : "-"}
+                                  </td>
+                                  <td>{statusText}</td>
+                                  <td>{r.refundStatus || "-"}</td>
+                                  <td>
+                                    <div className="d-flex gap-3 align-items-center flex-wrap">
+                                      <FaEye
+                                        style={{
+                                          cursor: "pointer",
+                                          fontSize: "14px",
+                                          color: "#007bff",
+                                        }}
+                                        onClick={() =>
+                                          navigate(
+                                            `/booking-details/gov-employee-booking/${r.bookingId}`,
+                                          )
+                                        }
+                                        title="View Details"
+                                      />
+                                      <FaDownload
+                                        style={{
+                                          cursor: "pointer",
+                                          fontSize: "14px",
+                                          color: "#198754",
+                                        }}
+                                        onClick={() => handleVoucher(r)}
+                                        title="Download Voucher"
+                                      />
+                                      {!r.cancelled && (
+                                        <FaTrash
+                                          style={{
+                                            cursor: "pointer",
+                                            fontSize: "14px",
+                                            color: "#dc3545",
+                                          }}
+                                          onClick={() => handleCancel(r)}
+                                          title="Cancel Booking"
+                                        />
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
                           ) : (
-                            <Badge bg="info">{r.confirmationStatus || "-"}</Badge>
+                            <tr>
+                              <td
+                                colSpan={role === "admin" ? 12 : 11}
+                                className="text-center py-4 text-muted"
+                              >
+                                No data available in table
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td>{r.refundStatus || "-"}</td>
-                        <td>
-                          <Button size="sm" variant="outline-primary" className="me-1"
-                                  onClick={() => navigate(`/booking-details/gov-employee-booking/${r.bookingId}`)}
-                                  title="View">
-                            <FaEye />
-                          </Button>
-                          <Button size="sm" variant="outline-success" className="me-1"
-                                  onClick={() => handleVoucher(r)} title="Download Voucher">
-                            <FaDownload />
-                          </Button>
-                          <Button size="sm" variant="outline-danger"
-                                  onClick={() => handleCancel(r)} title="Cancel"
-                                  disabled={r.cancelled}>
-                            <FaTrash />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </Table>
-            )}
+                        </tbody>
+                      </Table>
+                    </div>
 
-            {/* Pagination */}
-            <div className="d-flex justify-content-between align-items-center mt-2">
-              <div className="text-muted small">
-                Page {page + 1} of {Math.max(1, totalPages)}
-              </div>
-              <div>
-                <Button size="sm" variant="outline-secondary" className="me-1"
-                        disabled={page === 0}
-                        onClick={() => setPage((p) => Math.max(0, p - 1))}>
-                  Prev
-                </Button>
-                <Button size="sm" variant="outline-secondary"
-                        disabled={page + 1 >= totalPages}
-                        onClick={() => setPage((p) => p + 1)}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          </Card.Body>
-        </Card>
+                    {/* Pagination */}
+                    <div className="d-flex justify-content-between align-items-center mt-3">
+                      <div className="text-muted small">
+                        Showing {displayStart} to {displayEnd} of {totalElements}{" "}
+                        entries
+                      </div>
+                      {totalPages > 1 && (
+                        <Pagination className="mb-0">
+                          <Pagination.Prev
+                            disabled={page === 0}
+                            onClick={() => setPage((p) => Math.max(0, p - 1))}
+                          />
+                          {Array.from(
+                            { length: Math.min(5, totalPages) },
+                            (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i;
+                              } else if (page <= 2) {
+                                pageNum = i;
+                              } else if (page >= totalPages - 3) {
+                                pageNum = totalPages - 5 + i;
+                              } else {
+                                pageNum = page - 2 + i;
+                              }
+                              return (
+                                <Pagination.Item
+                                  key={pageNum}
+                                  active={pageNum === page}
+                                  onClick={() => setPage(pageNum)}
+                                >
+                                  {pageNum + 1}
+                                </Pagination.Item>
+                              );
+                            },
+                          )}
+                          <Pagination.Next
+                            disabled={page + 1 >= totalPages}
+                            onClick={() => setPage((p) => p + 1)}
+                          />
+                        </Pagination>
+                      )}
+                    </div>
+                  </>
+                )}
+              </Card.Body>
+            </Card>
+          </Container>
         </main>
       </div>
     </div>

@@ -49,7 +49,18 @@ const CabBookingList = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelling, setCancelling] = useState(false);
-  const [voucherLoading, setVoucherLoading] = useState(false);
+  // Voucher: track WHICH booking is loading so a single click only
+  // disables that row's voucher button (previously a single boolean
+  // disabled every row's voucher button while one PDF was generating).
+  const [voucherLoadingId, setVoucherLoadingId] = useState(null);
+  // Voucher modal — opens an in-page iframe preview of the PDF and
+  // lets the operator email the voucher to an arbitrary recipient.
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [voucherBooking, setVoucherBooking] = useState(null);
+  const [voucherPdfUrl, setVoucherPdfUrl] = useState("");
+  const [voucherEmail, setVoucherEmail] = useState("");
+  const [voucherEmailError, setVoucherEmailError] = useState("");
+  const [voucherSending, setVoucherSending] = useState(false);
   // Booking-details view modal
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsBooking, setDetailsBooking] = useState(null);
@@ -247,27 +258,72 @@ const CabBookingList = () => {
   };
 
   // Voucher action → backend (CabBookingController#getCabBookingPdf) returns a
-  // PdfGenerationResponseDTO with { status, message, pdfUrl }; open the URL in a
-  // new tab so the browser renders the PDF inline. Mirrors LongStayBookingList.
+  // PdfGenerationResponseDTO with { status, message, pdfUrl }; instead of
+  // opening a new tab, surface the URL inside an in-page modal with an
+  // iframe preview + an email-to field. Only the clicked row's button
+  // shows the spinner because we key off custombookingId.
   const handleVoucher = async (b) => {
     const id = b.custombookingId;
     if (!id) return;
     try {
-      setVoucherLoading(true);
+      setVoucherLoadingId(id);
       const res = await axiosInstance.get(`/api/cab/${id}/pdf`, {
         params: { type: "VOUCHER" },
       });
       if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
-        window.open(res.data.pdfUrl, "_blank", "noopener,noreferrer");
-        toast.success("Voucher opened in a new tab");
+        setVoucherBooking(b);
+        setVoucherPdfUrl(res.data.pdfUrl);
+        setVoucherEmail(b.customer?.emailId || "");
+        setVoucherEmailError("");
+        setShowVoucherModal(true);
       } else {
         toast.error(res.data?.message || "Failed to generate voucher");
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to generate voucher");
     } finally {
-      setVoucherLoading(false);
+      setVoucherLoadingId(null);
     }
+  };
+
+  // Email the voucher PDF to the address typed into the modal. Backend
+  // is expected to attach the PDF and send via SMTP. Mirrors the
+  // restaurant-booking pattern at /api/restaurant/booking/{id}/voucher/send.
+  const sendVoucherEmail = async () => {
+    if (!voucherBooking) return;
+    const email = (voucherEmail || "").trim();
+    if (!email) {
+      setVoucherEmailError("Email is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setVoucherEmailError("Please enter a valid email address");
+      return;
+    }
+    setVoucherEmailError("");
+    try {
+      setVoucherSending(true);
+      await axiosInstance.post(
+        `/api/cab/${voucherBooking.custombookingId}/voucher/send`,
+        { email }
+      );
+      toast.success(`Voucher sent to ${email}`);
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message || "Failed to send voucher email"
+      );
+    } finally {
+      setVoucherSending(false);
+    }
+  };
+
+  const closeVoucherModal = () => {
+    if (voucherSending) return;
+    setShowVoucherModal(false);
+    setVoucherBooking(null);
+    setVoucherPdfUrl("");
+    setVoucherEmail("");
+    setVoucherEmailError("");
   };
 
   const formatPrice = (price) =>
@@ -479,10 +535,10 @@ const CabBookingList = () => {
                                   size="sm"
                                   className="rounded-pill px-3 border"
                                   title="Voucher"
-                                  disabled={voucherLoading}
+                                  disabled={voucherLoadingId === b.custombookingId}
                                   onClick={() => handleVoucher(b)}
                                 >
-                                  {voucherLoading ? (
+                                  {voucherLoadingId === b.custombookingId ? (
                                     <Spinner size="sm" />
                                   ) : (
                                     <FaFileInvoice size={12} className="text-success" />
@@ -572,230 +628,458 @@ const CabBookingList = () => {
               size="lg"
               centered
               scrollable
+              backdrop="static"
+              keyboard={false}
             >
-              <Modal.Header closeButton className="border-0 pb-0">
-                <Modal.Title className="d-flex align-items-center">
-                  <FaCar className="me-2 text-primary" />
+              <Modal.Header
+                closeButton
+                className="border-bottom"
+                style={{ backgroundColor: "#f1f3f5" }}
+              >
+                <Modal.Title className="d-flex align-items-center text-dark fw-semibold">
+                  <FaCar className="me-2 text-secondary" />
                   Booking Details
                   {detailsBooking?.packageBookCode && (
-                    <Badge bg="primary-subtle" text="primary" className="ms-3">
+                    <Badge
+                      bg="light"
+                      text="dark"
+                      className="ms-3 fw-semibold border"
+                    >
                       {detailsBooking.packageBookCode}
                     </Badge>
                   )}
                 </Modal.Title>
               </Modal.Header>
-              <Modal.Body className="py-2">
+              <Modal.Body className="py-3 bg-white">
                 {!detailsBooking ? (
                   <div className="text-center py-3 text-muted">
                     No booking selected.
                   </div>
                 ) : (
-                  <>
-                    {/* ── Top strip: meta + cab/route in a single compact
-                        table so the modal stays dense and scannable. */}
-                    <Table size="sm" borderless className="mb-2">
-                      <tbody>
-                        <tr>
-                          <td className="text-muted small" style={{ width: 130 }}>Code</td>
-                          <td className="fw-semibold">
-                            {detailsBooking.packageBookCode || "—"}
-                          </td>
-                          <td className="text-muted small" style={{ width: 100 }}>Booked</td>
-                          <td className="fw-semibold">
-                            {formatDate(detailsBooking.bookingDate)}
-                          </td>
-                          <td className="text-muted small" style={{ width: 70 }}>Status</td>
-                          <td>
-                            <Badge
-                              bg={detailsBooking.cancelStatus ? "danger-subtle" : "success-subtle"}
-                              text={detailsBooking.cancelStatus ? "danger" : "success"}
-                            >
-                              {detailsBooking.cancelStatus ? "Cancelled" : "Confirmed"}
-                            </Badge>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="text-muted small">Cab</td>
-                          <td className="fw-semibold">
-                            {detailsBooking.cabName || "—"}
-                          </td>
-                          <td className="text-muted small">Pickup</td>
-                          <td className="fw-semibold">
-                            {detailsBooking.pickupDate || "—"}
-                            {detailsBooking.pickupName ? ` · ${detailsBooking.pickupName}` : ""}
-                            {detailsBooking.pickupTime ? ` ${detailsBooking.pickupTime}` : ""}
-                          </td>
-                          <td className="text-muted small">Dropoff</td>
-                          <td className="fw-semibold">
-                            {detailsBooking.dropOffDate || detailsBooking.dropoffDate || detailsBooking.pickupDate || "—"}
-                            {detailsBooking.dropoffName ? ` · ${detailsBooking.dropoffName}` : ""}
-                            {detailsBooking.dropoffTime ? ` ${detailsBooking.dropoffTime}` : ""}
-                          </td>
-                        </tr>
-                        {(detailsBooking.transporter || detailsBooking.driverName) && (
-                          <tr>
-                            <td className="text-muted small">Transporter</td>
-                            <td className="fw-semibold">
-                              {detailsBooking.transporter || "—"}
-                              {detailsBooking.contactNumber ? ` · ${detailsBooking.contactNumber}` : ""}
-                            </td>
-                            <td className="text-muted small">Driver</td>
-                            <td className="fw-semibold" colSpan={3}>
-                              {detailsBooking.driverName || "—"}
-                              {detailsBooking.driverContact ? ` · ${detailsBooking.driverContact}` : ""}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </Table>
-
-                    {/* ── Passenger manifest — one row per pax from
-                        cab_guest. Falls back to the legacy adult/child
-                        counts when the backend has no manifest yet. */}
-                    <div className="d-flex justify-content-between align-items-center mt-3 mb-1">
-                      <h6 className="fw-bold mb-0">
-                        <FaUserAlt className="me-2 text-primary" />
-                        Passengers
-                      </h6>
-                      <span className="text-muted small">
-                        {detailsBooking.noOfAdult ?? 0} Adult
-                        {(detailsBooking.noOfAdult ?? 0) !== 1 ? "s" : ""}
-                        {(detailsBooking.noOfChild ?? 0) > 0
-                          ? `, ${detailsBooking.noOfChild} Child${detailsBooking.noOfChild !== 1 ? "ren" : ""}`
-                          : ""}
-                      </span>
-                    </div>
-                    {Array.isArray(detailsBooking.guests) && detailsBooking.guests.length > 0 ? (
-                      <Table size="sm" bordered hover className="mb-3">
-                        <thead className="table-light">
-                          <tr>
-                            <th style={{ width: 50 }}>#</th>
-                            <th style={{ width: 80 }}>Type</th>
-                            <th>Name</th>
-                            <th style={{ width: 80 }}>Age</th>
-                            <th>Passport</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detailsBooking.guests.map((g, idx) => (
-                            <tr key={g.id || idx}>
-                              <td>{g.guestIndex || idx + 1}</td>
-                              <td>
-                                <Badge
-                                  bg={g.isChild ? "info-subtle" : "primary-subtle"}
-                                  text={g.isChild ? "info" : "primary"}
-                                >
-                                  {g.isChild ? "Child" : "Adult"}
-                                </Badge>
-                              </td>
-                              <td>
-                                {[g.salutation, g.firstName, g.middleName, g.lastName]
-                                  .filter(Boolean).join(" ") || "—"}
-                              </td>
-                              <td>{g.age ?? "—"}</td>
-                              <td>{g.passportNo || "—"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    ) : (
-                      <div className="small text-muted mb-3">
-                        No per-pax manifest captured for this booking.
-                        {Array.isArray(detailsBooking.childAgeArray) &&
-                          detailsBooking.childAgeArray.length > 0 && (
-                            <span> Child ages: {detailsBooking.childAgeArray.join(", ")}.</span>
-                          )}
+                  (() => {
+                    // Two-column key/value row helper, matched to the
+                    // screenshot's "label · value · label · value" layout.
+                    const KV = ({ label, value }) => (
+                      <Row className="g-0 py-2 border-bottom border-light-subtle">
+                        <Col xs={5} md={4} className="text-muted">
+                          {label}
+                        </Col>
+                        <Col xs={7} md={8} className="fw-semibold text-dark">
+                          {value || "—"}
+                        </Col>
+                      </Row>
+                    );
+                    const SectionHeader = ({ children }) => (
+                      <div
+                        className="px-3 py-2 fw-semibold text-dark border rounded-top"
+                        style={{ backgroundColor: "#f1f3f5" }}
+                      >
+                        {children}
                       </div>
-                    )}
+                    );
+                    const SectionBody = ({ children }) => (
+                      <div className="border border-top-0 rounded-bottom px-3 py-2 mb-3 bg-white">
+                        {children}
+                      </div>
+                    );
 
-                    {/* ── Primary contact + LPO — single compact row. */}
-                    <h6 className="fw-bold mb-1">Primary Contact</h6>
-                    <Table size="sm" borderless className="mb-3">
-                      <tbody>
-                        <tr>
-                          <td className="text-muted small" style={{ width: 80 }}>Name</td>
-                          <td className="fw-semibold">
-                            {[
-                              detailsBooking.customer?.salutaion,
-                              detailsBooking.customer?.firstName,
-                              detailsBooking.customer?.lastName,
-                            ].filter(Boolean).join(" ") || "—"}
-                          </td>
-                          <td className="text-muted small" style={{ width: 60 }}>
-                            <FaPhoneAlt className="me-1" />Phone
-                          </td>
-                          <td className="fw-semibold">
-                            {detailsBooking.customer?.contactNumber || "—"}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="text-muted small">
-                            <FaEnvelope className="me-1" />Email
-                          </td>
-                          <td className="fw-semibold">
-                            {detailsBooking.customer?.emailId || "—"}
-                          </td>
-                          <td className="text-muted small">
-                            <FaIdCard className="me-1" />Passport
-                          </td>
-                          <td className="fw-semibold">
-                            {detailsBooking.customer?.passportNumber || "—"}
-                          </td>
-                        </tr>
-                        {detailsBooking.lpo && (
-                          <tr>
-                            <td className="text-muted small">LPO</td>
-                            <td className="fw-semibold" colSpan={3}>
-                              {detailsBooking.lpo}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </Table>
+                    const customerName = [
+                      detailsBooking.customer?.salutaion,
+                      detailsBooking.customer?.firstName,
+                      detailsBooking.customer?.lastName,
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
 
-                    {/* ── Pricing — kept tight (single rounded panel). */}
-                    <div className="p-2 px-3 bg-light rounded">
-                      {detailsBooking.sellingPrice != null && (
-                        <div className="d-flex justify-content-between text-muted small">
-                          <span>Selling Price</span>
-                          <span className="fw-medium">
-                            {formatPrice(detailsBooking.sellingPrice)}
+                    return (
+                      <>
+                        {/* ── Booking Information ── */}
+                        <SectionHeader>Booking Information</SectionHeader>
+                        <SectionBody>
+                          <Row className="g-3">
+                            <Col md={6}>
+                              <KV
+                                label="Booking Code"
+                                value={detailsBooking.packageBookCode}
+                              />
+                              <KV
+                                label="Booking Date"
+                                value={formatDate(detailsBooking.bookingDate)}
+                              />
+                              <KV label="Cab" value={detailsBooking.cabName} />
+                              <KV
+                                label="Transporter"
+                                value={detailsBooking.transporter}
+                              />
+                              <KV
+                                label="Pickup Date"
+                                value={detailsBooking.pickupDate}
+                              />
+                              <KV
+                                label="Dropoff Date"
+                                value={
+                                  detailsBooking.dropOffDate ||
+                                  detailsBooking.dropoffDate ||
+                                  detailsBooking.pickupDate
+                                }
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <KV
+                                label="Agent"
+                                value={detailsBooking.agentName}
+                              />
+                              <KV
+                                label="Pickup"
+                                value={
+                                  [
+                                    detailsBooking.pickupName,
+                                    detailsBooking.pickupTime,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" @ ")
+                                }
+                              />
+                              <KV
+                                label="Dropoff"
+                                value={
+                                  [
+                                    detailsBooking.dropoffName,
+                                    detailsBooking.dropoffTime,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" @ ")
+                                }
+                              />
+                              <KV
+                                label="Driver"
+                                value={
+                                  [
+                                    detailsBooking.driverName,
+                                    detailsBooking.driverContact,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")
+                                }
+                              />
+                              <KV
+                                label="Voucher"
+                                value={
+                                  detailsBooking.voucherIssued ||
+                                  detailsBooking.voucher
+                                    ? "Yes"
+                                    : "No"
+                                }
+                              />
+                              <KV
+                                label="Status"
+                                value={
+                                  <span
+                                    className={
+                                      detailsBooking.cancelStatus
+                                        ? "text-danger fw-bold"
+                                        : "text-success fw-bold"
+                                    }
+                                  >
+                                    {detailsBooking.cancelStatus
+                                      ? "Cancelled"
+                                      : "Confirmed"}
+                                  </span>
+                                }
+                              />
+                            </Col>
+                          </Row>
+                        </SectionBody>
+
+                        {/* ── Guest Information ── */}
+                        <SectionHeader>Guest Information</SectionHeader>
+                        <SectionBody>
+                          <Row className="g-3">
+                            <Col md={6}>
+                              <KV label="Guest Name" value={customerName} />
+                              <KV
+                                label="Email"
+                                value={detailsBooking.customer?.emailId}
+                              />
+                              <KV
+                                label="Phone"
+                                value={detailsBooking.customer?.contactNumber}
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <KV
+                                label="Passport No."
+                                value={
+                                  detailsBooking.customer?.passportNumber
+                                }
+                              />
+                              <KV
+                                label="Nationality"
+                                value={
+                                  detailsBooking.customer?.nationality ||
+                                  detailsBooking.nationality
+                                }
+                              />
+                              <KV label="Agent LPO" value={detailsBooking.lpo} />
+                            </Col>
+                          </Row>
+                        </SectionBody>
+
+                        {/* ── Passenger Details ── */}
+                        <SectionHeader>
+                          Passenger Details
+                          <span className="text-muted small fw-normal ms-2">
+                            ({detailsBooking.noOfAdult ?? 0} Adult
+                            {(detailsBooking.noOfAdult ?? 0) !== 1 ? "s" : ""}
+                            {(detailsBooking.noOfChild ?? 0) > 0
+                              ? `, ${detailsBooking.noOfChild} Child${
+                                  detailsBooking.noOfChild !== 1 ? "ren" : ""
+                                }`
+                              : ""}
+                            )
                           </span>
+                        </SectionHeader>
+                        <div className="border border-top-0 rounded-bottom mb-3 bg-white">
+                          {Array.isArray(detailsBooking.guests) &&
+                          detailsBooking.guests.length > 0 ? (
+                            <Table
+                              size="sm"
+                              hover
+                              className="mb-0 align-middle"
+                            >
+                              <thead style={{ backgroundColor: "#f8f9fa" }}>
+                                <tr>
+                                  <th style={{ width: 50 }}>#</th>
+                                  <th style={{ width: 90 }}>Type</th>
+                                  <th>Name</th>
+                                  <th style={{ width: 80 }}>Age</th>
+                                  <th>Passport</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {detailsBooking.guests.map((g, idx) => (
+                                  <tr key={g.id || idx}>
+                                    <td>{g.guestIndex || idx + 1}</td>
+                                    <td>
+                                      <Badge
+                                        bg={g.isChild ? "secondary" : "dark"}
+                                      >
+                                        {g.isChild ? "Child" : "Adult"}
+                                      </Badge>
+                                    </td>
+                                    <td>
+                                      {[
+                                        g.salutation,
+                                        g.firstName,
+                                        g.middleName,
+                                        g.lastName,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" ") || "—"}
+                                    </td>
+                                    <td>{g.age ?? "—"}</td>
+                                    <td>{g.passportNo || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          ) : (
+                            <div className="small text-muted px-3 py-2">
+                              No per-pax manifest captured for this booking.
+                              {Array.isArray(detailsBooking.childAgeArray) &&
+                                detailsBooking.childAgeArray.length > 0 && (
+                                  <span>
+                                    {" "}
+                                    Child ages:{" "}
+                                    {detailsBooking.childAgeArray.join(", ")}.
+                                  </span>
+                                )}
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {detailsBooking.totalRate != null &&
-                        Number(detailsBooking.totalRate) !==
-                          Number(detailsBooking.totalPrice) && (
-                          <div className="d-flex justify-content-between text-muted small">
-                            <span>Total Rate</span>
-                            <span className="fw-medium">
-                              {formatPrice(detailsBooking.totalRate)}
-                            </span>
-                          </div>
-                        )}
-                      {detailsBooking.tourismDirham != null &&
-                        Number(detailsBooking.tourismDirham) > 0 && (
-                          <div className="d-flex justify-content-between text-primary small">
-                            <span>Tourism Dirham</span>
-                            <span className="fw-medium">
-                              + {formatPrice(detailsBooking.tourismDirham)}
-                            </span>
-                          </div>
-                        )}
-                      <div className="d-flex justify-content-between align-items-center border-top pt-1 mt-1">
-                        <span className="fw-semibold">Total Amount</span>
-                        <span className="fs-6 fw-bold text-success">
-                          {formatPrice(detailsBooking.totalPrice)}
-                        </span>
-                      </div>
-                    </div>
-                  </>
+
+                        {/* ── Price Details ── */}
+                        <SectionHeader>Price Details</SectionHeader>
+                        <SectionBody>
+                          {detailsBooking.sellingPrice != null && (
+                            <KV
+                              label="Selling Price"
+                              value={formatPrice(detailsBooking.sellingPrice)}
+                            />
+                          )}
+                          {detailsBooking.totalRate != null &&
+                            Number(detailsBooking.totalRate) !==
+                              Number(detailsBooking.totalPrice) && (
+                              <KV
+                                label="Total Rate"
+                                value={formatPrice(detailsBooking.totalRate)}
+                              />
+                            )}
+                          {detailsBooking.tourismDirham != null &&
+                            Number(detailsBooking.tourismDirham) > 0 && (
+                              <KV
+                                label="Tourism Dirham"
+                                value={`+ ${formatPrice(
+                                  detailsBooking.tourismDirham,
+                                )}`}
+                              />
+                            )}
+                          <Row className="g-0 pt-2">
+                            <Col xs={5} md={4} className="fw-semibold text-dark">
+                              Total Amount
+                            </Col>
+                            <Col
+                              xs={7}
+                              md={8}
+                              className="fw-bold text-success fs-6"
+                            >
+                              {formatPrice(detailsBooking.totalPrice)}
+                            </Col>
+                          </Row>
+                        </SectionBody>
+                      </>
+                    );
+                  })()
                 )}
               </Modal.Body>
-              <Modal.Footer>
+              <Modal.Footer style={{ backgroundColor: "#f8f9fa" }}>
                 <Button
                   variant="secondary"
                   onClick={() => setShowDetailsModal(false)}
+                >
+                  Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* ── Voucher modal — iframe preview + email-send form ───── */}
+            <Modal
+              show={showVoucherModal}
+              onHide={closeVoucherModal}
+              size="xl"
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header
+                closeButton={!voucherSending}
+                className="border-bottom"
+                style={{ backgroundColor: "#f1f3f5" }}
+              >
+                <Modal.Title className="d-flex align-items-center text-dark fw-semibold">
+                  <FaFileInvoice className="me-2 text-secondary" />
+                  Voucher
+                  {voucherBooking?.packageBookCode && (
+                    <Badge
+                      bg="light"
+                      text="dark"
+                      className="ms-3 fw-semibold border"
+                    >
+                      {voucherBooking.packageBookCode}
+                    </Badge>
+                  )}
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body className="p-3 bg-white">
+                {/* Email Voucher panel — sits ABOVE the PDF preview now. */}
+                <Card className="border shadow-none rounded-3 mb-3">
+                  <Card.Header
+                    className="py-2 fw-semibold text-dark d-flex align-items-center"
+                    style={{ backgroundColor: "#f1f3f5" }}
+                  >
+                    <FaEnvelope className="me-2 text-secondary" /> Email Voucher
+                  </Card.Header>
+                  <Card.Body className="p-3">
+                    <Row className="g-2 align-items-start">
+                      <Col md={8}>
+                        <Form.Label className="small fw-semibold mb-1">
+                          Recipient Email{" "}
+                          <span className="text-danger">*</span>
+                        </Form.Label>
+                        <Form.Control
+                          type="email"
+                          placeholder="name@example.com"
+                          value={voucherEmail}
+                          onChange={(e) => {
+                            setVoucherEmail(e.target.value);
+                            if (voucherEmailError) setVoucherEmailError("");
+                          }}
+                          isInvalid={!!voucherEmailError}
+                          disabled={voucherSending}
+                        />
+                        {voucherEmailError ? (
+                          <div className="invalid-feedback d-block">
+                            {voucherEmailError}
+                          </div>
+                        ) : (
+                          <Form.Text className="text-muted">
+                            The voucher PDF will be attached and sent to this address.
+                          </Form.Text>
+                        )}
+                      </Col>
+                      <Col md={4} className="d-flex flex-column gap-2 mt-md-4">
+                        <Button
+                          variant="dark"
+                          onClick={sendVoucherEmail}
+                          disabled={voucherSending}
+                        >
+                          {voucherSending ? (
+                            <>
+                              <Spinner size="sm" className="me-2" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <FaEnvelope className="me-2" /> Send
+                            </>
+                          )}
+                        </Button>
+                        {voucherPdfUrl && (
+                          <Button
+                            variant="outline-secondary"
+                            href={voucherPdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            disabled={voucherSending}
+                          >
+                            Open in New Tab
+                          </Button>
+                        )}
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+
+                {/* PDF preview below the email form. */}
+                <Card className="border shadow-none rounded-3 overflow-hidden">
+                  <Card.Body className="p-0">
+                    {voucherPdfUrl ? (
+                      <iframe
+                        title="Voucher PDF"
+                        src={voucherPdfUrl}
+                        style={{
+                          width: "100%",
+                          height: "65vh",
+                          border: "none",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      <div className="text-center text-muted py-5">
+                        No voucher loaded.
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Modal.Body>
+              <Modal.Footer
+                className="border-top"
+                style={{ backgroundColor: "#f8f9fa" }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={closeVoucherModal}
+                  disabled={voucherSending}
                 >
                   Close
                 </Button>

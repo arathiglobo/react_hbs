@@ -1,20 +1,94 @@
 /**
  * GovEmployeeBookingDetailView.jsx
  *
- * "View" page for a single gov-employee booking. Reached from the
- * booking-list view button. Mirrors the standard
- * BookingDetailedView.jsx but reads from
- * /api/gov-employee-booking/{id} and surfaces the discount fields.
+ * Detail view for a single gov-employee booking. Visual shell mirrors
+ * SeniorCitizenBookingDetailView / StudentBookingDetailView /
+ * BookingDetailedView so the detail pages read identically across the
+ * app. Functionality unchanged — voucher endpoint still
+ * /api/gov-employee-booking/{id}/voucher; data still loaded from
+ * /api/gov-employee-booking/{id}.
  */
 
 import React, { useEffect, useState } from "react";
-import { Card, Row, Col, Button, Spinner, Badge, Table } from "react-bootstrap";
-import { FaArrowLeft, FaDownload } from "react-icons/fa";
+import { Container, Row, Col, Spinner, Table } from "react-bootstrap";
 import { useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+
+const BUTTON_STYLE = {
+  backgroundColor: "#c0392b",
+  color: "#fff",
+  border: "none",
+  borderRadius: "3px",
+  padding: "6px 14px",
+  fontSize: "0.78rem",
+  fontWeight: "600",
+  cursor: "pointer",
+  letterSpacing: "0.4px",
+  whiteSpace: "nowrap",
+};
+
+const SECTION_HEADER = {
+  backgroundColor: "#f0f0f0",
+  padding: "7px 12px",
+  fontWeight: "600",
+  fontSize: "0.9rem",
+  borderBottom: "1px solid #ddd",
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+};
+
+const INFO_LABEL = {
+  fontWeight: "600",
+  color: "#555",
+  fontSize: "0.82rem",
+  minWidth: "160px",
+  display: "inline-block",
+};
+
+const INFO_VALUE = {
+  color: "#222",
+  fontSize: "0.82rem",
+};
+
+const parseLocal = (str) => {
+  if (!str) return null;
+  const normalized = str.includes("T") ? str : `${str}T00:00:00`;
+  const d = new Date(normalized);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+const formatDate = (dateStr) => {
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${day} ${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
+};
+
+const formatDateTime = (dateStr) => {
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const hrs = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${formatDate(dateStr)} ${hrs}:${min}:${sec}`;
+};
+
+const StatusBadge = ({ status }) => {
+  const s = (status || "").toUpperCase();
+  let color = "#888";
+  if (s === "CONFIRMED" || s === "RECONFIRMED") color = "#c0392b";
+  else if (s === "CANCELLED") color = "#888";
+  else if (s === "ON REQUEST") color = "#e67e22";
+  return (
+    <span style={{ color, fontWeight: "700", fontSize: "0.85rem" }}>
+      {status || "-"}
+    </span>
+  );
+};
 
 export default function GovEmployeeBookingDetailView() {
   const { id } = useParams();
@@ -26,12 +100,14 @@ export default function GovEmployeeBookingDetailView() {
     (async () => {
       setLoading(true);
       try {
-        const { data } = await axiosInstance.get(`/api/gov-employee-booking/${id}`);
-        if (data?.success === false) {
-          toast.error(data?.message || "Not found");
+        const { data: payload } = await axiosInstance.get(
+          `/api/gov-employee-booking/${id}`,
+        );
+        if (payload?.success === false) {
+          toast.error(payload?.message || "Not found");
           setData(null);
         } else {
-          setData(data);
+          setData(payload);
         }
       } catch (e) {
         toast.error("Failed to load booking");
@@ -41,178 +117,357 @@ export default function GovEmployeeBookingDetailView() {
     })();
   }, [id]);
 
-  const handleVoucher = async () => {
-    try {
-      const res = await axiosInstance.get(`/api/gov-employee-booking/${id}/voucher`, { responseType: "blob" });
-      const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `gov-employee-voucher-${id}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      toast.error("Voucher download failed");
-    }
+  const card = {
+    border: "1px solid #ddd",
+    borderRadius: "4px",
+    marginBottom: "14px",
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
   };
-
-  if (loading) return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
-      <TopBar />
-      <div className="d-flex flex-grow-1">
-        <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <div className="text-center py-5"><Spinner animation="border" /></div>
-        </main>
-      </div>
-    </div>
-  );
-  if (!data) return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
-      <TopBar />
-      <div className="d-flex flex-grow-1">
-        <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <div className="text-center text-muted py-5">Booking not found.</div>
-        </main>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm border-0">
-          <Card.Body>
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <div>
-                <Button variant="link" className="p-0 me-2" onClick={() => navigate(-1)}>
-                  <FaArrowLeft /> Back
-                </Button>
-                <h5 className="d-inline">Government Employee Booking</h5>
-                <div className="text-muted small mt-1">
-                  Code: <strong>{data.bookingCode}</strong> · Ref: {data.referenceNumber}
-                </div>
-              </div>
-              <div>
-                {data.cancelled ? (
-                  <Badge bg="danger" className="me-2 p-2">Cancelled</Badge>
-                ) : (
-                  <Badge bg="info" className="me-2 p-2">{data.confirmationStatus || "-"}</Badge>
-                )}
-                <Button variant="outline-success" size="sm" onClick={handleVoucher}>
-                  <FaDownload className="me-1" /> Voucher
-                </Button>
-              </div>
+        <main className="flex-grow-1 p-4" style={{ overflow: "auto" }}>
+          <Container fluid style={{ maxWidth: "1100px" }}>
+            {/* Back button */}
+            <div className="mb-3">
+              <button
+                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
+                onClick={() => navigate(-1)}
+              >
+                ← Back
+              </button>
+              <span
+                style={{
+                  marginLeft: "12px",
+                  fontWeight: "700",
+                  fontSize: "1.1rem",
+                  color: "#333",
+                }}
+              >
+                Booking Details
+              </span>
             </div>
 
-            {/* Hotel */}
-            <h6>Hotel</h6>
-            <Row className="g-2 mb-3">
-              <Col md={6}><strong>{data.hotelName}</strong></Col>
-              <Col md={6}>{data.address}</Col>
-              <Col md={4}>Check-In: <strong>{data.checkInDate?.slice(0, 10)}</strong></Col>
-              <Col md={4}>Check-Out: <strong>{data.checkOutDate?.slice(0, 10)}</strong></Col>
-              <Col md={4}>Nights: <strong>{data.nights}</strong></Col>
-            </Row>
-
-            {/* Government Employee — verification info captured at booking time */}
-            <h6>Government Employee Verification</h6>
-            <Row className="g-2 mb-3">
-              <Col md={4}>
-                Method:{" "}
-                <Badge bg={data.verificationMethod === "GOVT_ID_UPLOAD" ? "info" : "primary"}>
-                  {data.verificationMethod === "GOVT_ID_UPLOAD" ? "Government ID Upload" : "Employee Code"}
-                </Badge>
-              </Col>
-              {data.verificationMethod === "GOVT_ID_UPLOAD" ? (
-                <Col md={8}>
-                  Document:{" "}
-                  {data.govtIdFilePath ? (
-                    <a
-                      href={`${axiosInstance.defaults.baseURL || ""}/api/gov-employee-id-upload/preview?path=${encodeURIComponent(data.govtIdFilePath)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {data.govtIdFileName || "View uploaded ID"}
-                    </a>
-                  ) : "-"}
-                </Col>
-              ) : (
-                <Col md={8}>Code: <strong>{data.govEmployeeCode || "-"}</strong></Col>
-              )}
-              <Col md={6}>Name: <strong>{data.govEmployeeName || "-"}</strong></Col>
-              <Col md={6}>Department: <strong>{data.govEmployeeDepartment || "-"}</strong></Col>
-            </Row>
-
-            {/* Customer */}
-            {data.customer && (
+            {loading ? (
+              <div className="text-center py-5">
+                <Spinner animation="border" style={{ color: "#c0392b" }} />
+                <p className="mt-3 text-muted">Loading booking details...</p>
+              </div>
+            ) : !data ? (
+              <div className="text-center py-5 text-muted">
+                Booking not found.
+              </div>
+            ) : (
               <>
-                <h6>Primary Guest</h6>
-                <Row className="g-2 mb-3">
-                  <Col md={4}>{data.customer.salutation} {data.customer.firstName} {data.customer.lastName}</Col>
-                  <Col md={4}>{data.customer.email}</Col>
-                  <Col md={4}>{data.customer.phone}</Col>
-                </Row>
+                {/* ── Booking Information ───────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Booking Information</div>
+                  <div style={{ padding: "12px 16px" }}>
+                    <Row>
+                      <Col md={6}>
+                        <InfoRow label="Booking Code" value={data.bookingCode} />
+                        <InfoRow label="Reference No." value={data.referenceNumber} />
+                        <InfoRow label="Hotel Name" value={data.hotelName} />
+                        <InfoRow label="Address" value={data.address} />
+                        <InfoRow
+                          label="Star Rating"
+                          value={data.starRating ? `${data.starRating} Star` : "-"}
+                        />
+                        <InfoRow label="Check-In" value={formatDateTime(data.checkInDate)} />
+                        <InfoRow label="Check-Out" value={formatDateTime(data.checkOutDate)} />
+                        <InfoRow
+                          label="No. of Nights"
+                          value={data.nights ? `${data.nights} Nights` : "-"}
+                        />
+                      </Col>
+                      <Col md={6}>
+                        <InfoRow label="Agent" value={data.agentName} />
+                        <InfoRow label="Source" value={data.source} />
+                        <InfoRow label="Created By" value={data.createdByRole} />
+                        <InfoRow label="Supplier Ref." value={data.supplierReference} />
+                        <InfoRow
+                          label="Deadline Date"
+                          value={
+                            data.deadlineDate
+                              ? data.deadlineDate.replace("T", " ")
+                              : "-"
+                          }
+                        />
+                        <InfoRow label="Refund Status" value={data.refundStatus} />
+                        <InfoRow label="Voucher" value={data.voucherGenerated} />
+                        <InfoRow
+                          label="Status"
+                          value={
+                            data.cancelled ? (
+                              <StatusBadge status="CANCELLED" />
+                            ) : (
+                              <StatusBadge status={data.confirmationStatus} />
+                            )
+                          }
+                        />
+                      </Col>
+                    </Row>
+                  </div>
+                </div>
+
+                {/* ── Guest Information ─────────────────────────────── */}
+                {data.customer && (
+                  <div style={card}>
+                    <div style={SECTION_HEADER}>Guest Information</div>
+                    <div style={{ padding: "12px 16px" }}>
+                      <Row>
+                        <Col md={6}>
+                          <InfoRow
+                            label="Guest Name"
+                            value={
+                              [
+                                data.customer.salutation,
+                                data.customer.firstName,
+                                data.customer.middleName,
+                                data.customer.lastName,
+                              ]
+                                .filter(Boolean)
+                                .join(" ") || "-"
+                            }
+                          />
+                          <InfoRow label="Email" value={data.customer.email} />
+                          <InfoRow label="Phone" value={data.customer.phone} />
+                        </Col>
+                        <Col md={6}>
+                          <InfoRow label="Passport No." value={data.customer.passportNo} />
+                          <InfoRow
+                            label="Nationality"
+                            value={data.customer.customerNationality}
+                          />
+                          <InfoRow label="Agent LPO" value={data.customer.agentLpo} />
+                        </Col>
+                      </Row>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Government Employee Verification ──────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Government Employee Verification</div>
+                  <div style={{ padding: "12px 16px" }}>
+                    <Row>
+                      <Col md={6}>
+                        <InfoRow
+                          label="Verification Method"
+                          value={
+                            data.verificationMethod === "GOVT_ID_UPLOAD"
+                              ? "Government ID Upload"
+                              : data.verificationMethod === "EMPLOYEE_CODE"
+                                ? "Employee Code"
+                                : data.verificationMethod || "-"
+                          }
+                        />
+                        <InfoRow
+                          label="Employee Code"
+                          value={data.govEmployeeCode}
+                        />
+                        <InfoRow
+                          label="Employee Name"
+                          value={data.govEmployeeName}
+                        />
+                      </Col>
+                      <Col md={6}>
+                        <InfoRow
+                          label="Department"
+                          value={data.govEmployeeDepartment}
+                        />
+                        {data.verificationMethod === "GOVT_ID_UPLOAD" && (
+                          <InfoRow
+                            label="Document"
+                            value={
+                              data.govtIdFilePath ? (
+                                <a
+                                  href={`${axiosInstance.defaults.baseURL || ""}/api/gov-employee-id-upload/preview?path=${encodeURIComponent(
+                                    data.govtIdFilePath,
+                                  )}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {data.govtIdFileName || "View uploaded ID"}
+                                </a>
+                              ) : (
+                                "-"
+                              )
+                            }
+                          />
+                        )}
+                        {data.verifiedBy && (
+                          <InfoRow label="Verified By" value={data.verifiedBy} />
+                        )}
+                        {data.verifiedAt && (
+                          <InfoRow label="Verified At" value={data.verifiedAt} />
+                        )}
+                      </Col>
+                    </Row>
+                  </div>
+                </div>
+
+                {/* ── Rooms Details ─────────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Rooms Details</div>
+                  <div style={{ padding: "10px 16px 4px" }}>
+                    <span
+                      style={{
+                        color: "#c0392b",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        marginRight: "20px",
+                      }}
+                    >
+                      No of Rooms - {(data.rooms || []).length} Room
+                      {(data.rooms || []).length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  {(data.rooms || []).map((room, idx) => (
+                    <div
+                      key={room.roomBookingId || idx}
+                      style={{ padding: "8px 16px 12px" }}
+                    >
+                      <div
+                        style={{
+                          color: "#c0392b",
+                          fontWeight: "700",
+                          fontSize: "0.88rem",
+                          marginBottom: "6px",
+                        }}
+                      >
+                        Room {room.roomNo ?? idx + 1} -{" "}
+                        <StatusBadge
+                          status={
+                            data.confirmationStatus ||
+                            data.roomStatus ||
+                            "CONFIRMED"
+                          }
+                        />
+                      </div>
+                      <Table
+                        bordered
+                        size="sm"
+                        style={{ fontSize: "0.82rem", marginBottom: "6px" }}
+                      >
+                        <thead style={{ backgroundColor: "#f8f8f8" }}>
+                          <tr>
+                            <th>Room Category</th>
+                            <th>Meal Type</th>
+                            <th>Adults</th>
+                            <th>Children</th>
+                            <th>Before</th>
+                            <th>After</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>{room.roomCategory || "-"}</td>
+                            <td>{room.mealPlan || "-"}</td>
+                            <td>{room.adults ?? "-"}</td>
+                            <td>{room.children ?? "0"}</td>
+                            <td className="text-decoration-line-through">
+                              {room.rateBeforeDiscount ?? "-"}
+                            </td>
+                            <td>{room.rate ?? "-"}</td>
+                          </tr>
+                        </tbody>
+                      </Table>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Price Summary ─────────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Price Summary</div>
+                  <div style={{ padding: "12px 16px" }}>
+                    <Row>
+                      <Col md={4}>
+                        <InfoRow
+                          label="Total Before Discount"
+                          value={
+                            data.totalRateBeforeDiscount != null ? (
+                              <span className="text-decoration-line-through">
+                                {data.totalRateBeforeDiscount}
+                              </span>
+                            ) : (
+                              "-"
+                            )
+                          }
+                        />
+                      </Col>
+                      <Col md={4}>
+                        <InfoRow
+                          label="Discount Applied"
+                          value={
+                            [
+                              data.discountPercent
+                                ? `${data.discountPercent}%`
+                                : "",
+                              data.discountAmount
+                                ? `flat ${data.discountAmount}`
+                                : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" + ") || "-"
+                          }
+                        />
+                      </Col>
+                      <Col md={4}>
+                        <InfoRow
+                          label="Total Payable"
+                          value={
+                            <span
+                              style={{
+                                color: "#198754",
+                                fontWeight: "700",
+                                fontSize: "0.95rem",
+                              }}
+                            >
+                              {data.totalRate ?? "-"}
+                            </span>
+                          }
+                        />
+                      </Col>
+                    </Row>
+                  </div>
+                </div>
+
+                {/* ── Cancellation block (only when cancelled) ─────── */}
+                {data.cancelled && (
+                  <div style={card}>
+                    <div style={SECTION_HEADER}>Cancellation</div>
+                    <div style={{ padding: "12px 16px" }}>
+                      <InfoRow label="Cancelled At" value={data.cancelledAt} />
+                      <InfoRow
+                        label="Cancellation Reason"
+                        value={data.cancellationReason}
+                      />
+                    </div>
+                  </div>
+                )}
               </>
             )}
-
-            {/* Rooms */}
-            <h6>Rooms</h6>
-            <Table size="sm" bordered>
-              <thead className="table-light">
-                <tr>
-                  <th>#</th><th>Category</th><th>Meal</th>
-                  <th>Adults</th><th>Children</th>
-                  <th>Before</th><th>After</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data.rooms || []).map((r) => (
-                  <tr key={r.roomBookingId}>
-                    <td>{r.roomNo}</td>
-                    <td>{r.roomCategory}</td>
-                    <td>{r.mealPlan}</td>
-                    <td>{r.adults}</td>
-                    <td>{r.children}</td>
-                    <td className="text-decoration-line-through">{r.rateBeforeDiscount ?? "-"}</td>
-                    <td><strong className="text-success">{r.rate ?? "-"}</strong></td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-
-            {/* Totals */}
-            <Card className="bg-light border-0 mt-3">
-              <Card.Body>
-                <Row>
-                  <Col md={4}>Total Before Discount:
-                    <div className="text-decoration-line-through">{data.totalRateBeforeDiscount ?? "-"}</div>
-                  </Col>
-                  <Col md={4}>Discount Applied:
-                    <div>
-                      {data.discountPercent ? `${data.discountPercent}%` : ""}
-                      {data.discountAmount ? ` + flat ${data.discountAmount}` : ""}
-                    </div>
-                  </Col>
-                  <Col md={4}>Total Payable:
-                    <div className="h5 text-success">{data.totalRate ?? "-"}</div>
-                  </Col>
-                </Row>
-              </Card.Body>
-            </Card>
-
-            {data.cancelled && (
-              <div className="mt-3 text-danger small">
-                Cancelled at {data.cancelledAt} · Reason: {data.cancellationReason}
-              </div>
-            )}
-          </Card.Body>
-        </Card>
+          </Container>
         </main>
       </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <div
+      style={{ marginBottom: "6px", display: "flex", alignItems: "flex-start" }}
+    >
+      <span style={INFO_LABEL}>{label}</span>
+      <span style={{ ...INFO_VALUE, marginLeft: "8px" }}>{value ?? "-"}</span>
     </div>
   );
 }
