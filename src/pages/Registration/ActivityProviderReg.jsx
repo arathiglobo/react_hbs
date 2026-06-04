@@ -623,17 +623,99 @@ const ActivityProviderReg = () => {
           >
             <Modal.Header
               closeButton={!isLoading}
-              style={{ backgroundColor: "#1e3a8a", color: "white" }}
+              style={
+                isViewMode
+                  ? { backgroundColor: "#f1f3f5" }
+                  : { backgroundColor: "#1e3a8a", color: "white" }
+              }
+              className={isViewMode ? "border-bottom" : ""}
             >
-              <Modal.Title>
+              <Modal.Title className={isViewMode ? "text-dark" : ""}>
                 {isViewMode
-                  ? "View Provider"
+                  ? "Activity Provider Details"
                   : editing
                   ? "Update Provider"
                   : "Create Provider"}
               </Modal.Title>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body className={isViewMode ? "bg-white py-3" : ""}>
+              {isViewMode ? (
+                (() => {
+                  // ── Read-only view layout. Keeps text light — labels
+                  //    muted, values in plain body color (no bold, no
+                  //    text-dark/text-primary darken). */}
+                  const SectionHeader = ({ children }) => (
+                    <div
+                      className="px-3 py-2 border rounded-top text-dark"
+                      style={{
+                        backgroundColor: "#f1f3f5",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {children}
+                    </div>
+                  );
+                  const SectionBody = ({ children }) => (
+                    <div className="border border-top-0 rounded-bottom px-3 py-2 mb-3 bg-white">
+                      {children}
+                    </div>
+                  );
+                  const KV = ({ label, value }) => (
+                    <Row className="g-0 py-2 border-bottom border-light-subtle">
+                      <Col xs={5} md={4} className="text-muted">
+                        {label}
+                      </Col>
+                      <Col xs={7} md={8}>
+                        {value || "—"}
+                      </Col>
+                    </Row>
+                  );
+
+                  return (
+                    <>
+                      <SectionHeader>Provider Information</SectionHeader>
+                      <SectionBody>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <KV
+                              label="Provider Name"
+                              value={formData.providerName}
+                            />
+                            <KV
+                              label="Provider Code"
+                              value={formData.providerCode}
+                            />
+                            <KV
+                              label="First Name"
+                              value={formData.firstName}
+                            />
+                            <KV
+                              label="Last Name"
+                              value={formData.lastName}
+                            />
+                          </Col>
+                          <Col md={6}>
+                            <KV
+                              label="Mobile No"
+                              value={formData.mobileNo}
+                            />
+                            <KV label="Email Id" value={formData.emailId} />
+                            <KV
+                              label="Country"
+                              value={formData.countryName}
+                            />
+                            <KV label="City" value={formData.cityName} />
+                          </Col>
+                          <Col md={12}>
+                            <KV label="Address" value={formData.address} />
+                          </Col>
+                        </Row>
+                      </SectionBody>
+                    </>
+                  );
+                })()
+              ) : (
+              <>
               <div className="mb-2">
                 <small style={{ color: "red" }}>* mandatory fields</small>
               </div>
@@ -833,8 +915,14 @@ const ActivityProviderReg = () => {
                   </Form.Control.Feedback>
                 )}
               </Form>
+              </>
+              )}
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer
+              style={
+                isViewMode ? { backgroundColor: "#f8f9fa" } : undefined
+              }
+            >
               <Button
                 variant="danger"
                 onClick={closeModal}
@@ -842,7 +930,7 @@ const ActivityProviderReg = () => {
                 className="d-flex align-items-center gap-2"
               >
                 <i className="fas fa-times"></i>
-                Cancel
+                {isViewMode ? "Close" : "Cancel"}
               </Button>
               {!isViewMode && (
                 <>

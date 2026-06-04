@@ -1056,16 +1056,149 @@ const EmployeeReg = () => {
           </Card>
 
           <Modal show={showModal} onHide={closeModal} centered size="lg">
-            <Modal.Header closeButton={!isLoading}>
-              <Modal.Title>
+            <Modal.Header
+              closeButton={!isLoading}
+              className={isViewMode ? "border-bottom" : ""}
+              style={
+                isViewMode ? { backgroundColor: "#f1f3f5" } : undefined
+              }
+            >
+              <Modal.Title
+                className={
+                  isViewMode ? "text-dark fw-semibold" : ""
+                }
+              >
                 {isViewMode
-                  ? "View Details"
+                  ? "Employee Details"
                   : editing
                   ? "Update Employee"
                   : "Create Employee"}
               </Modal.Title>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body
+              className={isViewMode ? "bg-white py-3" : ""}
+            >
+              {isViewMode ? (
+                (() => {
+                  // ── Read-only view layout, matched to the standard
+                  //    "Booking Details" screenshot (light-shade section
+                  //    headers with two-column key/value rows). Keeps
+                  //    the existing modal/handlers untouched. */}
+                  const SectionHeader = ({ children }) => (
+                    <div
+                      className="px-3 py-2 fw-semibold text-dark border rounded-top"
+                      style={{ backgroundColor: "#f1f3f5" }}
+                    >
+                      {children}
+                    </div>
+                  );
+                  const SectionBody = ({ children }) => (
+                    <div className="border border-top-0 rounded-bottom px-3 py-2 mb-3 bg-white">
+                      {children}
+                    </div>
+                  );
+                  const KV = ({ label, value }) => (
+                    <Row className="g-0 py-2 border-bottom border-light-subtle">
+                      <Col xs={5} md={4} className="text-muted">
+                        {label}
+                      </Col>
+                      <Col xs={7} md={8} className="fw-semibold text-dark">
+                        {value || "—"}
+                      </Col>
+                    </Row>
+                  );
+
+                  // Profile image preview — handle both a string URL
+                  // (existing record) and a freshly-picked File object.
+                  let profilePreview = null;
+                  if (formData.profileImage) {
+                    if (typeof formData.profileImage === "string") {
+                      profilePreview = formData.profileImage;
+                    } else if (formData.profileImage instanceof File) {
+                      profilePreview = URL.createObjectURL(formData.profileImage);
+                    }
+                  }
+
+                  return (
+                    <>
+                      <SectionHeader>Employee Information</SectionHeader>
+                      <SectionBody>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <KV
+                              label="Employee Code"
+                              value={formData.employeeCode}
+                            />
+                            <KV
+                              label="First Name"
+                              value={formData.firstName}
+                            />
+                            <KV
+                              label="Last Name"
+                              value={formData.lastName}
+                            />
+                            <KV
+                              label="Designation"
+                              value={formData.designation}
+                            />
+                            <KV
+                              label="Date of Birth"
+                              value={formData.dob}
+                            />
+                          </Col>
+                          <Col md={6} className="text-center text-md-start">
+                            <div className="text-muted small mb-2">
+                              Profile Image
+                            </div>
+                            {profilePreview ? (
+                              <img
+                                src={profilePreview}
+                                alt="Employee"
+                                style={{
+                                  maxWidth: "160px",
+                                  maxHeight: "160px",
+                                  objectFit: "cover",
+                                  border: "1px solid #ddd",
+                                  borderRadius: "6px",
+                                }}
+                              />
+                            ) : (
+                              <div className="text-muted small">—</div>
+                            )}
+                          </Col>
+                        </Row>
+                      </SectionBody>
+
+                      <SectionHeader>Contact Information</SectionHeader>
+                      <SectionBody>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <KV label="Email" value={formData.email} />
+                            <KV
+                              label="Mobile Number"
+                              value={formData.mobileNumber}
+                            />
+                            <KV
+                              label="Telephone Number"
+                              value={formData.telexNumber}
+                            />
+                          </Col>
+                          <Col md={6}>
+                            <KV
+                              label="Fax Number"
+                              value={formData.faxNumber}
+                            />
+                            <KV label="Zip Code" value={formData.zipcode} />
+                          </Col>
+                          <Col md={12}>
+                            <KV label="Address" value={formData.address} />
+                          </Col>
+                        </Row>
+                      </SectionBody>
+                    </>
+                  );
+                })()
+              ) : (
               <Form>
                 <Card className="mb-3">
                   <Card.Header>Employee Details</Card.Header>
@@ -1461,8 +1594,13 @@ const EmployeeReg = () => {
                   </Form.Control.Feedback>
                 )}
               </Form>
+              )}
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer
+              style={
+                isViewMode ? { backgroundColor: "#f8f9fa" } : undefined
+              }
+            >
               <Button
                 variant="secondary"
                 onClick={closeModal}

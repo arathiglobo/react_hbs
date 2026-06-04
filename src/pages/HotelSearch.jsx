@@ -328,6 +328,21 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const [placeholder, setPlaceholder] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Agent logins book under themselves — the backend forces the booking,
+  // quote and search markup to the logged-in agent (see
+  // LongStayBookingController / LongStaySearchController), so the manual
+  // Agent picker is hidden and the agent-required validation is skipped.
+  // currentActiveRole isn't set for single-role logins, so fall back to
+  // userRole; admin/super-admin/staff keep the picker exactly as before.
+  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+    .trim()
+    .toUpperCase();
+  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const isAgentRole = activeRole
+    ? activeRole === "AGENT"
+    : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
+
   // When user came here via "Edit -> Book Again" from a booking detail page,
   // parentBookingCode is in the URL (e.g. ?parentBookingCode=GLBIN37). It is
   // threaded through to HotelBookingPage so the new booking is saved as a
@@ -1246,6 +1261,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                 */}
                 <Row className="g-4">
                   {/* 1. Agent */}
+                  {!isAgentRole && (
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
@@ -1291,6 +1307,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                       )}
                     </Form.Group>
                   </Col>
+                  )}
 
                   {/* 2. Destination / City */}
                   <Col lg={4} md={6}>

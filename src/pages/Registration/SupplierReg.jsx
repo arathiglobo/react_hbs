@@ -687,16 +687,95 @@ const SupplierReg = () => {
           </Card>
 
           <Modal show={showModal} onHide={closeModal} centered size="lg">
-            <Modal.Header closeButton={!isLoading}>
-              <Modal.Title>
+            <Modal.Header
+              closeButton={!isLoading}
+              className={isViewMode ? "border-bottom" : ""}
+              style={
+                isViewMode ? { backgroundColor: "#f1f3f5" } : undefined
+              }
+            >
+              <Modal.Title
+                className={
+                  isViewMode ? "text-dark fw-bold" : ""
+                }
+              >
                 {isViewMode
-                  ? "View Details"
+                  ? "Supplier Details"
                   : editing
                   ? "Update Supplier"
                   : "Create Supplier"}
               </Modal.Title>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body className={isViewMode ? "bg-white py-3" : ""}>
+              {isViewMode ? (
+                (() => {
+                  // ── Read-only view layout. Title is darker/bold per
+                  //    user spec; body labels stay muted, values stay
+                  //    in plain default body color (no bold/darken). */}
+                  const SectionHeader = ({ children }) => (
+                    <div
+                      className="px-3 py-2 border rounded-top text-dark"
+                      style={{
+                        backgroundColor: "#f1f3f5",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {children}
+                    </div>
+                  );
+                  const SectionBody = ({ children }) => (
+                    <div className="border border-top-0 rounded-bottom px-3 py-2 mb-3 bg-white">
+                      {children}
+                    </div>
+                  );
+                  const KV = ({ label, value }) => (
+                    <Row className="g-0 py-2 border-bottom border-light-subtle">
+                      <Col xs={5} md={4} className="text-muted">
+                        {label}
+                      </Col>
+                      <Col xs={7} md={8}>
+                        {value || "—"}
+                      </Col>
+                    </Row>
+                  );
+
+                  return (
+                    <>
+                      <SectionHeader>Supplier Information</SectionHeader>
+                      <SectionBody>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <KV
+                              label="Supplier Name"
+                              value={formData.name}
+                            />
+                            <KV label="Email" value={formData.email} />
+                            <KV
+                              label="Phone Number"
+                              value={formData.phoneNumber}
+                            />
+                          </Col>
+                          <Col md={6}>
+                            <KV
+                              label="TRN Number"
+                              value={formData.trnNumber}
+                            />
+                            <KV
+                              label="Status"
+                              value={
+                                formData.isActive ? "Active" : "Inactive"
+                              }
+                            />
+                          </Col>
+                          <Col md={12}>
+                            <KV label="Address" value={formData.address} />
+                          </Col>
+                        </Row>
+                      </SectionBody>
+                    </>
+                  );
+                })()
+              ) : (
               <Form>
                 <Card className="mb-3">
                   <Card.Header>Supplier Details</Card.Header>
@@ -946,8 +1025,13 @@ const SupplierReg = () => {
                   </Form.Control.Feedback>
                 )}
               </Form>
+              )}
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer
+              style={
+                isViewMode ? { backgroundColor: "#f8f9fa" } : undefined
+              }
+            >
               <Button
                 variant="secondary"
                 onClick={closeModal}

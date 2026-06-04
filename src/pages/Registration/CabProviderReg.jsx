@@ -1768,16 +1768,174 @@ const CabProviderReg = () => {
             backdrop="static"
             keyboard={false}
           >
-            <Modal.Header closeButton={!isLoading}>
-              <Modal.Title>
+            <Modal.Header
+              closeButton={!isLoading}
+              className={isViewMode ? "border-bottom" : ""}
+              style={
+                isViewMode ? { backgroundColor: "#f1f3f5" } : undefined
+              }
+            >
+              <Modal.Title
+                className={isViewMode ? "text-dark fw-semibold" : ""}
+              >
                 {isViewMode
-                  ? "View Details"
+                  ? "Cab Provider Details"
                   : editing
                   ? "Update Cab Provider"
                   : "Create Cab"}
               </Modal.Title>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body className={isViewMode ? "bg-white py-3" : ""}>
+              {isViewMode ? (
+                (() => {
+                  // ── Read-only view layout mirroring the standard
+                  //    "Booking Details" screenshot — light-shade section
+                  //    headers with two-column key/value rows. Keeps all
+                  //    existing handlers/state untouched. */}
+                  const SectionHeader = ({ children }) => (
+                    <div
+                      className="px-3 py-2 fw-semibold text-dark border rounded-top"
+                      style={{ backgroundColor: "#f1f3f5" }}
+                    >
+                      {children}
+                    </div>
+                  );
+                  const SectionBody = ({ children }) => (
+                    <div className="border border-top-0 rounded-bottom px-3 py-2 mb-3 bg-white">
+                      {children}
+                    </div>
+                  );
+                  const KV = ({ label, value }) => (
+                    <Row className="g-0 py-2 border-bottom border-light-subtle">
+                      <Col xs={5} md={4} className="text-muted">
+                        {label}
+                      </Col>
+                      <Col xs={7} md={8} className="fw-semibold text-dark">
+                        {value || "—"}
+                      </Col>
+                    </Row>
+                  );
+
+                  const cabRows =
+                    Array.isArray(cabList) && cabList.length > 0
+                      ? cabList
+                      : [];
+
+                  return (
+                    <>
+                      <SectionHeader>Provider Information</SectionHeader>
+                      <SectionBody>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <KV
+                              label="Cab Provider Name"
+                              value={formData.cabProviderName}
+                            />
+                            <KV
+                              label="Contact Person"
+                              value={formData.contactPerson}
+                            />
+                          </Col>
+                          <Col md={6}>
+                            <KV
+                              label="Contact Number"
+                              value={formData.contactNumber}
+                            />
+                            <KV label="Email" value={formData.email} />
+                          </Col>
+                        </Row>
+                      </SectionBody>
+
+                      <SectionHeader>
+                        Cab List
+                        <span className="text-muted small fw-normal ms-2">
+                          ({cabRows.length} cab
+                          {cabRows.length !== 1 ? "s" : ""})
+                        </span>
+                      </SectionHeader>
+                      <div className="border border-top-0 rounded-bottom mb-3 bg-white">
+                        {cabRows.length === 0 ? (
+                          <div className="small text-muted px-3 py-2">
+                            No cabs registered for this provider.
+                          </div>
+                        ) : (
+                          <Table
+                            size="sm"
+                            hover
+                            className="mb-0 align-middle"
+                          >
+                            <thead style={{ backgroundColor: "#f8f9fa" }}>
+                              <tr>
+                                <th style={{ width: 50 }}>#</th>
+                                <th>Cab Code</th>
+                                <th>Cab Name</th>
+                                <th>Max Pax</th>
+                                <th>Max Luggage</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cabRows.map((c, idx) => (
+                                <tr key={c.cabId || c.id || idx}>
+                                  <td>{idx + 1}</td>
+                                  <td>{c.cabCode || "—"}</td>
+                                  <td>{c.name || c.cabName || "—"}</td>
+                                  <td>{c.maxCapacity ?? "—"}</td>
+                                  <td>{c.maxLuggageCapacity ?? "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        )}
+                      </div>
+
+                      {pickupDropoffList && pickupDropoffList.length > 0 && (
+                        <>
+                          <SectionHeader>
+                            Pickup / Dropoff Locations
+                            <span className="text-muted small fw-normal ms-2">
+                              ({pickupDropoffList.length})
+                            </span>
+                          </SectionHeader>
+                          <div className="border border-top-0 rounded-bottom mb-3 bg-white">
+                            <Table
+                              size="sm"
+                              hover
+                              className="mb-0 align-middle"
+                            >
+                              <thead style={{ backgroundColor: "#f8f9fa" }}>
+                                <tr>
+                                  <th style={{ width: 50 }}>#</th>
+                                  <th>Pickup Type</th>
+                                  <th>Pickup</th>
+                                  <th>Dropoff Type</th>
+                                  <th>Dropoff</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pickupDropoffList.map((loc, idx) => (
+                                  <tr key={loc.id || idx}>
+                                    <td>{idx + 1}</td>
+                                    <td>{loc.pickupType || "—"}</td>
+                                    <td>
+                                      {loc.pickupLocation || loc.pickup || "—"}
+                                    </td>
+                                    <td>{loc.dropoffType || "—"}</td>
+                                    <td>
+                                      {loc.dropoffLocation ||
+                                        loc.dropOff ||
+                                        "—"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  );
+                })()
+              ) : (
               <Form>
                 <Card className="mb-3">
                   <Card.Header>Cab Provider Details</Card.Header>
@@ -2521,8 +2679,13 @@ const CabProviderReg = () => {
                   </Form.Control.Feedback>
                 )}
               </Form>
+              )}
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer
+              style={
+                isViewMode ? { backgroundColor: "#f8f9fa" } : undefined
+              }
+            >
               <Button
                 variant="secondary"
                 onClick={closeModal}
