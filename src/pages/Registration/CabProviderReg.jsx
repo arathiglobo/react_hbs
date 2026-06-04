@@ -532,6 +532,8 @@ const CabProviderReg = () => {
     pickup: "",
     dropOff: "",
     cabImage: null,
+    maxCapacity: "",
+    maxLuggageCapacity: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -572,6 +574,8 @@ const CabProviderReg = () => {
       placeId: "",
       pickup: "",
       dropOff: "",
+      maxCapacity: "",
+      maxLuggageCapacity: "",
     });
     setCabList([]);
     setPlaces([]);
@@ -600,6 +604,8 @@ const CabProviderReg = () => {
       placeId: "",
       pickup: "",
       dropOff: "",
+      maxCapacity: "",
+      maxLuggageCapacity: "",
     });
 
     // First, try to use existing cab data from the item
@@ -669,6 +675,8 @@ const CabProviderReg = () => {
       placeId: firstCab ? String(firstCab.placeid || "") : "",
       pickup: firstLocation ? firstLocation.pickup || "" : "",
       dropOff: firstLocation ? firstLocation.dropoff || "" : "",
+      maxCapacity: firstCab && firstCab.maxCapacity != null ? String(firstCab.maxCapacity) : "",
+      maxLuggageCapacity: firstCab && firstCab.maxLuggageCapacity != null ? String(firstCab.maxLuggageCapacity) : "",
     });
 
     // Populate pickup/dropoff locations from the first cab
@@ -1018,6 +1026,15 @@ const CabProviderReg = () => {
       placeOptions.find((place) => String(place.id) === placeIdString)?.name ||
       "";
 
+    const parsedMaxCapacity =
+      formData.maxCapacity === "" || formData.maxCapacity == null
+        ? null
+        : parseInt(formData.maxCapacity, 10);
+    const parsedMaxLuggageCapacity =
+      formData.maxLuggageCapacity === "" || formData.maxLuggageCapacity == null
+        ? null
+        : parseInt(formData.maxLuggageCapacity, 10);
+
     const newCab = {
       cabId: editingCab ? editingCab.cabId : Date.now(), // Keep existing ID if editing
       cabCode: formData.cabCode,
@@ -1026,6 +1043,8 @@ const CabProviderReg = () => {
       placeid: formData.placeId, // Use 'placeid' to match your data structure
       placeName: selectedPlaceName,
       cabImage: formData.cabImage, // Include the uploaded image
+      maxCapacity: Number.isFinite(parsedMaxCapacity) ? parsedMaxCapacity : null,
+      maxLuggageCapacity: Number.isFinite(parsedMaxLuggageCapacity) ? parsedMaxLuggageCapacity : null,
       cabLocationDTOList: pickupDropoffList.map((location, index) => ({
         cablocationId: location.id || Date.now() + index,
         cabid: null,
@@ -1059,6 +1078,8 @@ const CabProviderReg = () => {
       pickup: "",
       dropOff: "",
       cabImage: null,
+      maxCapacity: "",
+      maxLuggageCapacity: "",
     }));
     setPlaces([]);
     setPickupDropoffList([]); // Clear pickup/dropoff list
@@ -1085,6 +1106,8 @@ const CabProviderReg = () => {
       countryId: String(cab.countryid || ""),
       placeId: String(cab.placeid || ""),
       cabImage: cab.cabImage || null,
+      maxCapacity: cab.maxCapacity != null ? String(cab.maxCapacity) : "",
+      maxLuggageCapacity: cab.maxLuggageCapacity != null ? String(cab.maxLuggageCapacity) : "",
     }));
 
     // Set pickup/dropoff locations for editing
@@ -1277,6 +1300,12 @@ const CabProviderReg = () => {
         formDataPayload.append(`${prefix}.countryid`, cab.countryid || cab.countryId || '');
         formDataPayload.append(`${prefix}.placeid`, String(cab.placeid || cab.placeId || ''));
         formDataPayload.append(`${prefix}.providername`, '');
+        if (cab.maxCapacity != null && cab.maxCapacity !== '') {
+          formDataPayload.append(`${prefix}.maxCapacity`, String(cab.maxCapacity));
+        }
+        if (cab.maxLuggageCapacity != null && cab.maxLuggageCapacity !== '') {
+          formDataPayload.append(`${prefix}.maxLuggageCapacity`, String(cab.maxLuggageCapacity));
+        }
 
         const cabPicName =
           cab.cabpic ||
@@ -1293,7 +1322,7 @@ const CabProviderReg = () => {
         if (cabImageFile) {
           formDataPayload.append(`${prefix}.cabImage`, cabImageFile);
         }
-        
+
         if (cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0) {
           cab.cabLocationDTOList.forEach((location, locIndex) => {
             const locPrefix = `${prefix}.cabLocationDTOList[${locIndex}]`;
@@ -1377,6 +1406,12 @@ const CabProviderReg = () => {
         formDataPayload.append(`${prefix}.countryid`, cab.countryid || cab.countryId || '');
         formDataPayload.append(`${prefix}.placeid`, String(cab.placeid || cab.placeId || ''));
         formDataPayload.append(`${prefix}.providername`, '');
+        if (cab.maxCapacity != null && cab.maxCapacity !== '') {
+          formDataPayload.append(`${prefix}.maxCapacity`, String(cab.maxCapacity));
+        }
+        if (cab.maxLuggageCapacity != null && cab.maxLuggageCapacity !== '') {
+          formDataPayload.append(`${prefix}.maxLuggageCapacity`, String(cab.maxLuggageCapacity));
+        }
 
         const cabPicName =
           cab.cabpic ||
@@ -1393,7 +1428,7 @@ const CabProviderReg = () => {
         if (cabImageFile) {
           formDataPayload.append(`${prefix}.cabImage`, cabImageFile);
         }
-        
+
         if (cab.cabLocationDTOList && cab.cabLocationDTOList.length > 0) {
           cab.cabLocationDTOList.forEach((location, locIndex) => {
             const editingLocation = (editingCab.cabLocationDTOList || [])[locIndex] || {};
@@ -1449,6 +1484,8 @@ const CabProviderReg = () => {
       pickup: "",
       dropOff: "",
       cabImage: null,
+      maxCapacity: "",
+      maxLuggageCapacity: "",
     });
     setCabList([]);
     setPlaces([]);
@@ -1996,6 +2033,49 @@ const CabProviderReg = () => {
                           </Col>
                     </Row>
                     
+                    <Row>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Max Capacity</Form.Label>
+                          <Form.Control
+                            type="number"
+                            min="0"
+                            value={formData.maxCapacity}
+                            placeholder=""
+                            {...getFormControlProps(
+                              "maxCapacity",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  maxCapacity: e.target.value,
+                                }),
+                              {}
+                            )}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Max Luggage Capacity</Form.Label>
+                          <Form.Control
+                            type="number"
+                            min="0"
+                            value={formData.maxLuggageCapacity}
+                            placeholder=""
+                            {...getFormControlProps(
+                              "maxLuggageCapacity",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  maxLuggageCapacity: e.target.value,
+                                }),
+                              {}
+                            )}
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+
                     {/* Cab Image Upload */}
                     <Row>
                       <Col md={12}>
@@ -2357,6 +2437,8 @@ const CabProviderReg = () => {
                                 <th>Cab Name</th>
                                 <th>Country</th>
                                 <th>Place</th>
+                                <th>Max Capacity</th>
+                                <th>Max Luggage</th>
                                 <th>Image</th>
                                 <th>Actions</th>
                               </tr>
@@ -2383,6 +2465,8 @@ const CabProviderReg = () => {
                                       cab.place ||
                                       cab.placeid}
                                   </td>
+                                  <td>{cab.maxCapacity != null ? cab.maxCapacity : "—"}</td>
+                                  <td>{cab.maxLuggageCapacity != null ? cab.maxLuggageCapacity : "—"}</td>
                                   <td>
                                     {cab.cabImage ? (
                                       <img 

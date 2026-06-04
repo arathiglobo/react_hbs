@@ -253,23 +253,6 @@ export const CabSearch = () => {
   // and other flows are untouched.
   const [transferType, setTransferType] = useState("Shared");
 
-  // ── Result-page filter / sort / pagination state ─────────────────────
-  // Mirrors the Juniper-style result page in the reference screenshot:
-  //   - free-text "Search by Transfer Name"
-  //   - multi-select "Suppliers" (built from the unique cab providers
-  //     in the current result set)
-  //   - sort by Price (default) or Transfer Name
-  //   - basic page-of-N pagination, default 5 cards/page
-  // None of these touch the search API — they're applied on top of the
-  // already-fetched transferResults array.
-  const [nameFilter, setNameFilter] = useState("");
-  const [pendingNameFilter, setPendingNameFilter] = useState("");
-  const [selectedSuppliers, setSelectedSuppliers] = useState([]);
-  const [pendingSuppliers, setPendingSuppliers] = useState([]);
-  const [sortBy, setSortBy] = useState("price");
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
-
   // Country & Destination state
   const [nationalityList, setNationalityList] = useState([]);
   const [destinationOptions, setDestinationOptions] = useState([]);
@@ -318,253 +301,6 @@ export const CabSearch = () => {
   const [origin, setOrigin] = useState(null);
   const [departureTime, setDepartureTime] = useState("");
   const [returnTime, setReturnTime] = useState("");
-
-  // ── NEW simplified Transfer search criteria ───────────────────────────
-  // city: the master_state row chosen via api/province (drives the
-  //   pickup/drop facility lists). Shape: { value, label, countryId }.
-  // pickupKind / dropoffKind: "AIRPORT" | "HOTEL" | "PLACE" | ""
-  // pickupItem / dropoffItem: the selected option from the dependent
-  //   dropdown — { value, label, source, locationId, locationName }
-  // arrivalTime: HH:mm string (mapped to the search payload as
-  //   departureTime since the backend uses the same field for both
-  //   pickup-time and flight/arrival-time depending on timeType).
-  const [city, setCity] = useState(null);
-  const [cityOptions, setCityOptions] = useState([]);
-  const [isCityLoading, setIsCityLoading] = useState(false);
-  const [pickupKind, setPickupKind] = useState("");
-  const [pickupItem, setPickupItem] = useState(null);
-  const [dropoffKind, setDropoffKind] = useState("");
-  const [dropoffItem, setDropoffItem] = useState(null);
-  const [arrivalTime, setArrivalTime] = useState("");
-  // Drop-side departure time — separate from the pickup-side arrival time
-  // above. Sent as `dropoffTime` in the search payload.
-  const [dropDepartureTime, setDropDepartureTime] = useState("");
-
-  // "Change drop off city?" — when toggled on, a second City select appears
-  // and the drop-side facility lists load from that city instead of the
-  // pickup city. When off (default), pickup + drop facilities share the
-  // single City selection above.
-  const [changeDropCity, setChangeDropCity] = useState(false);
-  const [dropCity, setDropCity] = useState(null);
-  const [dropCityOptions, setDropCityOptions] = useState([]);
-  const [isDropCityLoading, setIsDropCityLoading] = useState(false);
-
-  // Per-kind option lists keyed off the chosen city.
-  // Pickup side — always filtered by the main `city`.
-  const [airportOpts, setAirportOpts] = useState([]);
-  const [hotelOpts, setHotelOpts] = useState([]);
-  const [placeOpts, setPlaceOpts] = useState([]);
-  const [isAirportLoading, setIsAirportLoading] = useState(false);
-  const [isHotelOptsLoading, setIsHotelOptsLoading] = useState(false);
-  const [isPlaceLoading, setIsPlaceLoading] = useState(false);
-
-  // Drop side — filtered by `dropCity` when changeDropCity is on, otherwise
-  // mirrors the pickup-side lists. We always store the drop options in a
-  // separate piece of state so toggling the checkbox doesn't blow away the
-  // pickup user's selection.
-  const [dropAirportOpts, setDropAirportOpts] = useState([]);
-  const [dropHotelOpts, setDropHotelOpts] = useState([]);
-  const [dropPlaceOpts, setDropPlaceOpts] = useState([]);
-  const [isDropAirportLoading, setIsDropAirportLoading] = useState(false);
-  const [isDropHotelLoading, setIsDropHotelLoading] = useState(false);
-  const [isDropPlaceLoading, setIsDropPlaceLoading] = useState(false);
-
-  // Shared helper: hit /api/province?search= and return city options shaped
-  // for react-select. Used by both the pickup City and the optional Drop
-  // City selectors so they show identical results for the same query.
-  const fetchCityOptions = async (q) => {
-    const res = await axiosInstance.get(
-      `/api/province?search=${encodeURIComponent(q || "")}&limit=20`,
-    );
-    const arr = Array.isArray(res.data) ? res.data : [];
-    return arr.slice(0, 50).map((p) => ({
-      value: p.id,
-      label: `${p.stateName || p.name || ""}${
-        p.country ? `, ${p.country}` : ""
-      }`,
-      countryId: p.countryId || null,
-      stateName: p.stateName || p.name || "",
-    }));
-  };
-
-  // City search hits api/province?search= directly so the dropdown shows the
-  // matching state rows (id, stateName, country).
-  const debouncedCityProvinceSearch = useRef(
-    debounce(async (q = "") => {
-      try {
-        setIsCityLoading(true);
-        const opts = await fetchCityOptions(q);
-        setCityOptions(opts);
-      } catch {
-        setCityOptions([]);
-      } finally {
-        setIsCityLoading(false);
-      }
-    }, 300),
-  ).current;
-
-  // Same logic but for the optional Drop City selector. Kept as a separate
-  // debounced ref so typing in one search box doesn't race the other.
-  const debouncedDropCityProvinceSearch = useRef(
-    debounce(async (q = "") => {
-      try {
-        setIsDropCityLoading(true);
-        const opts = await fetchCityOptions(q);
-        setDropCityOptions(opts);
-      } catch {
-        setDropCityOptions([]);
-      } finally {
-        setIsDropCityLoading(false);
-      }
-    }, 300),
-  ).current;
-
-  // Fetch airports filtered by the chosen city. AirportController now accepts
-  // an optional cityId query param so the dropdown only surfaces airports in
-  // the selected state. Setters are injected so the same helper can populate
-  // either the pickup-side or the drop-side option list.
-  const fetchAirportsForCity = async (cityId, setOpts, setLoading) => {
-    if (!cityId) {
-      setOpts([]);
-      return;
-    }
-    try {
-      setLoading(true);
-      const res = await axiosInstance.get(
-        `/api/airport?page=0&limit=50&cityId=${cityId}`,
-      );
-      const arr = Array.isArray(res.data) ? res.data : [];
-      setOpts(
-        arr.map((a) => ({
-          value: a.id,
-          label: `${a.airportName}${a.airportCode ? ` (${a.airportCode})` : ""}`,
-          source: "AIRPORT",
-          locationId: a.id,
-          locationName: a.airportName,
-        })),
-      );
-    } catch {
-      setOpts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch hotels filtered by city (and country if known). /api/hotels/lookup
-  // accepts both cityId and countryId so we narrow as much as possible.
-  const fetchHotelsForCity = async (cityId, countryId, setOpts, setLoading) => {
-    if (!cityId) {
-      setOpts([]);
-      return;
-    }
-    try {
-      setLoading(true);
-      const params = { cityId };
-      if (countryId) params.countryId = countryId;
-      const res = await axiosInstance.get("/api/hotels/lookup", { params });
-      const arr = Array.isArray(res.data) ? res.data : [];
-      setOpts(
-        arr.map((h) => ({
-          value: h.hotelId,
-          label: h.hotelName || `Hotel #${h.hotelId}`,
-          source: "HOTEL",
-          locationId: h.hotelId,
-          locationName: h.hotelName,
-        })),
-      );
-    } catch {
-      setOpts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch places (master_place) under the selected state. The state's id is
-  // the same value the api/province row carries, so we hit /api/destination/
-  // getplaces/{stateId} to surface every place inside that state.
-  const fetchPlacesForCity = async (cityId, setOpts, setLoading) => {
-    if (!cityId) {
-      setOpts([]);
-      return;
-    }
-    try {
-      setLoading(true);
-      const res = await axiosInstance.get(
-        `/api/destination/getplaces/${cityId}`,
-      );
-      const arr = Array.isArray(res.data) ? res.data : [];
-      setOpts(
-        arr.map((p) => ({
-          value: p.id,
-          label: p.name,
-          source: "PLACE",
-          locationId: p.id,
-          locationName: p.name,
-        })),
-      );
-    } catch {
-      setOpts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Pickup-side lists — always filtered by the main `city` selection.
-  useEffect(() => {
-    const cityId = city?.value;
-    const countryId = city?.countryId;
-    if (!cityId) {
-      setAirportOpts([]);
-      setHotelOpts([]);
-      setPlaceOpts([]);
-      return;
-    }
-    if (pickupKind === "AIRPORT") {
-      fetchAirportsForCity(cityId, setAirportOpts, setIsAirportLoading);
-    }
-    if (pickupKind === "HOTEL") {
-      fetchHotelsForCity(cityId, countryId, setHotelOpts, setIsHotelOptsLoading);
-    }
-    if (pickupKind === "PLACE") {
-      fetchPlacesForCity(cityId, setPlaceOpts, setIsPlaceLoading);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, pickupKind]);
-
-  // Drop-side lists — filtered by `dropCity` when "Change drop off city?" is
-  // ticked, otherwise mirror the pickup city. We re-derive the effective
-  // drop city inside the effect so toggling the checkbox immediately
-  // refreshes the drop dropdown options.
-  useEffect(() => {
-    const effective = changeDropCity ? dropCity : city;
-    const cityId = effective?.value;
-    const countryId = effective?.countryId;
-    if (!cityId) {
-      setDropAirportOpts([]);
-      setDropHotelOpts([]);
-      setDropPlaceOpts([]);
-      return;
-    }
-    if (dropoffKind === "AIRPORT") {
-      fetchAirportsForCity(
-        cityId,
-        setDropAirportOpts,
-        setIsDropAirportLoading,
-      );
-    }
-    if (dropoffKind === "HOTEL") {
-      fetchHotelsForCity(
-        cityId,
-        countryId,
-        setDropHotelOpts,
-        setIsDropHotelLoading,
-      );
-    }
-    if (dropoffKind === "PLACE") {
-      fetchPlacesForCity(cityId, setDropPlaceOpts, setIsDropPlaceLoading);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, dropCity, changeDropCity, dropoffKind]);
 
   // Combined Origin / Destination options grouped into Zones / Hotels /
   // Airports. Sourced from the new /api/cab-search/lookup endpoint, which
@@ -842,35 +578,59 @@ export const CabSearch = () => {
   };
 
   // ── Build per-field error map ─────────────────────────────────────────
-  // Mirrors the simplified Transfer search layout: Agent → City → Date →
-  // Pickup (type + facility) → Arrival time → Drop (type + facility) → Pax.
+  // Returns {} when the form is valid; otherwise an object whose keys are
+  // field names and values are user-facing error strings rendered inline.
   const buildValidationErrors = () => {
     const errs = {};
 
+    // Mandatory fields (existing behaviour, now per-field).
+    if (!nationality) errs.nationality = "Nationality is required.";
+    if (!origin) errs.origin = "Origin is required.";
+    if (!destination) errs.destination = "Destination is required.";
+    if (!transferPickupDate) errs.pickupDate = "Departure date is required.";
+    // Agent is required so the search can apply the right markup +
+    // resolve the agent balance in the booking flow downstream.
     if (!isAgentRole && !agent) errs.agent = "Agent is required.";
-    if (!city) errs.city = "City is required.";
-    if (changeDropCity && !dropCity) errs.dropCity = "Drop city is required.";
-    if (!transferPickupDate) errs.pickupDate = "Transfer date is required.";
 
-    if (!pickupKind) errs.pickupKind = "Pickup type is required.";
-    if (pickupKind && !pickupItem)
-      errs.pickupItem =
-        pickupKind === "AIRPORT"
-          ? "Please select a pickup airport."
-          : pickupKind === "HOTEL"
-            ? "Please select a pickup accommodation."
-            : "Please select a pickup place.";
+    // Round-trip needs a return date.
+    if (tripType === "ROUND_TRIP" && !transferDropoffDate) {
+      errs.dropoffDate = "Return date is required for round trip.";
+    }
 
-    if (!arrivalTime) errs.arrivalTime = "Arrival time is required.";
+    // Drop-off date (already required by data flow); flag if check-out
+    // somehow falls strictly before pickup.
+    if (
+      transferPickupDate &&
+      transferDropoffDate &&
+      transferDropoffDate < transferPickupDate
+    ) {
+      errs.dropoffDate = "Return date cannot be before departure date.";
+    }
 
-    if (!dropoffKind) errs.dropoffKind = "Drop type is required.";
-    if (dropoffKind && !dropoffItem)
-      errs.dropoffItem =
-        dropoffKind === "AIRPORT"
-          ? "Please select a drop airport."
-          : dropoffKind === "HOTEL"
-            ? "Please select a drop accommodation."
-            : "Please select a drop place.";
+    // Pickup section — only meaningful once a type is chosen.
+    if (pickupType) {
+      if (!pickupName || !pickupName.trim()) {
+        errs.pickupName =
+          pickupType === "HOTEL"
+            ? "Please select a pickup hotel."
+            : "Please enter the pickup airport name.";
+      }
+      if (pickupType === "AIRPORT") {
+        if (!pickupTime) {
+          errs.pickupTime = "Pickup time is required for airport pickup.";
+        }
+      }
+    }
+
+    // Drop-off section — name required once type is chosen; time is optional.
+    if (dropoffType) {
+      if (!dropoffName || !dropoffName.trim()) {
+        errs.dropoffName =
+          dropoffType === "HOTEL"
+            ? "Please select a drop-off hotel."
+            : "Please enter the drop-off airport name.";
+      }
+    }
 
     return errs;
   };
@@ -934,28 +694,23 @@ export const CabSearch = () => {
         localStorage.getItem("makeYourOwnPackageAgentId") ||
         "1";
 
-      // New zone-based search payload — built from the simplified Transfer
-      // criteria (Agent / City / Date / Pickup / Arrival time / Drop / Pax).
-      // The backend CabSearchRequestDTO uses originSource+id / destinationSource+id
-      // which we derive from the chosen pickup + drop facility.
+      // New zone-based search payload — matches CabSearchRequestDTO on the
+      // backend. The endpoint filters cabs by their CabZone (registered in
+      // CabProvider → Manage Zones) and surfaces matching CabRates rows.
       const transferPayload = {
-        originSource: pickupItem?.source || "AIRPORT",
-        originLocationId: pickupItem?.locationId || null,
-        originLocationName: pickupItem?.locationName || null,
-        destinationSource: dropoffItem?.source || "HOTEL",
-        destinationLocationId: dropoffItem?.locationId || null,
-        destinationLocationName: dropoffItem?.locationName || null,
-        tripType: "ONE_WAY",
-        timeType: "FLIGHT_TIME",
+        originSource: origin?.source || "SUBLOCATION",
+        originLocationId: origin?.locationId || null,
+        originLocationName: origin?.locationName || null,
+        destinationSource: destination?.source || "SUBLOCATION",
+        destinationLocationId: destination?.locationId || null,
+        destinationLocationName: destination?.locationName || null,
+        tripType, // "ONE_WAY" | "ROUND_TRIP"
+        timeType, // "PICKUP_TIME" | "FLIGHT_TIME"
         departureDate: transferPickupDate || null,
-        // arrivalTime drives the search's time field — the backend uses it
-        // alongside timeType to match rate-validity windows when configured.
-        departureTime: arrivalTime || null,
-        // Optional drop-side departure time, carried through to the booking
-        // page so the operator can show it on the order summary / PDF.
-        dropoffTime: dropDepartureTime || null,
-        returnDate: null,
-        returnTime: null,
+        departureTime: departureTime || null,
+        returnDate:
+          tripType === "ROUND_TRIP" ? transferDropoffDate || null : null,
+        returnTime: tripType === "ROUND_TRIP" ? returnTime || null : null,
         adults: transferAdults || 1,
         children: transferChildren || 0,
         childAges:
@@ -1210,21 +965,21 @@ export const CabSearch = () => {
         searchCriteria: {
           nationality,
           destination,
-          city,
           pickupDate: transferPickupDate,
           dropoffDate: transferDropoffDate,
           adults: transferAdults,
           children: transferChildren,
           childAges: transferChildAges,
-          // Carry the simplified Transfer criteria forward so the booking
-          // summary can display facility names and (where present) times.
-          pickupType: pickupKind === "HOTEL" ? "HOTEL" : pickupKind,
-          pickupName: pickupItem?.locationName || "",
-          pickupTime: arrivalTime,
-          dropoffType: dropoffKind === "HOTEL" ? "HOTEL" : dropoffKind,
-          dropoffName: dropoffItem?.locationName || "",
-          dropoffTime: dropDepartureTime || "",
-          arrivalTime,
+          // ── NEW: pickup / drop-off details carried into the booking page.
+          //    Booking Summary / Order Summary read these to render the
+          //    facility name (hotel or airport) + optional times. The booking
+          //    POST already picks them up from the same searchCriteria too.
+          pickupType,
+          pickupName,
+          pickupTime,
+          dropoffType,
+          dropoffName,
+          dropoffTime,
         },
       },
     });
@@ -1274,476 +1029,27 @@ export const CabSearch = () => {
               <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
                 <Card.Body>
                   <Form onSubmit={handleTransferSearchSubmit}>
-                    {/* ── Simplified Transfer search criteria ───────────────
-                        Layout per spec:
-                          1. Agent (hidden for Agent-role logins)
-                          2. City  — api/province?search=
-                          3. Transfer Date
-                          4. Pickup type + dependent facility
-                          5. Arrival time
-                          6. Drop type + dependent facility
-                          7. Pax (Adults + Children + Child ages) */}
-                    <Row className="g-3 mb-3 align-items-end">
-                      <Col md={6}>
-                        <Form.Label className="fw-semibold">
-                          City <span className="text-danger">*</span>
-                        </Form.Label>
-                        <Select
-                          options={cityOptions}
-                          value={city}
-                          isLoading={isCityLoading}
-                          onChange={(opt) => {
-                            setCity(opt);
-                            // Picking a different city invalidates whatever
-                            // facility was selected for pickup / dropoff —
-                            // clear them so the user re-selects within the
-                            // new city's lists.
-                            setPickupItem(null);
-                            setDropoffItem(null);
-                            if (opt) clearError("city");
-                          }}
-                          onInputChange={(input, { action }) => {
-                            if (action !== "input-change") return;
-                            debouncedCityProvinceSearch(input || "");
-                          }}
-                          onFocus={() => {
-                            if (cityOptions.length === 0) {
-                              debouncedCityProvinceSearch("");
-                            }
-                          }}
-                          filterOption={() => true}
-                          placeholder="Search city (e.g. Dubai)"
-                          isSearchable
-                          isClearable
-                          menuPortalTarget={document.body}
-                          styles={{
-                            ...customSelectStyles,
-                            control: (base) => ({
-                              ...customSelectStyles.control(base),
-                              borderColor: validationErrors.city
-                                ? "#dc3545"
-                                : base.borderColor,
-                            }),
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                        {validationErrors.city && (
-                          <div className="text-danger small mt-1">
-                            {validationErrors.city}
-                          </div>
-                        )}
-                        {/* Toggle that reveals the optional Drop City
-                            selector (rendered in its own row below) so the
-                            operator can search a route that ends in a
-                            different city than the pickup city. */}
-                        <Form.Check
-                          type="checkbox"
-                          id="cab-change-drop-city"
-                          label="Change drop off city?"
-                          className="mt-2"
-                          checked={changeDropCity}
-                          onChange={(e) => {
-                            const next = e.target.checked;
-                            setChangeDropCity(next);
-                            // Either way, the current drop facility was
-                            // bound to a list filtered by the *previous*
-                            // effective city — clear it so the user picks
-                            // afresh once the dropdown reloads.
-                            setDropoffItem(null);
-                            if (!next) setDropCity(null);
-                          }}
-                        />
-                      </Col>
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          Transfer Date{" "}
-                          <span className="text-danger">*</span>
-                        </Form.Label>
-                        <Form.Control
-                          style={{ height: "46px" }}
-                          type="date"
-                          value={transferPickupDate}
-                          isInvalid={!!validationErrors.pickupDate}
-                          onChange={(e) => {
-                            setTransferPickupDate(e.target.value);
-                            if (e.target.value) clearError("pickupDate");
-                          }}
-                          min={new Date().toISOString().split("T")[0]}
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.pickupDate}
-                        </Form.Control.Feedback>
-                      </Col>
-                           {!isAgentRole && (
-                        <Col md={3}>
-                          <Form.Label className="fw-semibold">
-                            Agent <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Form.Select
-                            style={{ height: "47px" }}
-                            value={agent}
-                            isInvalid={!!validationErrors.agent}
-                            onChange={(e) => {
-                              setAgent(e.target.value);
-                              if (e.target.value) clearError("agent");
-                            }}
-                          >
-                            <option value="">Select Agent</option>
-                            {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.companyName}
-                              </option>
-                            ))}
-                          </Form.Select>
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.agent}
-                          </Form.Control.Feedback>
-                          {agent && <AgentBalanceDisplay agentId={agent} />}
-                        </Col>
-                      )}
-                    </Row>
-
-                    {changeDropCity && (
-                      <Row className="g-3 mb-3 align-items-end">
-                        <Col md={6}>
-                          <Form.Label className="fw-semibold">
-                            Drop City{" "}
-                            <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Select
-                            options={dropCityOptions}
-                            value={dropCity}
-                            isLoading={isDropCityLoading}
-                            onChange={(opt) => {
-                              setDropCity(opt);
-                              // Picking a different drop city invalidates
-                              // whatever drop facility was selected.
-                              setDropoffItem(null);
-                              if (opt) clearError("dropCity");
-                            }}
-                            onInputChange={(input, { action }) => {
-                              if (action !== "input-change") return;
-                              debouncedDropCityProvinceSearch(input || "");
-                            }}
-                            onFocus={() => {
-                              if (dropCityOptions.length === 0) {
-                                debouncedDropCityProvinceSearch("");
-                              }
-                            }}
-                            filterOption={() => true}
-                            placeholder="Search drop city"
-                            isSearchable
-                            isClearable
-                            menuPortalTarget={document.body}
-                            styles={{
-                              ...customSelectStyles,
-                              control: (base) => ({
-                                ...customSelectStyles.control(base),
-                                borderColor: validationErrors.dropCity
-                                  ? "#dc3545"
-                                  : base.borderColor,
-                              }),
-                              menuPortal: (base) => ({
-                                ...base,
-                                zIndex: 9999,
-                              }),
-                            }}
-                          />
-                          {validationErrors.dropCity && (
-                            <div className="text-danger small mt-1">
-                              {validationErrors.dropCity}
-                            </div>
-                          )}
-                        </Col>
-                      </Row>
-                    )}
-
-                    <Row className="g-3 mb-3 align-items-end">
-
-
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          Pickup <span className="text-danger">*</span>
-                        </Form.Label>
-                        <Form.Select
-                          style={{ height: "46px" }}
-                          value={pickupKind}
-                          isInvalid={!!validationErrors.pickupKind}
-                          onChange={(e) => {
-                            setPickupKind(e.target.value);
-                            setPickupItem(null);
-                            if (e.target.value) clearError("pickupKind");
-                            clearError("pickupItem");
-                          }}
-                        >
-                          <option value="">— Select —</option>
-                          <option value="AIRPORT">Airport</option>
-                          <option value="HOTEL">Accommodation</option>
-                          <option value="PLACE">Place</option>
-                        </Form.Select>
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.pickupKind}
-                        </Form.Control.Feedback>
-                      </Col>
-
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          {pickupKind === "AIRPORT"
-                            ? "Airport"
-                            : pickupKind === "HOTEL"
-                              ? "Accommodation"
-                              : pickupKind === "PLACE"
-                                ? "Place"
-                                : "Pickup Facility"}{" "}
-                          {pickupKind ? (
-                            <span className="text-danger">*</span>
-                          ) : null}
-                        </Form.Label>
-                        <Select
-                          options={
-                            pickupKind === "AIRPORT"
-                              ? airportOpts
-                              : pickupKind === "HOTEL"
-                                ? hotelOpts
-                                : pickupKind === "PLACE"
-                                  ? placeOpts
-                                  : []
-                          }
-                          value={pickupItem}
-                          isLoading={
-                            pickupKind === "AIRPORT"
-                              ? isAirportLoading
-                              : pickupKind === "HOTEL"
-                                ? isHotelOptsLoading
-                                : pickupKind === "PLACE"
-                                  ? isPlaceLoading
-                                  : false
-                          }
-                          isDisabled={!pickupKind || !city}
-                          onChange={(opt) => {
-                            setPickupItem(opt);
-                            if (opt) clearError("pickupItem");
-                          }}
-                          isSearchable
-                          isClearable
-                          placeholder={
-                            !city
-                              ? "Pick a city first"
-                              : !pickupKind
-                                ? "Pick a type first"
-                                : `Select ${
-                                    pickupKind === "AIRPORT"
-                                      ? "airport"
-                                      : pickupKind === "HOTEL"
-                                        ? "accommodation"
-                                        : "place"
-                                  }`
-                          }
-                          menuPortalTarget={document.body}
-                          styles={{
-                            ...customSelectStyles,
-                            control: (base) => ({
-                              ...customSelectStyles.control(base),
-                              borderColor: validationErrors.pickupItem
-                                ? "#dc3545"
-                                : base.borderColor,
-                            }),
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                        {validationErrors.pickupItem && (
-                          <div className="text-danger small mt-1">
-                            {validationErrors.pickupItem}
-                          </div>
-                        )}
-                      </Col>
-
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          Arrival Time{" "}
-                          <span className="text-danger">*</span>
-                        </Form.Label>
-                        <Form.Control
-                          style={{ height: "46px" }}
-                          type="time"
-                          value={arrivalTime}
-                          isInvalid={!!validationErrors.arrivalTime}
-                          onChange={(e) => {
-                            setArrivalTime(e.target.value);
-                            if (e.target.value) clearError("arrivalTime");
-                          }}
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.arrivalTime}
-                        </Form.Control.Feedback>
-                      </Col>
-                    </Row>
-
-                    <Row className="g-3 mb-3 align-items-end">
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          Drop <span className="text-danger">*</span>
-                        </Form.Label>
-                        <Form.Select
-                          style={{ height: "46px" }}
-                          value={dropoffKind}
-                          isInvalid={!!validationErrors.dropoffKind}
-                          onChange={(e) => {
-                            setDropoffKind(e.target.value);
-                            setDropoffItem(null);
-                            if (e.target.value) clearError("dropoffKind");
-                            clearError("dropoffItem");
-                          }}
-                        >
-                          <option value="">— Select —</option>
-                          <option value="AIRPORT">Airport</option>
-                          <option value="HOTEL">Accommodation</option>
-                          <option value="PLACE">Place</option>
-                        </Form.Select>
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.dropoffKind}
-                        </Form.Control.Feedback>
-                      </Col>
-
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          {dropoffKind === "AIRPORT"
-                            ? "Airport"
-                            : dropoffKind === "HOTEL"
-                              ? "Accommodation"
-                              : dropoffKind === "PLACE"
-                                ? "Place"
-                                : "Drop Facility"}{" "}
-                          {dropoffKind ? (
-                            <span className="text-danger">*</span>
-                          ) : null}
-                        </Form.Label>
-                        <Select
-                          options={
-                            dropoffKind === "AIRPORT"
-                              ? dropAirportOpts
-                              : dropoffKind === "HOTEL"
-                                ? dropHotelOpts
-                                : dropoffKind === "PLACE"
-                                  ? dropPlaceOpts
-                                  : []
-                          }
-                          value={dropoffItem}
-                          isLoading={
-                            dropoffKind === "AIRPORT"
-                              ? isDropAirportLoading
-                              : dropoffKind === "HOTEL"
-                                ? isDropHotelLoading
-                                : dropoffKind === "PLACE"
-                                  ? isDropPlaceLoading
-                                  : false
-                          }
-                          isDisabled={
-                            !dropoffKind ||
-                            (changeDropCity ? !dropCity : !city)
-                          }
-                          onChange={(opt) => {
-                            setDropoffItem(opt);
-                            if (opt) clearError("dropoffItem");
-                          }}
-                          isSearchable
-                          isClearable
-                          placeholder={
-                            (changeDropCity ? !dropCity : !city)
-                              ? changeDropCity
-                                ? "Pick a drop city first"
-                                : "Pick a city first"
-                              : !dropoffKind
-                                ? "Pick a type first"
-                                : `Select ${
-                                    dropoffKind === "AIRPORT"
-                                      ? "airport"
-                                      : dropoffKind === "HOTEL"
-                                        ? "accommodation"
-                                        : "place"
-                                  }`
-                          }
-                          menuPortalTarget={document.body}
-                          styles={{
-                            ...customSelectStyles,
-                            control: (base) => ({
-                              ...customSelectStyles.control(base),
-                              borderColor: validationErrors.dropoffItem
-                                ? "#dc3545"
-                                : base.borderColor,
-                            }),
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                        {validationErrors.dropoffItem && (
-                          <div className="text-danger small mt-1">
-                            {validationErrors.dropoffItem}
-                          </div>
-                        )}
-                      </Col>
-
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">
-                          Departure Time
-                        </Form.Label>
-                        <Form.Control
-                          style={{ height: "46px" }}
-                          type="time"
-                          value={dropDepartureTime}
-                          onChange={(e) => setDropDepartureTime(e.target.value)}
-                        />
-                      </Col>
-
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">Adults</Form.Label>
-                        <Form.Select
-                          style={{ height: "46px" }}
-                          value={transferAdults}
-                          onChange={(e) =>
-                            setTransferAdults(parseInt(e.target.value) || 1)
-                          }
-                        >
-                          {Array.from({ length: 9 }, (_, i) => i + 1).map(
-                            (num) => (
-                              <option key={num} value={num}>
-                                {num} Adult{num > 1 ? "s" : ""}
-                              </option>
-                            ),
-                          )}
-                        </Form.Select>
-                      </Col>
-
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">
-                          Children
-                        </Form.Label>
-                        <Form.Select
-                          style={{ height: "46px" }}
-                          value={transferChildren}
-                          onChange={(e) =>
-                            setTransferChildren(parseInt(e.target.value) || 0)
-                          }
-                        >
-                          {Array.from({ length: 6 }, (_, i) => i).map((num) => (
-                            <option key={num} value={num}>
-                              {num} Child{num !== 1 ? "ren" : ""}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                    </Row>
-
-                    {/* Legacy/hidden fields kept in state but invisible.
-                        The original Trip Type radios + Origin/Destination/
-                        Time-type rows are no longer rendered — the simplified
-                        criteria above replace them. */}
-                    <div className="d-none">
+                    {/* ── NEW: Trip Type radios (top of form) ─────────────── */}
+                    <div className="mb-3 d-flex gap-4 align-items-center">
                       <Form.Check
+                        inline
                         type="radio"
+                        id="trip-one-way"
+                        name="tripType"
+                        label="One way"
                         checked={tripType === "ONE_WAY"}
                         onChange={() => setTripType("ONE_WAY")}
-                        label="One way"
                       />
+                      <Form.Check
+                        inline
+                        type="radio"
+                        id="trip-round"
+                        name="tripType"
+                        label="Round trip"
+                        checked={tripType === "ROUND_TRIP"}
+                        onChange={() => setTripType("ROUND_TRIP")}
+                      />
+                    </div>
 
                     {/* ── NEW: Origin / Destination / Passengers row ──────── */}
                     <Row className="g-3 mb-3">
@@ -2484,7 +1790,6 @@ export const CabSearch = () => {
                         </Col>
                       </Row>
                     </div>
-                    </div>
 
                     <Row className="justify-content-center">
                       <Col
@@ -2588,461 +1893,265 @@ export const CabSearch = () => {
               {/* Results Display */}
               {hasTransferSearched &&
                 !transferLoading &&
-                transferResults.length > 0 &&
-                (() => {
-                  // ── Flatten cabs into (cab, detail) rows so each option
-                  //   shows as its own card (matches the reference UI).
-                  //   Then apply name + supplier filters and sort by the
-                  //   currently selected key.
-                  const rows = [];
-                  transferResults.forEach((cab) => {
-                    const details = Array.isArray(cab.searchCabDetailsDTO)
-                      ? cab.searchCabDetailsDTO.filter((d) =>
+                transferResults.length > 0 && (
+                  <div className="mt-4">
+                    {/* Header */}
+                    <div className="d-flex justify-content-between align-items-center mb-3 px-1 flex-wrap gap-2">
+                      <h5 className="fw-semibold mb-0">Transfer Results</h5>
+
+                      {/* Shared / Private toggle. Drives result filtering + pricing only
+        (does not re-trigger the search). Defaulting to "Shared" matches
+        the SIC-first pricing convention used elsewhere in the app. */}
+                      <div className="d-flex align-items-center gap-3">
+                        <Form.Check
+                          inline
+                          type="radio"
+                          id="transferType-shared"
+                          name="transferType"
+                          label="Shared (SIC)"
+                          checked={transferType === "Shared"}
+                          onChange={() => setTransferType("Shared")}
+                        />
+                        <Form.Check
+                          inline
+                          type="radio"
+                          id="transferType-private"
+                          name="transferType"
+                          label="Private"
+                          checked={transferType === "Private"}
+                          onChange={() => setTransferType("Private")}
+                        />
+                        <span className="text-muted small">
+                          {transferResults.length} found
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Small note explaining how SIC pricing is computed so the operator
+      can sanity-check totals against the rate grid. */}
+                    {transferType === "Shared" && (
+                      <div className="text-muted small mb-2 px-1">
+                        Pricing for {sicPayingPax} paying pax (adults + children
+                        aged &gt; 3).
+                      </div>
+                    )}
+
+                    {/* If the user toggles to a type that none of the search results
+      support, surface a friendly empty-state instead of an empty grid. */}
+                    {transferResults.every(
+                      (cab) =>
+                        !Array.isArray(cab.searchCabDetailsDTO) ||
+                        cab.searchCabDetailsDTO.filter((d) =>
                           transferType === "Shared"
                             ? String(d.types || "").toUpperCase() === "SIC"
                             : String(d.types || "").toLowerCase() === "private",
+                        ).length === 0,
+                    ) && (
+                      <div className="text-center text-muted py-4 bg-white rounded-3 border">
+                        No{" "}
+                        {transferType === "Shared" ? "shared (SIC)" : "private"}{" "}
+                        rates available for this search. Try the other option.
+                      </div>
+                    )}
+
+                    <Row className="g-3 justify-content-center">
+                      {transferResults.map((cab) => {
+                        // Filter rows up-front so we know whether this cab has any
+                        // matching options for the selected type — keeps empty cabs out
+                        // of the list entirely and per-card hints accurate.
+                        const filteredDetails = Array.isArray(
+                          cab.searchCabDetailsDTO,
                         )
-                      : [];
-                    details.forEach((d) => rows.push({ cab, detail: d }));
-                  });
+                          ? cab.searchCabDetailsDTO.filter((d) =>
+                              transferType === "Shared"
+                                ? String(d.types || "").toUpperCase() === "SIC"
+                                : String(d.types || "").toLowerCase() ===
+                                  "private",
+                            )
+                          : [];
+                        if (filteredDetails.length === 0) return null;
+                        return (
+                          <Col key={cab.cabid} lg={12} xl={12}>
+                            {" "}
+                            {/* 🔥 wider */}
+                            <Card className="border-0 shadow-sm bg-white">
+                              <Card.Body className="p-4">
+                                {" "}
+                                {/* 🔥 more padding */}
+                                {/* HEADER */}
+                                <div className="d-flex justify-content-between align-items-center mb-3">
+                                  {/* LEFT */}
+                                  <div>
+                                    <h5 className="fw-semibold mb-1">
+                                      {cab.cabname || "Transfer Vehicle"}
+                                    </h5>
+                                    {cab.cabProviderName && (
+                                      <div className="text-muted small mb-1">
+                                        by {cab.cabProviderName}
+                                      </div>
+                                    )}
+                                    {(cab.originLocationName ||
+                                      cab.destinationLocationName) && (
+                                      <div className="small text-primary mb-1">
+                                        {cab.originLocationName || "—"} →{" "}
+                                        {cab.destinationLocationName || "—"}
+                                      </div>
+                                    )}
+                                    <div className="d-flex flex-wrap gap-2 align-items-center">
+                                      <span className="text-muted small">
+                                        <FaCar className="me-1" />
+                                        {cab.noOfCabs || "1"} Vehicle
+                                      </span>
+                                      {(cab.capacityMin != null ||
+                                        cab.capacityMax != null) && (
+                                        <span className="badge bg-light text-dark border">
+                                          Capacity{" "}
+                                          {cab.capacityMin != null
+                                            ? cab.capacityMin
+                                            : "?"}
+                                          –
+                                          {cab.capacityMax != null
+                                            ? cab.capacityMax
+                                            : "?"}{" "}
+                                          pax
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
 
-                  const supplierNames = Array.from(
-                    new Set(
-                      transferResults
-                        .map((c) => c.cabProviderName)
-                        .filter(Boolean),
-                    ),
-                  );
-
-                  const trimmedName = nameFilter.trim().toLowerCase();
-                  const filtered = rows.filter(({ cab }) => {
-                    if (
-                      trimmedName &&
-                      !String(cab.cabname || "")
-                        .toLowerCase()
-                        .includes(trimmedName)
-                    ) {
-                      return false;
-                    }
-                    if (
-                      selectedSuppliers.length > 0 &&
-                      !selectedSuppliers.includes(cab.cabProviderName)
-                    ) {
-                      return false;
-                    }
-                    return true;
-                  });
-
-                  filtered.sort((a, b) => {
-                    if (sortBy === "name") {
-                      return String(a.cab.cabname || "").localeCompare(
-                        String(b.cab.cabname || ""),
-                      );
-                    }
-                    const pa = priceDetail(a.detail).total || 0;
-                    const pb = priceDetail(b.detail).total || 0;
-                    return pa - pb;
-                  });
-
-                  const totalPages = Math.max(
-                    1,
-                    Math.ceil(filtered.length / pageSize),
-                  );
-                  const safePage = Math.min(currentPage, totalPages);
-                  const pageStart = (safePage - 1) * pageSize;
-                  const pageRows = filtered.slice(
-                    pageStart,
-                    pageStart + pageSize,
-                  );
-
-                  const renderPagination = () => (
-                    <div className="d-flex justify-content-end align-items-center gap-2 small">
-                      <Button
-                        size="sm"
-                        variant="link"
-                        className="text-decoration-none p-1"
-                        disabled={safePage === 1}
-                        onClick={() => setCurrentPage(1)}
-                      >
-                        First
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="link"
-                        className="text-decoration-none p-1"
-                        disabled={safePage === 1}
-                        onClick={() => setCurrentPage(safePage - 1)}
-                      >
-                        Previous
-                      </Button>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                        (p) => (
-                          <Button
-                            key={p}
-                            size="sm"
-                            variant={p === safePage ? "danger" : "outline-secondary"}
-                            className="px-2 py-0"
-                            onClick={() => setCurrentPage(p)}
-                          >
-                            {p}
-                          </Button>
-                        ),
-                      )}
-                      <Button
-                        size="sm"
-                        variant="link"
-                        className="text-decoration-none p-1"
-                        disabled={safePage === totalPages}
-                        onClick={() => setCurrentPage(safePage + 1)}
-                      >
-                        Next
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="link"
-                        className="text-decoration-none p-1"
-                        disabled={safePage === totalPages}
-                        onClick={() => setCurrentPage(totalPages)}
-                      >
-                        Last
-                      </Button>
-                    </div>
-                  );
-
-                  return (
-                    <div className="mt-4">
-                      <Row className="g-3">
-                        {/* ── LEFT: Filter panel ─────────────────────── */}
-                        <Col lg={3} md={4}>
-                          <Card className="border-0 shadow-sm rounded-3 mb-3">
-                            <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
-                              <span className="text-danger">
-                                Search by Transfer Name
-                              </span>
-                              <span className="text-muted small">▾</span>
-                            </Card.Header>
-                            <Card.Body className="p-3">
-                              <div className="d-flex gap-2">
-                                <Form.Control
-                                  type="text"
-                                  size="sm"
-                                  placeholder="Search"
-                                  value={pendingNameFilter}
-                                  onChange={(e) =>
-                                    setPendingNameFilter(e.target.value)
-                                  }
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      setNameFilter(pendingNameFilter);
-                                      setCurrentPage(1);
-                                    }
+                                  {/* RIGHT IMAGE */}
+                                  <div
+                                    style={{
+                                      width: "160px", // 🔥 bigger
+                                      height: "95px",
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    <LazyImage
+                                      src={cab.cabpic}
+                                      alt={cab.cabname}
+                                      className="rounded"
+                                    />
+                                  </div>
+                                </div>
+                                {/* Divider */}
+                                <div
+                                  style={{
+                                    borderTop: "1px solid #f1f5f9",
+                                    marginBottom: "10px",
                                   }}
                                 />
-                                <Button
-                                  size="sm"
-                                  variant="danger"
-                                  className="px-3"
-                                  onClick={() => {
-                                    setNameFilter(pendingNameFilter);
-                                    setCurrentPage(1);
-                                  }}
-                                >
-                                  GO
-                                </Button>
-                              </div>
-                            </Card.Body>
-                          </Card>
+                                {/* TABLE */}
+                                {filteredDetails.length > 0 ? (
+                                  <div>
+                                    <table
+                                      className="w-100"
+                                      style={{ fontSize: "0.95rem" }}
+                                    >
+                                      <thead>
+                                        <tr className="text-muted small">
+                                          <th className="pb-2 fw-normal">
+                                            Route
+                                          </th>
+                                          <th className="pb-2 fw-normal">
+                                            Type
+                                          </th>
+                                          <th className="pb-2 fw-normal text-end">
+                                            Price
+                                          </th>
+                                          <th className="pb-2 text-end"></th>
+                                        </tr>
+                                      </thead>
 
-                          <Card className="border-0 shadow-sm rounded-3 mb-3">
-                            <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
-                              <span className="text-danger">Suppliers</span>
-                              <span className="text-muted small">▾</span>
-                            </Card.Header>
-                            <Card.Body className="p-3">
-                              {supplierNames.length === 0 ? (
-                                <div className="text-muted small">
-                                  No suppliers in results.
-                                </div>
-                              ) : (
-                                supplierNames.map((s) => (
-                                  <Form.Check
-                                    key={s}
-                                    type="checkbox"
-                                    id={`supplier-${s}`}
-                                    label={s}
-                                    className="small"
-                                    checked={pendingSuppliers.includes(s)}
-                                    onChange={(e) => {
-                                      setPendingSuppliers((prev) =>
-                                        e.target.checked
-                                          ? [...prev, s]
-                                          : prev.filter((x) => x !== s),
-                                      );
-                                    }}
-                                  />
-                                ))
-                              )}
-                            </Card.Body>
-                          </Card>
+                                      <tbody>
+                                        {filteredDetails.map((detail, idx) => {
+                                          const {
+                                            total: totalRate,
+                                            perUnit,
+                                            label,
+                                          } = priceDetail(detail);
 
-                          <Card className="border-0 shadow-sm rounded-3 mb-3">
-                            <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
-                              <span className="text-danger">Transfer Type</span>
-                              <span className="text-muted small">▾</span>
-                            </Card.Header>
-                            <Card.Body className="p-3">
-                              <Form.Check
-                                type="radio"
-                                id="filter-shared"
-                                name="filterTransferType"
-                                label="Shared (SIC)"
-                                className="small"
-                                checked={transferType === "Shared"}
-                                onChange={() => {
-                                  setTransferType("Shared");
-                                  setCurrentPage(1);
-                                }}
-                              />
-                              <Form.Check
-                                type="radio"
-                                id="filter-private"
-                                name="filterTransferType"
-                                label="Private"
-                                className="small"
-                                checked={transferType === "Private"}
-                                onChange={() => {
-                                  setTransferType("Private");
-                                  setCurrentPage(1);
-                                }}
-                              />
-                            </Card.Body>
-                          </Card>
-
-                          <Button
-                            variant="danger"
-                            className="w-100 fw-bold"
-                            onClick={() => {
-                              setNameFilter(pendingNameFilter);
-                              setSelectedSuppliers(pendingSuppliers);
-                              setCurrentPage(1);
-                            }}
-                          >
-                            APPLY FILTERS
-                          </Button>
-                        </Col>
-
-                        {/* ── RIGHT: Results column ──────────────────── */}
-                        <Col lg={9} md={8}>
-                          {/* Sort bar */}
-                          <Card className="border-0 shadow-sm rounded-3 mb-3">
-                            <Card.Body className="py-2 px-3 d-flex flex-wrap align-items-center gap-2">
-                              <span className="text-muted small me-1">
-                                Sort By:
-                              </span>
-                              <Button
-                                size="sm"
-                                variant={
-                                  sortBy === "price" ? "danger" : "light"
-                                }
-                                className="px-3"
-                                onClick={() => setSortBy("price")}
-                              >
-                                ↕ Price
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={
-                                  sortBy === "name" ? "danger" : "light"
-                                }
-                                className="px-3"
-                                onClick={() => setSortBy("name")}
-                              >
-                                ↕ Transfer Name
-                              </Button>
-                            </Card.Body>
-                          </Card>
-
-                          {/* Page-of-N + count */}
-                          <div className="d-flex justify-content-between align-items-center mb-2 small text-muted">
-                            <div>
-                              Page {safePage} of {totalPages} ({filtered.length}{" "}
-                              records)
-                            </div>
-                            {totalPages > 1 && renderPagination()}
-                          </div>
-
-                          {transferType === "Shared" && (
-                            <div className="text-muted small mb-2">
-                              Pricing for {sicPayingPax} paying pax (adults +
-                              children aged &gt; 3).
-                            </div>
-                          )}
-
-                          {filtered.length === 0 ? (
-                            <div className="text-center text-muted py-5 bg-white rounded-3 border">
-                              No{" "}
-                              {transferType === "Shared"
-                                ? "shared (SIC)"
-                                : "private"}{" "}
-                              transfers match your filters.
-                            </div>
-                          ) : (
-                            <Row className="g-3">
-                              {pageRows.map(({ cab, detail }, idx) => {
-                                const {
-                                  total: totalRate,
-                                  perUnit,
-                                  label,
-                                } = priceDetail(detail);
-                                return (
-                                  <Col xs={12} key={`${cab.cabid}-${idx}`}>
-                                    <Card className="border-0 shadow-sm rounded-3 overflow-hidden">
-                                      <Card.Header className="bg-light py-2 px-3 fw-semibold text-dark">
-                                        {cab.cabname || "Transfer Vehicle"}
-                                      </Card.Header>
-                                      <Card.Body className="p-3">
-                                        <Row className="align-items-center g-3">
-                                          {/* Image */}
-                                          <Col xs={12} md={3}>
-                                            <div
+                                          return (
+                                            <tr
+                                              key={idx}
                                               style={{
-                                                width: "100%",
-                                                height: "120px",
-                                                overflow: "hidden",
-                                                borderRadius: "8px",
+                                                borderTop: "1px solid #f1f5f9",
                                               }}
+                                              className="hover-row"
                                             >
-                                              <LazyImage
-                                                src={cab.cabpic}
-                                                alt={cab.cabname}
-                                              />
-                                            </div>
-                                          </Col>
-
-                                          {/* Details */}
-                                          <Col xs={12} md={6}>
-                                            <div className="small mb-1">
-                                              <span className="text-muted">
-                                                Transfer Type:{" "}
-                                              </span>
-                                              <span
-                                                className={`fw-medium ${
-                                                  transferType === "Private"
-                                                    ? "text-success"
-                                                    : "text-primary"
-                                                }`}
-                                              >
-                                                {transferType === "Private"
-                                                  ? "Private Transfer"
-                                                  : "Shared (SIC)"}
-                                              </span>
-                                            </div>
-                                            <div className="small mb-1">
-                                              <span className="text-muted">
-                                                Vehicle:{" "}
-                                              </span>
-                                              <span className="text-dark">
-                                                {cab.cabname || "—"}
-                                              </span>
-                                            </div>
-                                            <div className="small mb-1 d-flex flex-wrap gap-3">
-                                              <span>
-                                                <span className="text-muted">
-                                                  Max Pax Per Vehicle :{" "}
-                                                </span>
-                                                <span className="text-dark">
-                                                  {cab.capacityMax ??
-                                                    cab.noOfCabs ??
-                                                    "—"}
-                                                </span>
-                                              </span>
-                                              <span>
-                                                <span className="text-muted">
-                                                  Max Luggage Per Vehicle :{" "}
-                                                </span>
-                                                <span className="text-dark">
-                                                  {cab.capacityMax ?? "—"}
-                                                </span>
-                                              </span>
-                                            </div>
-                                            {(detail.location ||
-                                              detail.dropOff) && (
-                                              <div className="small text-muted mb-1">
-                                                {detail.location || "N/A"} →{" "}
+                                              {/* Route */}
+                                              <td className="py-3">
+                                                {" "}
+                                                {/* 🔥 more spacing */}
+                                                {detail.location || "N/A"}{" "}
+                                                <span className="text-muted mx-1">
+                                                  →
+                                                </span>{" "}
                                                 {detail.dropOff || "N/A"}
-                                              </div>
-                                            )}
-                                            {cab.cabProviderName && (
-                                              <div className="small text-muted">
-                                                by {cab.cabProviderName}
-                                              </div>
-                                            )}
-                                            <a
-                                              href="#more-info"
-                                              onClick={(e) =>
-                                                e.preventDefault()
-                                              }
-                                              className="small text-decoration-underline text-primary"
-                                            >
-                                              More Info
-                                            </a>
-                                          </Col>
+                                              </td>
 
-                                          {/* Price + action */}
-                                          <Col
-                                            xs={12}
-                                            md={3}
-                                            className="text-md-end"
-                                          >
-                                            <div className="text-success small fw-semibold mb-1">
-                                              Available
-                                            </div>
-                                            <div className="fw-bold fs-5 mb-1">
-                                              AED{" "}
-                                              {Number(
-                                                totalRate || 0,
-                                              ).toLocaleString(undefined, {
-                                                minimumFractionDigits: 2,
-                                                maximumFractionDigits: 2,
-                                              })}
-                                            </div>
-                                            {label && (
-                                              <div className="small text-muted mb-2">
-                                                {perUnit > 0
-                                                  ? `AED ${perUnit.toLocaleString()} ${label}`
-                                                  : label}
-                                              </div>
-                                            )}
-                                            <Button
-                                              variant="danger"
-                                              className="px-4 fw-semibold"
-                                              onClick={() =>
-                                                handleBookNow(cab, detail)
-                                              }
-                                            >
-                                              Select
-                                            </Button>
-                                          </Col>
-                                        </Row>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-                                );
-                              })}
-                            </Row>
-                          )}
+                                              {/* Type */}
+                                              <td className="py-3">
+                                                <span
+                                                  className={`fw-medium ${
+                                                    transferType === "Private"
+                                                      ? "text-success"
+                                                      : "text-primary"
+                                                  }`}
+                                                >
+                                                  {transferType === "Private"
+                                                    ? "Private"
+                                                    : "SIC"}
+                                                </span>
+                                              </td>
 
-                          {totalPages > 1 && (
-                            <div className="d-flex justify-content-end mt-3">
-                              {renderPagination()}
-                            </div>
-                          )}
-                        </Col>
-                      </Row>
-                    </div>
-                  );
-                })()}
+                                              {/* Price */}
+                                              <td className="py-3 text-end fw-semibold">
+                                                AED{" "}
+                                                {Number(
+                                                  totalRate || 0,
+                                                ).toLocaleString()}
+                                                {label ? (
+                                                  <div className="text-muted small fw-normal">
+                                                    {perUnit > 0
+                                                      ? `AED ${perUnit.toLocaleString()} ${label}`
+                                                      : label}
+                                                  </div>
+                                                ) : null}
+                                              </td>
+
+                                              {/* Button */}
+                                              <td className="py-3 text-end">
+                                                <Button
+                                                  size="sm"
+                                                  variant="primary"
+                                                  className="px-3"
+                                                  onClick={() =>
+                                                    handleBookNow(cab, detail)
+                                                  }
+                                                >
+                                                  Book
+                                                </Button>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <div className="text-muted small mt-2">
+                                    No options available
+                                  </div>
+                                )}
+                              </Card.Body>
+                            </Card>
+                          </Col>
+                        );
+                      })}
+                    </Row>
+                  </div>
+                )}
 
               {/* No Results */}
               {hasTransferSearched &&

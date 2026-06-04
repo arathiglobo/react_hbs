@@ -250,7 +250,7 @@ export default function Sidebar() {
         },
         
         { label: "Package Booking", to: "/new-booking/package-search" },
-        { label: "Cab Booking", to: "/new-booking/cab" },
+        { label: "Transfers Booking", to: "/new-booking/cab" },
         { label: "Scheffer Driver and Limousine Booking", to: "/new-booking/scheffer-driver" },
         {
           label: "Tours and Activity",

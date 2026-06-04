@@ -12,7 +12,14 @@ import {
   Modal,
   Table,
 } from "react-bootstrap";
-import { FaCar, FaUserAlt, FaCheckCircle, FaCalendarAlt, FaMapMarkerAlt } from "react-icons/fa";
+import {
+  FaCar,
+  FaUserAlt,
+  FaCheckCircle,
+  FaCalendarAlt,
+  FaMapMarkerAlt,
+  FaArrowLeft,
+} from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
@@ -45,20 +52,12 @@ const CabBookingPage = () => {
   // If accessed directly without state, we should probably redirect or show an error
   const hasValidState = !!cab && !!selectedOption && !!searchCriteria;
 
-  const [primaryGuest, setPrimaryGuest] = useState({
-    salutation: "Mr",
-    firstName: "",
-    lastName: "",
-    contactNumber: "",
-    emailId: "",
-    passportNumber: "",
-    lpo: "",
-  });
-
   // ── Full pax manifest (one row per adult + child) ────────────────────
   // Seeded from the searchCriteria counts so the operator can capture
-  // names for every traveller. Adult 1 stays in lock-step with the
-  // primary guest contact above — editing one updates the other.
+  // names for every traveller. The Lead radio (one per row) picks which
+  // pax becomes the primary/lead — that row's contact + LPO fields are
+  // captured inline and persisted to the customer/lead-passenger table,
+  // while the other rows are persisted to the guest table as-is.
   const totalAdults = Math.max(0, Number(searchCriteria?.adults) || 0);
   const totalChildren = Math.max(0, Number(searchCriteria?.children) || 0);
   const childAges = Array.isArray(searchCriteria?.childAges)
@@ -76,6 +75,11 @@ const CabBookingPage = () => {
         isChild: false,
         age: null,
         passportNo: "",
+        // Lead-only contact fields. Captured inline when the row is
+        // marked as Lead and forwarded as the customer/primary record.
+        contactNumber: "",
+        emailId: "",
+        lpo: "",
       });
     }
     for (let i = 0; i < totalChildren; i++) {
@@ -88,6 +92,9 @@ const CabBookingPage = () => {
         isChild: true,
         age: childAges[i] != null ? Number(childAges[i]) : null,
         passportNo: "",
+        contactNumber: "",
+        emailId: "",
+        lpo: "",
       });
     }
     return out;
@@ -95,32 +102,25 @@ const CabBookingPage = () => {
   }, []);
   const [guests, setGuests] = useState(initialGuests);
 
-  // Keep Adult 1 in sync with primary guest contact whenever either side
-  // changes, so the operator never has to retype names. Only the three
-  // name-related fields are mirrored.
-  useEffect(() => {
-    if (guests.length === 0) return;
-    setGuests((prev) => {
-      const next = [...prev];
-      if (!next[0]) return prev;
-      const a1 = next[0];
-      if (
-        a1.salutation === primaryGuest.salutation &&
-        a1.firstName === primaryGuest.firstName &&
-        a1.lastName === primaryGuest.lastName
-      ) {
-        return prev;
-      }
-      next[0] = {
-        ...a1,
-        salutation: primaryGuest.salutation || a1.salutation,
-        firstName: primaryGuest.firstName,
-        lastName: primaryGuest.lastName,
-      };
-      return next;
-    });
-    // eslint-disable-next-line
-  }, [primaryGuest.salutation, primaryGuest.firstName, primaryGuest.lastName]);
+  // Lead-passenger index — points at the row whose details build the
+  // primary customer record. Defaults to the first adult; children are
+  // never allowed to be the lead (the radio is disabled for them).
+  const [leadIndex, setLeadIndex] = useState(0);
+
+  // Derived "primary guest" — exposed under the same shape the rest of
+  // this file already consumes (Order Summary modal, payload), so we
+  // didn't have to rename references. Always reflects whichever row is
+  // currently flagged as Lead.
+  const leadGuest = guests[leadIndex] || {};
+  const primaryGuest = {
+    salutation: leadGuest.salutation || "",
+    firstName: leadGuest.firstName || "",
+    lastName: leadGuest.lastName || "",
+    contactNumber: leadGuest.contactNumber || "",
+    emailId: leadGuest.emailId || "",
+    passportNumber: leadGuest.passportNo || "",
+    lpo: leadGuest.lpo || "",
+  };
 
   const handleGuestChange = (index, field, value) => {
     setGuests((prev) => {
@@ -129,15 +129,6 @@ const CabBookingPage = () => {
       next[index] = { ...next[index], [field]: value };
       return next;
     });
-    // Mirror Adult 1 name fields back to primary guest contact card.
-    if (
-      index === 0 &&
-      ["salutation", "firstName", "lastName"].includes(field)
-    ) {
-      setPrimaryGuest((prev) =>
-        prev[field] === value ? prev : { ...prev, [field]: value }
-      );
-    }
     // Clear inline error if any.
     const key = `guest_${index}_${field}`;
     if (validationErrors[key]) {
@@ -147,6 +138,27 @@ const CabBookingPage = () => {
         return updated;
       });
     }
+  };
+
+  const handleLeadSelect = (index) => {
+    if (guests[index]?.isChild) return;
+    setLeadIndex(index);
+    // Lead changed → clear any errors that were attached to the old lead's
+    // contact/email/lpo so they don't keep showing on the new lead's row.
+    setValidationErrors((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (
+          k === "contactNumber" ||
+          k === "emailId" ||
+          k === "lpo" ||
+          k === "lead"
+        ) {
+          delete next[k];
+        }
+      });
+      return next;
+    });
   };
 
   // Transporter & driver details were removed from the booking form, but the
@@ -251,31 +263,6 @@ const CabBookingPage = () => {
 
   const totalRate = parseFloat(prices.totalPrice) || initialTotalRate;
 
-  const handlePrimaryGuestChange = (field, value) => {
-    setPrimaryGuest((prev) => ({ ...prev, [field]: value }));
-
-    // Real-time validation for email format
-    if (field === "emailId" && value.trim() !== "") {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-        setValidationErrors((prev) => ({
-          ...prev,
-          emailId: "Please enter a valid email address",
-        }));
-        return;
-      }
-    }
-
-    // Clear validation error when user starts typing
-    const errorKey = field;
-    if (validationErrors[errorKey]) {
-      setValidationErrors((prev) => {
-        const updated = { ...prev };
-        delete updated[errorKey];
-        return updated;
-      });
-    }
-  };
-
   const handlePriceChange = (field, value) => {
     setPrices((prev) => ({ ...prev, [field]: value }));
   };
@@ -284,32 +271,29 @@ const CabBookingPage = () => {
     const errors = {};
     let hasErrors = false;
 
-    if (!primaryGuest.salutation || primaryGuest.salutation.trim() === "") {
-      errors.salutation = "Salutation is required";
+    const lead = guests[leadIndex];
+    if (!lead) {
+      errors.lead = "Please mark a passenger as Lead";
       hasErrors = true;
-    }
-    if (!primaryGuest.firstName || primaryGuest.firstName.trim() === "") {
-      errors.firstName = "First Name is required";
+    } else if (lead.isChild) {
+      errors.lead = "The lead must be an adult passenger";
       hasErrors = true;
-    }
-    if (!primaryGuest.lastName || primaryGuest.lastName.trim() === "") {
-      errors.lastName = "Last Name is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.contactNumber || primaryGuest.contactNumber.trim() === "") {
-      errors.contactNumber = "Contact Number is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.emailId || primaryGuest.emailId.trim() === "") {
-      errors.emailId = "Email Id is required";
-      hasErrors = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.emailId)) {
-      errors.emailId = "Please enter a valid email address";
-      hasErrors = true;
-    }
-    if (!primaryGuest.lpo || primaryGuest.lpo.trim() === "") {
-      errors.lpo = "LPO is required";
-      hasErrors = true;
+    } else {
+      if (!lead.contactNumber || !lead.contactNumber.trim()) {
+        errors.contactNumber = "Contact Number is required for lead";
+        hasErrors = true;
+      }
+      if (!lead.emailId || !lead.emailId.trim()) {
+        errors.emailId = "Email Id is required for lead";
+        hasErrors = true;
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.emailId)) {
+        errors.emailId = "Please enter a valid email address";
+        hasErrors = true;
+      }
+      if (!lead.lpo || !lead.lpo.trim()) {
+        errors.lpo = "LPO is required for lead";
+        hasErrors = true;
+      }
     }
 
     // Each pax row needs at least a first + last name. Salutation is
@@ -379,7 +363,9 @@ const CabBookingPage = () => {
         passportNumber: primaryGuest.passportNumber,
         lpo: primaryGuest.lpo
       },
-      // Full pax manifest — backend persists each row into cab_guest.
+      // Full pax manifest — backend persists each row into cab_guest. The
+      // row marked as Lead also has its name/contact data forwarded into
+      // customerDTO above, so the backend can split lead-vs-guest rows.
       guests: guests.map((g, idx) => {
         const adultsBefore = totalAdults;
         const seatNumber = g.isChild
@@ -395,6 +381,7 @@ const CabBookingPage = () => {
           age: g.age != null ? Number(g.age) : null,
           passportNo: g.passportNo || null,
           guestIndex: seatNumber,
+          isLead: idx === leadIndex,
         };
       }),
       transporter: transporterDetails.transporter,
@@ -462,205 +449,30 @@ const CabBookingPage = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid className="px-0">
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <h4 className="fw-bold mb-0 text-primary">Cab Booking Checkout</h4>
-              <AgentBalanceDisplay
-                agentId={selectedAgentId}
-              />
+            <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+              <div className="d-flex align-items-center gap-2">
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  className="d-flex align-items-center gap-1"
+                  onClick={() => navigate("/new-booking/cab")}
+                >
+                  <FaArrowLeft /> Back
+                </Button>
+                <h4 className="fw-bold mb-0 text-primary">
+                  Cab Booking Checkout
+                </h4>
+              </div>
+              <AgentBalanceDisplay agentId={selectedAgentId} />
             </div>
 
             <Row className="g-4">
               {/* Left Column: Guest Details */}
               <Col lg={8}>
-               <Card className="shadow border-0 rounded-4 mb-4">
-  
-  {/* Header */}
-  <Card.Header className="bg-white border-0 pt-4 px-4">
-    <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
-      <FaUserAlt className="me-2 text-primary" />
-      Primary Guest Details
-    </h5>
-  </Card.Header>
-
-  <Card.Body className="px-4 pb-4">
-
-    <Row className="g-3">
-
-      {/* Salutation */}
-      <Col xs={12} md={3} lg={2}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Salutation <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Select
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.salutation}
-            onChange={(e) =>
-              handlePrimaryGuestChange("salutation", e.target.value)
-            }
-            isInvalid={!!validationErrors.salutation}
-          >
-            <option value="Mr">Mr</option>
-            <option value="Mrs">Mrs</option>
-            <option value="Ms">Ms</option>
-            <option value="Miss">Miss</option>
-            <option value="Dr">Dr</option>
-          </Form.Select>
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.salutation}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* First Name */}
-      <Col xs={12} md={5}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            First Name <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="First Name"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.firstName}
-            onChange={(e) =>
-              handlePrimaryGuestChange("firstName", e.target.value)
-            }
-            isInvalid={!!validationErrors.firstName}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.firstName}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* Last Name */}
-      <Col xs={12} md={4} lg={5}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Last Name <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="Last Name"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.lastName}
-            onChange={(e) =>
-              handlePrimaryGuestChange("lastName", e.target.value)
-            }
-            isInvalid={!!validationErrors.lastName}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.lastName}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* Phone */}
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Contact Number <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="Contact Number"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.contactNumber}
-            onChange={(e) =>
-              handlePrimaryGuestChange("contactNumber", e.target.value)
-            }
-            isInvalid={!!validationErrors.contactNumber}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.contactNumber}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* Email */}
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Email ID <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="email"
-            placeholder="Email ID"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.emailId}
-            onChange={(e) =>
-              handlePrimaryGuestChange("emailId", e.target.value)
-            }
-            isInvalid={!!validationErrors.emailId}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.emailId}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* Passport */}
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Passport Number{" "}
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="Passport Number"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.passportNumber}
-            onChange={(e) =>
-              handlePrimaryGuestChange("passportNumber", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-      {/* LPO */}
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            LPO Number <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="Agent LPO"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.lpo}
-            onChange={(e) =>
-              handlePrimaryGuestChange("lpo", e.target.value)
-            }
-            isInvalid={!!validationErrors.lpo}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.lpo}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-    </Row>
-
-  </Card.Body>
-</Card>
-
-                {/* ── Pax Manifest ─────────────────────────────────────
-                     One compact row per traveller (Adult 1..N, Child
-                     1..M). Adult 1 mirrors the Primary Guest card. */}
+                {/* ── Passenger Details — single source of truth for
+                     traveller data. The row marked "Lead" is also
+                     persisted as the customer/lead-passenger record;
+                     all other rows go to the guest table. */}
                 {guests.length > 0 && (
                   <Card className="shadow border-0 rounded-4 mb-4">
                     <Card.Header className="bg-white border-0 pt-3 px-4 pb-2">
@@ -669,84 +481,262 @@ const CabBookingPage = () => {
                         Passenger Details
                         <span className="text-muted small ms-2">
                           ({totalAdults} Adult{totalAdults !== 1 ? "s" : ""}
-                          {totalChildren > 0 ? `, ${totalChildren} Child${totalChildren !== 1 ? "ren" : ""}` : ""})
+                          {totalChildren > 0
+                            ? `, ${totalChildren} Child${
+                                totalChildren !== 1 ? "ren" : ""
+                              }`
+                            : ""}
+                          )
                         </span>
                       </h6>
+                      {validationErrors.lead && (
+                        <small className="text-danger d-block mt-1">
+                          {validationErrors.lead}
+                        </small>
+                      )}
                     </Card.Header>
                     <Card.Body className="px-4 pt-2 pb-3">
+                      <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                        <Col md={2}>Passenger</Col>
+                        <Col md={2}>Title</Col>
+                        <Col md={2}>First Name</Col>
+                        <Col md={2}>Last Name</Col>
+                        <Col md={2}>Passport</Col>
+                        <Col md={2} className="text-center">
+                          Lead
+                        </Col>
+                      </Row>
                       {guests.map((g, idx) => {
                         const adultSeat = idx + 1;
                         const childSeat = idx - totalAdults + 1;
                         const label = g.isChild
-                          ? `Child ${childSeat}${g.age != null ? ` (Age ${g.age})` : ""}`
+                          ? `Child ${childSeat}${
+                              g.age != null ? ` (Age ${g.age})` : ""
+                            }`
                           : `Adult ${adultSeat}`;
+                        const isLead = leadIndex === idx;
                         return (
-                          <Row key={idx} className="g-2 align-items-center mb-2">
-                            <Col xs={12} md={2}>
-                              <span className="fw-semibold text-muted small">
-                                {label} {idx === 0 ? <span className="text-danger">*</span> : ""}
-                              </span>
-                            </Col>
-                            <Col xs={6} md={2}>
-                              <Form.Select
-                                size="sm"
-                                value={g.salutation}
-                                onChange={(e) =>
-                                  handleGuestChange(idx, "salutation", e.target.value)
-                                }
-                                isInvalid={!!validationErrors[`guest_${idx}_salutation`]}
-                              >
-                                <option value="">Title</option>
-                                {g.isChild ? (
-                                  <>
-                                    <option value="Mstr">Mstr</option>
-                                    <option value="Miss">Miss</option>
-                                  </>
-                                ) : (
-                                  <>
-                                    <option value="Mr">Mr</option>
-                                    <option value="Mrs">Mrs</option>
-                                    <option value="Ms">Ms</option>
-                                  </>
-                                )}
-                              </Form.Select>
-                            </Col>
-                            <Col xs={6} md={3}>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="First Name"
-                                value={g.firstName}
-                                onChange={(e) =>
-                                  handleGuestChange(idx, "firstName", e.target.value)
-                                }
-                                isInvalid={!!validationErrors[`guest_${idx}_firstName`]}
-                              />
-                            </Col>
-                            <Col xs={6} md={3}>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Last Name"
-                                value={g.lastName}
-                                onChange={(e) =>
-                                  handleGuestChange(idx, "lastName", e.target.value)
-                                }
-                                isInvalid={!!validationErrors[`guest_${idx}_lastName`]}
-                              />
-                            </Col>
-                            <Col xs={6} md={2}>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Passport (opt)"
-                                value={g.passportNo}
-                                onChange={(e) =>
-                                  handleGuestChange(idx, "passportNo", e.target.value)
-                                }
-                              />
-                            </Col>
-                          </Row>
+                          <React.Fragment key={idx}>
+                            <Row className="g-2 align-items-center mb-2">
+                              <Col xs={12} md={2}>
+                                <span className="fw-semibold text-muted small">
+                                  {label}
+                                </span>
+                              </Col>
+                              <Col xs={6} md={2}>
+                                <Form.Select
+                                  size="sm"
+                                  value={g.salutation}
+                                  onChange={(e) =>
+                                    handleGuestChange(
+                                      idx,
+                                      "salutation",
+                                      e.target.value,
+                                    )
+                                  }
+                                  isInvalid={
+                                    !!validationErrors[
+                                      `guest_${idx}_salutation`
+                                    ]
+                                  }
+                                >
+                                  <option value="">Title</option>
+                                  {g.isChild ? (
+                                    <>
+                                      <option value="Mstr">Mstr</option>
+                                      <option value="Miss">Miss</option>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <option value="Mr">Mr</option>
+                                      <option value="Mrs">Mrs</option>
+                                      <option value="Ms">Ms</option>
+                                    </>
+                                  )}
+                                </Form.Select>
+                              </Col>
+                              <Col xs={6} md={2}>
+                                <Form.Control
+                                  size="sm"
+                                  type="text"
+                                  placeholder="First Name"
+                                  value={g.firstName}
+                                  onChange={(e) =>
+                                    handleGuestChange(
+                                      idx,
+                                      "firstName",
+                                      e.target.value,
+                                    )
+                                  }
+                                  isInvalid={
+                                    !!validationErrors[`guest_${idx}_firstName`]
+                                  }
+                                />
+                              </Col>
+                              <Col xs={6} md={2}>
+                                <Form.Control
+                                  size="sm"
+                                  type="text"
+                                  placeholder="Last Name"
+                                  value={g.lastName}
+                                  onChange={(e) =>
+                                    handleGuestChange(
+                                      idx,
+                                      "lastName",
+                                      e.target.value,
+                                    )
+                                  }
+                                  isInvalid={
+                                    !!validationErrors[`guest_${idx}_lastName`]
+                                  }
+                                />
+                              </Col>
+                              <Col xs={6} md={2}>
+                                <Form.Control
+                                  size="sm"
+                                  type="text"
+                                  placeholder="Passport (opt)"
+                                  value={g.passportNo}
+                                  onChange={(e) =>
+                                    handleGuestChange(
+                                      idx,
+                                      "passportNo",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </Col>
+                              <Col xs={6} md={2} className="text-center">
+                                <Form.Check
+                                  type="radio"
+                                  name="lead-guest"
+                                  id={`lead-${idx}`}
+                                  checked={isLead}
+                                  disabled={g.isChild}
+                                  onChange={() => handleLeadSelect(idx)}
+                                  title={
+                                    g.isChild
+                                      ? "Children cannot be the lead"
+                                      : "Mark as Lead passenger"
+                                  }
+                                />
+                              </Col>
+                            </Row>
+
+                            {/* Inline lead contact fields — only the
+                                Lead row collects contact + LPO; these
+                                go to the customer record on save. */}
+                            {isLead && !g.isChild && (
+                              <div className="bg-light border rounded-3 p-3 mb-3">
+                                <div className="small text-muted fw-semibold mb-2">
+                                  Lead passenger contact
+                                </div>
+                                <Row className="g-2">
+                                  <Col xs={12} md={4}>
+                                    <Form.Label className="small text-muted fw-semibold mb-1">
+                                      Contact Number{" "}
+                                      <span className="text-danger">*</span>
+                                    </Form.Label>
+                                    <Form.Control
+                                      size="sm"
+                                      type="text"
+                                      placeholder="Contact Number"
+                                      value={g.contactNumber}
+                                      onChange={(e) => {
+                                        handleGuestChange(
+                                          idx,
+                                          "contactNumber",
+                                          e.target.value,
+                                        );
+                                        if (
+                                          e.target.value.trim() &&
+                                          validationErrors.contactNumber
+                                        ) {
+                                          setValidationErrors((prev) => {
+                                            const u = { ...prev };
+                                            delete u.contactNumber;
+                                            return u;
+                                          });
+                                        }
+                                      }}
+                                      isInvalid={
+                                        !!validationErrors.contactNumber
+                                      }
+                                    />
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.contactNumber}
+                                    </Form.Control.Feedback>
+                                  </Col>
+                                  <Col xs={12} md={4}>
+                                    <Form.Label className="small text-muted fw-semibold mb-1">
+                                      Email ID{" "}
+                                      <span className="text-danger">*</span>
+                                    </Form.Label>
+                                    <Form.Control
+                                      size="sm"
+                                      type="email"
+                                      placeholder="Email ID"
+                                      value={g.emailId}
+                                      onChange={(e) => {
+                                        handleGuestChange(
+                                          idx,
+                                          "emailId",
+                                          e.target.value,
+                                        );
+                                        if (
+                                          e.target.value.trim() &&
+                                          validationErrors.emailId
+                                        ) {
+                                          setValidationErrors((prev) => {
+                                            const u = { ...prev };
+                                            delete u.emailId;
+                                            return u;
+                                          });
+                                        }
+                                      }}
+                                      isInvalid={!!validationErrors.emailId}
+                                    />
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.emailId}
+                                    </Form.Control.Feedback>
+                                  </Col>
+                                  <Col xs={12} md={4}>
+                                    <Form.Label className="small text-muted fw-semibold mb-1">
+                                      LPO Number{" "}
+                                      <span className="text-danger">*</span>
+                                    </Form.Label>
+                                    <Form.Control
+                                      size="sm"
+                                      type="text"
+                                      placeholder="Agent LPO"
+                                      value={g.lpo}
+                                      onChange={(e) => {
+                                        handleGuestChange(
+                                          idx,
+                                          "lpo",
+                                          e.target.value,
+                                        );
+                                        if (
+                                          e.target.value.trim() &&
+                                          validationErrors.lpo
+                                        ) {
+                                          setValidationErrors((prev) => {
+                                            const u = { ...prev };
+                                            delete u.lpo;
+                                            return u;
+                                          });
+                                        }
+                                      }}
+                                      isInvalid={!!validationErrors.lpo}
+                                    />
+                                    <Form.Control.Feedback type="invalid">
+                                      {validationErrors.lpo}
+                                    </Form.Control.Feedback>
+                                  </Col>
+                                </Row>
+                              </div>
+                            )}
+                          </React.Fragment>
                         );
                       })}
                     </Card.Body>
@@ -849,256 +839,203 @@ const CabBookingPage = () => {
 </Card>
               </Col>
 
-              {/* Right Column: Order Summary */}
-              <Col lg={4}>
-                <Card
-  className="shadow border-0 rounded-4 "
- 
->
-  {/* ===== Header ===== */}
-  <Card.Header
-    className="border-0 rounded-top-4"
-    style={{
-      background: "#7193d5",
-      padding: "18px 20px",
-    }}
-  >
-    <div className="d-flex align-items-center justify-content-between">
-      <div>
-        <h5 className="mb-1 fw-bold text-white">Booking Summary</h5>
-        <small className="text-white opacity-75">
-          Review your trip details
-        </small>
-      </div>
+              {/* Right sticky column — Booking Summary + Price Details,
+                   matched to HotelBookingPage.jsx (hbp-* classes from
+                   HotelBookingPage.css, already imported above). */}
+              <Col lg={4} className="hbp-right-col">
+                <div className="hbp-sticky-summary">
+                  <Card className="shadow-sm rounded-3 mb-3 booking-summary-card border-0 overflow-hidden">
+                    <Card.Header className="bg-primary text-white py-2 rounded-top">
+                      <h6 className="mb-0 d-flex align-items-center">
+                        <FaCar className="me-2" /> Booking Summary
+                      </h6>
+                    </Card.Header>
+                    <Card.Body className="p-3">
+                      <div className="mb-3">
+                        <div className="fw-bold text-primary mb-1">
+                          {cab.cabname}
+                        </div>
+                        {cab.cabdetails && (
+                          <div className="text-muted small mb-2">
+                            {cab.cabdetails}
+                          </div>
+                        )}
+                        <div className="d-flex flex-wrap align-items-center gap-2">
+                          <Badge
+                            bg={
+                              selectedOption.types === "Private"
+                                ? "success"
+                                : "info"
+                            }
+                          >
+                            {selectedOption.types}
+                          </Badge>
+                          {cab.cabProviderName && (
+                            <small className="text-muted">
+                              {cab.cabProviderName}
+                            </small>
+                          )}
+                        </div>
+                      </div>
 
-      <div
-        className="bg-white bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center"
-        style={{ width: "40px", height: "40px" }}
-      >
-        <FaCar className="text-white" />
-      </div>
-    </div>
-  </Card.Header>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaCalendarAlt className="me-2 text-primary" />
+                          Pickup Date
+                        </div>
+                        <div className="hbp-summary-value">
+                          {searchCriteria.pickupDate || "—"}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row align-items-start">
+                        <div className="hbp-summary-label">
+                          <FaMapMarkerAlt className="me-2 text-primary" />
+                          Route
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {selectedOption.location || "N/A"} →{" "}
+                          {selectedOption.dropOff || "N/A"}
+                        </div>
+                      </div>
+                      {searchCriteria.pickupType && (
+                        <div className="hbp-summary-row align-items-start">
+                          <div className="hbp-summary-label">
+                            <FaMapMarkerAlt className="me-2 text-success" />
+                            Pickup
+                          </div>
+                          <div className="hbp-summary-value text-end">
+                            <Badge bg="success" className="me-1">
+                              {searchCriteria.pickupType}
+                            </Badge>
+                            {searchCriteria.pickupName || "—"}
+                            {searchCriteria.pickupType === "AIRPORT" &&
+                              searchCriteria.pickupTime && (
+                                <div className="small text-muted">
+                                  @ {searchCriteria.pickupTime}
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                      )}
+                      {searchCriteria.dropoffType && (
+                        <div className="hbp-summary-row align-items-start">
+                          <div className="hbp-summary-label">
+                            <FaMapMarkerAlt className="me-2 text-warning" />
+                            Dropoff
+                          </div>
+                          <div className="hbp-summary-value text-end">
+                            <Badge bg="warning" text="dark" className="me-1">
+                              {searchCriteria.dropoffType}
+                            </Badge>
+                            {searchCriteria.dropoffName || "—"}
+                            {searchCriteria.dropoffTime && (
+                              <div className="small text-muted">
+                                @ {searchCriteria.dropoffTime}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="hbp-summary-row align-items-start">
+                        <div className="hbp-summary-label">
+                          <FaUserAlt className="me-2 text-primary" />
+                          Guests
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          <div className="small">
+                            {searchCriteria.adults || 0} Adult
+                            {Number(searchCriteria.adults) !== 1 ? "s" : ""}
+                            {Number(searchCriteria.children) > 0
+                              ? `, ${searchCriteria.children} Child${
+                                  Number(searchCriteria.children) !== 1
+                                    ? "ren"
+                                    : ""
+                                }`
+                              : ""}
+                          </div>
+                        </div>
+                      </div>
+                    </Card.Body>
+                  </Card>
 
-  <Card.Body className="p-0">
+                  <Card className="shadow-sm rounded-3 border-0 hbp-price-card">
+                    <Card.Header className="bg-light py-2">
+                      <h6 className="mb-0 fw-bold">Price Details</h6>
+                    </Card.Header>
+                    <Card.Body className="p-3">
+                      {(() => {
+                        const tdNum =
+                          tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                            ? Number(tourismDirham)
+                            : 0;
+                        const grandTotal = Number(totalRate || 0) + tdNum;
+                        return (
+                          <>
+                            <div className="hbp-summary-row">
+                              <div className="hbp-summary-label">
+                                Transfer Fare
+                              </div>
+                              <div className="hbp-summary-value">
+                                {formatPrice(totalRate)}
+                              </div>
+                            </div>
+                            <div className="hbp-summary-row">
+                              <div className="hbp-summary-label">
+                                Tourism Dirham
+                              </div>
+                              <div className="hbp-summary-value">
+                                {formatPrice(tdNum)}
+                              </div>
+                            </div>
+                            <hr className="my-2" />
+                            <div className="hbp-summary-row fw-bold">
+                              <div className="hbp-summary-label text-danger">
+                                New Total
+                              </div>
+                              <div className="hbp-summary-value text-danger">
+                                {formatPrice(grandTotal)}
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </Card.Body>
+                  </Card>
 
-    {/* ===== Transfer Info ===== */}
-    <div className="p-4 border-bottom">
-
-      {/* Cab Info */}
-      <div className="d-flex align-items-start gap-3 mb-3">
-        <div
-          style={{
-            width: "100px",
-            height: "80px",
-            borderRadius: "12px",
-            overflow: "hidden",
-            flexShrink: 0,
-          }}
-        >
-          <img
-            src={cab.cabpic || "https://via.placeholder.com/80?text=Cab"}
-            alt={cab.cabname}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        </div>
-
-        <div className="flex-grow-1">
-          <h6 className="fw-bold mb-1 text-dark">{cab.cabname}</h6>
-
-          <div className="mb-2">
-          <span
-  className={`fw-semibold ${
-    selectedOption.types === "Private"
-      ? "text-success"
-      : "text-info"
-  }`}
->
-  {selectedOption.types}
-</span>
-          </div>
-
-          {cab.cabdetails && (
-            <small className="text-muted d-block" style={{ lineHeight: "1.3" }}>
-              {cab.cabdetails}
-            </small>
-          )}
-        </div>
-      </div>
-
-      {/* Info Box */}
-      <div className="bg-light rounded-3 p-3 mb-3">
-
-        {/* Date */}
-        <div className="d-flex align-items-start gap-2 mb-3">
-          <FaCalendarAlt className="text-primary mt-1" />
-          <div>
-            <small className="text-muted fw-semibold d-block">
-              Pickup Date
-            </small>
-            <span className="fw-medium text-dark">
-              {searchCriteria.pickupDate}
-            </span>
-          </div>
-        </div>
-
-        {/* Route */}
-        <div className="d-flex align-items-start gap-2">
-          <FaMapMarkerAlt className="text-danger mt-1" />
-          <div>
-            <small className="text-muted fw-semibold d-block">
-              Route Details
-            </small>
-            <span className="fw-medium text-dark">
-              {selectedOption.location || "N/A"} →{" "}
-              {selectedOption.dropOff || "N/A"}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Pickup details ─────────────────────────────────────────
-             Shows the chosen pickup category (HOTEL / AIRPORT) plus
-             the actual facility name; airport pickups also show the
-             time. The block is hidden entirely when no pickup type
-             was selected upstream so existing flows aren't affected. */}
-        {searchCriteria.pickupType && (
-          <div className="d-flex align-items-start gap-2 mt-3">
-            <FaMapMarkerAlt className="text-success mt-1" />
-            <div>
-              <small className="text-muted fw-semibold d-block">
-                Pickup{" "}
-                <span className="badge bg-success-subtle text-success ms-1">
-                  {searchCriteria.pickupType}
-                </span>
-              </small>
-              <span className="fw-medium text-dark">
-                {searchCriteria.pickupName || "—"}
-                {searchCriteria.pickupType === "AIRPORT" &&
-                  searchCriteria.pickupTime && (
-                    <span className="text-muted ms-2 small">
-                      @ {searchCriteria.pickupTime}
-                    </span>
-                  )}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ── Dropoff details (same pattern; time is always optional) ── */}
-        {searchCriteria.dropoffType && (
-          <div className="d-flex align-items-start gap-2 mt-3">
-            <FaMapMarkerAlt className="text-warning mt-1" />
-            <div>
-              <small className="text-muted fw-semibold d-block">
-                Dropoff{" "}
-                <span className="badge bg-warning-subtle text-warning ms-1">
-                  {searchCriteria.dropoffType}
-                </span>
-              </small>
-              <span className="fw-medium text-dark">
-                {searchCriteria.dropoffName || "—"}
-                {searchCriteria.dropoffTime && (
-                  <span className="text-muted ms-2 small">
-                    @ {searchCriteria.dropoffTime}
-                  </span>
-                )}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Passengers */}
-      <div className="d-flex justify-content-between small">
-        <span className="text-muted">
-          Adults:{" "}
-          <span className="fw-bold text-dark">
-            {searchCriteria.adults}
-          </span>
-        </span>
-        <span className="text-muted">
-          Children:{" "}
-          <span className="fw-bold text-dark">
-            {searchCriteria.children}
-          </span>
-        </span>
-      </div>
-    </div>
-
-    {/* ===== Price Section ===== */}
-    <div className="p-4 bg-light">
-
-      {(() => {
-        const tdNum =
-          tourismDirham !== "" && !isNaN(Number(tourismDirham))
-            ? Number(tourismDirham)
-            : 0;
-        const grandTotal = Number(totalRate || 0) + tdNum;
-        return (
-          <>
-            <div className="d-flex justify-content-between mb-2 text-muted">
-              <span>Transfer Fare</span>
-              <span className="fw-medium">{formatPrice(totalRate)}</span>
-            </div>
-
-            {tdNum > 0 && (
-              <div className="d-flex justify-content-between mb-2 text-muted">
-                <span>Tourism Dirham</span>
-                <span className="fw-medium text-primary">
-                  {formatPrice(tdNum)}
-                </span>
-              </div>
-            )}
-
-            <div className="d-flex justify-content-between mb-3 text-muted">
-              <span>Taxes &amp; Fees</span>
-              <span className="fw-medium">{formatPrice(0)}</span>
-            </div>
-
-            <hr className="my-3" />
-
-            <div className="d-flex justify-content-between align-items-center">
-              <span className="fw-bold text-dark fs-5">Total Amount</span>
-              <span className="fw-bold text-primary fs-4">
-                {formatPrice(grandTotal)}
-              </span>
-            </div>
-          </>
-        );
-      })()}
-    </div>
-
-    {/* ===== Button ===== */}
-    <div className="p-4">
-
-      <Button
-        variant="success"
-        className="w-100 py-3 rounded-3 fw-bold fs-5 shadow d-flex align-items-center justify-content-center gap-2"
-        // Validate + build payload, then open the Order Summary modal.
-        // The actual /api/cab/book POST happens only on modal-confirm.
-        onClick={handleConfirmClick}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <>
-            <Spinner animation="border" size="sm" />
-            Processing...
-          </>
-        ) : (
-          <>
-            <FaCheckCircle />
-            Confirm Booking
-          </>
-        )}
-      </Button>
-
-      <p className="text-center text-muted small mt-3 mb-0">
-        By confirming, you agree to the Terms and Conditions.
-      </p>
-    </div>
-
-  </Card.Body>
-</Card>
+                  <div className="hbp-action-bar mt-3 d-flex gap-2">
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => navigate(-1)}
+                      className="flex-grow-1"
+                      disabled={isSubmitting}
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      variant="primary"
+                      type="button"
+                      onClick={handleConfirmClick}
+                      disabled={isSubmitting}
+                      className="flex-grow-1"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <FaCheckCircle className="me-1" />
+                          Confirm Booking
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </Col>
             </Row>
           </Container>
