@@ -10,7 +10,47 @@ import {
   Row,
   Col,
   Alert,
+  Form,
+  InputGroup,
 } from "react-bootstrap";
+
+const STATUS_META = {
+  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+};
+
+const StatusPill = ({ meta, raw }) => {
+  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  return (
+    <span
+      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+      style={{
+        backgroundColor: meta.bg,
+        color: meta.color,
+        fontSize: "0.7rem",
+        fontWeight: 600,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {meta.dot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            backgroundColor: meta.dot,
+            display: "inline-block",
+          }}
+        />
+      )}
+      {meta.label}
+    </span>
+  );
+};
 import {
   FaEye,
   FaTrashAlt,
@@ -160,149 +200,238 @@ export default function LastMinuteBookingList() {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4" style={{ overflow: "auto" }}>
-          <Container fluid>
-            <div className="d-flex align-items-center justify-content-between mb-3">
-              <div>
-                <h4 className="mb-0">Last Minute Bookings</h4>
-                <small className="text-muted">
-                  All bookings created via the Last Minute Booking flow.
-                </small>
-              </div>
-              <div className="d-flex align-items-center gap-2">
-                <FaSearch className="text-muted" />
-                <input
-                  type="text"
-                  className="form-control form-control-sm"
-                  placeholder="Search by code / customer / hotel"
-                  style={{ minWidth: 280 }}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
+        <main
+          className="flex-grow-1 p-3"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "0.5rem",
+              paddingRight: "0.5rem",
+            }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="mb-0 text-dark fw-semibold">Last Minute Bookings</h5>
             </div>
 
-            <Card className="shadow-sm">
-              <Card.Body className="p-0">
+            <Card
+              className="border mb-3 shadow-sm"
+              style={{ borderRadius: "6px" }}
+            >
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
+                style={{
+                  borderRadius: "6px 6px 0 0",
+                  backgroundColor: "#f8f9fa",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                }}
+              >
+                <span>List of Bookings</span>
+              </Card.Header>
+              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
+                <div
+                  className="d-flex flex-wrap justify-content-end align-items-center gap-2"
+                  style={{ marginBottom: "1.5rem" }}
+                >
+                  <InputGroup size="sm" style={{ width: "300px" }}>
+                    <InputGroup.Text
+                      style={{
+                        fontSize: "0.75rem",
+                        backgroundColor: "#ffffff",
+                        borderRight: "none",
+                        color: "#98a2b3",
+                      }}
+                    >
+                      <FaSearch />
+                    </InputGroup.Text>
+                    <Form.Control
+                      type="text"
+                      placeholder="Search by code / customer / hotel"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      style={{ fontSize: "0.8rem", borderLeft: "none" }}
+                    />
+                  </InputGroup>
+                </div>
+
                 {loading ? (
                   <div className="text-center py-5">
-                    <Spinner animation="border" />
-                    <div className="text-muted mt-2 small">Loading…</div>
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-3 text-muted">Loading bookings...</p>
                   </div>
                 ) : filtered.length === 0 ? (
                   <div className="text-center py-5 text-muted">
-                    <FaInbox className="display-4 mb-3" />
-                    <h5>No last-minute bookings yet</h5>
-                    <p className="mb-0">
+                    <FaInbox className="display-4 mb-3" style={{ opacity: 0.4 }} />
+                    <h6 className="fw-semibold">No last-minute bookings yet</h6>
+                    <p className="mb-0 small">
                       They'll appear here once you create one via{" "}
                       <em>New Booking → Last Minute Booking</em>.
                     </p>
                   </div>
                 ) : (
-                  <Table responsive hover className="mb-0 align-middle">
-                    <thead className="table-light">
-                      <tr>
-                        <th style={{ width: 60 }}>S.N</th>
-                        <th>Customer</th>
-                        <th>Booking Code</th>
-                        <th>Hotel</th>
-                        <th>Supplier</th>
-                        <th>Supplier Ref</th>
-                        <th>Check-in</th>
-                        <th>Check-out</th>
-                        <th>Total</th>
-                        <th>Payment Method</th>
-                        <th>Status</th>
-                        <th style={{ width: 180 }} className="text-center">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((b, idx) => (
-                        <tr key={b.bookingId}>
-                          <td>{idx + 1}</td>
-                          <td>{b.customerName || "-"}</td>
-                          <td className="fw-semibold text-primary">
-                            {b.bookingCode || "-"}
-                          </td>
-                          <td>{b.hotelName || "-"}</td>
-                          {/* Supplier name — left blank for later entry. */}
-                          <td>
-                            {b.supplierName && b.supplierName !== "Inhouse"
-                              ? b.supplierName
-                              : "-"}
-                          </td>
-                          {/* Supplier ref — backend defaults to "0"; render
-                              "-" so it can be edited/entered later. */}
-                          <td>
-                            {b.supplierReference &&
-                            b.supplierReference !== "0"
-                              ? b.supplierReference
-                              : "-"}
-                          </td>
-                          <td>{formatDateTime(b.checkInDate)}</td>
-                          <td>{formatDateTime(b.checkOutDate)}</td>
-                          <td>
-                            {b.totalRate != null
-                              ? `AED ${Number(b.totalRate).toFixed(2)}`
-                              : "-"}
-                          </td>
-                          {/* Payment Method — e.g. Credit Limit / Card /
-                              Bank Transfer / Top Up / Credit Points. The
-                              backend resolves the value from the booking's
-                              payment record when available; renders "-" until
-                              the payment integration is wired up. */}
-                          <td>{b.paymentMethod || "-"}</td>
-                          <td>
-                            {b.isCancelled ? (
-                              <Badge bg="danger">Cancelled</Badge>
-                            ) : (
-                              <Badge bg="success">
-                                {b.confirmationStatus || "Confirmed"}
-                              </Badge>
-                            )}
-                          </td>
-                          <td>
-                            <div className="d-flex justify-content-center gap-2">
-                              <FaEye
-                                role="button"
-                                title="View details"
-                                className="text-primary"
-                                style={{ fontSize: 18, cursor: "pointer" }}
-                                onClick={() => handleView(b.bookingId)}
-                              />
-                              {!b.isCancelled && (
-                                <FaTrashAlt
-                                  role="button"
-                                  title="Cancel booking"
-                                  className="text-danger"
-                                  style={{ fontSize: 18, cursor: "pointer" }}
-                                  onClick={() =>
-                                    handleCancel(b.bookingId, b.bookingCode)
-                                  }
-                                />
-                              )}
-                              <FaFilePdf
-                                role="button"
-                                title="View Voucher"
-                                className="text-success"
-                                style={{ fontSize: 18, cursor: "pointer" }}
-                                onClick={() => handleViewVoucher(b.bookingId)}
-                              />
-                              <FaFileInvoice
-                                role="button"
-                                title="View Invoice"
-                                className="text-warning"
-                                style={{ fontSize: 18, cursor: "pointer" }}
-                                onClick={() => handleViewInvoice(b.bookingId)}
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
+                  <>
+                    <div className="table-responsive saas-table-wrap">
+                      <Table hover className="mb-0 align-middle saas-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: "48px" }}>#</th>
+                            <th>Customer</th>
+                            <th>Booking</th>
+                            <th>Hotel</th>
+                            <th>Supplier</th>
+                            <th>Supplier Ref</th>
+                            <th>Stay</th>
+                            <th className="text-end">Total</th>
+                            <th>Payment</th>
+                            <th>Status</th>
+                            <th className="text-center" style={{ width: "140px" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.map((b, idx) => {
+                            const statusText = b.isCancelled
+                              ? "Cancelled"
+                              : b.confirmationStatus || "Confirmed";
+                            const sMeta = STATUS_META[statusText];
+                            return (
+                              <tr key={b.bookingId}>
+                                <td className="text-muted">{idx + 1}</td>
+                                <td>
+                                  <span className="fw-medium text-dark">
+                                    {b.customerName || "-"}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span
+                                    className="fw-semibold"
+                                    style={{ color: "#1d4ed8" }}
+                                  >
+                                    {b.bookingCode || "-"}
+                                  </span>
+                                </td>
+                                <td>{b.hotelName || "-"}</td>
+                                <td>
+                                  {b.supplierName && b.supplierName !== "Inhouse"
+                                    ? b.supplierName
+                                    : "-"}
+                                </td>
+                                <td>
+                                  {b.supplierReference && b.supplierReference !== "0"
+                                    ? b.supplierReference
+                                    : "-"}
+                                </td>
+                                <td style={{ whiteSpace: "nowrap" }}>
+                                  <div>{formatDateTime(b.checkInDate)}</div>
+                                  <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                    → {formatDateTime(b.checkOutDate)}
+                                  </div>
+                                </td>
+                                <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                                  <span className="fw-semibold text-dark">
+                                    {b.totalRate != null
+                                      ? `AED ${Number(b.totalRate).toFixed(2)}`
+                                      : "-"}
+                                  </span>
+                                </td>
+                                <td>{b.paymentMethod || "-"}</td>
+                                <td>
+                                  <StatusPill meta={sMeta} raw={statusText} />
+                                </td>
+                                <td className="text-center">
+                                  <div className="d-flex justify-content-center gap-1">
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm border-0 p-1"
+                                      style={{
+                                        backgroundColor: "#eff6ff",
+                                        color: "#1d4ed8",
+                                        borderRadius: "6px",
+                                      }}
+                                      onClick={() => handleView(b.bookingId)}
+                                      title="View details"
+                                    >
+                                      <FaEye style={{ fontSize: "12px" }} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm border-0 p-1"
+                                      style={{
+                                        backgroundColor: "#ecfdf5",
+                                        color: "#1b7f3a",
+                                        borderRadius: "6px",
+                                      }}
+                                      onClick={() => handleViewVoucher(b.bookingId)}
+                                      title="View Voucher"
+                                    >
+                                      <FaFilePdf style={{ fontSize: "12px" }} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm border-0 p-1"
+                                      style={{
+                                        backgroundColor: "#fff7e6",
+                                        color: "#b76e00",
+                                        borderRadius: "6px",
+                                      }}
+                                      onClick={() => handleViewInvoice(b.bookingId)}
+                                      title="View Invoice"
+                                    >
+                                      <FaFileInvoice style={{ fontSize: "12px" }} />
+                                    </button>
+                                    {!b.isCancelled && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm border-0 p-1"
+                                        style={{
+                                          backgroundColor: "#fef2f2",
+                                          color: "#b42318",
+                                          borderRadius: "6px",
+                                        }}
+                                        onClick={() =>
+                                          handleCancel(b.bookingId, b.bookingCode)
+                                        }
+                                        title="Cancel booking"
+                                      >
+                                        <FaTrashAlt style={{ fontSize: "12px" }} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </Table>
+                    </div>
+
+                    <style>{`
+                      .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
+                      .saas-table { font-size: 0.8rem; margin-bottom: 0; }
+                      .saas-table thead th {
+                        background-color: #f9fafb;
+                        color: #667085;
+                        font-size: 0.68rem;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.04em;
+                        border-bottom: 1px solid #eaecf0;
+                        border-top: none;
+                        padding: 0.65rem 0.75rem;
+                        white-space: nowrap;
+                      }
+                      .saas-table tbody td {
+                        padding: 0.65rem 0.75rem;
+                        border-top: 1px solid #f2f4f7;
+                        vertical-align: middle;
+                        color: #344054;
+                      }
+                      .saas-table tbody tr:first-child td { border-top: none; }
+                      .saas-table tbody tr:hover { background-color: #fafbfc; }
+                    `}</style>
+                  </>
                 )}
               </Card.Body>
             </Card>

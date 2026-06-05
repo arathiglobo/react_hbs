@@ -1,30 +1,21 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Container,
-  Row,
-  Col,
   Card,
   Button,
   Form,
   Table,
-  Badge,
   InputGroup,
   Spinner,
-  Modal,
   Pagination,
 } from "react-bootstrap";
 import {
   FaSearch,
-  FaTrash,
   FaCalendarAlt,
-  FaUserAlt,
   FaEye,
   FaCar,
-  FaMapMarkerAlt,
-  FaPhoneAlt,
-  FaEnvelope,
-  FaIdCard,
-  FaFileInvoice,
+  FaSyncAlt,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -33,7 +24,15 @@ import toast from "react-hot-toast";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
+const fmtDateLong = (iso) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
 const CabBookingList = () => {
+  const navigate = useNavigate();
   const [role, setRole] = useState(() => {
     return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
   });
@@ -46,24 +45,6 @@ const CabBookingList = () => {
   const [status, setStatus] = useState("upcoming");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState(null);
-  const [cancelling, setCancelling] = useState(false);
-  // Voucher: track WHICH booking is loading so a single click only
-  // disables that row's voucher button (previously a single boolean
-  // disabled every row's voucher button while one PDF was generating).
-  const [voucherLoadingId, setVoucherLoadingId] = useState(null);
-  // Voucher modal — opens an in-page iframe preview of the PDF and
-  // lets the operator email the voucher to an arbitrary recipient.
-  const [showVoucherModal, setShowVoucherModal] = useState(false);
-  const [voucherBooking, setVoucherBooking] = useState(null);
-  const [voucherPdfUrl, setVoucherPdfUrl] = useState("");
-  const [voucherEmail, setVoucherEmail] = useState("");
-  const [voucherEmailError, setVoucherEmailError] = useState("");
-  const [voucherSending, setVoucherSending] = useState(false);
-  // Booking-details view modal
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [detailsBooking, setDetailsBooking] = useState(null);
   const [apiData, setApiData] = useState({
     upcomingBookings: { content: [] },
     completedBookings: { content: [] },
@@ -231,101 +212,6 @@ const CabBookingList = () => {
     );
   }, [apiData, status, search]);
 
-  const handleCancelClick = (booking) => {
-    setSelectedBooking(booking);
-    setShowCancelModal(true);
-  };
-
-  const handleCancelBooking = async () => {
-    if (!selectedBooking) return;
-    try {
-      setCancelling(true);
-      const response = await axiosInstance.delete(
-        `/api/cab/delete/${selectedBooking.custombookingId}`
-      );
-      if (response.data?.status === "success") {
-        toast.success("Booking cancelled");
-        setShowCancelModal(false);
-        fetchBookings();
-      } else {
-        toast.error("Cancel failed");
-      }
-    } catch {
-      toast.error("Error cancelling booking");
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  // Voucher action → backend (CabBookingController#getCabBookingPdf) returns a
-  // PdfGenerationResponseDTO with { status, message, pdfUrl }; instead of
-  // opening a new tab, surface the URL inside an in-page modal with an
-  // iframe preview + an email-to field. Only the clicked row's button
-  // shows the spinner because we key off custombookingId.
-  const handleVoucher = async (b) => {
-    const id = b.custombookingId;
-    if (!id) return;
-    try {
-      setVoucherLoadingId(id);
-      const res = await axiosInstance.get(`/api/cab/${id}/pdf`, {
-        params: { type: "VOUCHER" },
-      });
-      if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
-        setVoucherBooking(b);
-        setVoucherPdfUrl(res.data.pdfUrl);
-        setVoucherEmail(b.customer?.emailId || "");
-        setVoucherEmailError("");
-        setShowVoucherModal(true);
-      } else {
-        toast.error(res.data?.message || "Failed to generate voucher");
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to generate voucher");
-    } finally {
-      setVoucherLoadingId(null);
-    }
-  };
-
-  // Email the voucher PDF to the address typed into the modal. Backend
-  // is expected to attach the PDF and send via SMTP. Mirrors the
-  // restaurant-booking pattern at /api/restaurant/booking/{id}/voucher/send.
-  const sendVoucherEmail = async () => {
-    if (!voucherBooking) return;
-    const email = (voucherEmail || "").trim();
-    if (!email) {
-      setVoucherEmailError("Email is required");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setVoucherEmailError("Please enter a valid email address");
-      return;
-    }
-    setVoucherEmailError("");
-    try {
-      setVoucherSending(true);
-      await axiosInstance.post(
-        `/api/cab/${voucherBooking.custombookingId}/voucher/send`,
-        { email }
-      );
-      toast.success(`Voucher sent to ${email}`);
-    } catch (err) {
-      toast.error(
-        err?.response?.data?.message || "Failed to send voucher email"
-      );
-    } finally {
-      setVoucherSending(false);
-    }
-  };
-
-  const closeVoucherModal = () => {
-    if (voucherSending) return;
-    setShowVoucherModal(false);
-    setVoucherBooking(null);
-    setVoucherPdfUrl("");
-    setVoucherEmail("");
-    setVoucherEmailError("");
-  };
-
   const formatPrice = (price) =>
     new Intl.NumberFormat("en-AE", {
       style: "currency",
@@ -348,214 +234,299 @@ const CabBookingList = () => {
   const currentPerPage = pagination[status].perPage;
 
   return (
-    <div className="min-vh-100 d-flex flex-column" style={{ background: "#f8fafc" }}>
+    <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4" style={{ overflow: "hidden" }}>
-          <Container fluid>
+        <main
+          className="flex-grow-1 p-3"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "0.5rem",
+              paddingRight: "0.5rem",
+            }}
+          >
             <div className="d-flex justify-content-between align-items-center mb-4">
-              <h4 className="fw-semibold text-dark mb-0">Cab Bookings</h4>
+              <h5 className="mb-0 text-dark fw-semibold">
+                <FaCar className="me-2 text-muted" />
+                Cab Bookings
+              </h5>
               <Button
-                variant="dark"
+                variant="outline-secondary"
                 size="sm"
                 onClick={fetchBookings}
                 disabled={loading}
-                className="px-3 rounded-pill"
+                style={{ fontSize: "0.78rem" }}
               >
-                {loading ? <Spinner size="sm" /> : "Refresh"}
+                <FaSyncAlt className={`me-1 ${loading ? "fa-spin" : ""}`} style={{ fontSize: "0.7rem" }} />
+                {loading ? "Refreshing..." : "Refresh"}
               </Button>
             </div>
 
-            {/* Search and Filters */}
-            <Row className="mb-4 g-3">
-              <Col md={4}>
-                <InputGroup className="shadow-sm rounded-3 overflow-hidden bg-white border">
-                  <InputGroup.Text className="bg-white border-0">
-                    <FaSearch size={13} className="text-muted" />
-                  </InputGroup.Text>
-                  <Form.Control
-                    placeholder="Search by Booking Code, Cab or Transporter..."
-                    className="border-0 shadow-none py-2"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </InputGroup>
-              </Col>
-            </Row>
+            <Card
+              className="border mb-3 shadow-sm"
+              style={{ borderRadius: "6px" }}
+            >
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
+                style={{
+                  borderRadius: "6px 6px 0 0",
+                  backgroundColor: "#f8f9fa",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                }}
+              >
+                <span>List of Bookings</span>
+              </Card.Header>
+              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
+                {/* Toolbar row 1: pills with counts + Time Period */}
+                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
+                    {[
+                      { value: "upcoming",  label: "Upcoming",  count: apiData.upcomingBookings?.totalElements ?? 0 },
+                      { value: "completed", label: "Completed", count: apiData.completedBookings?.totalElements ?? 0 },
+                      { value: "cancelled", label: "Cancelled", count: apiData.cancelledBookings?.totalElements ?? 0 },
+                    ].map((opt) => {
+                      const active = status === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setStatus(opt.value)}
+                          className="border-0 d-inline-flex align-items-center gap-2 px-3 py-1"
+                          style={{
+                            backgroundColor: active ? "#ffffff" : "transparent",
+                            color: active ? "#101828" : "#667085",
+                            fontSize: "0.78rem",
+                            fontWeight: active ? 600 : 500,
+                            borderRadius: "6px",
+                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {opt.label}
+                          <span
+                            style={{
+                              backgroundColor: active ? "#eff6ff" : "#e4e7ec",
+                              color: active ? "#1d4ed8" : "#667085",
+                              fontSize: "0.65rem",
+                              fontWeight: 600,
+                              padding: "1px 7px",
+                              borderRadius: "10px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {opt.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-            <Row className="mb-4 g-3">
-              {/* Type Filter */}
-              <Col lg={6}>
-                <Card className="border-0 shadow-sm h-100" style={{ borderRadius: "12px" }}>
-                  <Card.Body className="p-3">
-                    <h6 className="mb-3 fw-bold text-dark small text-uppercase" style={{ letterSpacing: "0.5px" }}>
-                      Booking Types
-                    </h6>
-                    <div className="d-flex gap-4">
-                      {["upcoming", "completed", "cancelled"].map((type) => (
-                        <Form.Check
-                          key={type}
-                          type="radio"
-                          id={type}
-                          name="statusType"
-                          label={type.charAt(0).toUpperCase() + type.slice(1)}
-                          checked={status === type}
-                          onChange={() => setStatus(type)}
-                          className="fw-medium text-capitalize"
-                        />
-                      ))}
-                    </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-
-              {/* Date Filter */}
-              <Col lg={6}>
-                <Card className="border-0 shadow-sm h-100" style={{ borderRadius: "12px" }}>
-                  <Card.Body className="p-3">
-                    <h6 className="mb-3 fw-bold text-dark small text-uppercase" style={{ letterSpacing: "0.5px" }}>
+                  <div className="d-flex align-items-center gap-2">
+                    <span
+                      className="text-uppercase text-muted fw-semibold"
+                      style={{ fontSize: "0.68rem", letterSpacing: "0.05em" }}
+                    >
                       Time Period
-                    </h6>
-                    <Row className="g-2">
-                      <Col xs={6}>
-                        <Form.Select
-                          size="sm"
-                          value={selectedMonth}
-                          onChange={(e) => handleMonthChange(e.target.value)}
-                          className="border px-3 py-2"
-                        >
-                          <option value="">Month</option>
-                          {months.map((m, idx) => (
-                            <option key={m} value={idx + 1}>{m}</option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                      <Col xs={6}>
-                        <Form.Select
-                          size="sm"
-                          value={selectedYear}
-                          onChange={(e) => handleYearChange(e.target.value)}
-                          className="border px-3 py-2"
-                        >
-                          <option value="">Year</option>
-                          {years.map((y) => (
-                            <option key={y} value={y}>{y}</option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
+                    </span>
+                    <Form.Select
+                      size="sm"
+                      value={selectedMonth}
+                      onChange={(e) => handleMonthChange(e.target.value)}
+                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "100px" }}
+                    >
+                      <option value="">Month</option>
+                      {months.map((m, idx) => (
+                        <option key={m} value={idx + 1}>
+                          {m.slice(0, 3)}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <Form.Select
+                      size="sm"
+                      value={selectedYear}
+                      onChange={(e) => handleYearChange(e.target.value)}
+                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "90px" }}
+                    >
+                      <option value="">Year</option>
+                      {years.map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    {(selectedMonth || selectedYear) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMonth("");
+                          setSelectedYear("");
+                          resetAllPages();
+                        }}
+                        className="btn btn-sm border-0"
+                        style={{
+                          fontSize: "0.72rem",
+                          color: "#667085",
+                          padding: "0.25rem 0.5rem",
+                        }}
+                        title="Clear time period"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-            {/* Table */}
-            <Card className="border-0 shadow-sm" style={{ borderRadius: "12px" }}>
-              <Card.Body className="p-0">
-                <div className="table-responsive">
-                  <Table bordered hover className="mb-0 align-middle small">
-                    <thead className="bg-light text-muted uppercase small font-weight-bold">
+                {/* Toolbar row 2: page size + search */}
+                <div
+                  className="d-flex flex-wrap justify-content-end align-items-center gap-2"
+                  style={{ marginBottom: "1.5rem" }}
+                >
+                  <Form.Select
+                    value={currentPerPage}
+                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                    size="sm"
+                    style={{ width: "auto", fontSize: "0.8rem" }}
+                  >
+                    {PER_PAGE_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt} / page</option>
+                    ))}
+                  </Form.Select>
+                  <InputGroup size="sm" style={{ width: "280px" }}>
+                    <InputGroup.Text
+                      style={{
+                        fontSize: "0.75rem",
+                        backgroundColor: "#ffffff",
+                        borderRight: "none",
+                        color: "#98a2b3",
+                      }}
+                    >
+                      <FaSearch />
+                    </InputGroup.Text>
+                    <Form.Control
+                      placeholder="Search by booking, cab, transporter..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      style={{ fontSize: "0.8rem", borderLeft: "none" }}
+                    />
+                  </InputGroup>
+                </div>
+
+                {/* Table */}
+                <div className="table-responsive saas-table-wrap">
+                  <Table hover className="mb-0 align-middle saas-table">
+                    <thead>
                       <tr>
-                        {role === "admin" && <th>Agent Name</th>}
-                        <th className="ps-4 py-3">Booking</th>
-                        <th>Customer Name</th>
-                        <th>Cab Details</th>
-                        <th>Travel Info</th>
-                        <th>Pax</th>
-                        <th>Amount</th>
-                        <th className="text-center pe-4">Action</th>
+                        {role === "admin" && <th>Agent</th>}
+                        <th>Booking</th>
+                        <th>Customer</th>
+                        <th>Cab</th>
+                        <th>Travel</th>
+                        <th className="text-center">Pax</th>
+                        <th className="text-end">Amount</th>
+                        <th className="text-center" style={{ width: "70px" }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan="7" className="text-center py-5">
-                            <Spinner animation="border" size="sm" variant="primary" className="me-2" />
-                            <span className="text-muted">Loading bookings...</span>
+                          <td colSpan={role === "admin" ? 8 : 7} className="text-center py-5">
+                            <Spinner animation="border" variant="primary" />
+                            <p className="mt-2 text-muted mb-0">Loading bookings...</p>
                           </td>
                         </tr>
                       ) : filteredBookings.length === 0 ? (
                         <tr>
-                          <td colSpan="7" className="text-center py-5 text-muted">No cab bookings found in this category</td>
+                          <td colSpan={role === "admin" ? 8 : 7} className="text-center py-5 text-muted">
+                            No bookings found
+                          </td>
                         </tr>
                       ) : (
                         filteredBookings.map((b) => (
                           <tr key={b.custombookingId}>
                             {role === "admin" && (
-                              <td className="ps-4">
-                                <div className="fw-bold text-dark">{b.agentName || "-"}</div>
+                              <td>
+                                <span className="fw-medium text-dark">
+                                  {b.agentName || "-"}
+                                </span>
                               </td>
                             )}
-                            <td className="ps-4">
-                              <div className="fw-bold text-dark">{b.packageBookCode}</div>
-                              <small className="text-muted">{formatDate(b.bookingDate)}</small>
+                            <td>
+                              <div className="fw-semibold text-dark">{b.packageBookCode || "-"}</div>
+                              <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                {fmtDateLong(b.bookingDate)}
+                              </div>
                             </td>
                             <td>
                               <div className="fw-medium text-dark">
-                                {b.customer?.salutaion} {b.customer?.firstName} {b.customer?.lastName}
+                                {[b.customer?.salutaion, b.customer?.firstName, b.customer?.lastName]
+                                  .filter(Boolean)
+                                  .join(" ") || "-"}
                               </div>
-                              <small className="text-muted d-block">{b.customer?.emailId}</small>
-                            </td>
-                            <td>
-                              <div className="fw-bold text-primary">{b.cabName}</div>
-                              <small className="text-muted d-block">{b.transporter}</small>
-                            </td>
-                            <td>
-                              <div className="d-flex align-items-center text-muted">
-                                <FaCalendarAlt size={10} className="me-2 text-primary" />
-                                {b.pickupDate}
+                              <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                {b.customer?.emailId || ""}
                               </div>
                             </td>
                             <td>
-                              <div className="d-flex align-items-center text-muted">
-                                <FaUserAlt size={10} className="me-2 text-primary" />
-                                {b.noOfAdult}A / {b.noOfChild}C
+                              <div className="fw-medium text-dark">{b.cabName || "-"}</div>
+                              <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                {b.transporter || ""}
                               </div>
                             </td>
-                            <td>
-                              <div className="fw-bold text-dark">{formatPrice(b.totalPrice)}</div>
-                            </td>
-                            <td className="text-center pe-4">
-                              <div className="d-inline-flex gap-2">
-                                <Button
-                                  variant="light"
-                                  size="sm"
-                                  className="rounded-pill px-3 border"
-                                  title="View booking details"
-                                  onClick={() => {
-                                    setDetailsBooking(b);
-                                    setShowDetailsModal(true);
-                                  }}
-                                >
-                                  <FaEye size={12} className="text-primary" />
-                                </Button>
-                                <Button
-                                  variant="light"
-                                  size="sm"
-                                  className="rounded-pill px-3 border"
-                                  title="Voucher"
-                                  disabled={voucherLoadingId === b.custombookingId}
-                                  onClick={() => handleVoucher(b)}
-                                >
-                                  {voucherLoadingId === b.custombookingId ? (
-                                    <Spinner size="sm" />
-                                  ) : (
-                                    <FaFileInvoice size={12} className="text-success" />
-                                  )}
-                                </Button>
-                                {status === "upcoming" && (
-                                  <Button
-                                    variant="light"
-                                    size="sm"
-                                    className="rounded-pill px-3 border"
-                                    title="Cancel booking"
-                                    onClick={() => handleCancelClick(b)}
-                                  >
-                                    <FaTrash size={12} className="text-danger" />
-                                  </Button>
-                                )}
+                            <td style={{ whiteSpace: "nowrap" }}>
+                              <div className="d-flex align-items-center gap-1">
+                                <FaCalendarAlt style={{ fontSize: "0.7rem", color: "#98a2b3" }} />
+                                <span>{fmtDateLong(b.pickupDate)}</span>
                               </div>
+                              {(b.pickupName || b.dropoffName) && (
+                                <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                  {b.pickupName || ""}
+                                  {b.dropoffName ? ` → ${b.dropoffName}` : ""}
+                                </div>
+                              )}
+                            </td>
+                            <td className="text-center">
+                              <span
+                                className="px-2 py-1 rounded"
+                                style={{
+                                  backgroundColor: "#eff8ff",
+                                  color: "#175cd3",
+                                  fontSize: "0.7rem",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {b.noOfAdult || 0}A / {b.noOfChild || 0}C
+                              </span>
+                            </td>
+                            <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                              <span className="fw-semibold text-dark">
+                                {formatPrice(b.totalPrice)}
+                              </span>
+                            </td>
+                            <td className="text-center">
+                              <button
+                                type="button"
+                                className="btn btn-sm border-0 p-1"
+                                style={{
+                                  backgroundColor: "#eff6ff",
+                                  color: "#1d4ed8",
+                                  borderRadius: "6px",
+                                }}
+                                onClick={() =>
+                                  navigate(
+                                    `/booking-details/cab-booking/${b.custombookingId}`,
+                                    { state: { booking: b } },
+                                  )
+                                }
+                                title="View details"
+                              >
+                                <FaEye style={{ fontSize: "12px" }} />
+                              </button>
                             </td>
                           </tr>
                         ))
@@ -564,24 +535,39 @@ const CabBookingList = () => {
                   </Table>
                 </div>
 
+                <style>{`
+                  .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
+                  .saas-table { font-size: 0.8rem; margin-bottom: 0; }
+                  .saas-table thead th {
+                    background-color: #f9fafb;
+                    color: #667085;
+                    font-size: 0.68rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    border-bottom: 1px solid #eaecf0;
+                    border-top: none;
+                    padding: 0.65rem 0.75rem;
+                    white-space: nowrap;
+                  }
+                  .saas-table tbody td {
+                    padding: 0.65rem 0.75rem;
+                    border-top: 1px solid #f2f4f7;
+                    vertical-align: middle;
+                    color: #344054;
+                  }
+                  .saas-table tbody tr:first-child td { border-top: none; }
+                  .saas-table tbody tr:hover { background-color: #fafbfc; }
+                `}</style>
+
                 {/* Pagination */}
                 {!loading && totalElements > 0 && (
-                  <div className="px-4 py-3 d-flex justify-content-between align-items-center border-top">
-                    <div className="d-flex align-items-center gap-3">
-                      <span className="small text-muted">Showing {filteredBookings.length} of {totalElements} entries</span>
-                      <Form.Select
-                        size="sm"
-                        className="w-auto"
-                        value={currentPerPage}
-                        onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                      >
-                        {PER_PAGE_OPTIONS.map(opt => (
-                          <option key={opt} value={opt}>{opt} / page</option>
-                        ))}
-                      </Form.Select>
-                    </div>
+                  <div className="d-flex justify-content-between align-items-center mt-3">
+                    <span className="small text-muted">
+                      Showing {filteredBookings.length} of {totalElements} entries
+                    </span>
                     <Pagination size="sm" className="mb-0">
-                      <Pagination.Prev 
+                      <Pagination.Prev
                         disabled={currentPage === 1}
                         onClick={() => handlePageChange(currentPage - 1)}
                       />
@@ -594,7 +580,7 @@ const CabBookingList = () => {
                           {idx + 1}
                         </Pagination.Item>
                       )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
-                      <Pagination.Next 
+                      <Pagination.Next
                         disabled={currentPage === totalPages}
                         onClick={() => handlePageChange(currentPage + 1)}
                       />
@@ -603,488 +589,6 @@ const CabBookingList = () => {
                 )}
               </Card.Body>
             </Card>
-
-            <Modal show={showCancelModal} onHide={() => !cancelling && setShowCancelModal(false)} centered>
-              <Modal.Header closeButton={!cancelling}>
-                <Modal.Title>Cancel Cab Booking</Modal.Title>
-              </Modal.Header>
-              <Modal.Body className="text-center py-4">
-                <p className="mb-1 text-muted">Are you sure you want to cancel this booking?</p>
-                <h5 className="mb-0">{selectedBooking?.packageBookCode}</h5>
-                <p className="text-primary small mt-2">{selectedBooking?.cabName}</p>
-              </Modal.Body>
-              <Modal.Footer className="justify-content-center border-0 pb-4">
-                <Button variant="light" className="px-4" onClick={() => setShowCancelModal(false)} disabled={cancelling}>No, Keep</Button>
-                <Button variant="dark" className="px-4" onClick={handleCancelBooking} disabled={cancelling}>
-                  {cancelling ? <Spinner size="sm" className="me-2" /> : "Yes, Cancel"}
-                </Button>
-              </Modal.Footer>
-            </Modal>
-
-            {/* ── Booking Details modal ───────────────────────────────── */}
-            <Modal
-              show={showDetailsModal}
-              onHide={() => setShowDetailsModal(false)}
-              size="lg"
-              centered
-              scrollable
-              backdrop="static"
-              keyboard={false}
-            >
-              <Modal.Header
-                closeButton
-                className="border-bottom"
-                style={{ backgroundColor: "#f1f3f5" }}
-              >
-                <Modal.Title className="d-flex align-items-center text-dark fw-semibold">
-                  <FaCar className="me-2 text-secondary" />
-                  Booking Details
-                  {detailsBooking?.packageBookCode && (
-                    <Badge
-                      bg="light"
-                      text="dark"
-                      className="ms-3 fw-semibold border"
-                    >
-                      {detailsBooking.packageBookCode}
-                    </Badge>
-                  )}
-                </Modal.Title>
-              </Modal.Header>
-              <Modal.Body className="py-3 bg-white">
-                {!detailsBooking ? (
-                  <div className="text-center py-3 text-muted">
-                    No booking selected.
-                  </div>
-                ) : (
-                  (() => {
-                    // Two-column key/value row helper, matched to the
-                    // screenshot's "label · value · label · value" layout.
-                    const KV = ({ label, value }) => (
-                      <Row className="g-0 py-2 border-bottom border-light-subtle">
-                        <Col xs={5} md={4} className="text-muted">
-                          {label}
-                        </Col>
-                        <Col xs={7} md={8} className="fw-semibold text-dark">
-                          {value || "—"}
-                        </Col>
-                      </Row>
-                    );
-                    const SectionHeader = ({ children }) => (
-                      <div
-                        className="px-3 py-2 fw-semibold text-dark border rounded-top"
-                        style={{ backgroundColor: "#f1f3f5" }}
-                      >
-                        {children}
-                      </div>
-                    );
-                    const SectionBody = ({ children }) => (
-                      <div className="border border-top-0 rounded-bottom px-3 py-2 mb-3 bg-white">
-                        {children}
-                      </div>
-                    );
-
-                    const customerName = [
-                      detailsBooking.customer?.salutaion,
-                      detailsBooking.customer?.firstName,
-                      detailsBooking.customer?.lastName,
-                    ]
-                      .filter(Boolean)
-                      .join(" ");
-
-                    return (
-                      <>
-                        {/* ── Booking Information ── */}
-                        <SectionHeader>Booking Information</SectionHeader>
-                        <SectionBody>
-                          <Row className="g-3">
-                            <Col md={6}>
-                              <KV
-                                label="Booking Code"
-                                value={detailsBooking.packageBookCode}
-                              />
-                              <KV
-                                label="Booking Date"
-                                value={formatDate(detailsBooking.bookingDate)}
-                              />
-                              <KV label="Cab" value={detailsBooking.cabName} />
-                              <KV
-                                label="Transporter"
-                                value={detailsBooking.transporter}
-                              />
-                              <KV
-                                label="Pickup Date"
-                                value={detailsBooking.pickupDate}
-                              />
-                              <KV
-                                label="Dropoff Date"
-                                value={
-                                  detailsBooking.dropOffDate ||
-                                  detailsBooking.dropoffDate ||
-                                  detailsBooking.pickupDate
-                                }
-                              />
-                            </Col>
-                            <Col md={6}>
-                              <KV
-                                label="Agent"
-                                value={detailsBooking.agentName}
-                              />
-                              <KV
-                                label="Pickup"
-                                value={
-                                  [
-                                    detailsBooking.pickupName,
-                                    detailsBooking.pickupTime,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" @ ")
-                                }
-                              />
-                              <KV
-                                label="Dropoff"
-                                value={
-                                  [
-                                    detailsBooking.dropoffName,
-                                    detailsBooking.dropoffTime,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" @ ")
-                                }
-                              />
-                              <KV
-                                label="Driver"
-                                value={
-                                  [
-                                    detailsBooking.driverName,
-                                    detailsBooking.driverContact,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" · ")
-                                }
-                              />
-                              <KV
-                                label="Voucher"
-                                value={
-                                  detailsBooking.voucherIssued ||
-                                  detailsBooking.voucher
-                                    ? "Yes"
-                                    : "No"
-                                }
-                              />
-                              <KV
-                                label="Status"
-                                value={
-                                  <span
-                                    className={
-                                      detailsBooking.cancelStatus
-                                        ? "text-danger fw-bold"
-                                        : "text-success fw-bold"
-                                    }
-                                  >
-                                    {detailsBooking.cancelStatus
-                                      ? "Cancelled"
-                                      : "Confirmed"}
-                                  </span>
-                                }
-                              />
-                            </Col>
-                          </Row>
-                        </SectionBody>
-
-                        {/* ── Guest Information ── */}
-                        <SectionHeader>Guest Information</SectionHeader>
-                        <SectionBody>
-                          <Row className="g-3">
-                            <Col md={6}>
-                              <KV label="Guest Name" value={customerName} />
-                              <KV
-                                label="Email"
-                                value={detailsBooking.customer?.emailId}
-                              />
-                              <KV
-                                label="Phone"
-                                value={detailsBooking.customer?.contactNumber}
-                              />
-                            </Col>
-                            <Col md={6}>
-                              <KV
-                                label="Passport No."
-                                value={
-                                  detailsBooking.customer?.passportNumber
-                                }
-                              />
-                              <KV
-                                label="Nationality"
-                                value={
-                                  detailsBooking.customer?.nationality ||
-                                  detailsBooking.nationality
-                                }
-                              />
-                              <KV label="Agent LPO" value={detailsBooking.lpo} />
-                            </Col>
-                          </Row>
-                        </SectionBody>
-
-                        {/* ── Passenger Details ── */}
-                        <SectionHeader>
-                          Passenger Details
-                          <span className="text-muted small fw-normal ms-2">
-                            ({detailsBooking.noOfAdult ?? 0} Adult
-                            {(detailsBooking.noOfAdult ?? 0) !== 1 ? "s" : ""}
-                            {(detailsBooking.noOfChild ?? 0) > 0
-                              ? `, ${detailsBooking.noOfChild} Child${
-                                  detailsBooking.noOfChild !== 1 ? "ren" : ""
-                                }`
-                              : ""}
-                            )
-                          </span>
-                        </SectionHeader>
-                        <div className="border border-top-0 rounded-bottom mb-3 bg-white">
-                          {Array.isArray(detailsBooking.guests) &&
-                          detailsBooking.guests.length > 0 ? (
-                            <Table
-                              size="sm"
-                              hover
-                              className="mb-0 align-middle"
-                            >
-                              <thead style={{ backgroundColor: "#f8f9fa" }}>
-                                <tr>
-                                  <th style={{ width: 50 }}>#</th>
-                                  <th style={{ width: 90 }}>Type</th>
-                                  <th>Name</th>
-                                  <th style={{ width: 80 }}>Age</th>
-                                  <th>Passport</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {detailsBooking.guests.map((g, idx) => (
-                                  <tr key={g.id || idx}>
-                                    <td>{g.guestIndex || idx + 1}</td>
-                                    <td>
-                                      <Badge
-                                        bg={g.isChild ? "secondary" : "dark"}
-                                      >
-                                        {g.isChild ? "Child" : "Adult"}
-                                      </Badge>
-                                    </td>
-                                    <td>
-                                      {[
-                                        g.salutation,
-                                        g.firstName,
-                                        g.middleName,
-                                        g.lastName,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" ") || "—"}
-                                    </td>
-                                    <td>{g.age ?? "—"}</td>
-                                    <td>{g.passportNo || "—"}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </Table>
-                          ) : (
-                            <div className="small text-muted px-3 py-2">
-                              No per-pax manifest captured for this booking.
-                              {Array.isArray(detailsBooking.childAgeArray) &&
-                                detailsBooking.childAgeArray.length > 0 && (
-                                  <span>
-                                    {" "}
-                                    Child ages:{" "}
-                                    {detailsBooking.childAgeArray.join(", ")}.
-                                  </span>
-                                )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* ── Price Details ── */}
-                        <SectionHeader>Price Details</SectionHeader>
-                        <SectionBody>
-                          {detailsBooking.sellingPrice != null && (
-                            <KV
-                              label="Selling Price"
-                              value={formatPrice(detailsBooking.sellingPrice)}
-                            />
-                          )}
-                          {detailsBooking.totalRate != null &&
-                            Number(detailsBooking.totalRate) !==
-                              Number(detailsBooking.totalPrice) && (
-                              <KV
-                                label="Total Rate"
-                                value={formatPrice(detailsBooking.totalRate)}
-                              />
-                            )}
-                          {detailsBooking.tourismDirham != null &&
-                            Number(detailsBooking.tourismDirham) > 0 && (
-                              <KV
-                                label="Tourism Dirham"
-                                value={`+ ${formatPrice(
-                                  detailsBooking.tourismDirham,
-                                )}`}
-                              />
-                            )}
-                          <Row className="g-0 pt-2">
-                            <Col xs={5} md={4} className="fw-semibold text-dark">
-                              Total Amount
-                            </Col>
-                            <Col
-                              xs={7}
-                              md={8}
-                              className="fw-bold text-success fs-6"
-                            >
-                              {formatPrice(detailsBooking.totalPrice)}
-                            </Col>
-                          </Row>
-                        </SectionBody>
-                      </>
-                    );
-                  })()
-                )}
-              </Modal.Body>
-              <Modal.Footer style={{ backgroundColor: "#f8f9fa" }}>
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowDetailsModal(false)}
-                >
-                  Close
-                </Button>
-              </Modal.Footer>
-            </Modal>
-
-            {/* ── Voucher modal — iframe preview + email-send form ───── */}
-            <Modal
-              show={showVoucherModal}
-              onHide={closeVoucherModal}
-              size="xl"
-              centered
-              backdrop="static"
-              keyboard={false}
-            >
-              <Modal.Header
-                closeButton={!voucherSending}
-                className="border-bottom"
-                style={{ backgroundColor: "#f1f3f5" }}
-              >
-                <Modal.Title className="d-flex align-items-center text-dark fw-semibold">
-                  <FaFileInvoice className="me-2 text-secondary" />
-                  Voucher
-                  {voucherBooking?.packageBookCode && (
-                    <Badge
-                      bg="light"
-                      text="dark"
-                      className="ms-3 fw-semibold border"
-                    >
-                      {voucherBooking.packageBookCode}
-                    </Badge>
-                  )}
-                </Modal.Title>
-              </Modal.Header>
-              <Modal.Body className="p-3 bg-white">
-                {/* Email Voucher panel — sits ABOVE the PDF preview now. */}
-                <Card className="border shadow-none rounded-3 mb-3">
-                  <Card.Header
-                    className="py-2 fw-semibold text-dark d-flex align-items-center"
-                    style={{ backgroundColor: "#f1f3f5" }}
-                  >
-                    <FaEnvelope className="me-2 text-secondary" /> Email Voucher
-                  </Card.Header>
-                  <Card.Body className="p-3">
-                    <Row className="g-2 align-items-start">
-                      <Col md={8}>
-                        <Form.Label className="small fw-semibold mb-1">
-                          Recipient Email{" "}
-                          <span className="text-danger">*</span>
-                        </Form.Label>
-                        <Form.Control
-                          type="email"
-                          placeholder="name@example.com"
-                          value={voucherEmail}
-                          onChange={(e) => {
-                            setVoucherEmail(e.target.value);
-                            if (voucherEmailError) setVoucherEmailError("");
-                          }}
-                          isInvalid={!!voucherEmailError}
-                          disabled={voucherSending}
-                        />
-                        {voucherEmailError ? (
-                          <div className="invalid-feedback d-block">
-                            {voucherEmailError}
-                          </div>
-                        ) : (
-                          <Form.Text className="text-muted">
-                            The voucher PDF will be attached and sent to this address.
-                          </Form.Text>
-                        )}
-                      </Col>
-                      <Col md={4} className="d-flex flex-column gap-2 mt-md-4">
-                        <Button
-                          variant="dark"
-                          onClick={sendVoucherEmail}
-                          disabled={voucherSending}
-                        >
-                          {voucherSending ? (
-                            <>
-                              <Spinner size="sm" className="me-2" />
-                              Sending...
-                            </>
-                          ) : (
-                            <>
-                              <FaEnvelope className="me-2" /> Send
-                            </>
-                          )}
-                        </Button>
-                        {voucherPdfUrl && (
-                          <Button
-                            variant="outline-secondary"
-                            href={voucherPdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            disabled={voucherSending}
-                          >
-                            Open in New Tab
-                          </Button>
-                        )}
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
-
-                {/* PDF preview below the email form. */}
-                <Card className="border shadow-none rounded-3 overflow-hidden">
-                  <Card.Body className="p-0">
-                    {voucherPdfUrl ? (
-                      <iframe
-                        title="Voucher PDF"
-                        src={voucherPdfUrl}
-                        style={{
-                          width: "100%",
-                          height: "65vh",
-                          border: "none",
-                          display: "block",
-                        }}
-                      />
-                    ) : (
-                      <div className="text-center text-muted py-5">
-                        No voucher loaded.
-                      </div>
-                    )}
-                  </Card.Body>
-                </Card>
-              </Modal.Body>
-              <Modal.Footer
-                className="border-top"
-                style={{ backgroundColor: "#f8f9fa" }}
-              >
-                <Button
-                  variant="secondary"
-                  onClick={closeVoucherModal}
-                  disabled={voucherSending}
-                >
-                  Close
-                </Button>
-              </Modal.Footer>
-            </Modal>
           </Container>
         </main>
       </div>
@@ -1093,3 +597,4 @@ const CabBookingList = () => {
 };
 
 export default CabBookingList;
+

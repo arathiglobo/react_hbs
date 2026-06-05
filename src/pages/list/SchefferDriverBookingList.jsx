@@ -1,102 +1,77 @@
+/**
+ * SchefferDriverBookingList.jsx
+ *
+ * Booking-list page for the Scheffer Driver new-booking flow.
+ *
+ *   GET /api/scheffer/grouped-list — upcoming / completed / cancelled buckets,
+ *   now accepts optional month / year params (Time Period filter).
+ *
+ * The Action column now contains only the View (eye) icon — clicking it
+ * navigates to a dedicated detail page
+ * (/booking-details/scheffer-driver-booking/:id) where Voucher / Cancel /
+ * Record-Actual-Usage live as buttons at the bottom-left.
+ */
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Container,
-  Row,
-  Col,
   Card,
   Button,
   Form,
   Table,
-  Badge,
   InputGroup,
   Spinner,
-  Modal,
 } from "react-bootstrap";
-import {
-  FaSearch,
-  FaTrash,
-  FaEye,
-  FaCar,
-  FaFileAlt,
-  FaMapMarkerAlt,
-  FaPhoneAlt,
-  FaEnvelope,
-  FaIdCard,
-  FaRoad,
-} from "react-icons/fa";
+import { FaSearch, FaEye, FaCar, FaMapMarkerAlt, FaSyncAlt } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 
-/**
- * Booking list for the Scheffer Driver new-booking flow.
- *
- *   GET   /api/scheffer/grouped-list   — upcoming / completed / cancelled tabs
- *   DELETE /api/scheffer/delete/{id}    — cancel a booking
- *   GET   /api/scheffer/{id}/voucher    — PDF voucher (application/pdf)
- *
- * View action opens a details modal sourced from the same row object.
- * Voucher action streams the PDF as a Blob, builds an object URL and
- * shows it in an <iframe> inside a modal (same UX as
- * /booking-details/offline-booking-list).
- */
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const fmtDateLong = (iso) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
 const SchefferDriverBookingList = ({
   apiBase = "/api/scheffer",
-  pageTitle = "Scheffer Driver & Limousine Bookings",
-  fileLabel = "scheffer-driver",
+  pageTitle = "Chauffeur Driver & Limousine Bookings",
 }) => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("upcoming");
   const [search, setSearch] = useState("");
-  const [data, setData] = useState({ upcoming: [], completed: [], cancelled: [] });
-  const [totals, setTotals] = useState({ upcomingTotal: 0, completedTotal: 0, cancelledTotal: 0 });
-
-  // Cancel modal
-  const [showCancel, setShowCancel] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [selected, setSelected] = useState(null);
-
-  // View modal
-  const [showDetails, setShowDetails] = useState(false);
-  const [details, setDetails] = useState(null);
-
-  // Voucher (PDF) modal
-  const [showPdf, setShowPdf] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [loadingPdf, setLoadingPdf] = useState(false);
-
-  // Actual-usage modal (post-trip hours/km + intercity → final amount)
-  const [showUsage, setShowUsage] = useState(false);
-  const [usageBooking, setUsageBooking] = useState(null);
-  const [savingUsage, setSavingUsage] = useState(false);
-  const [usageForm, setUsageForm] = useState({
-    actualHoursUsed: "",
-    actualKmUsed: "",
-    intercityFromCityId: "",
-    intercityToCityId: "",
+  const [data, setData] = useState({
+    upcoming: [],
+    completed: [],
+    cancelled: [],
   });
-  const [cityList, setCityList] = useState([]);
+  const [totals, setTotals] = useState({
+    upcomingTotal: 0,
+    completedTotal: 0,
+    cancelledTotal: 0,
+  });
 
-  const loadCities = async () => {
-    try {
-      const r = await axiosInstance.get("/api/province", { params: { limit: 500 } });
-      const items = Array.isArray(r.data) ? r.data : r.data?.content || [];
-      setCityList(
-        items.map((it) => ({
-          id: it.id ?? it.stateId ?? it.placeid ?? it.provinceId,
-          name: it.name ?? it.stateName ?? it.placeName ?? it.provinceName,
-        }))
-      );
-    } catch (e) {
-      console.error("Error loading cities:", e);
-    }
-  };
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const currentYear = new Date().getFullYear();
+  const years = Array.from(
+    { length: currentYear - 2014 },
+    (_, i) => 2020 + i,
+  );
 
   const fetchList = async () => {
     setLoading(true);
     try {
-      const role = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
+      const role = (localStorage.getItem("currentActiveRole") || "")
+        .toLowerCase();
       const params = {
         upcomingPage: 0,
         upcomingSize: 50,
@@ -109,7 +84,11 @@ const SchefferDriverBookingList = ({
         const agentId = localStorage.getItem("agentId");
         if (agentId && agentId !== "null") params.agentId = agentId;
       }
-      const res = await axiosInstance.get(`${apiBase}/grouped-list`, { params });
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+      const res = await axiosInstance.get(`${apiBase}/grouped-list`, {
+        params,
+      });
       const d = res.data || {};
       setData({
         upcoming: d.upcoming || [],
@@ -131,61 +110,8 @@ const SchefferDriverBookingList = ({
 
   useEffect(() => {
     fetchList();
-    loadCities();
-  }, [apiBase]); // eslint-disable-line
-
-  const cityName = (id) => {
-    const c = cityList.find((x) => String(x.id) === String(id));
-    return c ? c.name : "";
-  };
-
-  const onUsage = (b) => {
-    setUsageBooking(b);
-    setUsageForm({
-      actualHoursUsed: b.actualHoursUsed != null ? b.actualHoursUsed : "",
-      actualKmUsed: b.actualKmUsed != null ? b.actualKmUsed : "",
-      intercityFromCityId: "",
-      intercityToCityId: "",
-    });
-    setShowUsage(true);
-  };
-
-  const saveUsage = async () => {
-    const b = usageBooking;
-    if (!b) return;
-    const id = b.id || b.custombookingId;
-    setSavingUsage(true);
-    try {
-      const payload = {
-        actualHoursUsed:
-          usageForm.actualHoursUsed === "" ? null : Number(usageForm.actualHoursUsed),
-        actualKmUsed:
-          usageForm.actualKmUsed === "" ? null : Number(usageForm.actualKmUsed),
-        intercityFromCityId: usageForm.intercityFromCityId
-          ? Number(usageForm.intercityFromCityId)
-          : null,
-        intercityFromCity: usageForm.intercityFromCityId
-          ? cityName(usageForm.intercityFromCityId)
-          : null,
-        intercityToCityId: usageForm.intercityToCityId
-          ? Number(usageForm.intercityToCityId)
-          : null,
-        intercityToCity: usageForm.intercityToCityId
-          ? cityName(usageForm.intercityToCityId)
-          : null,
-      };
-      await axiosInstance.put(`${apiBase}/${id}/usage`, payload);
-      toast.success("Usage updated — final amount recalculated");
-      setShowUsage(false);
-      setUsageBooking(null);
-      fetchList();
-    } catch (e) {
-      console.error("Usage update error:", e);
-      toast.error("Failed to update usage");
-    } finally {
-      setSavingUsage(false);
-    }
-  };
+    // eslint-disable-next-line
+  }, [apiBase, selectedMonth, selectedYear]);
 
   const rows = useMemo(() => {
     const arr = data[status] || [];
@@ -210,635 +136,358 @@ const SchefferDriverBookingList = ({
     });
   }, [data, status, search]);
 
-  const onCancelClick = (b) => {
-    setSelected(b);
-    setShowCancel(true);
+  const clearTimePeriod = () => {
+    setSelectedMonth("");
+    setSelectedYear("");
   };
-  const doCancel = async () => {
-    if (!selected) return;
-    const id = selected.id || selected.custombookingId;
-    if (!id) return;
-    setCancelling(true);
-    try {
-      await axiosInstance.delete(`${apiBase}/delete/${id}`);
-      toast.success("Booking cancelled");
-      setShowCancel(false);
-      setSelected(null);
-      fetchList();
-    } catch (e) {
-      console.error("Cancel error:", e);
-      toast.error("Failed to cancel booking");
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  const onView = (b) => {
-    setDetails(b);
-    setShowDetails(true);
-  };
-
-  const onVoucher = async (b) => {
-    const id = b.id || b.custombookingId;
-    if (!id) return;
-    setShowPdf(true);
-    setLoadingPdf(true);
-    setPdfUrl(null);
-    try {
-      const res = await axiosInstance.get(`${apiBase}/${id}/voucher`, {
-        responseType: "blob",
-      });
-      const blob = new Blob([res.data], { type: "application/pdf" });
-      setPdfUrl(URL.createObjectURL(blob));
-    } catch (e) {
-      console.error("Voucher error:", e);
-      toast.error("Failed to generate voucher");
-    } finally {
-      setLoadingPdf(false);
-    }
-  };
-
-  const closePdf = () => {
-    setShowPdf(false);
-    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-    setPdfUrl(null);
-  };
-
-  const fmtDate = (d) => (d ? String(d).split("T")[0] : "-");
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-3">
-          <Container fluid>
-            <Card className="shadow-sm mb-3">
-              <Card.Header className="d-flex justify-content-between align-items-center">
-                <span className="fw-semibold">
-                  <FaCar className="me-2 text-success" />
-                  {pageTitle}
-                </span>
-                <Button variant="outline-primary" size="sm" onClick={fetchList} disabled={loading}>
-                  {loading ? "Refreshing..." : "Refresh"}
-                </Button>
-              </Card.Header>
-              <Card.Body>
-                <Row className="g-2 mb-3">
-                  <Col md={6}>
-                    <InputGroup>
-                      <InputGroup.Text>
-                        <FaSearch />
-                      </InputGroup.Text>
-                      <Form.Control
-                        placeholder="Search by Booking Code, Cab, Customer..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                    </InputGroup>
-                  </Col>
-                  <Col md={6}>
-                    <div className="d-flex gap-3 align-items-center">
-                      <Form.Check
-                        type="radio"
-                        label={`Upcoming (${totals.upcomingTotal})`}
-                        name="status"
-                        checked={status === "upcoming"}
-                        onChange={() => setStatus("upcoming")}
-                      />
-                      <Form.Check
-                        type="radio"
-                        label={`Completed (${totals.completedTotal})`}
-                        name="status"
-                        checked={status === "completed"}
-                        onChange={() => setStatus("completed")}
-                      />
-                      <Form.Check
-                        type="radio"
-                        label={`Cancelled (${totals.cancelledTotal})`}
-                        name="status"
-                        checked={status === "cancelled"}
-                        onChange={() => setStatus("cancelled")}
-                      />
-                    </div>
-                  </Col>
-                </Row>
+        <main
+          className="flex-grow-1 p-3"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "0.5rem",
+              paddingRight: "0.5rem",
+            }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="mb-0 text-dark fw-semibold">
+                <FaCar className="me-2 text-muted" />
+                {pageTitle}
+              </h5>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={fetchList}
+                disabled={loading}
+                style={{ fontSize: "0.78rem" }}
+              >
+                <FaSyncAlt className={`me-1 ${loading ? "fa-spin" : ""}`} style={{ fontSize: "0.7rem" }} />
+                {loading ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
 
-                <Table bordered hover responsive className="align-middle">
-                  <thead className="table-light">
-                    <tr>
-                      <th>S/N</th>
-                      <th>Booking</th>
-                      <th>Customer</th>
-                      <th>Cab</th>
-                      <th>Travel</th>
-                      <th>Pax</th>
-                      <th>Amount</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading && (
-                      <tr>
-                        <td colSpan="8" className="text-center py-4">
-                          <Spinner size="sm" /> Loading...
-                        </td>
-                      </tr>
+            <Card
+              className="border mb-3 shadow-sm"
+              style={{ borderRadius: "6px" }}
+            >
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
+                style={{
+                  borderRadius: "6px 6px 0 0",
+                  backgroundColor: "#f8f9fa",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                }}
+              >
+                <span>List of Bookings</span>
+              </Card.Header>
+              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
+                {/* Toolbar row 1: pills with counts + Time Period */}
+                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
+                    {[
+                      { value: "upcoming",  label: "Upcoming",  count: totals.upcomingTotal },
+                      { value: "completed", label: "Completed", count: totals.completedTotal },
+                      { value: "cancelled", label: "Cancelled", count: totals.cancelledTotal },
+                    ].map((opt) => {
+                      const active = status === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setStatus(opt.value)}
+                          className="border-0 d-inline-flex align-items-center gap-2 px-3 py-1"
+                          style={{
+                            backgroundColor: active ? "#ffffff" : "transparent",
+                            color: active ? "#101828" : "#667085",
+                            fontSize: "0.78rem",
+                            fontWeight: active ? 600 : 500,
+                            borderRadius: "6px",
+                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {opt.label}
+                          <span
+                            style={{
+                              backgroundColor: active ? "#eff6ff" : "#e4e7ec",
+                              color: active ? "#1d4ed8" : "#667085",
+                              fontSize: "0.65rem",
+                              fontWeight: 600,
+                              padding: "1px 7px",
+                              borderRadius: "10px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {opt.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="d-flex align-items-center gap-2">
+                    <span
+                      className="text-uppercase text-muted fw-semibold"
+                      style={{ fontSize: "0.68rem", letterSpacing: "0.05em" }}
+                    >
+                      Time Period
+                    </span>
+                    <Form.Select
+                      size="sm"
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "100px" }}
+                    >
+                      <option value="">Month</option>
+                      {MONTHS.map((m, idx) => (
+                        <option key={m} value={idx + 1}>
+                          {m.slice(0, 3)}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <Form.Select
+                      size="sm"
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(e.target.value)}
+                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "90px" }}
+                    >
+                      <option value="">Year</option>
+                      {years.map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    {(selectedMonth || selectedYear) && (
+                      <button
+                        type="button"
+                        onClick={clearTimePeriod}
+                        className="btn btn-sm border-0"
+                        style={{
+                          fontSize: "0.72rem",
+                          color: "#667085",
+                          padding: "0.25rem 0.5rem",
+                        }}
+                        title="Clear time period"
+                      >
+                        Clear
+                      </button>
                     )}
-                    {!loading && rows.length === 0 && (
+                  </div>
+                </div>
+
+                {/* Toolbar row 2: search */}
+                <div
+                  className="d-flex flex-wrap justify-content-end align-items-center gap-2"
+                  style={{ marginBottom: "1.5rem" }}
+                >
+                  <InputGroup size="sm" style={{ width: "280px" }}>
+                    <InputGroup.Text
+                      style={{
+                        fontSize: "0.75rem",
+                        backgroundColor: "#ffffff",
+                        borderRight: "none",
+                        color: "#98a2b3",
+                      }}
+                    >
+                      <FaSearch />
+                    </InputGroup.Text>
+                    <Form.Control
+                      placeholder="Search by booking, cab, customer..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      style={{ fontSize: "0.8rem", borderLeft: "none" }}
+                    />
+                  </InputGroup>
+                </div>
+
+                {/* Table */}
+                <div className="table-responsive saas-table-wrap">
+                  <Table hover className="mb-0 align-middle saas-table">
+                    <thead>
                       <tr>
-                        <td colSpan="8" className="text-center text-muted py-4">
-                          No bookings found.
-                        </td>
+                        <th style={{ width: "48px" }}>#</th>
+                        <th>Booking</th>
+                        <th>Customer</th>
+                        <th>Cab</th>
+                        <th>Travel</th>
+                        <th className="text-center">Pax</th>
+                        <th className="text-end">Amount</th>
+                        <th className="text-center" style={{ width: "80px" }}>Action</th>
                       </tr>
-                    )}
-                    {!loading &&
-                      rows.map((b, i) => (
-                        <tr key={b.id || b.custombookingId || i}>
-                          <td>{i + 1}</td>
-                          <td>
-                            <div className="fw-semibold">{b.bookingCode || b.packageBookCode || "-"}</div>
-                            <small className="text-muted">
-                              {b.createdAt ? new Date(b.createdAt).toLocaleDateString() : ""}
-                            </small>
-                          </td>
-                          <td>
-                            <div>
-                              {[b.custSalutation, b.custFirstName, b.custLastName].filter(Boolean).join(" ") || "-"}
-                            </div>
-                            <small className="text-muted">{b.custEmail || b.custPhone || ""}</small>
-                          </td>
-                          <td>
-                            <div className="fw-semibold">{b.cabName || `Cab #${b.cabId || "-"}`}</div>
-                            <small className="text-muted">{b.cabProviderName || ""}</small>
-                          </td>
-                          <td>
-                            <div>
-                              <FaMapMarkerAlt className="text-success me-1" />
-                              {b.pickupName || "-"} {b.pickupTime ? `@ ${b.pickupTime}` : ""}
-                            </div>
-                            <div>
-                              <FaMapMarkerAlt className="text-danger me-1" />
-                              {b.dropoffName || "-"} {b.dropoffTime ? `@ ${b.dropoffTime}` : ""}
-                            </div>
-                            <small className="text-muted">
-                              {fmtDate(b.pickupDate)}
-                              {b.dropOffDate ? ` → ${fmtDate(b.dropOffDate)}` : ""}
-                            </small>
-                          </td>
-                          <td>
-                            <Badge bg="info">
-                              {(b.noOfAdult || 0)}A / {(b.noOfChild || 0)}C
-                            </Badge>
-                          </td>
-                          <td>
-                            <div className="fw-semibold">
-                              AED {b.finalAmount != null ? b.finalAmount : (b.totalPrice || b.totalRate || "-")}
-                            </div>
-                            {b.packageName && (
-                              <small className="text-muted d-block">{b.packageName}</small>
-                            )}
-                          </td>
-                          <td>
-                            <div className="d-flex gap-2 align-items-center">
-                              <FaEye
-                                title="View"
-                                role="button"
-                                className="text-primary"
-                                onClick={() => onView(b)}
-                              />
-                              {status === "upcoming" && (
-                                <FaTrash
-                                  title="Cancel"
-                                  role="button"
-                                  className="text-danger"
-                                  onClick={() => onCancelClick(b)}
-                                />
-                              )}
-                              {b.packageName && b.status !== "CANCELLED" && (
-                                <FaRoad
-                                  title="Record actual usage"
-                                  role="button"
-                                  className="text-warning"
-                                  onClick={() => onUsage(b)}
-                                />
-                              )}
-                              <FaFileAlt
-                                title="Voucher"
-                                role="button"
-                                className="text-info"
-                                onClick={() => onVoucher(b)}
-                              />
-                            </div>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr>
+                          <td colSpan={8} className="text-center py-5">
+                            <Spinner animation="border" variant="primary" />
+                            <p className="mt-2 text-muted mb-0">
+                              Loading bookings...
+                            </p>
                           </td>
                         </tr>
-                      ))}
-                  </tbody>
-                </Table>
+                      ) : rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="text-center py-5 text-muted">
+                            No bookings found
+                          </td>
+                        </tr>
+                      ) : (
+                        rows.map((b, i) => (
+                          <tr key={b.id || b.custombookingId || i}>
+                            <td className="text-muted">{i + 1}</td>
+                            <td>
+                              <div className="fw-semibold text-dark">
+                                {b.bookingCode || b.packageBookCode || "-"}
+                              </div>
+                              <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                {b.createdAt ? fmtDateLong(b.createdAt) : ""}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="fw-medium text-dark">
+                                {[b.custSalutation, b.custFirstName, b.custLastName]
+                                  .filter(Boolean)
+                                  .join(" ") || "-"}
+                              </div>
+                              <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                {b.custEmail || b.custPhone || ""}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="fw-medium text-dark">
+                                {b.cabName || `Cab #${b.cabId || "-"}`}
+                              </div>
+                              <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                {b.cabProviderName || ""}
+                              </div>
+                            </td>
+                            <td style={{ minWidth: "220px" }}>
+                              <div className="d-flex align-items-center gap-1">
+                                <FaMapMarkerAlt
+                                  style={{ color: "#22c55e", fontSize: "0.7rem" }}
+                                />
+                                <span className="text-dark">
+                                  {b.pickupName || "-"}
+                                </span>
+                                {b.pickupTime && (
+                                  <span className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                    @ {b.pickupTime}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="d-flex align-items-center gap-1">
+                                <FaMapMarkerAlt
+                                  style={{ color: "#ef4444", fontSize: "0.7rem" }}
+                                />
+                                <span className="text-dark">
+                                  {b.dropoffName || "-"}
+                                </span>
+                                {b.dropoffTime && (
+                                  <span className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                    @ {b.dropoffTime}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-muted" style={{ fontSize: "0.7rem", marginTop: "2px" }}>
+                                {fmtDateLong(b.pickupDate)}
+                                {b.dropOffDate
+                                  ? ` → ${fmtDateLong(b.dropOffDate)}`
+                                  : ""}
+                              </div>
+                            </td>
+                            <td className="text-center">
+                              <span
+                                className="px-2 py-1 rounded"
+                                style={{
+                                  fontSize: "0.7rem",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {b.noOfAdult || 0} ADT / {b.noOfChild || 0}CHD
+                              </span>
+                            </td>
+                            <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                              <div className="fw-semibold text-dark">
+                                AED{" "}
+                                {b.finalAmount != null
+                                  ? b.finalAmount
+                                  : b.totalPrice || b.totalRate || "-"}
+                              </div>
+                              {b.packageName && (
+                                <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                  {b.packageName}
+                                </div>
+                              )}
+                            </td>
+                            <td className="text-center">
+                              <button
+                                type="button"
+                                className="btn btn-sm border-0 p-1"
+                                style={{
+                                  backgroundColor: "#eff6ff",
+                                  color: "#1d4ed8",
+                                  borderRadius: "6px",
+                                }}
+                                onClick={() =>
+                                  navigate(
+                                    `/booking-details/scheffer-driver-booking/${b.id || b.custombookingId}`,
+                                    { state: { booking: b } },
+                                  )
+                                }
+                                title="View details"
+                              >
+                                <FaEye style={{ fontSize: "12px" }} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </Table>
+                </div>
+
+                <style>{`
+                  .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
+                  .saas-table { font-size: 0.8rem; margin-bottom: 0; }
+                  .saas-table thead th {
+                    background-color: #f9fafb;
+                    color: #667085;
+                    font-size: 0.68rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    border-bottom: 1px solid #eaecf0;
+                    border-top: none;
+                    padding: 0.65rem 0.75rem;
+                    white-space: nowrap;
+                  }
+                  .saas-table tbody td {
+                    padding: 0.65rem 0.75rem;
+                    border-top: 1px solid #f2f4f7;
+                    vertical-align: middle;
+                    color: #344054;
+                  }
+                  .saas-table tbody tr:first-child td { border-top: none; }
+                  .saas-table tbody tr:hover { background-color: #fafbfc; }
+                `}</style>
               </Card.Body>
             </Card>
-
-            {/* Cancel confirmation */}
-            <Modal show={showCancel} onHide={() => setShowCancel(false)} centered>
-              <Modal.Header closeButton>
-                <Modal.Title>Cancel Booking</Modal.Title>
-              </Modal.Header>
-              <Modal.Body>
-                Are you sure you want to cancel booking{" "}
-                <strong>{selected?.bookingCode || selected?.packageBookCode}</strong>?
-              </Modal.Body>
-              <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowCancel(false)} disabled={cancelling}>
-                  No
-                </Button>
-                <Button variant="danger" onClick={doCancel} disabled={cancelling}>
-                  {cancelling ? "Cancelling..." : "Yes, Cancel"}
-                </Button>
-              </Modal.Footer>
-            </Modal>
-
-            {/* Details (View) modal */}
-            <Modal show={showDetails} onHide={() => setShowDetails(false)} size="lg" scrollable centered>
-              <Modal.Header closeButton className="bg-light">
-                <Modal.Title>
-                  <FaCar className="me-2" />
-                  Booking Details {details?.bookingCode && <Badge bg="success" className="ms-2">{details.bookingCode}</Badge>}
-                </Modal.Title>
-              </Modal.Header>
-              <Modal.Body>
-                {details && (
-                  <>
-                    <Table size="sm" borderless>
-                      <tbody>
-                        <tr>
-                          <th style={{ width: 180 }}>Booking Code</th>
-                          <td>{details.bookingCode || details.packageBookCode || "-"}</td>
-                        </tr>
-                        <tr>
-                          <th>Status</th>
-                          <td>
-                            <Badge bg={details.status === "CANCELLED" ? "danger" : "success"}>
-                              {details.status || "CONFIRMED"}
-                            </Badge>
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Cab</th>
-                          <td>{details.cabName || "-"} ({details.cabProviderName || "-"})</td>
-                        </tr>
-                        <tr>
-                          <th>Pickup</th>
-                          <td>
-                            {fmtDate(details.pickupDate)} — {details.pickupName || "-"}{" "}
-                            {details.pickupTime ? `@ ${details.pickupTime}` : ""}
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Dropoff</th>
-                          <td>
-                            {fmtDate(details.dropOffDate)} — {details.dropoffName || "-"}{" "}
-                            {details.dropoffTime ? `@ ${details.dropoffTime}` : ""}
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Hours</th>
-                          <td>{details.hourDetails ?? "-"}</td>
-                        </tr>
-                        <tr>
-                          <th>Luggage</th>
-                          <td>{details.luggage ? "Yes" : "No"}</td>
-                        </tr>
-                        {(details.transporter || details.driverName) && (
-                          <tr>
-                            <th>Transporter / Driver</th>
-                            <td>
-                              {details.transporter || "-"}
-                              {details.contactNumber && <> · <FaPhoneAlt size={10} /> {details.contactNumber}</>}
-                              {details.driverName && <> · {details.driverName}</>}
-                              {details.driverContact && <> · <FaPhoneAlt size={10} /> {details.driverContact}</>}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </Table>
-
-                    <h6 className="mt-3">Passengers ({(details.noOfAdult || 0) + (details.noOfChild || 0)})</h6>
-                    {details.guests && details.guests.length > 0 ? (
-                      <Table size="sm" bordered>
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th>Type</th>
-                            <th>Name</th>
-                            <th>Age</th>
-                            <th>Passport</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {details.guests.map((g, idx) => (
-                            <tr key={g.id || idx}>
-                              <td>{idx + 1}</td>
-                              <td>
-                                <Badge bg={g.isChild ? "warning" : "primary"}>{g.isChild ? "Child" : "Adult"}</Badge>
-                              </td>
-                              <td>{[g.salutation, g.firstName, g.middleName, g.lastName].filter(Boolean).join(" ")}</td>
-                              <td>{g.age ?? "-"}</td>
-                              <td>{g.passportNo || "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    ) : (
-                      <p className="text-muted small">No passenger manifest recorded.</p>
-                    )}
-
-                    <h6 className="mt-3">Primary Contact</h6>
-                    <Table size="sm" borderless>
-                      <tbody>
-                        <tr>
-                          <th style={{ width: 180 }}>
-                            <FaUserAltIcon /> Name
-                          </th>
-                          <td>
-                            {[details.custSalutation, details.custFirstName, details.custMiddleName, details.custLastName]
-                              .filter(Boolean)
-                              .join(" ") || "-"}
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>
-                            <FaPhoneAlt /> Phone
-                          </th>
-                          <td>{details.custPhone || "-"}</td>
-                        </tr>
-                        <tr>
-                          <th>
-                            <FaEnvelope /> Email
-                          </th>
-                          <td>{details.custEmail || "-"}</td>
-                        </tr>
-                        <tr>
-                          <th>
-                            <FaIdCard /> Passport
-                          </th>
-                          <td>{details.custPassport || "-"}</td>
-                        </tr>
-                        {details.custAgentLpo && (
-                          <tr>
-                            <th>Agent LPO</th>
-                            <td>{details.custAgentLpo}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </Table>
-
-                    {details.packageName && (
-                      <>
-                        <h6 className="mt-3">Rental Package</h6>
-                        <Table size="sm" borderless>
-                          <tbody>
-                            <tr>
-                              <th style={{ width: 180 }}>City / Cab Type</th>
-                              <td>{details.cityName || "-"} · {details.cabType || "-"}</td>
-                            </tr>
-                            <tr>
-                              <th>Package</th>
-                              <td>{details.packageName}</td>
-                            </tr>
-                            <tr>
-                              <th>Included</th>
-                              <td>{details.includedHours ?? "-"} hrs · {details.includedKm ?? "-"} km</td>
-                            </tr>
-                            <tr>
-                              <th>Extra Rates</th>
-                              <td>
-                                Hour: AED {details.extraHourRate ?? "-"} · KM: AED {details.extraKmRate ?? "-"}
-                              </td>
-                            </tr>
-                            <tr>
-                              <th>Actual Used</th>
-                              <td>
-                                {details.actualHoursUsed != null ? `${details.actualHoursUsed} hrs` : "—"}
-                                {details.actualKmUsed != null ? ` · ${details.actualKmUsed} km` : ""}
-                              </td>
-                            </tr>
-                            {(details.extraHoursCharge > 0 || details.extraKmCharge > 0 || details.intercityCharge > 0) && (
-                              <tr>
-                                <th>Extra Charges</th>
-                                <td>
-                                  {details.extraHoursCharge > 0 && <span className="me-2">Hours: AED {details.extraHoursCharge}</span>}
-                                  {details.extraKmCharge > 0 && <span className="me-2">KM: AED {details.extraKmCharge}</span>}
-                                  {details.intercityCharge > 0 && (
-                                    <span>
-                                      Intercity: AED {details.intercityCharge}
-                                      {details.intercityFromCity && details.intercityToCity
-                                        ? ` (${details.intercityFromCity} → ${details.intercityToCity})`
-                                        : ""}
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </Table>
-                      </>
-                    )}
-
-                    <h6 className="mt-3">Pricing</h6>
-                    <Table size="sm" borderless>
-                      <tbody>
-                        {details.sellingPrice && (
-                          <tr>
-                            <th style={{ width: 180 }}>Selling Price</th>
-                            <td>AED {details.sellingPrice}</td>
-                          </tr>
-                        )}
-                        {details.totalRate != null && details.totalRate !== details.totalPrice && (
-                          <tr>
-                            <th>Total Rate</th>
-                            <td>AED {details.totalRate}</td>
-                          </tr>
-                        )}
-                        {details.tourismDirham && Number(details.tourismDirham) > 0 && (
-                          <tr>
-                            <th>Tourism Dirham</th>
-                            <td>AED {details.tourismDirham}</td>
-                          </tr>
-                        )}
-                        <tr>
-                          <th>
-                            <strong>Total Price</strong>
-                          </th>
-                          <td>
-                            <strong>AED {details.totalPrice || details.totalRate || "-"}</strong>
-                          </td>
-                        </tr>
-                        {details.finalAmount != null && (
-                          <tr>
-                            <th>
-                              <strong className="text-success">Final Amount</strong>
-                            </th>
-                            <td>
-                              <strong className="text-success">AED {details.finalAmount}</strong>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </Table>
-                  </>
-                )}
-              </Modal.Body>
-              <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowDetails(false)}>
-                  Close
-                </Button>
-              </Modal.Footer>
-            </Modal>
-
-            {/* Voucher PDF modal */}
-            <Modal
-              show={showPdf}
-              onHide={closePdf}
-              size="xl"
-              centered
-              scrollable
-              backdrop="static"
-              keyboard={false}
-            >
-              <Modal.Header className="bg-light" closeButton>
-                <Modal.Title className="fw-bold">
-                  Voucher {selected?.bookingCode ? "- " + selected.bookingCode : ""}
-                </Modal.Title>
-              </Modal.Header>
-              <Modal.Body className="p-0" style={{ height: "70vh" }}>
-                {loadingPdf ? (
-                  <div className="h-100 d-flex flex-column align-items-center justify-content-center">
-                    <Spinner animation="border" variant="primary" />
-                    <p className="mt-2 text-muted">Generating Voucher...</p>
-                  </div>
-                ) : pdfUrl ? (
-                  <iframe
-                    src={`${pdfUrl}#toolbar=0`}
-                    width="100%"
-                    height="100%"
-                    title={`${fileLabel}-voucher`}
-                    style={{ border: "none" }}
-                  />
-                ) : (
-                  <div className="h-100 d-flex align-items-center justify-content-center">
-                    <p className="text-danger">Failed to load PDF.</p>
-                  </div>
-                )}
-              </Modal.Body>
-              <Modal.Footer>
-                {pdfUrl && (
-                  <Button variant="primary" onClick={() => window.open(pdfUrl, "_blank")}>
-                    Download
-                  </Button>
-                )}
-                <Button variant="secondary" onClick={closePdf}>
-                  Close
-                </Button>
-              </Modal.Footer>
-            </Modal>
-
-            {/* Actual usage modal — records post-trip hours/km + optional
-                intercity leg; backend recomputes extra charges + final amount. */}
-            <Modal show={showUsage} onHide={() => setShowUsage(false)} centered>
-              <Modal.Header closeButton>
-                <Modal.Title>
-                  <FaRoad className="me-2 text-warning" />
-                  Record Actual Usage
-                </Modal.Title>
-              </Modal.Header>
-              <Modal.Body>
-                {usageBooking && (
-                  <>
-                    <p className="text-muted small mb-3">
-                      Package <strong>{usageBooking.packageName}</strong> —{" "}
-                      {usageBooking.includedHours ?? "-"} hrs / {usageBooking.includedKm ?? "-"} km included.
-                      Extra hour: AED {usageBooking.extraHourRate ?? "-"}, Extra km: AED {usageBooking.extraKmRate ?? "-"}.
-                    </p>
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Label>Actual Hours Used</Form.Label>
-                        <Form.Control
-                          type="number"
-                          min="0"
-                          value={usageForm.actualHoursUsed}
-                          onChange={(e) =>
-                            setUsageForm((p) => ({ ...p, actualHoursUsed: e.target.value }))
-                          }
-                        />
-                      </Col>
-                      <Col md={6}>
-                        <Form.Label>Actual KM Used</Form.Label>
-                        <Form.Control
-                          type="number"
-                          min="0"
-                          value={usageForm.actualKmUsed}
-                          onChange={(e) =>
-                            setUsageForm((p) => ({ ...p, actualKmUsed: e.target.value }))
-                          }
-                        />
-                      </Col>
-                      <Col md={12}>
-                        <hr className="my-2" />
-                        <small className="text-muted">Intercity leg (optional — adds surcharge)</small>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Label>From City</Form.Label>
-                        <Form.Select
-                          value={usageForm.intercityFromCityId}
-                          onChange={(e) =>
-                            setUsageForm((p) => ({ ...p, intercityFromCityId: e.target.value }))
-                          }
-                        >
-                          <option value="">None</option>
-                          {cityList.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Label>To City</Form.Label>
-                        <Form.Select
-                          value={usageForm.intercityToCityId}
-                          onChange={(e) =>
-                            setUsageForm((p) => ({ ...p, intercityToCityId: e.target.value }))
-                          }
-                        >
-                          <option value="">None</option>
-                          {cityList.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                    </Row>
-                  </>
-                )}
-              </Modal.Body>
-              <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowUsage(false)} disabled={savingUsage}>
-                  Cancel
-                </Button>
-                <Button variant="success" onClick={saveUsage} disabled={savingUsage}>
-                  {savingUsage ? "Saving..." : "Save & Recalculate"}
-                </Button>
-              </Modal.Footer>
-            </Modal>
           </Container>
         </main>
       </div>
     </div>
   );
 };
-
-// Lightweight icon used inline above (avoid re-import noise)
-const FaUserAltIcon = () => <i className="fas fa-user" style={{ marginRight: 4 }} />;
 
 export default SchefferDriverBookingList;

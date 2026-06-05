@@ -31,6 +31,7 @@ import {
   Container,
   InputGroup,
   Pagination,
+  Badge,
 } from "react-bootstrap";
 import { FaEye, FaSearch } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
@@ -41,11 +42,61 @@ import toast from "react-hot-toast";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-// Short human label for the verification-method column.
 const METHOD_META = {
   STUDENT_ID_UPLOAD:     { label: "ID Upload" },
   MANUAL_ADMIN_APPROVAL: { label: "Manual" },
   INSTITUTIONAL_EMAIL:   { label: "Email OTP" },
+};
+
+const VERIFICATION_META = {
+  PENDING_STUDENT_VERIFICATION: { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  APPROVED:                     { label: "Approved",  bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  REJECTED:                     { label: "Rejected",  bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  REQUEST_REUPLOAD:             { label: "Re-upload", bg: "#eef2ff", color: "#3538cd", dot: "#6366f1" },
+};
+
+const REFUND_META = {
+  REFUNDABLE:      { label: "Refundable",     bg: "#e7f6ec", color: "#1b7f3a" },
+  "Non-Refundable":{ label: "Non-Refundable", bg: "#f3f4f6", color: "#475467" },
+  NON_REFUNDABLE:  { label: "Non-Refundable", bg: "#f3f4f6", color: "#475467" },
+  REFUNDED:        { label: "Refunded",       bg: "#eff8ff", color: "#175cd3" },
+};
+
+const StatusPill = ({ meta, raw }) => {
+  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  return (
+    <span
+      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+      style={{
+        backgroundColor: meta.bg,
+        color: meta.color,
+        fontSize: "0.7rem",
+        fontWeight: 600,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {meta.dot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            backgroundColor: meta.dot,
+            display: "inline-block",
+          }}
+        />
+      )}
+      {meta.label}
+    </span>
+  );
+};
+
+const fmtDate = (iso) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso.slice(0, 10);
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
 
 export default function StudentBookingList() {
@@ -110,119 +161,110 @@ export default function StudentBookingList() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main
-          className="flex-grow-1 p-4"
+          className="flex-grow-1 p-3"
           style={{ width: "100%", overflow: "hidden" }}
         >
           <Container
             fluid
             style={{
               maxWidth: "100%",
-              paddingLeft: "1rem",
-              paddingRight: "1rem",
+              paddingLeft: "0.5rem",
+              paddingRight: "0.5rem",
             }}
           >
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <div className="d-flex align-items-center gap-3">
-                <h4 className="mb-0 text-dark">Student Booking</h4>
-              </div>
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="mb-0 text-dark fw-semibold">Student Booking</h5>
             </div>
 
             {/* List of Bookings Section */}
             <Card
-              className="border mb-3"
-              style={{ borderRadius: "8px" }}
+              className="border mb-3 shadow-sm"
+              style={{ borderRadius: "6px" }}
             >
               <Card.Header
-                className="d-flex justify-content-between align-items-center text-dark border-bottom"
+                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
                 style={{
-                  borderRadius: "8px 8px 0 0",
-                  backgroundColor: "#f1f3f5",
+                  borderRadius: "6px 6px 0 0",
+                  backgroundColor: "#f8f9fa",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
                 }}
               >
                 <span>List of Bookings</span>
               </Card.Header>
-              <Card.Body>
-                {/* Verification Filter Section */}
-                <Row className="mb-4">
-                  <Col md={6}>
-                    <Card
-                      className="border"
-                      style={{
-                        backgroundColor: "#f8f9fa",
-                        borderRadius: "8px",
-                      }}
-                    >
-                      <Card.Body className="p-3">
-                        <h6
-                          className="mb-3 text-dark"
-                          style={{ fontSize: "0.85rem" }}
+              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
+                {/* Compact toolbar: filter + display + search */}
+                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2" style={{ marginBottom: "1.5rem" }}>
+                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
+                    {[
+                      { value: "", label: "All" },
+                      { value: "PENDING_STUDENT_VERIFICATION", label: "Pending" },
+                      { value: "APPROVED", label: "Approved" },
+                      { value: "REJECTED", label: "Rejected" },
+                      { value: "REQUEST_REUPLOAD", label: "Re-upload" },
+                    ].map((opt) => {
+                      const active = verificationStatus === opt.value;
+                      return (
+                        <button
+                          key={opt.value || "all"}
+                          type="button"
+                          onClick={() => {
+                            setVerificationStatus(opt.value);
+                            setPage(0);
+                          }}
+                          className="border-0 px-3 py-1"
+                          style={{
+                            backgroundColor: active ? "#ffffff" : "transparent",
+                            color: active ? "#101828" : "#667085",
+                            fontSize: "0.78rem",
+                            fontWeight: active ? 600 : 500,
+                            borderRadius: "6px",
+                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
+                            transition: "all 0.15s",
+                          }}
                         >
-                          Verification Status
-                        </h6>
-                        <div className="d-flex flex-wrap gap-4">
-                          {[
-                            { value: "", label: "All" },
-                            { value: "PENDING_STUDENT_VERIFICATION", label: "Pending" },
-                            { value: "APPROVED", label: "Approved" },
-                            { value: "REJECTED", label: "Rejected" },
-                            { value: "REQUEST_REUPLOAD", label: "Re-upload" },
-                          ].map((opt) => (
-                            <Form.Check
-                              key={opt.value || "all"}
-                              type="radio"
-                              id={`verification-${opt.value || "all"}`}
-                              name="verificationStatus"
-                              label={opt.label}
-                              checked={verificationStatus === opt.value}
-                              onChange={() => {
-                                setVerificationStatus(opt.value);
-                                setPage(0);
-                              }}
-                              style={{ fontSize: "0.85rem", cursor: "pointer" }}
-                            />
-                          ))}
-                        </div>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                </Row>
-
-                {/* Display and Search */}
-                <Row className="mb-3 align-items-center">
-                  <Col md={3}>
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="small text-muted">Display</span>
-                      <Form.Select
-                        value={size}
-                        onChange={(e) => {
-                          setSize(Number(e.target.value));
-                          setPage(0);
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    <Form.Select
+                      value={size}
+                      onChange={(e) => {
+                        setSize(Number(e.target.value));
+                        setPage(0);
+                      }}
+                      size="sm"
+                      style={{ width: "auto", fontSize: "0.8rem",height:"49px" }}
+                    >
+                      {PER_PAGE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option} / page
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <InputGroup size="sm" style={{ width: "240px",height:"49px !important"  }}>
+                      <InputGroup.Text
+                        style={{
+                          fontSize: "0.75rem",
+                          backgroundColor: "#ffffff",
+                          borderRight: "none",
+                          color: "#98a2b3",
                         }}
-                        size="sm"
-                        style={{ width: "auto" }}
                       >
-                        {PER_PAGE_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option} records
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </div>
-                  </Col>
-                  <Col md={4} className="ms-auto">
-                    <InputGroup>
-                      <InputGroup.Text>
                         <FaSearch />
                       </InputGroup.Text>
                       <Form.Control
                         type="text"
-                        placeholder="Search:"
+                        placeholder="Search bookings..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
+                        style={{ fontSize: "0.8rem", borderLeft: "none" }}
                       />
                     </InputGroup>
-                  </Col>
-                </Row>
+                  </div>
+                </div>
 
                 {/* Table */}
                 {loading ? (
@@ -232,103 +274,157 @@ export default function StudentBookingList() {
                   </div>
                 ) : (
                   <>
-                    <div className="table-responsive">
-                      <Table striped bordered hover className="mb-0">
-                        <thead className="table-light">
+                    <div className="table-responsive saas-table-wrap">
+                      <Table
+                        hover
+                        className="mb-0 align-middle saas-table"
+                      >
+                        <thead>
                           <tr>
-                            <th style={{ width: "60px" }}>S.N</th>
-                            <th>Booking Code</th>
+                            <th style={{ width: "48px" }}>#</th>
+                            <th>Booking</th>
                             {role === "admin" && <th>Agent</th>}
                             <th>Customer</th>
                             <th>Student / Institution</th>
                             <th>Hotel</th>
                             <th>Stay</th>
-                            <th className="text-end">Before</th>
-                            <th className="text-end">After</th>
+                            <th className="text-end">Amount</th>
                             <th>Method</th>
                             <th>Verification</th>
                             <th>Refund</th>
-                            <th style={{ width: "160px" }}>Action</th>
+                            <th className="text-center" style={{ width: "80px" }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
                           {filtered.length > 0 ? (
-                            filtered.map((r, i) => (
-                              <tr key={r.bookingId}>
-                                <td>{page * size + i + 1}</td>
-                                <td className="text-dark">
-                                  {r.bookingCode || "-"}
-                                </td>
-                                {role === "admin" && (
-                                  <td>{r.agentName || r.agentId || "-"}</td>
-                                )}
-                                <td>{r.customerName || "-"}</td>
-                                <td>
-                                  <div>{r.studentName || "-"}</div>
-                                  <div className="text-muted small">
-                                    {r.institutionName}
-                                    {r.studentIdNumber
-                                      ? ` · ${r.studentIdNumber}`
-                                      : ""}
-                                  </div>
-                                </td>
-                                <td>{r.hotelName || "-"}</td>
-                                <td>
-                                  <div className="small">
-                                    {r.checkInDate?.slice(0, 10) || "-"}
-                                  </div>
-                                  <div className="small text-muted">
-                                    {r.checkOutDate?.slice(0, 10) || "-"}
-                                  </div>
-                                </td>
-                                <td className="text-end text-decoration-line-through">
-                                  {r.totalRateBeforeDiscount ?? "-"}
-                                </td>
-                                <td className="text-end text-dark">
-                                  {r.totalRate ?? "-"}
-                                </td>
-                                <td>
-                                  {(() => {
-                                    const m = METHOD_META[r.verificationMethod];
-                                    return m
-                                      ? m.label
-                                      : r.verificationMethod || "-";
-                                  })()}
-                                </td>
-                                <td>{r.verificationStatus || "-"}</td>
-                                <td>{r.refundStatus || "-"}</td>
-                                <td>
-                                  <div className="d-flex gap-3 align-items-center flex-wrap">
-                                    <FaEye
+                            filtered.map((r, i) => {
+                              const methodLabel =
+                                METHOD_META[r.verificationMethod]?.label ||
+                                r.verificationMethod ||
+                                "-";
+                              const vMeta = VERIFICATION_META[r.verificationStatus];
+                              const rMeta = REFUND_META[r.refundStatus];
+                              return (
+                                <tr key={r.bookingId}>
+                                  <td className="text-muted">{page * size + i + 1}</td>
+                                  <td>
+                                    <span className="fw-semibold text-dark">
+                                      {r.bookingCode || "-"}
+                                    </span>
+                                  </td>
+                                  {role === "admin" && (
+                                    <td>{r.agentName || r.agentId || "-"}</td>
+                                  )}
+                                  <td>{r.customerName || "-"}</td>
+                                  <td>
+                                    <div className="fw-medium text-dark">
+                                      {r.studentName || "-"}
+                                    </div>
+                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                      {r.institutionName}
+                                      {r.studentIdNumber ? ` · ${r.studentIdNumber}` : ""}
+                                    </div>
+                                  </td>
+                                  <td>{r.hotelName || "-"}</td>
+                                  <td style={{ whiteSpace: "nowrap" }}>
+                                    <div>{fmtDate(r.checkInDate)}</div>
+                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                      → {fmtDate(r.checkOutDate)}
+                                    </div>
+                                  </td>
+                                  <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                                    <div className="fw-semibold text-dark">
+                                      {r.totalRate ?? "-"}
+                                    </div>
+                                    {r.totalRateBeforeDiscount != null &&
+                                      r.totalRateBeforeDiscount !== r.totalRate && (
+                                        <div
+                                          className="text-muted text-decoration-line-through"
+                                          style={{ fontSize: "0.7rem" }}
+                                        >
+                                          {r.totalRateBeforeDiscount}
+                                        </div>
+                                      )}
+                                  </td>
+                                  <td>
+                                    <span
+                                      className="px-2 py-1 rounded"
                                       style={{
-                                        cursor: "pointer",
-                                        fontSize: "14px",
-                                        color: "#007bff",
+                                        backgroundColor: "#f3f4f6",
+                                        color: "#475467",
+                                        fontSize: "0.7rem",
+                                        fontWeight: 500,
+                                      }}
+                                    >
+                                      {methodLabel}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <StatusPill meta={vMeta} raw={r.verificationStatus} />
+                                  </td>
+                                  <td>
+                                    <StatusPill meta={rMeta} raw={r.refundStatus} />
+                                  </td>
+                                  <td className="text-center">
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm border-0 p-1"
+                                      style={{
+                                        backgroundColor: "#eff6ff",
+                                        color: "#1d4ed8",
+                                        borderRadius: "6px",
                                       }}
                                       onClick={() =>
                                         navigate(
                                           `/booking-details/student-booking/${r.bookingId}`,
                                         )
                                       }
-                                      title="View Details"
-                                    />
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
+                                      title="View details"
+                                    >
+                                      <FaEye style={{ fontSize: "12px" }} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
                           ) : (
                             <tr>
                               <td
-                                colSpan={role === "admin" ? 13 : 12}
-                                className="text-center py-4 text-muted"
+                                colSpan={role === "admin" ? 12 : 11}
+                                className="text-center py-5 text-muted"
                               >
-                                No data available in table
+                                No bookings found
                               </td>
                             </tr>
                           )}
                         </tbody>
                       </Table>
                     </div>
+
+                    <style>{`
+                      .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
+                      .saas-table { font-size: 0.8rem; margin-bottom: 0; }
+                      .saas-table thead th {
+                        background-color: #f9fafb;
+                        color: #667085;
+                        font-size: 0.68rem;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.04em;
+                        border-bottom: 1px solid #eaecf0;
+                        border-top: none;
+                        padding: 0.65rem 0.75rem;
+                        white-space: nowrap;
+                      }
+                      .saas-table tbody td {
+                        padding: 0.65rem 0.75rem;
+                        border-top: 1px solid #f2f4f7;
+                        vertical-align: middle;
+                        color: #344054;
+                      }
+                      .saas-table tbody tr:first-child td { border-top: none; }
+                      .saas-table tbody tr:hover { background-color: #fafbfc; }
+                    `}</style>
 
                     {/* Pagination */}
                     <div className="d-flex justify-content-between align-items-center mt-3">

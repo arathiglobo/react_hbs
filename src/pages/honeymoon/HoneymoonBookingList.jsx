@@ -15,7 +15,6 @@ import {
 } from "react-bootstrap";
 import {
   FaSearch,
-  FaCalendarAlt,
   FaSuitcaseRolling,
   FaEye,
   FaTimes,
@@ -30,6 +29,54 @@ import axiosInstance from "../../components/AxiosInstance";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
+const STATUS_META = {
+  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  Completed: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  Pending:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+};
+
+const StatusPill = ({ meta, raw }) => {
+  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  return (
+    <span
+      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+      style={{
+        backgroundColor: meta.bg,
+        color: meta.color,
+        fontSize: "0.7rem",
+        fontWeight: 600,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {meta.dot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            backgroundColor: meta.dot,
+            display: "inline-block",
+          }}
+        />
+      )}
+      {meta.label}
+    </span>
+  );
+};
+
+const fmtDate = (iso) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
 const HoneymoonBookingList = () => {
   const [data, setData] = useState({ content: [], totalElements: 0, totalPages: 0 });
   const [loading, setLoading] = useState(false);
@@ -37,6 +84,7 @@ const HoneymoonBookingList = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(10);
+  const [bookingType, setBookingType] = useState("upcoming");
   const [selected, setSelected] = useState(null);
   const [toCancel, setToCancel] = useState(null);
   const [cancelling, setCancelling] = useState(false);
@@ -106,6 +154,26 @@ const HoneymoonBookingList = () => {
     load();
   }, [page, size, debouncedSearch]); // eslint-disable-line
 
+  // Client-side booking-type filter (Upcoming / Completed / Cancelled)
+  // layered over the server page. Matches the convention from the other
+  // booking-list pages.
+  const filteredContent = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return (data.content || []).filter((b) => {
+      if (bookingType === "cancelled") return !!b.isCancelled;
+      if (b.isCancelled) return false;
+      const ref = b.startingDate;
+      const refDate = ref ? new Date(ref) : null;
+      if (refDate && !isNaN(refDate.getTime())) {
+        refDate.setHours(0, 0, 0, 0);
+        if (bookingType === "completed" && refDate >= today) return false;
+        if (bookingType === "upcoming" && refDate < today) return false;
+      }
+      return true;
+    });
+  }, [data.content, bookingType]);
+
   const handleCancel = async () => {
     if (!toCancel) return;
     setCancelling(true);
@@ -136,171 +204,326 @@ const HoneymoonBookingList = () => {
   }, [data.totalPages, page]);
 
   return (
-    <div
-      className="min-vh-100 d-flex flex-column"
-      style={{ background: "#f5f7fb" }}
-    >
+    <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <Container fluid>
-            <Card className="shadow-lg border-0 rounded-4">
-              <Card.Header className="bg-gradient-primary text-white border-0 rounded-top-4">
-                <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                  <h4 className="mb-0">
-                    <FaSuitcaseRolling className="me-2" /> Honeymoon Bookings
-                  </h4>
-                  <Badge bg="light" text="dark" className="fs-6 px-3 py-2">
-                    {data.totalElements || 0} Total
-                  </Badge>
-                </div>
+        <main
+          className="flex-grow-1 p-3"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "0.5rem",
+              paddingRight: "0.5rem",
+            }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="mb-0 text-dark fw-semibold">
+                <FaSuitcaseRolling className="me-2 text-muted" />
+                Honeymoon Bookings
+              </h5>
+              <span
+                className="text-muted"
+                style={{ fontSize: "0.78rem", fontWeight: 500 }}
+              >
+                {data.totalElements || 0} total
+              </span>
+            </div>
+
+            {/* List of Bookings Section */}
+            <Card
+              className="border mb-3 shadow-sm"
+              style={{ borderRadius: "6px" }}
+            >
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
+                style={{
+                  borderRadius: "6px 6px 0 0",
+                  backgroundColor: "#f8f9fa",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                }}
+              >
+                <span>List of Bookings</span>
               </Card.Header>
-              <Card.Body className="p-4">
-                <Row className="mb-3 g-2 align-items-end">
-                  <Col md={4}>
-                    <Form.Label className="small mb-1">Search</Form.Label>
-                    <InputGroup>
-                      <InputGroup.Text><FaSearch /></InputGroup.Text>
-                      <Form.Control
-                        placeholder="Booking #, package, customer, mobile..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                    </InputGroup>
-                  </Col>
-                  <Col md={2}>
-                    <Form.Label className="small mb-1">Page size</Form.Label>
+              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
+                {/* Compact toolbar: filter pills + page size + search */}
+                <div
+                  className="d-flex flex-wrap justify-content-between align-items-center gap-2"
+                  style={{ marginBottom: "1.5rem" }}
+                >
+                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
+                    {[
+                      { value: "upcoming", label: "Upcoming" },
+                      { value: "completed", label: "Completed" },
+                      { value: "cancelled", label: "Cancelled" },
+                    ].map((opt) => {
+                      const active = bookingType === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setBookingType(opt.value);
+                            setPage(0);
+                          }}
+                          className="border-0 px-3 py-1"
+                          style={{
+                            backgroundColor: active ? "#ffffff" : "transparent",
+                            color: active ? "#101828" : "#667085",
+                            fontSize: "0.78rem",
+                            fontWeight: active ? 600 : 500,
+                            borderRadius: "6px",
+                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
                     <Form.Select
                       value={size}
                       onChange={(e) => {
                         setSize(Number(e.target.value));
                         setPage(0);
                       }}
+                      size="sm"
+                      style={{ width: "auto", fontSize: "0.8rem" }}
                     >
                       {PER_PAGE_OPTIONS.map((n) => (
                         <option key={n} value={n}>{n} / page</option>
                       ))}
                     </Form.Select>
-                  </Col>
-                </Row>
+                    <InputGroup size="sm" style={{ width: "240px" }}>
+                      <InputGroup.Text
+                        style={{
+                          fontSize: "0.75rem",
+                          backgroundColor: "#ffffff",
+                          borderRight: "none",
+                          color: "#98a2b3",
+                        }}
+                      >
+                        <FaSearch />
+                      </InputGroup.Text>
+                      <Form.Control
+                        type="text"
+                        placeholder="Search bookings..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        style={{ fontSize: "0.8rem", borderLeft: "none" }}
+                      />
+                    </InputGroup>
+                  </div>
+                </div>
 
                 {loading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
-                  </div>
-                ) : (data.content || []).length === 0 ? (
-                  <div className="text-center text-muted py-5">
-                    <FaSuitcaseRolling size={48} className="mb-2 opacity-50" />
-                    <div>No bookings yet.</div>
+                    <p className="mt-3 text-muted">Loading bookings...</p>
                   </div>
                 ) : (
-                  <Table responsive hover bordered className="align-middle">
-                    <thead className="table-light">
-                      <tr>
-                        <th>#</th>
-                        <th>Booking #</th>
-                        <th>Package</th>
-                        <th><FaCalendarAlt className="me-1" /> Start</th>
-                        <th>Pax / Rooms</th>
-                        <th>Customer</th>
-                        <th>Mobile</th>
-                        <th>Base</th>
-                        <th>Markup</th>
-                        <th>Total</th>
-                        <th>Status</th>
-                        <th style={{ width: 100 }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.content.map((b, i) => (
-                        <tr key={b.id}>
-                          <td>{page * size + i + 1}</td>
-                          <td className="fw-semibold">{b.bookingNumber}</td>
-                          <td>{b.packageName}<br /><small className="text-muted">{b.startingFrom} → {b.destination}</small></td>
-                          <td>{b.startingDate}</td>
-                          <td>{(b.adults || 0) + (b.children || 0)} pax / {b.rooms || 0} room(s)</td>
-                          <td>{b.customerName}</td>
-                          <td>{b.mobile}</td>
-                          <td className="text-end">₹ {Number(b.baseRate || 0).toFixed(2)}</td>
-                          <td className="text-end">
-                            <Badge bg="info" pill>
-                              {Number(b.markupPercent || 0).toFixed(2)}%
-                            </Badge>
-                            <div className="small text-muted">
-                              +₹ {Number(b.markupAmount || 0).toFixed(2)}
-                            </div>
-                          </td>
-                          <td className="fw-semibold">₹ {Number(b.totalAmount || 0).toFixed(2)}</td>
-                          <td>
-                            {b.isCancelled ? (
-                              <Badge bg="danger">Cancelled</Badge>
-                            ) : (
-                              <Badge bg="success">{b.bookingStatus || "Confirmed"}</Badge>
-                            )}
-                          </td>
-                          <td>
-                            <div className="d-flex gap-2 flex-wrap">
-                              <Button
-                                size="sm"
-                                variant="outline-info"
-                                onClick={() => setSelected(b)}
-                                title="View"
-                              >
-                                <FaEye />
-                              </Button>
-                              {/* Voucher — generates a PDF via the backend
-                                  and opens it in an iframe modal. */}
-                              <Button
-                                size="sm"
-                                variant="outline-primary"
-                                onClick={() => openVoucher(b)}
-                                title="Voucher"
-                                disabled={b.isCancelled}
-                              >
-                                <FaFilePdf />
-                              </Button>
-                              {!b.isCancelled && (
-                                <Button
-                                  size="sm"
-                                  variant="outline-danger"
-                                  onClick={() => setToCancel(b)}
-                                  title="Cancel"
-                                >
-                                  <FaTimes />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                )}
-
-                {data.totalPages > 1 && (
-                  <div className="d-flex justify-content-between align-items-center mt-3">
-                    <div className="text-muted small">
-                      Page {page + 1} of {data.totalPages} · {data.totalElements} total
+                  <>
+                    <div className="table-responsive saas-table-wrap">
+                      <Table hover className="mb-0 align-middle saas-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: "48px" }}>#</th>
+                            <th>Booking</th>
+                            <th>Package</th>
+                            <th>Start</th>
+                            <th className="text-center">Pax / Rooms</th>
+                            <th>Customer</th>
+                            <th className="text-end">Base</th>
+                            <th className="text-end">Markup</th>
+                            <th className="text-end">Total</th>
+                            <th>Status</th>
+                            <th className="text-center" style={{ width: "120px" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredContent.length === 0 ? (
+                            <tr>
+                              <td colSpan={11} className="text-center py-5 text-muted">
+                                No bookings found
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredContent.map((b, i) => {
+                              const statusText = b.isCancelled
+                                ? "Cancelled"
+                                : b.bookingStatus || "Confirmed";
+                              const sMeta = STATUS_META[statusText];
+                              return (
+                                <tr key={b.id}>
+                                  <td className="text-muted">{page * size + i + 1}</td>
+                                  <td>
+                                    <span className="fw-semibold text-dark">
+                                      {b.bookingNumber || "-"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="fw-medium text-dark">
+                                      {b.packageName || "-"}
+                                    </div>
+                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                      {b.startingFrom} → {b.destination}
+                                    </div>
+                                  </td>
+                                  <td style={{ whiteSpace: "nowrap" }}>
+                                    {fmtDate(b.startingDate)}
+                                  </td>
+                                  <td className="text-center">
+                                    <div>{(b.adults || 0) + (b.children || 0)} pax</div>
+                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                      {b.rooms || 0} room{(b.rooms || 0) === 1 ? "" : "s"}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="fw-medium text-dark">
+                                      {b.customerName || "-"}
+                                    </div>
+                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                      {b.mobile || ""}
+                                    </div>
+                                  </td>
+                                  <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                                    ₹ {Number(b.baseRate || 0).toFixed(2)}
+                                  </td>
+                                  <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                                    <span
+                                      className="px-2 py-1 rounded"
+                                      style={{
+                                        backgroundColor: "#eff8ff",
+                                        color: "#175cd3",
+                                        fontSize: "0.7rem",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {Number(b.markupPercent || 0).toFixed(2)}%
+                                    </span>
+                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                      +₹ {Number(b.markupAmount || 0).toFixed(2)}
+                                    </div>
+                                  </td>
+                                  <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                                    <span className="fw-semibold text-dark">
+                                      ₹ {Number(b.totalAmount || 0).toFixed(2)}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <StatusPill meta={sMeta} raw={statusText} />
+                                  </td>
+                                  <td className="text-center">
+                                    <div className="d-flex justify-content-center gap-1">
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm border-0 p-1"
+                                        style={{
+                                          backgroundColor: "#eff6ff",
+                                          color: "#1d4ed8",
+                                          borderRadius: "6px",
+                                        }}
+                                        onClick={() => setSelected(b)}
+                                        title="View details"
+                                      >
+                                        <FaEye style={{ fontSize: "12px" }} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm border-0 p-1"
+                                        style={{
+                                          backgroundColor: b.isCancelled ? "#f3f4f6" : "#fef3f2",
+                                          color: b.isCancelled ? "#98a2b3" : "#b42318",
+                                          borderRadius: "6px",
+                                          cursor: b.isCancelled ? "not-allowed" : "pointer",
+                                        }}
+                                        onClick={() => !b.isCancelled && openVoucher(b)}
+                                        disabled={b.isCancelled}
+                                        title="Voucher"
+                                      >
+                                        <FaFilePdf style={{ fontSize: "12px" }} />
+                                      </button>
+                                      {!b.isCancelled && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm border-0 p-1"
+                                          style={{
+                                            backgroundColor: "#fef2f2",
+                                            color: "#b42318",
+                                            borderRadius: "6px",
+                                          }}
+                                          onClick={() => setToCancel(b)}
+                                          title="Cancel booking"
+                                        >
+                                          <FaTimes style={{ fontSize: "12px" }} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </Table>
                     </div>
-                    <Pagination className="mb-0">
-                      <Pagination.First disabled={page === 0} onClick={() => setPage(0)} />
-                      <Pagination.Prev disabled={page === 0} onClick={() => setPage((p) => p - 1)} />
-                      {pageNumbers.map((n) => (
-                        <Pagination.Item key={n} active={n === page} onClick={() => setPage(n)}>
-                          {n + 1}
-                        </Pagination.Item>
-                      ))}
-                      <Pagination.Next
-                        disabled={page >= data.totalPages - 1}
-                        onClick={() => setPage((p) => p + 1)}
-                      />
-                      <Pagination.Last
-                        disabled={page >= data.totalPages - 1}
-                        onClick={() => setPage(data.totalPages - 1)}
-                      />
-                    </Pagination>
-                  </div>
+
+                    <style>{`
+                      .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
+                      .saas-table { font-size: 0.8rem; margin-bottom: 0; }
+                      .saas-table thead th {
+                        background-color: #f9fafb;
+                        color: #667085;
+                        font-size: 0.68rem;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.04em;
+                        border-bottom: 1px solid #eaecf0;
+                        border-top: none;
+                        padding: 0.65rem 0.75rem;
+                        white-space: nowrap;
+                      }
+                      .saas-table tbody td {
+                        padding: 0.65rem 0.75rem;
+                        border-top: 1px solid #f2f4f7;
+                        vertical-align: middle;
+                        color: #344054;
+                      }
+                      .saas-table tbody tr:first-child td { border-top: none; }
+                      .saas-table tbody tr:hover { background-color: #fafbfc; }
+                    `}</style>
+
+                    {data.totalPages > 1 && (
+                      <div className="d-flex justify-content-between align-items-center mt-3">
+                        <div className="text-muted small">
+                          Page {page + 1} of {data.totalPages} · {data.totalElements} total
+                        </div>
+                        <Pagination className="mb-0">
+                          <Pagination.First disabled={page === 0} onClick={() => setPage(0)} />
+                          <Pagination.Prev disabled={page === 0} onClick={() => setPage((p) => p - 1)} />
+                          {pageNumbers.map((n) => (
+                            <Pagination.Item key={n} active={n === page} onClick={() => setPage(n)}>
+                              {n + 1}
+                            </Pagination.Item>
+                          ))}
+                          <Pagination.Next
+                            disabled={page >= data.totalPages - 1}
+                            onClick={() => setPage((p) => p + 1)}
+                          />
+                          <Pagination.Last
+                            disabled={page >= data.totalPages - 1}
+                            onClick={() => setPage(data.totalPages - 1)}
+                          />
+                        </Pagination>
+                      </div>
+                    )}
+                  </>
                 )}
               </Card.Body>
             </Card>

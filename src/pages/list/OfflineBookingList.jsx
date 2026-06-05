@@ -1,27 +1,30 @@
+/**
+ * OfflineBookingList.jsx
+ *
+ * Booking-list page for offline bookings. The Action column now contains
+ * only the View (eye) icon — clicking it navigates to a dedicated detail
+ * page (/booking-details/offline-booking/:id) where Voucher / Invoice /
+ * Tax live as buttons at the bottom-left.
+ *
+ * Filters (mirrors HotelBookingList):
+ *   - Booking Types pills (Upcoming / Completed / Cancelled) → backend
+ *     `status` query param.
+ *   - Time Period (Month + Year) → backend `month` / `year`.
+ * Backend interprets UPCOMING as checkOut ≥ today, COMPLETED as
+ * checkOut < today, CANCELLED as soft-deleted rows.
+ */
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Container,
-  Row,
-  Col,
   Card,
-  Button,
   Form,
   Table,
   InputGroup,
   Spinner,
   Pagination,
-  Modal,
 } from "react-bootstrap";
-import {
-  FaSearch,
-  FaEye,
-  FaFileAlt,
-  FaFileInvoice,
-  FaPercent,
-  FaEnvelope,
-  FaPaperPlane,
-  FaDownload,
-} from "react-icons/fa";
+import { FaSearch, FaEye } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -29,14 +32,27 @@ import toast from "react-hot-toast";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const fmtDate = (iso) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
 const OfflineBookingList = () => {
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [role, setRole] = useState(() => {
     return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
   });
   const [userId, setUserId] = useState(() => {
     const stored = localStorage.getItem("userId");
-    return (stored && stored !== "null") ? stored : null;
+    return stored && stored !== "null" ? stored : null;
   });
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -45,29 +61,26 @@ const OfflineBookingList = () => {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  // Modals state
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [viewData, setViewData] = useState([]);
-  const [loadingView, setLoadingView] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [bookingType, setBookingType] = useState("upcoming");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const currentYear = new Date().getFullYear();
+  const years = Array.from(
+    { length: currentYear - 2014 },
+    (_, i) => 2020 + i,
+  );
 
-  const [showPdfModal, setShowPdfModal] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState("");
-  const [pdfTitle, setPdfTitle] = useState("");
-  const [loadingPdf, setLoadingPdf] = useState(false);
-  
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState("");
-  const [sendingMail, setSendingMail] = useState(false);
-
-  // Handle role sync if it's missing from localStorage initially
+  // Role sync if missing from localStorage initially
   useEffect(() => {
-    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    const storedRole = localStorage
+      .getItem("currentActiveRole")
+      ?.toLowerCase();
     if (storedRole && storedRole !== role) {
       setRole(storedRole);
     } else if (!storedRole) {
-      // Fallback to userRole if currentActiveRole is missing
-      const userRoles = (localStorage.getItem("userRole") || "").toLowerCase().split(",");
+      const userRoles = (localStorage.getItem("userRole") || "")
+        .toLowerCase()
+        .split(",");
       if (userRoles.includes("agent")) setRole("agent");
       else if (userRoles.includes("staff")) setRole("staff");
       else if (userRoles.includes("admin")) setRole("admin");
@@ -77,14 +90,15 @@ const OfflineBookingList = () => {
   // Fetch userId if missing
   useEffect(() => {
     const fetchUserId = async () => {
-      // Don't fetch if we already have a valid userId
       if (userId && userId !== "null") return;
-      
-      const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      const userName =
+        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName");
       if (!userName) return;
-
       try {
-        const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
+        const response = await axiosInstance.get(
+          `/api/personalProfile/${userName}`,
+        );
         if (response.data && response.data.id) {
           const id = String(response.data.id);
           setUserId(id);
@@ -94,52 +108,50 @@ const OfflineBookingList = () => {
         console.error("Error fetching user profile for ID:", error);
       }
     };
-
     if (role === "agent" || role === "staff") {
       fetchUserId();
     }
   }, [role, userId]);
 
   const fetchBookings = useCallback(async () => {
-    // SECURITY BLOCK:
-    // 1. If role is missing, we don't know what to fetch.
-    if (!role) {
-      console.log("Blocking fetchBookings: role is missing.");
+    if (!role) return;
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    )
       return;
-    }
-
-    // 2. If we are an agent or staff but don't have the ID yet, do NOT call.
-    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) {
-      console.log("Blocking fetchBookings: role is " + role + " but userId is missing.");
-      return;
-    }
 
     try {
       setLoading(true);
-      
       const params = {
         page: page - 1,
         limit: perPage,
-        search: search.trim() || undefined
+        search: search.trim() || undefined,
+        status: bookingType ? bookingType.toUpperCase() : undefined,
+        month: selectedMonth || undefined,
+        year: selectedYear || undefined,
       };
 
-      // Role-based filtering
       if (role === "agent" && userId) {
         params.agentId = userId;
       } else if (role === "staff" && userId) {
-        // Based on backend snippet, only agentId is supported. 
-        // We pass userId as agentId if staff represents the same filtering logic.
         params.agentId = userId;
       }
 
-      console.log("Offline Booking API Request -> api/v1/offline-booking/all-list with params:", params);
-      const response = await axiosInstance.get("api/v1/offline-booking/all-list", { params });
+      const response = await axiosInstance.get(
+        "api/v1/offline-booking/all-list",
+        { params },
+      );
 
       if (response.data) {
         const data = response.data.content || response.data;
         setBookings(Array.isArray(data) ? data : []);
-        setTotalElements(response.data.totalElements || data.length || 0);
-        setTotalPages(response.data.totalPages || Math.ceil((data.length || 0) / perPage));
+        setTotalElements(
+          response.data.totalElements || (data.length || 0),
+        );
+        setTotalPages(
+          response.data.totalPages || Math.ceil((data.length || 0) / perPage),
+        );
       }
     } catch (error) {
       console.error("Error fetching offline bookings:", error);
@@ -147,441 +159,374 @@ const OfflineBookingList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, search, role, userId]);
+  }, [
+    page,
+    perPage,
+    search,
+    role,
+    userId,
+    bookingType,
+    selectedMonth,
+    selectedYear,
+  ]);
 
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
 
-  const handleViewClick = async (booking) => {
-    setSelectedBooking(booking);
-    setShowViewModal(true);
-    setLoadingView(true);
-    try {
-      const response = await axiosInstance.get(
-        `api/v1/offline-booking/list/${booking.invoiceNumber}/${booking.supplierMainBasicId}`
-      );
-      setViewData(response.data || []);
-    } catch (error) {
-      console.error("Error fetching view data:", error);
-      toast.error("Failed to load booking details");
-    } finally {
-      setLoadingView(false);
-    }
-  };
-
-  const handlePdfClick = async (booking, type) => {
-    setSelectedBooking(booking);
-    setPdfTitle(type);
-    setShowPdfModal(true);
-    setLoadingPdf(true);
-    try {
-      const response = await axiosInstance.get(
-        `api/v1/offline-booking/${booking.supplierMainBasicId}/pdf`,
-        { params: { type: type.toUpperCase() } }
-      );
-      if (response.data && response.data.status === "SUCCESS") {
-        setPdfUrl(response.data.pdfUrl);
-      } else {
-        toast.error(response.data?.message || `Failed to generate ${type}`);
-        setShowPdfModal(false);
-      }
-    } catch (error) {
-      console.error(`Error fetching ${type} PDF:`, error);
-      toast.error(`Failed to load ${type}`);
-      setShowPdfModal(false);
-    } finally {
-      setLoadingPdf(false);
-    }
-  };
-
-  const handleSendMail = async () => {
-    if (!email.trim()) {
-      setEmailError("Email is required");
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setEmailError("Invalid email format");
-      return;
-    }
-    setEmailError("");
-
-    setSendingMail(true);
-    try {
-      const response = await axiosInstance.post("api/v1/offline-booking/send-pdf-email", {
-        email: email,
-        pdfUrl: pdfUrl,
-        type: pdfTitle,
-        invoiceNumber: selectedBooking?.invoiceNumber,
-        bookingId: selectedBooking?.supplierMainBasicId
-      });
-      if (response.status === 200) {
-        toast.success("Email sent successfully");
-        setEmail("");
-      } else {
-        toast.error("Failed to send email");
-      }
-    } catch (error) {
-      console.error("Error sending email:", error);
-      toast.error("An error occurred while sending email");
-    } finally {
-      setSendingMail(false);
-    }
-  };
-
   const handlePageChange = (newPage) => setPage(newPage);
-  const handlePerPageChange = (e) => {
-    setPerPage(parseInt(e.target.value, 10));
+
+  const clearTimePeriod = () => {
+    setSelectedMonth("");
+    setSelectedYear("");
     setPage(1);
   };
+
+  const colCount = role === "admin" ? 7 : 6;
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4" style={{ overflowX: "hidden" }}>
-          <Container fluid>
+        <main
+          className="flex-grow-1 p-3"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "0.5rem",
+              paddingRight: "0.5rem",
+            }}
+          >
             <div className="d-flex justify-content-between align-items-center mb-4">
-              <h3 className="fw-bold text-dark">List of Suppliers</h3>
+              <h5 className="mb-0 text-dark fw-semibold">Offline Bookings</h5>
             </div>
 
-            <Card className="shadow-sm border-0 mb-4" style={{ borderRadius: "12px" }}>
-              <Card.Body className="p-3">
-                <Row className="align-items-center g-3">
-                  <Col md={3}>
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="text-muted small">Display</span>
-                      <Form.Select
-                        size="sm"
-                        value={perPage}
-                        onChange={handlePerPageChange}
-                        style={{ width: "80px" }}
-                      >
-                        {PER_PAGE_OPTIONS.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      <span className="text-muted small">records</span>
-                    </div>
-                  </Col>
-                  <Col md={{ span: 4, offset: 5 }}>
-                    <InputGroup size="sm">
-                      <InputGroup.Text className="bg-white border-end-0">
-                        <FaSearch className="text-muted" />
-                      </InputGroup.Text>
-                      <Form.Control
-                        placeholder="Search..."
-                        value={search}
-                        onChange={(e) => {
-                          setSearch(e.target.value);
-                          setPage(1);
-                        }}
-                        className="border-start-0"
-                      />
-                    </InputGroup>
-                  </Col>
-                </Row>
-              </Card.Body>
-            </Card>
+            <Card
+              className="border mb-3 shadow-sm"
+              style={{ borderRadius: "6px" }}
+            >
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
+                style={{
+                  borderRadius: "6px 6px 0 0",
+                  backgroundColor: "#f8f9fa",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                }}
+              >
+                <span>List of Bookings</span>
+              </Card.Header>
+              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
+                {/* Toolbar row 1: Booking-type pills + Time Period */}
+                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
+                    {[
+                      { value: "upcoming", label: "Upcoming" },
+                      { value: "completed", label: "Completed" },
+                      { value: "cancelled", label: "Cancelled" },
+                    ].map((opt) => {
+                      const active = bookingType === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setBookingType(opt.value);
+                            setPage(1);
+                          }}
+                          className="border-0 px-3 py-1"
+                          style={{
+                            backgroundColor: active ? "#ffffff" : "transparent",
+                            color: active ? "#101828" : "#667085",
+                            fontSize: "0.78rem",
+                            fontWeight: active ? 600 : 500,
+                            borderRadius: "6px",
+                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-            <Card className="shadow-sm border-0" style={{ borderRadius: "12px", overflow: "hidden" }}>
-              <div className="table-responsive">
-                <Table hover className="mb-0 align-middle">
-                  <thead className="bg-primary text-white">
-                    <tr>
-                      <th className="py-3 px-4 text-center" style={{ width: "60px" }}>S.N</th>
-                      <th className="py-3 px-4">Date</th>
-                      <th className="py-3 px-4">Invoice Number</th>
-                      {role === "admin" && <th className="py-3 px-4">Agent Name</th>}
-                      <th className="py-3 px-4">Booking Details</th>
-                      <th className="py-3 px-4">Total Amount</th>
-                      <th className="py-3 px-4 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
+                  <div className="d-flex align-items-center gap-2">
+                    <span
+                      className="text-uppercase text-muted fw-semibold"
+                      style={{ fontSize: "0.68rem", letterSpacing: "0.05em" }}
+                    >
+                      Time Period
+                    </span>
+                    <Form.Select
+                      size="sm"
+                      value={selectedMonth}
+                      onChange={(e) => {
+                        setSelectedMonth(e.target.value);
+                        setPage(1);
+                      }}
+                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "100px" }}
+                    >
+                      <option value="">Month</option>
+                      {MONTHS.map((m, idx) => (
+                        <option key={m} value={idx + 1}>
+                          {m.slice(0, 3)}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <Form.Select
+                      size="sm"
+                      value={selectedYear}
+                      onChange={(e) => {
+                        setSelectedYear(e.target.value);
+                        setPage(1);
+                      }}
+                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "90px" }}
+                    >
+                      <option value="">Year</option>
+                      {years.map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    {(selectedMonth || selectedYear) && (
+                      <button
+                        type="button"
+                        onClick={clearTimePeriod}
+                        className="btn btn-sm border-0"
+                        style={{
+                          fontSize: "0.72rem",
+                          color: "#667085",
+                          padding: "0.25rem 0.5rem",
+                        }}
+                        title="Clear time period"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Toolbar row 2: page size + search */}
+                <div
+                  className="d-flex flex-wrap justify-content-end align-items-center gap-2"
+                  style={{ marginBottom: "1.5rem" }}
+                >
+                  <Form.Select
+                    value={perPage}
+                    onChange={(e) => {
+                      setPerPage(parseInt(e.target.value, 10));
+                      setPage(1);
+                    }}
+                    size="sm"
+                    style={{ width: "auto", fontSize: "0.8rem" }}
+                  >
+                    {PER_PAGE_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt} / page
+                      </option>
+                    ))}
+                  </Form.Select>
+                  <InputGroup size="sm" style={{ width: "240px" }}>
+                    <InputGroup.Text
+                      style={{
+                        fontSize: "0.75rem",
+                        backgroundColor: "#ffffff",
+                        borderRight: "none",
+                        color: "#98a2b3",
+                      }}
+                    >
+                      <FaSearch />
+                    </InputGroup.Text>
+                    <Form.Control
+                      placeholder="Search bookings..."
+                      value={search}
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        setPage(1);
+                      }}
+                      style={{ fontSize: "0.8rem", borderLeft: "none" }}
+                    />
+                  </InputGroup>
+                </div>
+
+                {/* Table */}
+                <div className="table-responsive saas-table-wrap">
+                  <Table hover className="mb-0 align-middle saas-table">
+                    <thead>
                       <tr>
-                        <td colSpan="7" className="text-center py-5">
-                          <Spinner animation="border" variant="primary" />
-                          <p className="mt-2 text-muted mb-0">Loading bookings...</p>
-                        </td>
+                        <th style={{ width: "48px" }}>#</th>
+                        <th>Booking Date</th>
+                        <th>Invoice</th>
+                        {role === "admin" && <th>Agent</th>}
+                        <th>Booking Details</th>
+                        <th className="text-end">Total</th>
+                        <th className="text-center" style={{ width: "80px" }}>Action</th>
                       </tr>
-                    ) : bookings.length > 0 ? (
-                      bookings.map((booking, idx) => (
-                        <tr key={booking.id || idx}>
-                          <td className="px-4 text-center">{(page - 1) * perPage + idx + 1}</td>
-                          <td className="px-4">{booking.bookingDate || booking.createdAt || "N/A"}</td>
-                          <td className="px-4 font-monospace fw-bold text-primary">{booking.invoiceNumber}</td>
-                          {role === "admin" && <td className="px-4">{booking.agentName || "Direct Client"}</td>}
-                          <td className="px-4">
-                            <div className="small">
-                              <div className="fw-bold text-dark">{booking.customerName}</div>
-                              <div className="text-muted">
-                                Check-In: {booking.checkIn}<br />
-                                Check-Out: {booking.checkOut}<br />
-                                Total Pax: {booking.adult || 0} adult(s) and {booking.child || 0} child(ren)
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 fw-bold">{booking.totalAmount || booking.grandTotal || "0.00"}</td>
-                          <td className="px-4 text-center">
-                            <div className="d-flex justify-content-center gap-2">
-                              <Button 
-                                variant="outline-primary" 
-                                size="sm" 
-                                className="btn-icon-custom" 
-                                title="View"
-                                onClick={() => handleViewClick(booking)}
-                              >
-                                <FaEye />
-                              </Button>
-                              <Button 
-                                variant="outline-success" 
-                                size="sm" 
-                                className="btn-icon-custom" 
-                                title="Voucher"
-                                onClick={() => handlePdfClick(booking, "VOUCHER")}
-                              >
-                                <FaFileAlt />
-                              </Button>
-                              <Button 
-                                variant="outline-info" 
-                                size="sm" 
-                                className="btn-icon-custom" 
-                                title="Invoice"
-                                onClick={() => handlePdfClick(booking, "INVOICE")}
-                              >
-                                <FaFileInvoice />
-                              </Button>
-                              <Button 
-                                variant="outline-secondary" 
-                                size="sm" 
-                                className="btn-icon-custom" 
-                                title="Tax"
-                                onClick={() => handlePdfClick(booking, "TAX")}
-                              >
-                                <FaPercent />
-                              </Button>
-                            </div>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr>
+                          <td colSpan={colCount} className="text-center py-5">
+                            <Spinner animation="border" variant="primary" />
+                            <p className="mt-2 text-muted mb-0">
+                              Loading bookings...
+                            </p>
                           </td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="7" className="text-center py-5 text-muted">
-                          No offline bookings found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </Table>
-              </div>
+                      ) : bookings.length > 0 ? (
+                        bookings.map((booking, idx) => (
+                          <tr key={booking.id || idx}>
+                            <td className="text-muted">
+                              {(page - 1) * perPage + idx + 1}
+                            </td>
+                            <td style={{ whiteSpace: "nowrap" }}>
+                              {fmtDate(booking.bookingDate || booking.createdAt)}
+                            </td>
+                            <td>
+                              <span
+                                className="font-monospace fw-semibold"
+                                style={{ color: "#1d4ed8", fontSize: "0.78rem" }}
+                              >
+                                {booking.invoiceNumber || "-"}
+                              </span>
+                            </td>
+                            {role === "admin" && (
+                              <td>{booking.agentName || "Direct Client"}</td>
+                            )}
+                            <td>
+                              <div className="fw-medium text-dark">
+                                {booking.customerName || "-"}
+                              </div>
+                              <div
+                                className="text-muted"
+                                style={{ fontSize: "0.7rem", lineHeight: 1.5 }}
+                              >
+                                {fmtDate(booking.checkIn)} → {fmtDate(booking.checkOut)}
+                                <br />
+                                {booking.adult || 0} adult{(booking.adult || 0) === 1 ? "" : "s"}
+                                {booking.child
+                                  ? `, ${booking.child} child${booking.child === 1 ? "" : "ren"}`
+                                  : ""}
+                              </div>
+                            </td>
+                            <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                              <span className="fw-semibold text-dark">
+                                {booking.totalAmount ||
+                                  booking.grandTotal ||
+                                  "0.00"}
+                              </span>
+                            </td>
+                            <td className="text-center">
+                              <button
+                                type="button"
+                                className="btn btn-sm border-0 p-1"
+                                style={{
+                                  backgroundColor: "#eff6ff",
+                                  color: "#1d4ed8",
+                                  borderRadius: "6px",
+                                }}
+                                onClick={() =>
+                                  navigate(
+                                    `/booking-details/offline-booking/${booking.supplierMainBasicId}`,
+                                    { state: { booking } },
+                                  )
+                                }
+                                title="View details"
+                              >
+                                <FaEye style={{ fontSize: "12px" }} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan={colCount}
+                            className="text-center py-5 text-muted"
+                          >
+                            No bookings found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </Table>
+                </div>
 
-              {totalPages > 1 && (
-                <Card.Footer className="bg-white border-0 py-3">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <span className="small text-muted">
-                      Showing {(page - 1) * perPage + 1} to {Math.min(page * perPage, totalElements)} of {totalElements} entries
-                    </span>
+                <style>{`
+                  .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
+                  .saas-table { font-size: 0.8rem; margin-bottom: 0; }
+                  .saas-table thead th {
+                    background-color: #f9fafb;
+                    color: #667085;
+                    font-size: 0.68rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    border-bottom: 1px solid #eaecf0;
+                    border-top: none;
+                    padding: 0.65rem 0.75rem;
+                    white-space: nowrap;
+                  }
+                  .saas-table tbody td {
+                    padding: 0.65rem 0.75rem;
+                    border-top: 1px solid #f2f4f7;
+                    vertical-align: middle;
+                    color: #344054;
+                  }
+                  .saas-table tbody tr:first-child td { border-top: none; }
+                  .saas-table tbody tr:hover { background-color: #fafbfc; }
+                `}</style>
+
+                {totalPages > 1 && (
+                  <div className="d-flex justify-content-between align-items-center mt-3">
+                    <div className="text-muted small">
+                      Showing {(page - 1) * perPage + 1} to{" "}
+                      {Math.min(page * perPage, totalElements)} of{" "}
+                      {totalElements} entries
+                    </div>
                     <Pagination size="sm" className="mb-0">
-                      <Pagination.Prev disabled={page === 1} onClick={() => handlePageChange(page - 1)} />
-                      {[...Array(totalPages)].map((_, i) => (
-                        <Pagination.Item
-                          key={i + 1}
-                          active={i + 1 === page}
-                          onClick={() => handlePageChange(i + 1)}
-                        >
-                          {i + 1}
-                        </Pagination.Item>
-                      ))}
-                      <Pagination.Next disabled={page === totalPages} onClick={() => handlePageChange(page + 1)} />
+                      <Pagination.Prev
+                        disabled={page === 1}
+                        onClick={() => handlePageChange(page - 1)}
+                      />
+                      {Array.from(
+                        { length: Math.min(5, totalPages) },
+                        (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) pageNum = i + 1;
+                          else if (page <= 3) pageNum = i + 1;
+                          else if (page >= totalPages - 2)
+                            pageNum = totalPages - 4 + i;
+                          else pageNum = page - 2 + i;
+                          return (
+                            <Pagination.Item
+                              key={pageNum}
+                              active={pageNum === page}
+                              onClick={() => handlePageChange(pageNum)}
+                            >
+                              {pageNum}
+                            </Pagination.Item>
+                          );
+                        },
+                      )}
+                      <Pagination.Next
+                        disabled={page === totalPages}
+                        onClick={() => handlePageChange(page + 1)}
+                      />
                     </Pagination>
                   </div>
-                </Card.Footer>
-              )}
+                )}
+              </Card.Body>
             </Card>
           </Container>
         </main>
       </div>
-
-      {/* View Modal */}
-      <Modal 
-        show={showViewModal} 
-        onHide={() => setShowViewModal(false)} 
-        size="xl" 
-        centered
-        backdrop="static"
-        keyboard={false}
-      >
-        <Modal.Header className="bg-light">
-          <Modal.Title className="fw-bold">
-            <FaEye className="me-2 text-primary" />
-            Booking Details - {selectedBooking?.invoiceNumber}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {loadingView ? (
-            <div className="text-center py-5">
-              <Spinner animation="border" variant="primary" />
-              <p className="mt-2 text-muted">Loading details...</p>
-            </div>
-          ) : (
-            <div className="table-responsive">
-              <Table bordered hover size="sm" className="align-middle">
-                <thead className="bg-light">
-                  <tr>
-                    <th>S.N</th>
-                    <th>Supplier Type</th>
-                    <th>Description</th>
-                    <th>Qty</th>
-                    <th>Unit Price</th>
-                    <th>Tax (%)</th>
-                    <th>Tax Amount</th>
-                    <th>Sub Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {viewData.length > 0 ? (
-                    viewData.map((item, idx) => (
-                      <tr key={idx}>
-                        <td>{idx + 1}</td>
-                        <td className="fw-bold text-primary">{item.supplierType}</td>
-                        <td style={{ maxWidth: "300px" }}>{item.description}</td>
-                        <td>{item.quantity}</td>
-                        <td>{item.unitPrice}</td>
-                        <td>{item.tax}%</td>
-                        <td>{item.taxAmount}</td>
-                        <td className="fw-bold">{item.subTotal}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="8" className="text-center py-3">No details available.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            </div>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowViewModal(false)}>Close</Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* PDF Modal */}
-      <Modal 
-        show={showPdfModal} 
-        onHide={() => setShowPdfModal(false)} 
-        size="xl" 
-        centered 
-        scrollable
-        backdrop="static"
-        keyboard={false}
-      >
-        <Modal.Header className="bg-light">
-          <Modal.Title className="fw-bold">
-            {pdfTitle} - {selectedBooking?.invoiceNumber}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="p-0" style={{ height: "70vh" }}>
-          {loadingPdf ? (
-            <div className="h-100 d-flex flex-column align-items-center justify-content-center">
-              <Spinner animation="border" variant="primary" />
-              <p className="mt-2 text-muted">Generating {pdfTitle}...</p>
-            </div>
-          ) : pdfUrl ? (
-            <iframe
-              src={`${pdfUrl}#toolbar=0`}
-              width="100%"
-              height="100%"
-              title="PDF Viewer"
-              style={{ border: "none" }}
-            />
-          ) : (
-            <div className="h-100 d-flex align-items-center justify-content-center">
-              <p className="text-danger">Failed to load PDF.</p>
-            </div>
-          )}
-        </Modal.Body>
-        <div className="p-3 border-top bg-light">
-          <Row className="align-items-center">
-            <Col md={8}>
-              <Form.Group>
-                <InputGroup className={emailError ? "is-invalid" : ""}>
-                  <InputGroup.Text className="bg-white">
-                    <FaEnvelope className="text-muted" />
-                  </InputGroup.Text>
-                  <Form.Control
-                    type="email"
-                    placeholder="Enter email address"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (emailError) setEmailError("");
-                    }}
-                    className={emailError ? "is-invalid" : ""}
-                  />
-                  <Button 
-                    variant="primary" 
-                    onClick={handleSendMail}
-                    disabled={sendingMail || !pdfUrl}
-                  >
-                    {sendingMail ? (
-                      <Spinner animation="border" size="sm" />
-                    ) : (
-                      <>
-                        <FaPaperPlane className="me-2" />
-                        Send Mail
-                      </>
-                    )}
-                  </Button>
-                </InputGroup>
-                {emailError && <div className="invalid-feedback d-block">{emailError}</div>}
-              </Form.Group>
-            </Col>
-            <Col md={4} className="text-end">
-              <Button variant="outline-primary" size="sm" onClick={() => window.open(pdfUrl, "_blank")} disabled={!pdfUrl}>
-                <FaDownload className="me-1" /> Download
-              </Button>
-            </Col>
-          </Row>
-        </div>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => {
-            setShowPdfModal(false);
-            setEmail("");
-            setEmailError("");
-          }}>Close</Button>
-        </Modal.Footer>
-      </Modal>
-      
-      <style>{`
-        .bg-primary {
-          background-color: #3f51b5 !important;
-        }
-        .btn-icon-custom {
-          width: 32px;
-          height: 32px;
-          padding: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 6px;
-          transition: all 0.2s;
-        }
-        .btn-icon-custom:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .table hover tbody tr:hover {
-          background-color: rgba(63, 81, 181, 0.05) !important;
-        }
-      `}</style>
     </div>
   );
 };

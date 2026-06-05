@@ -22,7 +22,12 @@ import "../../styles/Ayurveda.css";
 const AYURVEDA_API = "/api/v1/ayurveda";
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
-const formatDate = (d) => (d ? d : "-");
+const formatDate = (d) => {
+  if (!d) return "-";
+  const dt = new Date(d);
+  if (isNaN(dt)) return typeof d === "string" ? d.slice(0, 10) : "-";
+  return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
 const formatAmount = (a) => (a != null ? `₹${Number(a).toFixed(2)}` : "-");
 
 const typeIcon = (type) => {
@@ -30,6 +35,58 @@ const typeIcon = (type) => {
   if (type === "CONSULTATION") return <FaUserMd className="me-1" />;
   if (type === "COURSE") return <FaBookOpen className="me-1" />;
   return null;
+};
+
+const STATUS_META = {
+  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+};
+
+const PAYMENT_META = {
+  PAID:      { label: "Paid",     bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  PENDING:   { label: "Pending",  bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  FAILED:    { label: "Failed",   bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  REFUNDED:  { label: "Refunded", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  UNPAID:    { label: "Unpaid",   bg: "#f3f4f6", color: "#475467" },
+};
+
+const TYPE_META = {
+  PACKAGE:      { bg: "#f0f9ff", color: "#0369a1" },
+  CONSULTATION: { bg: "#faf5ff", color: "#7e22ce" },
+  COURSE:       { bg: "#fff7ed", color: "#c2410c" },
+};
+
+const StatusPill = ({ meta, raw }) => {
+  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  return (
+    <span
+      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+      style={{
+        backgroundColor: meta.bg,
+        color: meta.color,
+        fontSize: "0.7rem",
+        fontWeight: 600,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {meta.dot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            backgroundColor: meta.dot,
+            display: "inline-block",
+          }}
+        />
+      )}
+      {meta.label}
+    </span>
+  );
 };
 
 const AyurvedaBookingList = () => {
@@ -141,131 +198,119 @@ const AyurvedaBookingList = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main
-          className="flex-grow-1 p-4"
+          className="flex-grow-1 p-3"
           style={{ width: "100%", overflow: "hidden" }}
         >
           <Container
             fluid
             style={{
               maxWidth: "100%",
-              paddingLeft: "1rem",
-              paddingRight: "1rem",
+              paddingLeft: "0.5rem",
+              paddingRight: "0.5rem",
             }}
           >
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <div className="d-flex align-items-center gap-3">
-                <h4 className="mb-0 text-dark">Ayurveda Booking</h4>
-              </div>
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="mb-0 text-dark fw-semibold">Ayurveda Booking</h5>
             </div>
 
             {/* List of Bookings Section */}
-            <Card className="border mb-3" style={{ borderRadius: "8px" }}>
+            <Card
+              className="border mb-3 shadow-sm"
+              style={{ borderRadius: "6px" }}
+            >
               <Card.Header
-                className="d-flex justify-content-between align-items-center text-dark border-bottom"
+                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
                 style={{
-                  borderRadius: "8px 8px 0 0",
-                  backgroundColor: "#f1f3f5",
+                  borderRadius: "6px 6px 0 0",
+                  backgroundColor: "#f8f9fa",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
                 }}
               >
                 <span>List of Bookings</span>
               </Card.Header>
-              <Card.Body>
-                {/* Booking Types radio filter (Upcoming / Completed /
-                    Cancelled). Filters rows client-side. */}
-                <Row className="mb-4">
-                  <Col md={6}>
-                    <Card
-                      className="border"
-                      style={{
-                        backgroundColor: "#f8f9fa",
-                        borderRadius: "8px",
-                      }}
-                    >
-                      <Card.Body className="p-3">
-                        <h6
-                          className="mb-3 text-dark"
-                          style={{ fontSize: "0.85rem" }}
+              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
+                {/* Compact toolbar: filter pills + type select + search */}
+                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2" style={{ marginBottom: "1.5rem" }}>
+                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
+                    {[
+                      { value: "upcoming", label: "Upcoming" },
+                      { value: "completed", label: "Completed" },
+                      { value: "cancelled", label: "Cancelled" },
+                    ].map((opt) => {
+                      const active = bookingType === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setBookingType(opt.value);
+                            setPage(0);
+                          }}
+                          className="border-0 px-3 py-1"
+                          style={{
+                            backgroundColor: active ? "#ffffff" : "transparent",
+                            color: active ? "#101828" : "#667085",
+                            fontSize: "0.78rem",
+                            fontWeight: active ? 600 : 500,
+                            borderRadius: "6px",
+                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
+                            transition: "all 0.15s",
+                          }}
                         >
-                          Booking Types
-                        </h6>
-                        <div className="d-flex flex-wrap gap-4">
-                          {[
-                            { value: "upcoming", label: "Upcoming" },
-                            { value: "completed", label: "Completed" },
-                            { value: "cancelled", label: "Cancelled" },
-                          ].map((opt) => (
-                            <Form.Check
-                              key={opt.value}
-                              type="radio"
-                              id={`bookingType-${opt.value}`}
-                              name="bookingType"
-                              label={opt.label}
-                              checked={bookingType === opt.value}
-                              onChange={() => {
-                                setBookingType(opt.value);
-                                setPage(0);
-                              }}
-                              style={{
-                                fontSize: "0.85rem",
-                                cursor: "pointer",
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                </Row>
-
-                {/* Display + Type + Search */}
-                <Row className="mb-3 align-items-center g-2">
-                  <Col md="auto">
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="small text-muted">Display</span>
-                      <Form.Select
-                        value={size}
-                        onChange={(e) => {
-                          setSize(Number(e.target.value));
-                          setPage(0);
-                        }}
-                        size="sm"
-                        style={{ width: "auto" }}
-                      >
-                        {PAGE_SIZE_OPTIONS.map((s) => (
-                          <option key={s} value={s}>
-                            {s} records
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </div>
-                  </Col>
-                  <Col md="auto">
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
                     <Form.Select
                       size="sm"
                       value={filterType}
                       onChange={(e) => setFilterType(e.target.value)}
-                      style={{ width: "auto" }}
+                      style={{ width: "auto", fontSize: "0.8rem" }}
                     >
                       <option value="">All Types</option>
                       <option value="PACKAGE">Package</option>
                       <option value="CONSULTATION">Consultation</option>
                       <option value="COURSE">Course</option>
                     </Form.Select>
-                  </Col>
-                  <Col md={4} className="ms-auto">
-                    <InputGroup>
-                      <InputGroup.Text>
+                    <Form.Select
+                      value={size}
+                      onChange={(e) => {
+                        setSize(Number(e.target.value));
+                        setPage(0);
+                      }}
+                      size="sm"
+                      style={{ width: "auto", fontSize: "0.8rem" }}
+                    >
+                      {PAGE_SIZE_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {s} / page
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <InputGroup size="sm" style={{ width: "240px" }}>
+                      <InputGroup.Text
+                        style={{
+                          fontSize: "0.75rem",
+                          backgroundColor: "#ffffff",
+                          borderRight: "none",
+                          color: "#98a2b3",
+                        }}
+                      >
                         <FaSearch />
                       </InputGroup.Text>
                       <Form.Control
                         type="text"
-                        placeholder="Search:"
+                        placeholder="Search bookings..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
+                        style={{ fontSize: "0.8rem", borderLeft: "none" }}
                       />
                     </InputGroup>
-                  </Col>
-                </Row>
+                  </div>
+                </div>
 
                 {/* Table */}
                 {loading ? (
@@ -275,92 +320,153 @@ const AyurvedaBookingList = () => {
                   </div>
                 ) : (
                   <>
-                    <div className="table-responsive">
-                      <Table striped bordered hover className="mb-0">
-                        <thead className="table-light">
+                    <div className="table-responsive saas-table-wrap">
+                      <Table hover className="mb-0 align-middle saas-table">
+                        <thead>
                           <tr>
-                            <th style={{ width: "60px" }}>S.N</th>
+                            <th style={{ width: "48px" }}>#</th>
                             <th>Reference</th>
                             <th>Type</th>
                             <th>Item</th>
-                            <th>Booking Date</th>
-                            <th>Start</th>
-                            <th>End</th>
-                            <th>Pax</th>
+                            <th>Booked</th>
+                            <th>Period</th>
+                            <th className="text-center">Pax</th>
                             <th className="text-end">Total</th>
                             <th>Status</th>
                             <th>Payment</th>
-                            <th style={{ width: "120px" }}>Action</th>
+                            <th className="text-center" style={{ width: "100px" }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
                           {filtered.length > 0 ? (
-                            filtered.map((b, idx) => (
-                              <tr key={b.id}>
-                                <td>{idx + 1 + page * size}</td>
-                                <td className="text-dark">
-                                  {b.bookingReference || "-"}
-                                </td>
-                                <td>
-                                  <span className="text-dark">
-                                    {typeIcon(b.bookingType)}
-                                    {b.bookingType || "-"}
-                                  </span>
-                                </td>
-                                <td>
-                                  {b.packageName ||
-                                    b.doctorName ||
-                                    b.courseName ||
-                                    "-"}
-                                </td>
-                                <td>{formatDate(b.bookingDate)}</td>
-                                <td>{formatDate(b.startDate)}</td>
-                                <td>{formatDate(b.endDate)}</td>
-                                <td>{b.numberOfParticipants ?? "-"}</td>
-                                <td className="text-end text-dark">
-                                  {formatAmount(b.totalPrice)}
-                                </td>
-                                <td>{b.status || "-"}</td>
-                                <td>{b.paymentStatus || "-"}</td>
-                                <td>
-                                  <div className="d-flex gap-3 align-items-center flex-wrap">
-                                    <FaEye
+                            filtered.map((b, idx) => {
+                              const sMeta = STATUS_META[b.status];
+                              const pMeta = PAYMENT_META[b.paymentStatus];
+                              const tMeta = TYPE_META[b.bookingType] || { bg: "#f3f4f6", color: "#475467" };
+                              return (
+                                <tr key={b.id}>
+                                  <td className="text-muted">{idx + 1 + page * size}</td>
+                                  <td>
+                                    <span className="fw-semibold text-dark">
+                                      {b.bookingReference || "-"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span
+                                      className="d-inline-flex align-items-center px-2 py-1 rounded"
                                       style={{
-                                        cursor: "pointer",
-                                        fontSize: "14px",
-                                        color: "#007bff",
+                                        backgroundColor: tMeta.bg,
+                                        color: tMeta.color,
+                                        fontSize: "0.7rem",
+                                        fontWeight: 600,
                                       }}
-                                      onClick={() => setDetailsBooking(b)}
-                                      title="View Details"
-                                    />
-                                    {!b.isCancelled && (
-                                      <FaTrashAlt
+                                    >
+                                      {typeIcon(b.bookingType)}
+                                      {b.bookingType || "-"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {b.packageName ||
+                                      b.doctorName ||
+                                      b.courseName ||
+                                      "-"}
+                                  </td>
+                                  <td style={{ whiteSpace: "nowrap" }}>
+                                    {formatDate(b.bookingDate)}
+                                  </td>
+                                  <td style={{ whiteSpace: "nowrap" }}>
+                                    <div>{formatDate(b.startDate)}</div>
+                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
+                                      → {formatDate(b.endDate)}
+                                    </div>
+                                  </td>
+                                  <td className="text-center">
+                                    {b.numberOfParticipants ?? "-"}
+                                  </td>
+                                  <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                                    <span className="fw-semibold text-dark">
+                                      {formatAmount(b.totalPrice)}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <StatusPill meta={sMeta} raw={b.status} />
+                                  </td>
+                                  <td>
+                                    <StatusPill meta={pMeta} raw={b.paymentStatus} />
+                                  </td>
+                                  <td className="text-center">
+                                    <div className="d-flex justify-content-center gap-1">
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm border-0 p-1"
                                         style={{
-                                          cursor: "pointer",
-                                          fontSize: "14px",
-                                          color: "#dc3545",
+                                          backgroundColor: "#eff6ff",
+                                          color: "#1d4ed8",
+                                          borderRadius: "6px",
                                         }}
-                                        onClick={() => setCancelBooking(b)}
-                                        title="Cancel Booking"
-                                      />
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
+                                        onClick={() => setDetailsBooking(b)}
+                                        title="View details"
+                                      >
+                                        <FaEye style={{ fontSize: "12px" }} />
+                                      </button>
+                                      {!b.isCancelled && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm border-0 p-1"
+                                          style={{
+                                            backgroundColor: "#fef2f2",
+                                            color: "#b42318",
+                                            borderRadius: "6px",
+                                          }}
+                                          onClick={() => setCancelBooking(b)}
+                                          title="Cancel booking"
+                                        >
+                                          <FaTrashAlt style={{ fontSize: "12px" }} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
                           ) : (
                             <tr>
                               <td
-                                colSpan={12}
-                                className="text-center py-4 text-muted"
+                                colSpan={11}
+                                className="text-center py-5 text-muted"
                               >
-                                No data available in table
+                                No bookings found
                               </td>
                             </tr>
                           )}
                         </tbody>
                       </Table>
                     </div>
+
+                    <style>{`
+                      .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
+                      .saas-table { font-size: 0.8rem; margin-bottom: 0; }
+                      .saas-table thead th {
+                        background-color: #f9fafb;
+                        color: #667085;
+                        font-size: 0.68rem;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.04em;
+                        border-bottom: 1px solid #eaecf0;
+                        border-top: none;
+                        padding: 0.65rem 0.75rem;
+                        white-space: nowrap;
+                      }
+                      .saas-table tbody td {
+                        padding: 0.65rem 0.75rem;
+                        border-top: 1px solid #f2f4f7;
+                        vertical-align: middle;
+                        color: #344054;
+                      }
+                      .saas-table tbody tr:first-child td { border-top: none; }
+                      .saas-table tbody tr:hover { background-color: #fafbfc; }
+                    `}</style>
 
                     {/* Pagination */}
                     <div className="d-flex justify-content-between align-items-center mt-3">

@@ -170,7 +170,9 @@ import CabBookingPage from "./pages/booking/CabBookingPage";
 import ActivitySearch from "./pages/search/activity/ActivitySearch";
 import ActivityBookingPage from "./pages/booking/ActivityBookingPage";
 import CabBookingList from "./pages/list/CabBookingList";
+import CabBookingDetailView from "./pages/list/CabBookingDetailView";
 import ActivityBookingList from "./pages/list/ActivityBookingList";
+import ActivityBookingDetailView from "./pages/list/ActivityBookingDetailView";
 import HotelMapping from "./pages/master/HotelMapping";
 import HotelMappingBulkList from "./pages/master/HotelMappingBulkList";
 import UnMappingCity from "./pages/master/UnMappingCity";
@@ -197,8 +199,10 @@ import PackageSearch from "./pages/search/package/PackageSearch";
 import PackageBooking from "./pages/booking/packagebooking/PackageBooking";
 import FetchNewHotels from "./pages/master/FetchNewHotels";
 import PackageBookingList from "./pages/list/PackageBookingList";
+import PackageBookingDetailView from "./pages/list/PackageBookingDetailView";
 import OfflineSearch from "./pages/search/offline/OfflineSearch";
 import OfflineBookingList from "./pages/list/OfflineBookingList";
+import OfflineBookingDetailView from "./pages/list/OfflineBookingDetailView";
 import SubUser from "./pages/Registration/agent/SubUser";
 import SubAgent from "./pages/Registration/agent/SubAgent";
 
@@ -207,12 +211,14 @@ import MeetingSpaceManage from "./pages/HotelActions/MeetingSpace/MeetingSpaceMa
 import MeetAndSpaceSearch from "./pages/search/meetspace/MeetAndSpaceSearch";
 import MeetAndSpaceBookingPage from "./pages/booking/meetspace/MeetAndSpaceBookingPage";
 import MeetAndSpaceBookingList from "./pages/list/MeetAndSpaceBookingList";
+import MeetAndSpaceBookingDetailView from "./pages/list/MeetAndSpaceBookingDetailView";
 import MeetAndSpaceBookingEditPage from "./pages/list/MeetAndSpaceBookingEditPage";
 
 // Restaurant Module
 import RestaurantRegistration from "./pages/restaurant/RestaurantRegistration";
 import RestaurantList from "./pages/restaurant/RestaurantList";
 import RestaurantBookingList from "./pages/restaurant/RestaurantBookingList";
+import RestaurantBookingDetailView from "./pages/restaurant/RestaurantBookingDetailView";
 import RestaurantSearch from "./pages/restaurant/RestaurantSearch";
 import RestaurantBooking from "./pages/restaurant/RestaurantBooking";
 import RestaurantViewPage from "./pages/restaurant/RestaurantViewPage";
@@ -248,6 +254,7 @@ import SchefferDriverRates from "./pages/Registration/SchefferDriverRates";
 import { SchefferDriverSearch } from "./pages/search/schefferDriver/SchefferDriverSearch";
 import SchefferDriverBookingPage from "./pages/booking/SchefferDriverBookingPage";
 import SchefferDriverBookingList from "./pages/list/SchefferDriverBookingList";
+import SchefferDriverBookingDetailView from "./pages/list/SchefferDriverBookingDetailView";
 import AyurvedaRegistration from "./pages/ayurveda/AyurvedaRegistration";
 import AyurvedaCentreManage from "./pages/ayurveda/AyurvedaCentreManage";
 import AyurvedaSearch from "./pages/ayurveda/AyurvedaSearch";
@@ -445,9 +452,13 @@ export default function App() {
 
         {/* Booking List/Details */}
         <Route path="/booking-details/cab-booking-list" element={<PrivateRoute><CabBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/cab-booking/:id" element={<PrivateRoute><CabBookingDetailView /></PrivateRoute>} />
         <Route path="/booking-details/activity-booking-list" element={<PrivateRoute><ActivityBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/activity-booking/:id" element={<PrivateRoute><ActivityBookingDetailView /></PrivateRoute>} />
         <Route path="/booking-details/package-booking-list" element={<PrivateRoute><PackageBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/package-booking/:id" element={<PrivateRoute><PackageBookingDetailView /></PrivateRoute>} />
         <Route path="/booking-details/offline-booking-list" element={<PrivateRoute><OfflineBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/offline-booking/:id" element={<PrivateRoute><OfflineBookingDetailView /></PrivateRoute>} />
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
 
@@ -474,6 +485,7 @@ export default function App() {
         <Route path="/new-booking/scheffer-driver" element={<PrivateRoute><SchefferDriverSearch /></PrivateRoute>} />
         <Route path="/scheffer-driver-booking-page" element={<PrivateRoute><SchefferDriverBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/scheffer-driver-booking-list" element={<PrivateRoute><SchefferDriverBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/scheffer-driver-booking/:id" element={<PrivateRoute><SchefferDriverBookingDetailView /></PrivateRoute>} />
 
         {/* MYOP Package Add-Ons (dynamic catalog used by /new-booking/make-your-own-package-v2/search) */}
         <Route path="/registration/package-addons" element={<PrivateRoute><PackageAddOnReg /></PrivateRoute>} />
@@ -486,6 +498,7 @@ export default function App() {
         <Route path="/restaurant/list" element={<PrivateRoute><RestaurantList /></PrivateRoute>} />
         <Route path="/restaurant/view/:id" element={<PrivateRoute><RestaurantViewPage /></PrivateRoute>} />
         <Route path="/booking-details/restaurant-booking-list" element={<PrivateRoute><RestaurantBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/restaurant-booking/:id" element={<PrivateRoute><RestaurantBookingDetailView /></PrivateRoute>} />
         <Route path="/new-booking/restaurant" element={<PrivateRoute><RestaurantSearch /></PrivateRoute>} />
         <Route path="/new-booking/restaurant/booking" element={<PrivateRoute><RestaurantBooking /></PrivateRoute>} />
 
@@ -587,6 +600,7 @@ export default function App() {
         <Route path="/new-booking/meet-and-space" element={<PrivateRoute><MeetAndSpaceSearch /></PrivateRoute>} />
         <Route path="/new-booking/meet-and-space/book" element={<PrivateRoute><MeetAndSpaceBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/meet-and-space-booking-list" element={<PrivateRoute><MeetAndSpaceBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/meet-and-space-booking/:id" element={<PrivateRoute><MeetAndSpaceBookingDetailView /></PrivateRoute>} />
         <Route path="/booking-details/meet-and-space-booking-list/:id/edit" element={<PrivateRoute><MeetAndSpaceBookingEditPage /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/create" element={<PrivateRoute><CreateLongStayContract /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/long-stay-contract/:contractId/edit" element={<PrivateRoute><EditLongStayContract /></PrivateRoute>} />

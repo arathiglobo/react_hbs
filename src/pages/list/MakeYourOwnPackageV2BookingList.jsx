@@ -28,6 +28,50 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { ADDON_SERVICES_CATALOG } from "../../components/AddOnServicesPanel";
 
+const STATUS_PILL_META = {
+  Confirmed:   { label: "Confirmed",   bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  Completed:   { label: "Completed",   bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  "On Request":{ label: "On Request",  bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  Reconfirmed: { label: "Reconfirmed", bg: "#eef2ff", color: "#3538cd", dot: "#6366f1" },
+  Invoiced:    { label: "Invoiced",    bg: "#eff6ff", color: "#1d4ed8", dot: "#3b82f6" },
+  Failed:      { label: "Failed",      bg: "#f3f4f6", color: "#475467", dot: "#98a2b3" },
+  Cancelled:   { label: "Cancelled",   bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+};
+
+const renderStatusPill = (raw) => {
+  const key = String(raw || "Confirmed").trim();
+  const meta =
+    STATUS_PILL_META[key] ||
+    STATUS_PILL_META[Object.keys(STATUS_PILL_META).find(
+      (k) => k.toLowerCase() === key.toLowerCase(),
+    )];
+  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  return (
+    <span
+      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+      style={{
+        backgroundColor: meta.bg,
+        color: meta.color,
+        fontSize: "0.7rem",
+        fontWeight: 600,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          backgroundColor: meta.dot,
+          display: "inline-block",
+        }}
+      />
+      {meta.label}
+    </span>
+  );
+};
+
 /**
  * /booking-details/make-your-own-package-v2-list
  *
@@ -345,205 +389,265 @@ const MakeYourOwnPackageV2BookingList = () => {
           className="flex-grow-1 p-3"
           style={{ width: "100%", overflow: "hidden" }}
         >
-          <Container fluid className="px-0">
-            {/* Header + search card */}
-            <Card
-              className="shadow-sm border-0 mb-3"
-              style={{ borderRadius: 8 }}
-            >
-              <Card.Body className="d-flex justify-content-between align-items-center">
-                <h3 className="fw-bold text-dark mb-0">
-                  Make Your Own Package Bookings
-                </h3>
-                <div className="d-flex gap-2 align-items-center">
-                  <InputGroup style={{ width: 300 }}>
-                    <InputGroup.Text className="bg-white">
-                      <FaSearch className="text-muted" />
-                    </InputGroup.Text>
-                    <Form.Control
-                      placeholder="Search by Booking Code, Customer, Agent…"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-                  </InputGroup>
-                  <Button
-                    variant="outline-primary"
-                    onClick={fetchList}
-                    disabled={loading}
-                  >
-                    <FaSync className={loading ? "me-1 fa-spin" : "me-1"} />
-                    Refresh
-                  </Button>
-                </div>
-              </Card.Body>
-            </Card>
+          <Container
+            fluid
+            style={{
+              maxWidth: "100%",
+              paddingLeft: "0.5rem",
+              paddingRight: "0.5rem",
+            }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="mb-0 text-dark fw-semibold">
+                Make Your Own Package Bookings
+              </h5>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={fetchList}
+                disabled={loading}
+                style={{ fontSize: "0.78rem" }}
+              >
+                <FaSync className={`me-1 ${loading ? "fa-spin" : ""}`} style={{ fontSize: "0.7rem" }} />
+                {loading ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
 
-            {/* Booking Types card (same pattern as HotelBookingList) */}
             <Card
-              className="shadow-sm border-0 mb-3"
-              style={{ borderRadius: 8 }}
+              className="border mb-3 shadow-sm"
+              style={{ borderRadius: "6px" }}
             >
-              <Card.Body>
-                <h6 className="fw-bold text-secondary mb-2">Booking Types</h6>
-                <Row className="g-2">
-                  {STATUS_TABS.map((t) => (
-                    <Col xs={6} md={4} lg={3} xl={2} key={t.key}>
-                      <Form.Check
-                        type="radio"
-                        name="bookingType"
-                        id={`bt-${t.key}`}
-                        label={`${t.label} (${tabCounts[t.key] || 0})`}
-                        checked={status === t.key}
-                        onChange={() => setStatus(t.key)}
-                      />
-                    </Col>
-                  ))}
-                </Row>
-              </Card.Body>
-            </Card>
-
-            {/* Table card */}
-            <Card
-              className="shadow-sm border-0"
-              style={{ borderRadius: 8, overflow: "hidden" }}
-            >
-              <Card.Body className="p-0">
-                <Table
-                  hover
-                  size="sm"
-                  className="mb-0 align-middle table-bordered"
-                  style={{ tableLayout: "fixed", fontSize: "0.85rem" }}
+              <Card.Header
+                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
+                style={{
+                  borderRadius: "6px 6px 0 0",
+                  backgroundColor: "#f8f9fa",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                }}
+              >
+                <span>List of Bookings</span>
+              </Card.Header>
+              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
+                {/* Status pills with counts (wraps to a second row on narrow screens) */}
+                <div
+                  className="d-flex flex-wrap p-1 rounded mb-3"
+                  style={{ backgroundColor: "#f3f4f6", gap: "2px" }}
                 >
-                  <thead
-                    style={{
-                      backgroundColor: "#f8f9fa",
-                      borderBottom: "2px solid #dee2e6",
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.06)",
-                    }}
-                  >
-                    <tr
+                  {STATUS_TABS.map((t) => {
+                    const active = status === t.key;
+                    return (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setStatus(t.key)}
+                        className="border-0 d-inline-flex align-items-center gap-2 px-3 py-1"
+                        style={{
+                          backgroundColor: active ? "#ffffff" : "transparent",
+                          color: active ? "#101828" : "#667085",
+                          fontSize: "0.78rem",
+                          fontWeight: active ? 600 : 500,
+                          borderRadius: "6px",
+                          boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {t.label}
+                        <span
+                          style={{
+                            backgroundColor: active ? "#eff6ff" : "#e4e7ec",
+                            color: active ? "#1d4ed8" : "#667085",
+                            fontSize: "0.65rem",
+                            fontWeight: 600,
+                            padding: "1px 7px",
+                            borderRadius: "10px",
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {tabCounts[t.key] || 0}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Search */}
+                <div
+                  className="d-flex flex-wrap justify-content-end align-items-center gap-2"
+                  style={{ marginBottom: "1.5rem" }}
+                >
+                  <InputGroup size="sm" style={{ width: "300px" }}>
+                    <InputGroup.Text
                       style={{
-                        textTransform: "uppercase",
-                        fontSize: "0.72rem",
+                        fontSize: "0.75rem",
+                        backgroundColor: "#ffffff",
+                        borderRight: "none",
+                        color: "#98a2b3",
                       }}
                     >
-                      <th style={{ width: 50 }}>S.N</th>
-                      <th style={{ width: 130 }}>Booking Code</th>
-                      <th>Customer</th>
-                      <th style={{ width: 160 }}>Agent</th>
-                      <th style={{ width: 110 }}>Tour Date</th>
-                      <th style={{ width: 110 }}>Total</th>
-                      <th style={{ width: 110 }}>Status</th>
-                      <th style={{ width: 140 }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading && (
+                      <FaSearch />
+                    </InputGroup.Text>
+                    <Form.Control
+                      placeholder="Search by code, customer, agent..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      style={{ fontSize: "0.8rem", borderLeft: "none" }}
+                    />
+                  </InputGroup>
+                </div>
+
+                {/* Table */}
+                <div className="table-responsive saas-table-wrap">
+                  <Table hover className="mb-0 align-middle saas-table">
+                    <thead>
                       <tr>
-                        <td colSpan={8} className="text-center py-4">
-                          <Spinner animation="border" size="sm" /> Loading…
-                        </td>
+                        <th style={{ width: "48px" }}>#</th>
+                        <th>Booking</th>
+                        <th>Customer</th>
+                        <th>Agent</th>
+                        <th>Tour Date</th>
+                        <th className="text-end">Total</th>
+                        <th>Status</th>
+                        <th className="text-center" style={{ width: "120px" }}>Action</th>
                       </tr>
-                    )}
-                    {!loading && filtered.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="text-center text-muted py-4">
-                          No bookings found.
-                        </td>
-                      </tr>
-                    )}
-                    {!loading &&
-                      filtered.map((b, i) => (
-                        <tr key={b.id}>
-                          <td>{i + 1}</td>
-                          <td className="fw-semibold text-primary">
-                            {b.bookingCode}
-                          </td>
-                          <td>
-                            <div className="fw-semibold">
-                              {[
-                                b.salutation,
-                                b.customerFirstName,
-                                b.customerLastName,
-                              ]
-                                .filter(Boolean)
-                                .join(" ") || "—"}
-                            </div>
-                            <small className="text-muted d-block">
-                              {b.customerEmail || ""}
-                            </small>
-                            <small className="text-muted d-block">
-                              {b.customerPhone || ""}
-                            </small>
-                          </td>
-                          <td>{b.agentName || "—"}</td>
-                          <td>{b.tourDate || "—"}</td>
-                          <td className="fw-semibold">
-                            ₹ {Number(b.totalPrice || 0).toLocaleString()}
-                          </td>
-                          <td>
-                            {(() => {
-                              // Status badge — colour-coded so an ops
-                              // user can scan the table at a glance.
-                              if (b.isCancelled) {
-                                return <Badge bg="danger">Cancelled</Badge>;
-                              }
-                              const s = String(b.bookingStatus || "Confirmed").trim();
-                              const map = {
-                                confirmed: "success",
-                                completed: "secondary",
-                                "on request": "warning",
-                                reconfirmed: "info",
-                                invoiced: "primary",
-                                failed: "dark",
-                                cancelled: "danger",
-                              };
-                              const variant = map[s.toLowerCase()] || "success";
-                              return <Badge bg={variant}>{s}</Badge>;
-                            })()}
-                          </td>
-                          <td>
-                            <div className="d-flex align-items-center gap-3">
-                              <FaEye
-                                title="View"
-                                role="button"
-                                style={{ color: "#007bff", cursor: "pointer" }}
-                                onClick={() => onView(b)}
-                              />
-                              <FaFileAlt
-                                title="Voucher"
-                                role="button"
-                                style={{ color: "#28a745", cursor: "pointer" }}
-                                onClick={() => onVoucher(b)}
-                              />
-                              {!b.isCancelled && (
-                                <FaTrash
-                                  title="Cancel"
-                                  role="button"
-                                  style={{
-                                    color: "#dc3545",
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={() => onCancelClick(b)}
-                                />
-                              )}
-                            </div>
+                    </thead>
+                    <tbody>
+                      {loading && (
+                        <tr>
+                          <td colSpan={8} className="text-center py-5">
+                            <Spinner animation="border" variant="primary" />
+                            <p className="mt-2 text-muted mb-0">Loading bookings...</p>
                           </td>
                         </tr>
-                      ))}
-                  </tbody>
-                </Table>
-              </Card.Body>
-            </Card>
+                      )}
+                      {!loading && filtered.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="text-center py-5 text-muted">
+                            No bookings found
+                          </td>
+                        </tr>
+                      )}
+                      {!loading &&
+                        filtered.map((b, i) => (
+                          <tr key={b.id}>
+                            <td className="text-muted">{i + 1}</td>
+                            <td>
+                              <span
+                                className="fw-semibold"
+                                style={{ color: "#1d4ed8" }}
+                              >
+                                {b.bookingCode || "-"}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="fw-medium text-dark">
+                                {[
+                                  b.salutation,
+                                  b.customerFirstName,
+                                  b.customerLastName,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ") || "—"}
+                              </div>
+                              <div className="text-muted" style={{ fontSize: "0.7rem", lineHeight: 1.4 }}>
+                                {b.customerEmail || ""}
+                                {b.customerEmail && b.customerPhone ? " · " : ""}
+                                {b.customerPhone || ""}
+                              </div>
+                            </td>
+                            <td>{b.agentName || "—"}</td>
+                            <td style={{ whiteSpace: "nowrap" }}>{b.tourDate || "—"}</td>
+                            <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                              <span className="fw-semibold text-dark">
+                                ₹ {Number(b.totalPrice || 0).toLocaleString()}
+                              </span>
+                            </td>
+                            <td>
+                              {b.isCancelled
+                                ? renderStatusPill("Cancelled")
+                                : renderStatusPill(b.bookingStatus || "Confirmed")}
+                            </td>
+                            <td className="text-center">
+                              <div className="d-flex justify-content-center gap-1">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm border-0 p-1"
+                                  style={{
+                                    backgroundColor: "#eff6ff",
+                                    color: "#1d4ed8",
+                                    borderRadius: "6px",
+                                  }}
+                                  onClick={() => onView(b)}
+                                  title="View details"
+                                >
+                                  <FaEye style={{ fontSize: "12px" }} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm border-0 p-1"
+                                  style={{
+                                    backgroundColor: "#ecfdf5",
+                                    color: "#1b7f3a",
+                                    borderRadius: "6px",
+                                  }}
+                                  onClick={() => onVoucher(b)}
+                                  title="Voucher"
+                                >
+                                  <FaFileAlt style={{ fontSize: "12px" }} />
+                                </button>
+                                {!b.isCancelled && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm border-0 p-1"
+                                    style={{
+                                      backgroundColor: "#fef2f2",
+                                      color: "#b42318",
+                                      borderRadius: "6px",
+                                    }}
+                                    onClick={() => onCancelClick(b)}
+                                    title="Cancel booking"
+                                  >
+                                    <FaTrash style={{ fontSize: "12px" }} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </Table>
+                </div>
 
-            <Card
-              className="shadow-sm border-0 mt-3"
-              style={{ borderRadius: 8 }}
-            >
-              <Card.Body className="d-flex justify-content-between align-items-center small text-muted">
-                <span>
-                  Showing {filtered.length} of {rows.length} bookings
-                </span>
+                <style>{`
+                  .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
+                  .saas-table { font-size: 0.8rem; margin-bottom: 0; }
+                  .saas-table thead th {
+                    background-color: #f9fafb;
+                    color: #667085;
+                    font-size: 0.68rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    border-bottom: 1px solid #eaecf0;
+                    border-top: none;
+                    padding: 0.65rem 0.75rem;
+                    white-space: nowrap;
+                  }
+                  .saas-table tbody td {
+                    padding: 0.65rem 0.75rem;
+                    border-top: 1px solid #f2f4f7;
+                    vertical-align: middle;
+                    color: #344054;
+                  }
+                  .saas-table tbody tr:first-child td { border-top: none; }
+                  .saas-table tbody tr:hover { background-color: #fafbfc; }
+                `}</style>
+
+                <div className="d-flex justify-content-between align-items-center mt-3">
+                  <span className="small text-muted">
+                    Showing {filtered.length} of {rows.length} bookings
+                  </span>
+                </div>
               </Card.Body>
             </Card>
           </Container>
