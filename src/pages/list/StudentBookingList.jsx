@@ -24,25 +24,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Card,
   Table,
-  Button,
   Spinner,
   Form,
   Row,
   Col,
-  Modal,
   Container,
   InputGroup,
   Pagination,
 } from "react-bootstrap";
-import {
-  FaEye,
-  FaDownload,
-  FaTrash,
-  FaSearch,
-  FaCheck,
-  FaTimes,
-  FaRedo,
-} from "react-icons/fa";
+import { FaEye, FaSearch } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -69,19 +59,9 @@ export default function StudentBookingList() {
   const [verificationStatus, setVerificationStatus] = useState("");
   const [search, setSearch] = useState("");
 
-  // Approve / Reject / Re-upload icons only render for admins.
-  // Agents only see View / Voucher / Cancel.
   const [role, setRole] = useState(
     (localStorage.getItem("currentActiveRole") || "").toLowerCase()
   );
-  const isAdmin = role === "admin";
-
-  // Admin-decision modal state — opens when an admin clicks
-  // Approve / Reject / Re-upload on a pending row.
-  const [decisionRow, setDecisionRow] = useState(null);
-  const [decisionType, setDecisionType] = useState("");
-  const [decisionNotes, setDecisionNotes] = useState("");
-  const [decisionSubmitting, setDecisionSubmitting] = useState(false);
 
   useEffect(() => {
     const r = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
@@ -119,70 +99,6 @@ export default function StudentBookingList() {
       (r.studentIdNumber || "").toLowerCase().includes(q)
     );
   }, [rows, search]);
-
-  const handleCancel = async (row) => {
-    if ((row.refundStatus || "").toLowerCase() === "non-refundable") {
-      toast.error("This booking is non-refundable and cannot be cancelled.");
-      return;
-    }
-    if (!window.confirm(`Cancel booking ${row.bookingCode}? Agent credit will be restored.`)) return;
-    try {
-      await axiosInstance.delete(`/api/student-booking/${row.bookingId}?reason=Cancelled%20by%20user`);
-      toast.success("Booking cancelled");
-      fetchPage();
-    } catch (e) { toast.error("Cancel failed"); }
-  };
-
-  const handleVoucher = async (row) => {
-    try {
-      const res = await axiosInstance.get(`/api/student-booking/${row.bookingId}/voucher`, { responseType: "blob" });
-      const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
-      const a = document.createElement("a");
-      a.href = url; a.download = `student-voucher-${row.bookingId}.pdf`; a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) { toast.error("Voucher download failed"); }
-  };
-
-  // ── Admin decision flow (Approve / Reject / Request Re-upload) ────
-  const openDecision = (row, type) => {
-    setDecisionRow(row);
-    setDecisionType(type);
-    setDecisionNotes("");
-  };
-  const closeDecision = () => {
-    setDecisionRow(null);
-    setDecisionType("");
-    setDecisionNotes("");
-  };
-
-  // Already-approved / already-rejected / cancelled rows hide the
-  // admin buttons to keep the row readable.
-  const isAdminActionable = (row) =>
-    isAdmin &&
-    !row.cancelled &&
-    (row.verificationStatus === "PENDING_STUDENT_VERIFICATION" ||
-     row.verificationStatus === "REQUEST_REUPLOAD");
-
-  const submitDecision = async () => {
-    if (!decisionRow) return;
-    setDecisionSubmitting(true);
-    try {
-      const verifiedBy =
-        localStorage.getItem("userName") ||
-        localStorage.getItem("userId") || "admin";
-      await axiosInstance.post(
-        `/api/student-booking-admin/${decisionRow.bookingId}/decision`,
-        { decision: decisionType, notes: decisionNotes, verifiedBy }
-      );
-      toast.success(`Booking ${decisionRow.bookingCode} → ${decisionType}`);
-      closeDecision();
-      fetchPage();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || "Decision failed");
-    } finally {
-      setDecisionSubmitting(false);
-    }
-  };
 
   const totalElements = rows.length === 0 ? 0 : (totalPages > 1 ? totalPages * size : filtered.length);
   const displayStart = filtered.length === 0 ? 0 : page * size + 1;
@@ -396,67 +312,6 @@ export default function StudentBookingList() {
                                       }
                                       title="View Details"
                                     />
-                                    <FaDownload
-                                      style={{
-                                        cursor: "pointer",
-                                        fontSize: "14px",
-                                        color: "#198754",
-                                      }}
-                                      onClick={() => handleVoucher(r)}
-                                      title="Download Voucher"
-                                    />
-                                    {!r.cancelled && (
-                                      <FaTrash
-                                        style={{
-                                          cursor: "pointer",
-                                          fontSize: "14px",
-                                          color: "#dc3545",
-                                        }}
-                                        onClick={() => handleCancel(r)}
-                                        title="Cancel Booking"
-                                      />
-                                    )}
-                                    {/* Admin verification icons — only
-                                        render for admins and only when the
-                                        booking is still PENDING /
-                                        REQUEST_REUPLOAD. */}
-                                    {isAdminActionable(r) && (
-                                      <>
-                                        <FaCheck
-                                          style={{
-                                            cursor: "pointer",
-                                            fontSize: "14px",
-                                            color: "#198754",
-                                          }}
-                                          onClick={() =>
-                                            openDecision(r, "APPROVED")
-                                          }
-                                          title="Approve"
-                                        />
-                                        <FaTimes
-                                          style={{
-                                            cursor: "pointer",
-                                            fontSize: "14px",
-                                            color: "#dc3545",
-                                          }}
-                                          onClick={() =>
-                                            openDecision(r, "REJECTED")
-                                          }
-                                          title="Reject (refunds credit)"
-                                        />
-                                        <FaRedo
-                                          style={{
-                                            cursor: "pointer",
-                                            fontSize: "14px",
-                                            color: "#0dcaf0",
-                                          }}
-                                          onClick={() =>
-                                            openDecision(r, "REQUEST_REUPLOAD")
-                                          }
-                                          title="Request Re-upload"
-                                        />
-                                      </>
-                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -527,75 +382,6 @@ export default function StudentBookingList() {
           </Container>
         </main>
       </div>
-
-      {/* ── Admin decision modal ─────────────────────────────────
-          Opens when an admin clicks Approve / Reject / Re-upload on
-          a row. The actual POST happens on Confirm. */}
-      <Modal show={!!decisionRow} onHide={closeDecision} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Confirm Decision: {decisionType}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {decisionRow && (
-            <>
-              <p className="mb-2">
-                <strong>Booking:</strong> {decisionRow.bookingCode}
-                <br />
-                <strong>Student:</strong> {decisionRow.studentName} (
-                {decisionRow.studentIdNumber})
-                <br />
-                <strong>Institution:</strong> {decisionRow.institutionName}
-                <br />
-                <strong>Method:</strong> {decisionRow.verificationMethod}
-              </p>
-              <Form.Label>Notes / Reason (optional)</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={decisionNotes}
-                onChange={(e) => setDecisionNotes(e.target.value)}
-              />
-              {decisionType === "REJECTED" && (
-                <div className="text-danger small mt-2">
-                  Rejecting will cancel the booking and refund the agent's
-                  credit limit (for refundable bookings).
-                </div>
-              )}
-              {decisionType === "REQUEST_REUPLOAD" && (
-                <div className="text-info small mt-2">
-                  The student will see this booking marked REQUEST_REUPLOAD.
-                  Credit stays on hold.
-                </div>
-              )}
-            </>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="secondary"
-            onClick={closeDecision}
-            disabled={decisionSubmitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant={
-              decisionType === "REJECTED"
-                ? "danger"
-                : decisionType === "APPROVED"
-                  ? "success"
-                  : "info"
-            }
-            onClick={submitDecision}
-            disabled={decisionSubmitting}
-          >
-            {decisionSubmitting ? (
-              <Spinner size="sm" className="me-1" />
-            ) : null}
-            Confirm {decisionType}
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </div>
   );
 }

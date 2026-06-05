@@ -12,8 +12,24 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { Container, Row, Col, Spinner, Table } from "react-bootstrap";
+import {
+  Container,
+  Row,
+  Col,
+  Spinner,
+  Table,
+  Modal,
+  Button,
+  Form,
+} from "react-bootstrap";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  FaDownload,
+  FaTrash,
+  FaCheck,
+  FaTimes,
+  FaRedo,
+} from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -116,27 +132,117 @@ export default function StudentBookingDetailView() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const role = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
+  const isAdmin = role === "admin";
+
+  const [decisionType, setDecisionType] = useState("");
+  const [decisionNotes, setDecisionNotes] = useState("");
+  const [decisionSubmitting, setDecisionSubmitting] = useState(false);
+  const decisionOpen = !!decisionType;
+
+  const fetchBooking = async () => {
+    setLoading(true);
+    try {
+      const { data: payload } = await axiosInstance.get(
+        `/api/student-booking/${id}`,
+      );
+      if (payload?.success === false) {
+        toast.error(payload?.message || "Not found");
+        setData(null);
+      } else {
+        setData(payload);
+      }
+    } catch (e) {
+      toast.error("Failed to load booking");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const { data: payload } = await axiosInstance.get(
-          `/api/student-booking/${id}`,
-        );
-        if (payload?.success === false) {
-          toast.error(payload?.message || "Not found");
-          setData(null);
-        } else {
-          setData(payload);
-        }
-      } catch (e) {
-        toast.error("Failed to load booking");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    fetchBooking(); /* eslint-disable-next-line */
   }, [id]);
+
+  const handleVoucher = async () => {
+    if (!data) return;
+    try {
+      const res = await axiosInstance.get(
+        `/api/student-booking/${data.bookingId}/voucher`,
+        { responseType: "blob" },
+      );
+      const url = URL.createObjectURL(
+        new Blob([res.data], { type: "application/pdf" }),
+      );
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `student-voucher-${data.bookingId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error("Voucher download failed");
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!data) return;
+    if ((data.refundStatus || "").toLowerCase() === "non-refundable") {
+      toast.error("This booking is non-refundable and cannot be cancelled.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Cancel booking ${data.bookingCode}? Agent credit will be restored.`,
+      )
+    )
+      return;
+    try {
+      await axiosInstance.delete(
+        `/api/student-booking/${data.bookingId}?reason=Cancelled%20by%20user`,
+      );
+      toast.success("Booking cancelled");
+      fetchBooking();
+    } catch (e) {
+      toast.error("Cancel failed");
+    }
+  };
+
+  const openDecision = (type) => {
+    setDecisionType(type);
+    setDecisionNotes("");
+  };
+  const closeDecision = () => {
+    setDecisionType("");
+    setDecisionNotes("");
+  };
+
+  const isAdminActionable =
+    isAdmin &&
+    data &&
+    !data.cancelled &&
+    (data.verificationStatus === "PENDING_STUDENT_VERIFICATION" ||
+      data.verificationStatus === "REQUEST_REUPLOAD");
+
+  const submitDecision = async () => {
+    if (!data) return;
+    setDecisionSubmitting(true);
+    try {
+      const verifiedBy =
+        localStorage.getItem("userName") ||
+        localStorage.getItem("userId") ||
+        "admin";
+      await axiosInstance.post(
+        `/api/student-booking-admin/${data.bookingId}/decision`,
+        { decision: decisionType, notes: decisionNotes, verifiedBy },
+      );
+      toast.success(`Booking ${data.bookingCode} → ${decisionType}`);
+      closeDecision();
+      fetchBooking();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Decision failed");
+    } finally {
+      setDecisionSubmitting(false);
+    }
+  };
 
   const card = {
     border: "1px solid #ddd",
@@ -425,9 +531,13 @@ export default function StudentBookingDetailView() {
                             <td>{room.adults ?? "-"}</td>
                             <td>{room.children ?? "0"}</td>
                             <td className="text-decoration-line-through">
-                              {room.rateBeforeDiscount ?? "-"}
+                              {room.rateBeforeDiscount != null
+                                ? `AED ${room.rateBeforeDiscount}`
+                                : "-"}
                             </td>
-                            <td>{room.rate ?? "-"}</td>
+                            <td>
+                              {room.rate != null ? `AED ${room.rate}` : "-"}
+                            </td>
                           </tr>
                         </tbody>
                       </Table>
@@ -446,7 +556,7 @@ export default function StudentBookingDetailView() {
                           value={
                             data.totalRateBeforeDiscount != null ? (
                               <span className="text-decoration-line-through">
-                                {data.totalRateBeforeDiscount}
+                                AED {data.totalRateBeforeDiscount}
                               </span>
                             ) : (
                               "-"
@@ -463,7 +573,7 @@ export default function StudentBookingDetailView() {
                                 ? `${data.discountPercent}%`
                                 : "",
                               data.discountAmount
-                                ? `flat ${data.discountAmount}`
+                                ? `flat AED ${data.discountAmount}`
                                 : "",
                             ]
                               .filter(Boolean)
@@ -482,7 +592,9 @@ export default function StudentBookingDetailView() {
                                 fontSize: "0.95rem",
                               }}
                             >
-                              {data.totalRate ?? "-"}
+                              {data.totalRate != null
+                                ? `AED ${data.totalRate}`
+                                : "-"}
                             </span>
                           }
                         />
@@ -505,11 +617,132 @@ export default function StudentBookingDetailView() {
                   </div>
                 )}
 
+                {/* ── Bottom action buttons (left-aligned) ─────────── */}
+                <div
+                  className="d-flex gap-2 justify-content-start flex-wrap"
+                  style={{ marginTop: "16px", marginBottom: "20px" }}
+                >
+                  <button
+                    style={{ ...BUTTON_STYLE, backgroundColor: "#198754" }}
+                    onClick={handleVoucher}
+                    title="Download Voucher"
+                  >
+                    <FaDownload style={{ marginRight: "6px" }} />
+                    Download
+                  </button>
+                  {!data.cancelled && (
+                    <button
+                      style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
+                      onClick={handleCancel}
+                      title="Cancel Booking"
+                    >
+                      <FaTrash style={{ marginRight: "6px" }} />
+                      Cancel
+                    </button>
+                  )}
+                  {isAdminActionable && (
+                    <>
+                      <button
+                        style={{ ...BUTTON_STYLE, backgroundColor: "#198754" }}
+                        onClick={() => openDecision("APPROVED")}
+                        title="Approve"
+                      >
+                        <FaCheck style={{ marginRight: "6px" }} />
+                        Approve
+                      </button>
+                      <button
+                        style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
+                        onClick={() => openDecision("REJECTED")}
+                        title="Reject (refunds credit)"
+                      >
+                        <FaTimes style={{ marginRight: "6px" }} />
+                        Reject
+                      </button>
+                      <button
+                        style={{ ...BUTTON_STYLE, backgroundColor: "#0dcaf0" }}
+                        onClick={() => openDecision("REQUEST_REUPLOAD")}
+                        title="Request Re-upload"
+                      >
+                        <FaRedo style={{ marginRight: "6px" }} />
+                        Re-upload
+                      </button>
+                    </>
+                  )}
+                </div>
               </>
             )}
           </Container>
         </main>
       </div>
+
+      {/* ── Admin decision modal ─────────────────────────────────
+          Opens when an admin clicks Approve / Reject / Re-upload.
+          The actual POST happens on Confirm. */}
+      <Modal show={decisionOpen} onHide={closeDecision} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Decision: {decisionType}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {data && (
+            <>
+              <p className="mb-2">
+                <strong>Booking:</strong> {data.bookingCode}
+                <br />
+                <strong>Student:</strong> {data.studentName} (
+                {data.studentIdNumber})
+                <br />
+                <strong>Institution:</strong> {data.institutionName}
+                <br />
+                <strong>Method:</strong> {data.verificationMethod}
+              </p>
+              <Form.Label>Notes / Reason (optional)</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                value={decisionNotes}
+                onChange={(e) => setDecisionNotes(e.target.value)}
+              />
+              {decisionType === "REJECTED" && (
+                <div className="text-danger small mt-2">
+                  Rejecting will cancel the booking and refund the agent's
+                  credit limit (for refundable bookings).
+                </div>
+              )}
+              {decisionType === "REQUEST_REUPLOAD" && (
+                <div className="text-info small mt-2">
+                  The student will see this booking marked REQUEST_REUPLOAD.
+                  Credit stays on hold.
+                </div>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={closeDecision}
+            disabled={decisionSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={
+              decisionType === "REJECTED"
+                ? "danger"
+                : decisionType === "APPROVED"
+                  ? "success"
+                  : "info"
+            }
+            onClick={submitDecision}
+            disabled={decisionSubmitting}
+          >
+            {decisionSubmitting ? (
+              <Spinner size="sm" className="me-1" />
+            ) : null}
+            Confirm {decisionType}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

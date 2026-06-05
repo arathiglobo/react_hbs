@@ -22,7 +22,7 @@ import {
   InputGroup,
   Pagination,
 } from "react-bootstrap";
-import { FaEye, FaDownload, FaTrash, FaSearch } from "react-icons/fa";
+import { FaEye, FaSearch } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -103,47 +103,6 @@ export default function SeniorCitizenBookingList() {
         (r.hotelName || "").toLowerCase().includes(q),
     );
   }, [rows, search, bookingType]);
-
-  const handleCancel = async (row) => {
-    if ((row.refundStatus || "").toLowerCase() === "non-refundable") {
-      toast.error("This booking is non-refundable and cannot be cancelled.");
-      return;
-    }
-    if (
-      !window.confirm(
-        `Cancel booking ${row.bookingCode}? Agent credit will be restored.`,
-      )
-    )
-      return;
-    try {
-      await axiosInstance.delete(
-        `/api/senior-citizen-booking/${row.bookingId}?reason=${encodeURIComponent("Cancelled by user")}`,
-      );
-      toast.success("Booking cancelled");
-      fetchPage();
-    } catch (e) {
-      toast.error("Cancel failed");
-    }
-  };
-
-  const handleVoucher = async (row) => {
-    try {
-      const res = await axiosInstance.get(
-        `/api/senior-citizen-booking/${row.bookingId}/voucher`,
-        { responseType: "blob" },
-      );
-      const url = URL.createObjectURL(
-        new Blob([res.data], { type: "application/pdf" }),
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `senior-citizen-voucher-${row.bookingId}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      toast.error("Voucher download failed");
-    }
-  };
 
   const totalElements =
     rows.length === 0
@@ -335,7 +294,9 @@ export default function SeniorCitizenBookingList() {
                                     {ages.length ? ages.join(", ") : "-"}
                                   </td>
                                   <td className="text-end text-dark">
-                                    {r.totalRate ?? "-"}
+                                    {r.totalRate != null
+                                      ? `AED ${r.totalRate}`
+                                      : "-"}
                                   </td>
                                   <td>{statusText}</td>
                                   <td>{r.refundStatus || "-"}</td>
@@ -354,26 +315,6 @@ export default function SeniorCitizenBookingList() {
                                         }
                                         title="View Details"
                                       />
-                                      <FaDownload
-                                        style={{
-                                          cursor: "pointer",
-                                          fontSize: "14px",
-                                          color: "#198754",
-                                        }}
-                                        onClick={() => handleVoucher(r)}
-                                        title="Download Voucher"
-                                      />
-                                      {!r.cancelled && (
-                                        <FaTrash
-                                          style={{
-                                            cursor: "pointer",
-                                            fontSize: "14px",
-                                            color: "#dc3545",
-                                          }}
-                                          onClick={() => handleCancel(r)}
-                                          title="Cancel Booking"
-                                        />
-                                      )}
                                     </div>
                                   </td>
                                 </tr>

@@ -10,6 +10,7 @@
 import React, { useEffect, useState } from "react";
 import { Container, Row, Col, Spinner, Table } from "react-bootstrap";
 import { useNavigate, useParams } from "react-router-dom";
+import { FaDownload, FaTrash } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -94,26 +95,71 @@ export default function SeniorCitizenBookingDetailView() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const { data: payload } = await axiosInstance.get(
-          `/api/senior-citizen-booking/${id}`,
-        );
-        if (payload?.success === false) {
-          toast.error(payload?.message || "Not found");
-          setData(null);
-        } else {
-          setData(payload);
-        }
-      } catch (e) {
-        toast.error("Failed to load booking");
-      } finally {
-        setLoading(false);
+  const fetchBooking = async () => {
+    setLoading(true);
+    try {
+      const { data: payload } = await axiosInstance.get(
+        `/api/senior-citizen-booking/${id}`,
+      );
+      if (payload?.success === false) {
+        toast.error(payload?.message || "Not found");
+        setData(null);
+      } else {
+        setData(payload);
       }
-    })();
+    } catch (e) {
+      toast.error("Failed to load booking");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBooking(); /* eslint-disable-next-line */
   }, [id]);
+
+  const handleDownload = async () => {
+    if (!data) return;
+    try {
+      const res = await axiosInstance.get(
+        `/api/senior-citizen-booking/${data.bookingId}/voucher`,
+        { responseType: "blob" },
+      );
+      const url = URL.createObjectURL(
+        new Blob([res.data], { type: "application/pdf" }),
+      );
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `senior-citizen-voucher-${data.bookingId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error("Voucher download failed");
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!data) return;
+    if ((data.refundStatus || "").toLowerCase() === "non-refundable") {
+      toast.error("This booking is non-refundable and cannot be cancelled.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Cancel booking ${data.bookingCode}? Agent credit will be restored.`,
+      )
+    )
+      return;
+    try {
+      await axiosInstance.delete(
+        `/api/senior-citizen-booking/${data.bookingId}?reason=${encodeURIComponent("Cancelled by user")}`,
+      );
+      toast.success("Booking cancelled");
+      fetchBooking();
+    } catch (e) {
+      toast.error("Cancel failed");
+    }
+  };
 
   const card = {
     border: "1px solid #ddd",
@@ -371,9 +417,13 @@ export default function SeniorCitizenBookingDetailView() {
                             <td>{room.adults ?? "-"}</td>
                             <td>{room.children ?? "0"}</td>
                             <td className="text-decoration-line-through">
-                              {room.rateBeforeDiscount ?? "-"}
+                              {room.rateBeforeDiscount != null
+                                ? `AED ${room.rateBeforeDiscount}`
+                                : "-"}
                             </td>
-                            <td>{room.rate ?? "-"}</td>
+                            <td>
+                              {room.rate != null ? `AED ${room.rate}` : "-"}
+                            </td>
                           </tr>
                         </tbody>
                       </Table>
@@ -392,7 +442,7 @@ export default function SeniorCitizenBookingDetailView() {
                           value={
                             data.totalRateBeforeDiscount != null ? (
                               <span className="text-decoration-line-through">
-                                {data.totalRateBeforeDiscount}
+                                AED {data.totalRateBeforeDiscount}
                               </span>
                             ) : (
                               "-"
@@ -409,7 +459,7 @@ export default function SeniorCitizenBookingDetailView() {
                                 ? `${data.discountPercent}%`
                                 : "",
                               data.discountAmount
-                                ? `flat ${data.discountAmount}`
+                                ? `flat AED ${data.discountAmount}`
                                 : "",
                             ]
                               .filter(Boolean)
@@ -428,7 +478,9 @@ export default function SeniorCitizenBookingDetailView() {
                                 fontSize: "0.95rem",
                               }}
                             >
-                              {data.totalRate ?? "-"}
+                              {data.totalRate != null
+                                ? `AED ${data.totalRate}`
+                                : "-"}
                             </span>
                           }
                         />
@@ -450,6 +502,31 @@ export default function SeniorCitizenBookingDetailView() {
                     </div>
                   </div>
                 )}
+
+                {/* ── Bottom action buttons ─────────────────────────── */}
+                <div
+                  className="d-flex gap-2 justify-content-start"
+                  style={{ marginTop: "16px", marginBottom: "20px" }}
+                >
+                  <button
+                    style={{ ...BUTTON_STYLE, backgroundColor: "#198754" }}
+                    onClick={handleDownload}
+                    title="Download Voucher"
+                  >
+                    <FaDownload style={{ marginRight: "6px" }} />
+                    Download
+                  </button>
+                  {!data.cancelled && (
+                    <button
+                      style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
+                      onClick={handleCancel}
+                      title="Cancel Booking"
+                    >
+                      <FaTrash style={{ marginRight: "6px" }} />
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </>
             )}
           </Container>
