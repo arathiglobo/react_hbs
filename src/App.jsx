@@ -22,6 +22,7 @@ import HotelBookingList from "./pages/list/HotelBookingList";
 import HotelBookingList24Hour from "./pages/list/HotelBookingList24Hour";
 // Last Minute Booking — list page (Phase 4)
 import LastMinuteBookingList from "./pages/list/LastMinuteBookingList";
+import LastMinuteBookingDetailView from "./pages/list/LastMinuteBookingDetailView";
 // 24 Hour Check-In configuration pages (new feature)
 import Hotel24HourCheckin from "./pages/HotelActions/TwentyFourHourCheckin/Hotel24HourCheckin";
 import Hotel24HourCheckinForm from "./pages/HotelActions/TwentyFourHourCheckin/Hotel24HourCheckinForm";
@@ -29,6 +30,7 @@ import BookingDetailedView from "./pages/list/BookingDetailedView";
 import BookingEditPage from "./pages/list/BookingEditPage";
 import BookingNotesPage from "./pages/list/BookingNotesPage";
 import CustomBookingList from "./pages/list/CustomBookingList";
+import CustomBookingDetailView from "./pages/list/CustomBookingDetailView";
 import Bank from "./pages/master/Bank";
 import ContactType from "./pages/master/ContactType";
 import MarkupType from "./pages/master/MarkupType";
@@ -99,6 +101,7 @@ import DayStaySearch from "./pages/search/daystay/DayStaySearch";
 import DayStayRoomList from "./pages/roomlist/DayStayRoomList";
 import DayStayBookingPage from "./pages/booking/daystay/DayStayBookingPage";
 import DayStayBookingList from "./pages/list/DayStayBookingList";
+import DayStayBookingDetailView from "./pages/list/DayStayBookingDetailView";
 import OfferZone from "./pages/OfferZone";
 import OfferImageUpload from "./pages/OfferImageUpload";
 import AgentAccounts from "./pages/inhouseAccounts/AgentAccounts";
@@ -128,6 +131,7 @@ import MakePkgAddOnsFirstPage from "./pages/search/MakePkgAddOnsFirstPage";
 import MakePkgCombineSearchV2 from "./pages/search/MakePkgCombineSearchV2";
 import MakePkgBookingPageV2 from "./pages/roomlist/makeyourownpkg/MakePkgBookingPageV2";
 import MakeYourOwnPackageV2BookingList from "./pages/list/MakeYourOwnPackageV2BookingList";
+import MakeYourOwnPackageV2BookingDetailView from "./pages/list/MakeYourOwnPackageV2BookingDetailView";
 import MakePkgV3Form from "./pages/search/MakePkgV3Form";
 import MakePkgV3Results from "./pages/search/MakePkgV3Results";
 import MakePkgV3BookingPage from "./pages/roomlist/makeyourownpkg/MakePkgV3BookingPage";
@@ -159,6 +163,7 @@ import ApiBookingPageForHotels from "./pages/booking/ApiBookingPageForHotels";
 import LongStaySearch from "./pages/search/LongStaySearch";
 import LongStayBookingPage from "./pages/booking/LongStayBookingPage";
 import LongStayBookingList from "./pages/list/LongStayBookingList";
+import LongStayBookingDetailView from "./pages/list/LongStayBookingDetailView";
 import LongStayRoomList from "./pages/LongStayRoomList";
 import CopilotWidget from "./components/CopilotWidget";
 import AiDashboard from "./pages/ai/AiDashboard";
@@ -403,6 +408,7 @@ export default function App() {
         <Route path="/new-booking/long-stay" element={<PrivateRoute><LongStaySearch /></PrivateRoute>} />
         <Route path="/long-stay-booking-page" element={<PrivateRoute><LongStayBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/long-stay-booking-list" element={<PrivateRoute><LongStayBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/long-stay-booking/:id" element={<PrivateRoute><LongStayBookingDetailView /></PrivateRoute>} />
         <Route path="/long-stay-room-list" element={<PrivateRoute><LongStayRoomList /></PrivateRoute>} />
         <Route path="/ai" element={<PrivateRoute><AiDashboard /></PrivateRoute>} />
         <Route path="/ai/demand-forecast" element={<PrivateRoute><DemandForecast /></PrivateRoute>} />
@@ -420,6 +426,7 @@ export default function App() {
         <Route path="/new-booking/make-your-own-package-v2/search" element={<PrivateRoute><MakePkgCombineSearchV2 /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package-v2/booking-page" element={<PrivateRoute><MakePkgBookingPageV2 /></PrivateRoute>} />
         <Route path="/booking-details/make-your-own-package-v2-list" element={<PrivateRoute><MakeYourOwnPackageV2BookingList /></PrivateRoute>} />
+        <Route path="/booking-details/make-your-own-package-v2/:id" element={<PrivateRoute><MakeYourOwnPackageV2BookingDetailView /></PrivateRoute>} />
         {/* v3 unified-search flow */}
         <Route path="/new-booking/make-your-own-package-v3" element={<PrivateRoute><MakePkgV3Form /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package-v3/results" element={<PrivateRoute><MakePkgV3Results /></PrivateRoute>} />
@@ -431,10 +438,12 @@ export default function App() {
         <Route path="/booking-details/24hr-booking-list" element={<PrivateRoute><HotelBookingList24Hour /> </PrivateRoute>}/>
         {/* Last Minute Bookings list — view + cancel from this page */}
         <Route path="/booking-details/last-minute-booking-list" element={<PrivateRoute><LastMinuteBookingList /></PrivateRoute>}/>
+        <Route path="/booking-details/last-minute-booking/:id" element={<PrivateRoute><LastMinuteBookingDetailView /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id" element={<PrivateRoute><BookingDetailedView /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id/edit" element={<PrivateRoute><BookingEditPage /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id/notes" element={<PrivateRoute><BookingNotesPage /></PrivateRoute>}/>
         <Route path="/booking-details/custom-booking-list" element={<PrivateRoute><CustomBookingList /> </PrivateRoute>}/>
+        <Route path="/booking-details/custom-booking/:id" element={<PrivateRoute><CustomBookingDetailView /></PrivateRoute>}/>
         <Route path="/make-your-pkg-room-list" element={<PrivateRoute><AccomodationRoomList /> </PrivateRoute>}/>
         <Route path="/make-your-own-package/generate-quotation-booking" element={<PrivateRoute><GenerateQuotationBooking /> </PrivateRoute>}/>
         <Route path="/make-your-own-package/confirm-quotation-bookingpage" element={<PrivateRoute><QuotationBookingPage /> </PrivateRoute>}/>
@@ -617,6 +626,7 @@ export default function App() {
         <Route path="/day-stay-room-list" element={<PrivateRoute><DayStayRoomList /></PrivateRoute>} />
         <Route path="/day-stay-booking-page" element={<PrivateRoute><DayStayBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/day-stay-booking-list" element={<PrivateRoute><DayStayBookingList /></PrivateRoute>} />
+        <Route path="/booking-details/day-stay-booking/:id" element={<PrivateRoute><DayStayBookingDetailView /></PrivateRoute>} />
 
         {/* promotion */}
         <Route path="/hotel-actions/:id/promotions" element={<PrivateRoute><Promotion /></PrivateRoute>} />
