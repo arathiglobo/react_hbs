@@ -22,6 +22,10 @@ const PaxInformation = ({
   // When set, the submit button performs an amendment (PUT) on the
   // existing booking instead of creating a new one (POST).
   editingBookingId,
+  // When set (Amend → child-booking flow from PackageBookingDetailView),
+  // forwarded to /book so the backend stamps "{parent}/{n}" — e.g.
+  // amending GPKG-4 yields GPKG-4/1. Mirrors Hotel ADD NEW ITEM.
+  parentBookingCode,
 }) => {
   const navigate = useNavigate();
   const [showSummary, setShowSummary] = useState(false);
@@ -155,6 +159,9 @@ const PaxInformation = ({
         travelDate: searchParams.travelDate,
         packageCategory: searchParams.packageCategory,
         nativeCountry: searchParams.nativeCountry,
+        // Amend → child-booking lineage. Backend uses this to compute
+        // "{parent}/{n}" for the new booking's code.
+        parentBookingCode: parentBookingCode || null,
         totalPrice: totalPrice,
         tourismDirham:
           tourismDirham !== "" && !isNaN(Number(tourismDirham))

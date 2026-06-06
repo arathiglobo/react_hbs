@@ -132,18 +132,30 @@ export default function PackageBookingDetailView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
 
-  // ── Amendment / Edit handler ───────────────────────────────────────
+  // ── Amendment handler ──────────────────────────────────────────────
+  // Mirrors the Hotel "ADD NEW ITEM" pattern in BookingDetailedView.jsx:
+  // we open the package booking page with a parentBookingCode query
+  // param. On submit the backend stamps a child code "{parent}/{n}" —
+  // e.g. amending GPKG-4 yields GPKG-4/1, GPKG-4/2, etc.
+  //
+  // packageId is read from bookingDetails (the authoritative source from
+  // the detail fetch) before falling back to the row stub — rowStub from
+  // the list does not carry packageId, which is why the original
+  // "missing on booking row" toast was firing.
   const handleEditClick = () => {
-    const source = rowStub || bookingDetails || {};
+    const source = bookingDetails || rowStub || {};
     const packageId = source.packageId;
     if (!packageId) {
       toast.error("Cannot amend — package id missing on booking row");
       return;
     }
-    navigate(`/new-booking/package-booking/${packageId}`, {
+    // Walk up to the original parent so amendments of amendments still
+    // chain to the root code (e.g. amending GPKG-4/1 → GPKG-4/2, not
+    // GPKG-4/1/1). Mirrors the Hotel pattern.
+    const parent = source.parentBookingCode || source.confirmationCode;
+    const qs = parent ? `?parentBookingCode=${encodeURIComponent(parent)}` : "";
+    navigate(`/new-booking/package-booking/${packageId}${qs}`, {
       state: {
-        mode: "edit",
-        bookingId,
         agentId: source.agentId || null,
         destinationCountryId: source.destinationCountryId || null,
       },
@@ -179,23 +191,29 @@ export default function PackageBookingDetailView() {
   };
 
   // ── Voucher handlers ───────────────────────────────────────────────
-  /** Fetch the PDF as a blob and build a same-origin Object URL the iframe
-   *  can render. Keeps us safe from popup blockers and from the backend's
-   *  attachment Content-Disposition header. */
+  /** /generate-pdf returns JSON { status, message, pdfUrl } where pdfUrl
+   *  is a same-origin static-files URL (e.g. http://localhost:8081/files/
+   *  PackageBooking_10.pdf). The iframe loads that URL directly — no blob
+   *  conversion. (The previous blob path wrapped the JSON response in a
+   *  fake PDF blob, which is why the iframe rendered "Failed to load PDF
+   *  document".) */
   const loadVoucherPdf = async () => {
     if (!bookingId) return;
     setIsLoadingVoucherPdf(true);
     try {
       const response = await axiosInstance.get(
-        `/api/v1/package-booking/generate-pdf/${bookingId}`,
-        { responseType: "blob" }
+        `/api/v1/package-booking/generate-pdf/${bookingId}`
       );
-      const blob = new Blob([response.data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-      setVoucherBlobUrl(url);
+      if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
+        setVoucherBlobUrl(response.data.pdfUrl);
+      } else {
+        toast.error(response.data?.message || "Failed to load voucher PDF");
+      }
     } catch (err) {
       console.error("Voucher load failed:", err);
-      toast.error("Failed to load voucher PDF");
+      toast.error(
+        err.response?.data?.message || "Failed to load voucher PDF"
+      );
     } finally {
       setIsLoadingVoucherPdf(false);
     }
@@ -232,12 +250,15 @@ export default function PackageBookingDetailView() {
       let url = voucherBlobUrl;
       if (!url) {
         const response = await axiosInstance.get(
-          `/api/v1/package-booking/generate-pdf/${bookingId}`,
-          { responseType: "blob" }
+          `/api/v1/package-booking/generate-pdf/${bookingId}`
         );
-        const blob = new Blob([response.data], { type: "application/pdf" });
-        url = window.URL.createObjectURL(blob);
-        setVoucherBlobUrl(url);
+        if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
+          url = response.data.pdfUrl;
+          setVoucherBlobUrl(url);
+        } else {
+          toast.error(response.data?.message || "Failed to download voucher");
+          return;
+        }
       }
       const a = document.createElement("a");
       a.href = url;
@@ -555,6 +576,75 @@ export default function PackageBookingDetailView() {
                     </div>
                   </Col>
                 </Row>
+
+                {/* Related Sub-Bookings — amendments of this primary booking.
+                    Mirrors the "Related Sub-Bookings" card in
+                    BookingDetailedView.jsx. The list comes from
+                    bookingDetails.subBookings populated server-side via
+                    findByParentBookingCodeOrderByChildBookingIndexAsc. */}
+                {bookingDetails.subBookings &&
+                  bookingDetails.subBookings.length > 0 && (
+                    <div className="border bg-white mb-3">
+                      <div
+                        className="px-3 py-2 border-bottom fw-semibold"
+                        style={{ backgroundColor: "#f1f3f5" }}
+                      >
+                        Related Sub-Bookings (
+                        {bookingDetails.subBookings.length})
+                      </div>
+                      <div className="p-3">
+                        {bookingDetails.subBookings.map((sub) => (
+                          <div
+                            key={sub.bookingId}
+                            className="border-top py-2 d-flex justify-content-between align-items-center flex-wrap gap-2"
+                          >
+                            <div>
+                              <span
+                                style={{
+                                  color: "#6c5ce7",
+                                  fontWeight: 700,
+                                  fontSize: "0.9rem",
+                                }}
+                              >
+                                {sub.confirmationCode}
+                              </span>
+                              {sub.childBookingIndex != null && (
+                                <span
+                                  className="ms-2 text-muted small"
+                                >
+                                  (Amend #{sub.childBookingIndex})
+                                </span>
+                              )}
+                              <div
+                                className="text-muted small"
+                                style={{ marginTop: 2 }}
+                              >
+                                {sub.packageName || "-"} ·{" "}
+                                {formatDate(sub.travelDate)} ·{" "}
+                                {sub.contactName || "-"} · AED{" "}
+                                {parseFloat(
+                                  sub.totalPrice || 0
+                                ).toLocaleString()}
+                              </div>
+                            </div>
+                            <button
+                              style={{
+                                ...BUTTON_STYLE,
+                                backgroundColor: "#555",
+                              }}
+                              onClick={() =>
+                                navigate(
+                                  `/booking-details/package-booking/${sub.bookingId}`
+                                )
+                              }
+                            >
+                              View
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Bottom action buttons (left-aligned) — mirrors the
                     Edit / Voucher / Cancel row icons. Same status gate

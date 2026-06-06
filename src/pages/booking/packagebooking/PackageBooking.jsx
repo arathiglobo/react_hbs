@@ -26,6 +26,14 @@ const PackageBooking = () => {
     location.state || {};
   const isEditMode = mode === "edit" && bookingId;
 
+  // Amend → child-booking flow (mirrors Hotel "ADD NEW ITEM").
+  // PackageBookingDetailView's Amend navigates here with
+  // ?parentBookingCode=GPKG-... so the backend can stamp "{parent}/{n}"
+  // for the new booking on submit. Threaded through to PaxInformation.
+  const parentBookingCode = new URLSearchParams(location.search).get(
+    "parentBookingCode"
+  );
+
   const [currentStep, setCurrentStep] = useState(1);
   const [packageData, setPackageData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -198,6 +206,7 @@ const PackageBooking = () => {
                         packageData={packageData}
                         totalPrice={totalPrice}
                         editingBookingId={editingBookingId}
+                        parentBookingCode={parentBookingCode}
                       />;
       default: return null;
     }
