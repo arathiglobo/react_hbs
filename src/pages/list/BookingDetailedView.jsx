@@ -570,6 +570,16 @@ export default function BookingDetailedView() {
                         <InfoRow label="Agent" value={booking.agentName} />
                         <InfoRow label="Source" value={booking.source} />
                         <InfoRow label="Created By" value={booking.createdByRole} />
+                        {/* "Booking Done By Employee" picked in
+                            HotelSearch — only rendered when an employee
+                            was actually selected so unrelated bookings
+                            don't show a stray dash row. */}
+                        {booking.employeeName && (
+                          <InfoRow
+                            label="Booked By Employee"
+                            value={booking.employeeName}
+                          />
+                        )}
                         <InfoRow label="Supplier Ref." value={booking.supplierReference} />
                         <InfoRow label="Deadline Date"   value={booking.deadlineDate? booking.deadlineDate.replace("T", " "): "-"} />
                         <InfoRow label="Refund Status" value={booking.refundStatus} />

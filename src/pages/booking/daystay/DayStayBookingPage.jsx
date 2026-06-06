@@ -62,6 +62,22 @@ export default function DayStayBookingPage() {
     nativeCountry: "",
   });
   const [rooms, setRooms] = useState([]);
+
+  // ── Lead passenger marker — { roomIdx, guestIdx } pointing at the
+  //    single guest the user has flagged as Lead. Mirrors the gov /
+  //    SC / Student / Hotel / LastMinute / LongStay booking pages.
+  //    Defaults to the first guest (room 0, guest 0) so the column
+  //    has one selection on first render. Children can't be Lead.
+  //    The Lead-marked guest drives the submitted `primaryGuest`
+  //    (replacing the hidden Lead Passenger card).
+  const [leadIndex, setLeadIndex] = useState({ roomIdx: 0, guestIdx: 0 });
+
+  const handleLeadSelect = (roomIdx, guestIdx) => {
+    const g = rooms?.[roomIdx]?.guests?.[guestIdx];
+    if (g?.isChild) return;
+    setLeadIndex({ roomIdx, guestIdx });
+  };
+
   const [selectedSpecialRequests, setSelectedSpecialRequests] = useState([]);
   const [remarks, setRemarks] = useState("");
   const [paymentMode, setPaymentMode] = useState("Online");
@@ -220,16 +236,10 @@ export default function DayStayBookingPage() {
 
   const validate = () => {
     const errs = {};
-    if (!primaryGuest.salutation) errs.salutation = "Salutation is required";
-    if (!primaryGuest.firstName.trim()) errs.firstName = "First name is required";
-    if (!primaryGuest.lastName.trim()) errs.lastName = "Last name is required";
-    if (!primaryGuest.email.trim()) errs.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.email))
-      errs.email = "Invalid email";
-    if (!primaryGuest.phone.trim()) errs.phone = "Phone is required";
-    else if (primaryGuest.phone.trim().length > 15)
-      errs.phone = "Phone cannot exceed 15 digits";
-    if (!primaryGuest.agentLpo.trim()) errs.agentLpo = "Agent LPO is required";
+    // Lead Passenger / Primary Guest validation removed — the card
+    // has been hidden. The Guest Details grid above is the single
+    // source of customer details; the submit payload derives
+    // `primaryGuest` from the Lead-marked guest at build time.
 
     rooms.forEach((room, ri) => {
       room.guests.forEach((g, gi) => {
@@ -270,6 +280,10 @@ export default function DayStayBookingPage() {
       const body = {
         hotelId: payload.hotelId,
         agentId: Number(payload.agentId) || null,
+        // Optional "Booking Done By Employee" — picked in DayStaySearch,
+        // spread through DayStayRoomList's payload. Backend resolves it
+        // to an Employee row in DayStayBookingServiceImpl.create.
+        employeeId: payload.employeeId || null,
         contractId: payload.contractId,
         checkInDate: payload.checkInDate,
         checkInTime: payload.checkInTime,
@@ -283,8 +297,29 @@ export default function DayStayBookingPage() {
         totalAmount: totals.grandTotal,
         bookingConfirmation,
         remarks: remarks?.trim() || null,
-        primaryGuest,
-        rooms: rooms.map((r) => ({
+        // Lead Passenger / Primary Guest card is hidden — derive
+        // primaryGuest from the Lead-marked guest in the Guest
+        // Details grid above. Email / phone / passportNo / agentLpo
+        // / nativeCountry are no longer collected on the form and
+        // are sent as empty strings. Backend ignores empty optional
+        // values so the existing booking-create contract is
+        // preserved.
+        primaryGuest: (() => {
+          const leadGuest =
+            rooms?.[leadIndex.roomIdx]?.guests?.[leadIndex.guestIdx] || {};
+          return {
+            salutation: leadGuest.salutation || "",
+            firstName: leadGuest.firstName || "",
+            middleName: leadGuest.middleName || "",
+            lastName: leadGuest.lastName || "",
+            email: "",
+            phone: "",
+            passportNo: "",
+            agentLpo: "",
+            nativeCountry: "",
+          };
+        })(),
+        rooms: rooms.map((r, rIdx) => ({
           roomNo: r.roomNo,
           roomCategory: r.roomCategory,
           mealPlan: r.mealPlan,
@@ -294,7 +329,13 @@ export default function DayStayBookingPage() {
           rateWithoutMarkup: r.rateWithoutMarkup,
           adults: r.adults,
           children: r.children,
-          guests: r.guests,
+          // Mark each guest with an additive `isLead` flag mirroring
+          // the other dedicated-flow booking pages. Backend ignores
+          // unknown fields.
+          guests: (r.guests || []).map((g, gi) => ({
+            ...g,
+            isLead: rIdx === leadIndex.roomIdx && gi === leadIndex.guestIdx,
+          })),
         })),
         policyAccepted: true,
         acceptedTermsAndConditions: true,
@@ -419,7 +460,7 @@ export default function DayStayBookingPage() {
                         >
                           ← Back
                         </Button>
-                        <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
+                        <h6 className="mb-0 fw-bold text-dark">Guest Details</h6>
                       </div>
                     </Card.Header>
                     <Card.Body className="p-0">
@@ -447,17 +488,31 @@ export default function DayStayBookingPage() {
                                 )}
                               </h6>
                             </Accordion.Header>
-                            <Accordion.Body className="p-4">
+                            <Accordion.Body className="p-3">
+                              {/* Column headers — mirrors the other
+                                  dedicated-flow booking pages so
+                                  every Guest Details grid looks
+                                  identical. */}
+                              <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                                <Col md={2}>Passenger</Col>
+                                <Col md={2}>Title *</Col>
+                                <Col md={3}>First Name *</Col>
+                                <Col md={3}>Surname *</Col>
+                                <Col md={2} className="text-center">Lead</Col>
+                              </Row>
                               {room.guests.map((g, gi) => {
                                 const lbl = g.isChild
                                   ? `Child ${gi - room.adults + 1}`
                                   : `Adult ${gi + 1}`;
+                                const isLead =
+                                  leadIndex.roomIdx === ri &&
+                                  leadIndex.guestIdx === gi;
                                 return (
-                                  <div key={gi} className="guest-row mb-3">
+                                  <div key={gi} className="guest-row mb-2">
                                     <Row className="align-items-center g-2">
                                       <Col md={2}>
                                         <span className="fw-semibold text-muted">
-                                          {lbl} *
+                                          {lbl}
                                         </span>
                                       </Col>
                                       <Col md={2}>
@@ -486,9 +541,9 @@ export default function DayStayBookingPage() {
                                           ))}
                                         </Form.Select>
                                       </Col>
-                                      <Col md={2}>
+                                      <Col md={3}>
                                         <Form.Control
-                                          placeholder="First Name *"
+                                          placeholder="First Name"
                                           value={g.firstName}
                                           isInvalid={
                                             !!validationErrors[
@@ -506,24 +561,9 @@ export default function DayStayBookingPage() {
                                           className="form-control-sm"
                                         />
                                       </Col>
-                                      <Col md={2}>
+                                      <Col md={3}>
                                         <Form.Control
-                                          placeholder="Middle"
-                                          value={g.middleName}
-                                          onChange={(e) =>
-                                            handleGuest(
-                                              ri,
-                                              gi,
-                                              "middleName",
-                                              e.target.value
-                                            )
-                                          }
-                                          className="form-control-sm"
-                                        />
-                                      </Col>
-                                      <Col md={2}>
-                                        <Form.Control
-                                          placeholder="Last Name *"
+                                          placeholder="Surname"
                                           value={g.lastName}
                                           isInvalid={
                                             !!validationErrors[
@@ -541,31 +581,35 @@ export default function DayStayBookingPage() {
                                           className="form-control-sm"
                                         />
                                       </Col>
-                                      <Col md={2}>
-                                        <Form.Select
-                                          value={g.gender}
-                                          onChange={(e) =>
-                                            handleGuest(
-                                              ri,
-                                              gi,
-                                              "gender",
-                                              e.target.value
-                                            )
+                                      {/* Gender column hidden by
+                                          request. State `g.gender`
+                                          keeps its default empty
+                                          string. */}
+                                      <Col md={2} className="text-center">
+                                        {/* Lead radio — only adults
+                                            can be lead. Disabled+greyed
+                                            for children so the row
+                                            still aligns. The Lead-marked
+                                            guest drives the `primaryGuest`
+                                            payload (replacing the hidden
+                                            Lead Passenger card). */}
+                                        <Form.Check
+                                          type="radio"
+                                          name="ds-lead-guest"
+                                          id={`ds-lead-${ri}-${gi}`}
+                                          checked={isLead}
+                                          disabled={g.isChild}
+                                          onChange={() =>
+                                            handleLeadSelect(ri, gi)
                                           }
-                                          className="form-control-sm"
-                                        >
-                                          <option value="">Gender</option>
-                                          {GENDERS.map((s) => (
-                                            <option key={s} value={s}>
-                                              {s}
-                                            </option>
-                                          ))}
-                                        </Form.Select>
+                                          title={
+                                            g.isChild
+                                              ? "Children cannot be the lead"
+                                              : "Mark as Lead passenger"
+                                          }
+                                        />
                                       </Col>
                                     </Row>
-                                    {gi < room.guests.length - 1 && (
-                                      <hr className="my-3" />
-                                    )}
                                   </div>
                                 );
                               })}
@@ -576,148 +620,20 @@ export default function DayStayBookingPage() {
                     </Card.Body>
                   </Card>
 
-                  {/* Lead Passenger */}
-                  <Card className="p-4 mb-4 shadow-sm border-0">
-                    <h5 className="mb-3 fw-bold">Lead Passenger</h5>
-                    <Row className="g-3">
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Salutation
-                          </Form.Label>
-                          <Form.Select
-                            value={primaryGuest.salutation}
-                            isInvalid={!!validationErrors.salutation}
-                            onChange={(e) =>
-                              handlePrimary("salutation", e.target.value)
-                            }
-                          >
-                            <option value="">--</option>
-                            {SALUTATIONS.map((s) => (
-                              <option key={s} value={s}>
-                                {s}
-                              </option>
-                            ))}
-                          </Form.Select>
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.salutation}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>First Name
-                          </Form.Label>
-                          <Form.Control
-                            value={primaryGuest.firstName}
-                            isInvalid={!!validationErrors.firstName}
-                            onChange={(e) =>
-                              handlePrimary("firstName", e.target.value)
-                            }
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.firstName}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>Middle Name</Form.Label>
-                          <Form.Control
-                            value={primaryGuest.middleName}
-                            onChange={(e) =>
-                              handlePrimary("middleName", e.target.value)
-                            }
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Last Name
-                          </Form.Label>
-                          <Form.Control
-                            value={primaryGuest.lastName}
-                            isInvalid={!!validationErrors.lastName}
-                            onChange={(e) =>
-                              handlePrimary("lastName", e.target.value)
-                            }
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.lastName}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={4}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Email
-                          </Form.Label>
-                          <Form.Control
-                            type="email"
-                            value={primaryGuest.email}
-                            isInvalid={!!validationErrors.email}
-                            onChange={(e) =>
-                              handlePrimary("email", e.target.value)
-                            }
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.email}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Phone
-                          </Form.Label>
-                          <Form.Control
-                            value={primaryGuest.phone}
-                            isInvalid={!!validationErrors.phone}
-                            onChange={(e) =>
-                              handlePrimary("phone", e.target.value)
-                            }
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.phone}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Agent LPO
-                          </Form.Label>
-                          <Form.Control
-                            value={primaryGuest.agentLpo}
-                            isInvalid={!!validationErrors.agentLpo}
-                            onChange={(e) =>
-                              handlePrimary("agentLpo", e.target.value)
-                            }
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.agentLpo}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={2}>
-                        <Form.Group>
-                          <Form.Label>Passport No</Form.Label>
-                          <Form.Control
-                            value={primaryGuest.passportNo}
-                            onChange={(e) =>
-                              handlePrimary("passportNo", e.target.value)
-                            }
-                          />
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </Card>
+                  {/* Lead Passenger / Primary Guest Details card
+                      hidden by request — the Guest Details grid
+                      above is the single source of customer details,
+                      with the Lead radio marking the head guest. The
+                      submit payload still carries a `primaryGuest`
+                      object: it's derived from the Lead-marked
+                      passenger in handleReview / submit, so the
+                      booking-create contract stays intact. */}
 
-                  {/* Remarks & Special Requests */}
+                  {/* Special Requests (Remarks textarea hidden by
+                      request — state `remarks` keeps its default
+                      empty string so the payload key stays intact). */}
                   <Card className="p-4 mb-2 shadow-sm border-0">
-                    <h5 className="mb-3 fw-bold">Remarks &amp; Special Requests</h5>
+                    <h5 className="mb-3 fw-bold">Special Requests</h5>
                     <div className="special-request-grid mb-3">
                       {SPECIAL_REQUESTS.map((req) => (
                         <Form.Check
@@ -732,17 +648,6 @@ export default function DayStayBookingPage() {
                       ))}
                     </div>
                     <Row className="g-3">
-                      <Col md={12}>
-                        <Form.Group>
-                          <Form.Label>Remarks</Form.Label>
-                          <Form.Control
-                            as="textarea"
-                            rows={2}
-                            value={remarks}
-                            onChange={(e) => setRemarks(e.target.value)}
-                          />
-                        </Form.Group>
-                      </Col>
                       <Col md={6}>
                         <Form.Group>
                           <Form.Label>Payment Mode</Form.Label>
@@ -908,7 +813,7 @@ export default function DayStayBookingPage() {
                         disabled={submitting}
                         className="flex-grow-1"
                       >
-                        Review &amp; Submit
+                        Submit
                       </Button>
                     </div>
                   </div>
@@ -1025,19 +930,20 @@ export default function DayStayBookingPage() {
             <Col md={6}>
               <strong>Check-Out:</strong> {payload?.checkOutTime}
             </Col>
-            <Col md={6}>
-              <strong>Guest:</strong> {primaryGuest.salutation}{" "}
-              {primaryGuest.firstName} {primaryGuest.lastName}
-            </Col>
-            <Col md={6}>
-              <strong>Email:</strong> {primaryGuest.email}
-            </Col>
-            <Col md={6}>
-              <strong>Phone:</strong> {primaryGuest.phone}
-            </Col>
-            <Col md={6}>
-              <strong>Agent LPO:</strong> {primaryGuest.agentLpo}
-            </Col>
+            {/* Guest summary now reads the Lead-marked passenger
+                straight off the rooms array — the Primary Guest
+                Details card was hidden. Email / Phone / Agent LPO
+                are no longer collected on the form. */}
+            {(() => {
+              const lead =
+                rooms?.[leadIndex.roomIdx]?.guests?.[leadIndex.guestIdx] || {};
+              return (
+                <Col md={6}>
+                  <strong>Guest:</strong> {lead.salutation}{" "}
+                  {lead.firstName} {lead.lastName}
+                </Col>
+              );
+            })()}
           </Row>
           <Table size="sm" bordered>
             <thead className="table-light">

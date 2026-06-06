@@ -246,6 +246,14 @@ export default function SeniorCitizenBookingDetailView() {
                         <InfoRow label="Agent" value={data.agentName} />
                         <InfoRow label="Source" value={data.source} />
                         <InfoRow label="Created By" value={data.createdByRole} />
+                        {/* Optional "Booking Done By Employee" — only
+                            shown when picked at search time. */}
+                        {data.employeeName && (
+                          <InfoRow
+                            label="Booked By Employee"
+                            value={data.employeeName}
+                          />
+                        )}
                         <InfoRow label="Supplier Ref." value={data.supplierReference} />
                         <InfoRow
                           label="Deadline Date"

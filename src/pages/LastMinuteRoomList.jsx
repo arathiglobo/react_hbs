@@ -9,6 +9,7 @@ import {
   Spinner,
   Alert,
   Accordion,
+  Form,
 } from "react-bootstrap";
 import { useAccordionButton } from "react-bootstrap/AccordionButton";
 import {
@@ -134,6 +135,24 @@ export default function LastMinuteRoomList() {
   const [activeAccordion, setActiveAccordion] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
 
+  // ──────────────────────────────────────────────────────────────────────
+  // Multi-room selection — mirrors RoomList.jsx.
+  //
+  // Single-room searches (numRooms === 1) keep the legacy
+  // `handleBookRate` flow — the per-rate "View Details / Book" button
+  // renders unchanged and navigates with the single rate as `ctx.room`.
+  //
+  // Multi-room searches (numRooms > 1) render a per-room outer
+  // Accordion. Each rate's button becomes a radio bound to a room
+  // slot. Important caveat: the `last-minute-booking/create` endpoint
+  // accepts only ONE `lastMinuteRateId` today, so when the user picks
+  // different rates per slot the combined handler uses Room 1's pick
+  // for the booking itself. The other slots' picks ride along as
+  // `roomBreakdown` for future backend work; the user is told this on
+  // the bottom CTA.
+  // ──────────────────────────────────────────────────────────────────────
+  const [selectedRooms, setSelectedRooms] = useState([]);
+
   // Shared Room-Type + Refund-Policy filters (same UX as /room-list).
   // Last-minute rates carry `refundable` (boolean) + `mealPlanName`.
   const filters = useRoomFilters();
@@ -180,12 +199,102 @@ export default function LastMinuteRoomList() {
           nights: results.nights,
           searchRooms,
           agentId: sc.agent || null,
+          // Optional "Booking Done By Employee" — carried from
+          // LastMinuteBookingPage searchContext into the form's create payload.
+          employeeId: sc.employeeId || null,
           nationalityId: nat?.value ?? null,
           nationalityCode: nat?.code ?? null,
           nationalityName: nat?.label ?? null,
         },
       },
     });
+  };
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Multi-room helpers (see comment near `selectedRooms`).
+  // ──────────────────────────────────────────────────────────────────────
+  const numRooms =
+    (payload?.searchContext?.rooms || []).length || 1;
+  const isMultiRoom = numRooms > 1;
+  const allRoomsSelected =
+    selectedRooms.length > 0 &&
+    selectedRooms.every((r) => r.selectedRate !== null);
+
+  useEffect(() => {
+    setSelectedRooms((prev) => {
+      if (prev.length === numRooms) return prev;
+      return Array.from({ length: numRooms }, (_, i) => ({
+        roomNo: i + 1,
+        selectedRate: null,
+      }));
+    });
+  }, [numRooms]);
+
+  const handleRateSelect = (roomIndex, rate) => {
+    setSelectedRooms((prev) =>
+      prev.map((r, i) => {
+        if (i !== roomIndex) return r;
+        if (r.selectedRate === rate) {
+          return { ...r, selectedRate: null };
+        }
+        return { ...r, selectedRate: rate };
+      }),
+    );
+  };
+
+  /** Multi-room navigation. The booking-create endpoint takes a single
+   *  `lastMinuteRateId` so we send Room 1's pick as `ctx.room`
+   *  (legacy single-rate shape). All slots' picks ride along as
+   *  `ctx.roomBreakdown` for any future backend work that wants real
+   *  per-room rates. */
+  const handleProceedBooking = () => {
+    if (!allRoomsSelected || !payload) return;
+    try {
+      const hotelFromPayload = payload.hotel;
+      const resultsFromPayload = payload.results;
+      const sc = payload.searchContext || {};
+      const searchRooms = sc.rooms || [{ adults: 1, children: 0, childAges: [] }];
+      const nat = sc.nationality || null;
+      const primaryRate = selectedRooms[0].selectedRate;
+
+      navigate("/new-booking/last-minute-booking/create", {
+        state: {
+          ctx: {
+            hotel: {
+              hotelId: hotelFromPayload.hotelId,
+              hotelName: hotelFromPayload.hotelName,
+              address: hotelFromPayload.address,
+              hotelImage: hotelFromPayload.hotelImage,
+              starRating: hotelFromPayload.starRating,
+              categoryName: hotelFromPayload.categoryName,
+            },
+            // Backend takes one rate today — primary slot wins.
+            room: primaryRate,
+            // Additive — downstream code can use this to render
+            // per-slot details on the form (LastMinuteBookingForm
+            // currently ignores it). When the backend gains a
+            // per-room rate list, this is the field to read.
+            roomBreakdown: selectedRooms.map((r, i) => ({
+              roomNo: i + 1,
+              rate: r.selectedRate,
+            })),
+            checkInDate: resultsFromPayload.checkInDate,
+            checkOutDate: resultsFromPayload.checkOutDate,
+            nights: resultsFromPayload.nights,
+            searchRooms,
+            agentId: sc.agent || null,
+            // Optional "Booking Done By Employee" — same forwarding
+            // path as the single-room flow above.
+            employeeId: sc.employeeId || null,
+            nationalityId: nat?.value ?? null,
+            nationalityCode: nat?.code ?? null,
+            nationalityName: nat?.label ?? null,
+          },
+        },
+      });
+    } catch (err) {
+      console.error("Error preparing multi-room ctx:", err);
+    }
   };
 
   if (loading) {
@@ -359,6 +468,13 @@ export default function LastMinuteRoomList() {
                   No last-minute rates available for this hotel.
                 </Alert>
               ) : (
+                <>
+                {/* Per-room wrapper — single-room renders the inner
+                    Accordion once unwrapped (legacy behavior);
+                    multi-room renders it per slot inside a
+                    "Room N" Accordion. */}
+                {(isMultiRoom ? selectedRooms : [null]).map((_slot, roomSlotIndex) => {
+                  const inner = (
                 <Accordion
                   activeKey={activeAccordion}
                   onSelect={(key) => setActiveAccordion(key)}
@@ -486,16 +602,38 @@ export default function LastMinuteRoomList() {
                                         </div>
                                       </div>
 
-                                      <Button
-                                        variant="primary"
-                                        className="w-100 book-now-btn mt-1 mb-1"
-                                        onClick={() =>
-                                          handleBookRate(rate, hotel, results)
-                                        }
-                                      >
-                                        <FaMoneyBillWave className="me-2" />
-                                        View Details / Book
-                                      </Button>
+                                      {isMultiRoom ? (
+                                        <Form.Check
+                                          type="radio"
+                                          id={`lm-rate-radio-grid-${roomSlotIndex}-${index}-${i}`}
+                                          name={`lm-rate-radio-grid-room-${roomSlotIndex}`}
+                                          className="w-100 mt-1 mb-1"
+                                          label={
+                                            selectedRooms[roomSlotIndex]
+                                              ?.selectedRate === rate
+                                              ? `Selected for Room ${roomSlotIndex + 1}`
+                                              : `Select for Room ${roomSlotIndex + 1}`
+                                          }
+                                          checked={
+                                            selectedRooms[roomSlotIndex]
+                                              ?.selectedRate === rate
+                                          }
+                                          onChange={() =>
+                                            handleRateSelect(roomSlotIndex, rate)
+                                          }
+                                        />
+                                      ) : (
+                                        <Button
+                                          variant="primary"
+                                          className="w-100 book-now-btn mt-1 mb-1"
+                                          onClick={() =>
+                                            handleBookRate(rate, hotel, results)
+                                          }
+                                        >
+                                          <FaMoneyBillWave className="me-2" />
+                                          View Details / Book
+                                        </Button>
+                                      )}
                                     </Card.Body>
                                   ) : (
                                     <Card.Body className="p-3 py-2 d-flex flex-row justify-content-between align-items-center gap-3">
@@ -550,17 +688,39 @@ export default function LastMinuteRoomList() {
                                         )}
                                       </div>
                                       <div className="ps-2">
-                                        <Button
-                                          variant="primary"
-                                          className="book-now-btn px-4 py-2"
-                                          onClick={() =>
-                                            handleBookRate(rate, hotel, results)
-                                          }
-                                          style={{ whiteSpace: "nowrap" }}
-                                        >
-                                          <FaMoneyBillWave className="me-2" />
-                                          View Details
-                                        </Button>
+                                        {isMultiRoom ? (
+                                          <Form.Check
+                                            type="radio"
+                                            id={`lm-rate-radio-list-${roomSlotIndex}-${index}-${i}`}
+                                            name={`lm-rate-radio-list-room-${roomSlotIndex}`}
+                                            label={
+                                              selectedRooms[roomSlotIndex]
+                                                ?.selectedRate === rate
+                                                ? `Selected for Room ${roomSlotIndex + 1}`
+                                                : `Select for Room ${roomSlotIndex + 1}`
+                                            }
+                                            checked={
+                                              selectedRooms[roomSlotIndex]
+                                                ?.selectedRate === rate
+                                            }
+                                            onChange={() =>
+                                              handleRateSelect(roomSlotIndex, rate)
+                                            }
+                                            style={{ whiteSpace: "nowrap" }}
+                                          />
+                                        ) : (
+                                          <Button
+                                            variant="primary"
+                                            className="book-now-btn px-4 py-2"
+                                            onClick={() =>
+                                              handleBookRate(rate, hotel, results)
+                                            }
+                                            style={{ whiteSpace: "nowrap" }}
+                                          >
+                                            <FaMoneyBillWave className="me-2" />
+                                            View Details
+                                          </Button>
+                                        )}
                                       </div>
                                     </Card.Body>
                                   )}
@@ -580,6 +740,74 @@ export default function LastMinuteRoomList() {
                     </Alert>
                   )}
                 </Accordion>
+                  );
+                  if (!isMultiRoom) {
+                    return (
+                      <React.Fragment key="lm-single-room">{inner}</React.Fragment>
+                    );
+                  }
+                  const slotSelection = selectedRooms[roomSlotIndex];
+                  return (
+                    <Accordion
+                      key={`lm-room-slot-${roomSlotIndex}`}
+                      defaultActiveKey={`lm-room-slot-${roomSlotIndex}`}
+                      className="mb-3 room-slot-accordion"
+                    >
+                      <Accordion.Item eventKey={`lm-room-slot-${roomSlotIndex}`}>
+                        <Accordion.Header>
+                          <div className="d-flex w-100 justify-content-between align-items-center pe-3">
+                            <span className="fw-semibold">
+                              <FaBed className="me-2 text-primary" />
+                              Room {roomSlotIndex + 1}
+                            </span>
+                            {slotSelection?.selectedRate ? (
+                              <Badge bg="success" className="ms-2">
+                                {slotSelection.selectedRate.roomCategoryName}
+                                {" — "}
+                                {formatPrice(
+                                  applyMarkup(
+                                    slotSelection.selectedRate.lastMinuteRate,
+                                    slotSelection.selectedRate.markup,
+                                  ),
+                                )}
+                              </Badge>
+                            ) : (
+                              <Badge bg="warning" text="dark" className="ms-2">
+                                Not selected
+                              </Badge>
+                            )}
+                          </div>
+                        </Accordion.Header>
+                        <Accordion.Body>{inner}</Accordion.Body>
+                      </Accordion.Item>
+                    </Accordion>
+                  );
+                })}
+
+                {/* Multi-room "Continue with Booking" CTA. The
+                    last-minute-booking endpoint takes one rate id, so
+                    Room 1's pick is applied to all rooms. The notice
+                    below makes that explicit so users aren't
+                    surprised. */}
+                {isMultiRoom && (
+                  <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mt-3 p-3 border rounded bg-light">
+                    <div className="small text-muted">
+                      {allRoomsSelected
+                        ? `All ${numRooms} rooms selected. Note: every room in this booking will be charged at Room 1's selected rate.`
+                        : `Pick a rate for each of the ${numRooms} rooms to continue. ${selectedRooms.filter((r) => r.selectedRate).length}/${numRooms} selected.`}
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      disabled={!allRoomsSelected}
+                      onClick={handleProceedBooking}
+                    >
+                      <FaMoneyBillWave className="me-2" />
+                      Continue with Booking
+                    </Button>
+                  </div>
+                )}
+                </>
               )}
                 </Col>
               </Row>

@@ -494,15 +494,22 @@ const HotelRegistrationActions = () => {
     return iconMap[amenityId] || FaCheck;
   };
 
-  // Helper function to get state name from ID
+  // Helper function to get state name from ID.
+  // Coerces both sides to String — /api/states returns numeric ids,
+  // /api/hotels/{id} sometimes serializes stateId as a string (depends
+  // on Jackson config), and strict === between the two silently fails,
+  // which is why "State ID: 3" was rendering instead of the name.
+  // Also no-ops on null/undefined so legacy rows don't print "State ID: null".
   const getStateName = (stateId) => {
-    const state = stateList.find((s) => s.value === stateId);
+    if (stateId == null || stateId === "") return "";
+    const state = stateList.find((s) => String(s.value) === String(stateId));
     return state ? state.label : `State ID: ${stateId}`;
   };
 
-  // Helper function to get place name from ID
+  // Helper function to get place name from ID — same coercion + null guard.
   const getPlaceName = (placeId) => {
-    const place = placeList.find((p) => p.value === placeId);
+    if (placeId == null || placeId === "") return "";
+    const place = placeList.find((p) => String(p.value) === String(placeId));
     return place ? place.label : `Place ID: ${placeId}`;
   };
 
@@ -565,8 +572,16 @@ const HotelRegistrationActions = () => {
                         <div className="location-details">
                           <div>{hotelData.address}</div>
                           <div className="location-additional">
-                            {getStateName(hotelData.stateId)},{" "}
-                            {getPlaceName(hotelData.placeId)}
+                            {/* Prefer the resolved names that
+                                /api/hotels/{id} now returns. Fall back
+                                to the master-list lookup so any caller
+                                that still ships only the ids keeps
+                                working. */}
+                            {hotelData.stateName ||
+                              getStateName(hotelData.stateId)}
+                            ,{" "}
+                            {hotelData.placeName ||
+                              getPlaceName(hotelData.placeId)}
                           </div>
                         </div>
                       </div>

@@ -9,6 +9,7 @@ import {
   Col,
   Alert,
   Accordion,
+  Form,
 } from "react-bootstrap";
 import { useAccordionButton } from "react-bootstrap/AccordionButton";
 import {
@@ -164,7 +165,25 @@ function ViewToggleBar({ view, onViewChange, count }) {
 }
 
 // ── Grid Room Card ────────────────────────────────────────────────────────────
-function RoomCardGrid({ contract, room, totalNights, estPrice, exceedsCap, onBook, extraAdults = 0, extraChildren = 0 }) {
+// Multi-room props (`isMultiRoom`, `roomSlotIndex`, `isSelected`, `onSelect`)
+// are optional. Single-room callers omit them and the existing Book button
+// renders unchanged. Multi-room callers pass them and the button is
+// swapped for a radio bound to the room slot. See LongStayRoomList main
+// component for the selectedRooms wiring.
+function RoomCardGrid({
+  contract,
+  room,
+  totalNights,
+  estPrice,
+  exceedsCap,
+  onBook,
+  extraAdults = 0,
+  extraChildren = 0,
+  isMultiRoom = false,
+  roomSlotIndex = 0,
+  isSelected = false,
+  onSelect,
+}) {
   return (
     <Col lg={6} xl={4} className="mb-3">
       <Card className="rate-card h-100 shadow-sm">
@@ -224,16 +243,35 @@ function RoomCardGrid({ contract, room, totalNights, estPrice, exceedsCap, onBoo
             </div>
           </div>
 
-          {/* Book button */}
-          <Button
-            variant={exceedsCap ? "outline-secondary" : "primary"}
-            className="w-100 book-now-btn"
-            disabled={exceedsCap}
-            onClick={() => onBook(contract, room)}
-          >
-            <FaMoneyBillWave className="me-2" />
-            {exceedsCap ? "Stay too long" : "Book this room"}
-          </Button>
+          {/* Book button (single-room) / per-room radio (multi-room) */}
+          {isMultiRoom ? (
+            <Form.Check
+              type="radio"
+              id={`ls-rate-radio-grid-${roomSlotIndex}-${contract?.id || "c"}-${room.longStayRoomId}`}
+              name={`ls-rate-radio-grid-room-${roomSlotIndex}`}
+              className="w-100 mt-1 mb-1"
+              disabled={exceedsCap}
+              label={
+                exceedsCap
+                  ? "Stay too long"
+                  : isSelected
+                    ? `Selected for Room ${roomSlotIndex + 1}`
+                    : `Select for Room ${roomSlotIndex + 1}`
+              }
+              checked={isSelected}
+              onChange={() => onSelect && onSelect(contract, room)}
+            />
+          ) : (
+            <Button
+              variant={exceedsCap ? "outline-secondary" : "primary"}
+              className="w-100 book-now-btn"
+              disabled={exceedsCap}
+              onClick={() => onBook(contract, room)}
+            >
+              <FaMoneyBillWave className="me-2" />
+              {exceedsCap ? "Stay too long" : "Book this room"}
+            </Button>
+          )}
 
           <div className="small text-muted text-center">
             <FaShieldAlt className="me-1" />
@@ -246,7 +284,21 @@ function RoomCardGrid({ contract, room, totalNights, estPrice, exceedsCap, onBoo
 }
 
 // ── List Room Card ────────────────────────────────────────────────────────────
-function RoomCardList({ contract, room, totalNights, estPrice, exceedsCap, onBook, extraAdults = 0, extraChildren = 0 }) {
+// See note on RoomCardGrid — same multi-room prop pattern.
+function RoomCardList({
+  contract,
+  room,
+  totalNights,
+  estPrice,
+  exceedsCap,
+  onBook,
+  extraAdults = 0,
+  extraChildren = 0,
+  isMultiRoom = false,
+  roomSlotIndex = 0,
+  isSelected = false,
+  onSelect,
+}) {
   return (
     <div
       className="d-flex align-items-center gap-3 p-3 mb-2 bg-white border rounded"
@@ -298,16 +350,35 @@ function RoomCardList({ contract, room, totalNights, estPrice, exceedsCap, onBoo
             {formatPrice(estPrice)}
           </div>
         </div>
-        <Button
-          variant={exceedsCap ? "outline-secondary" : "primary"}
-          size="sm"
-          disabled={exceedsCap}
-          onClick={() => onBook(contract, room)}
-          className="d-flex align-items-center gap-1"
-        >
-          <FaMoneyBillWave size={12} />
-          {exceedsCap ? "Stay too long" : "Book"}
-        </Button>
+        {isMultiRoom ? (
+          <Form.Check
+            type="radio"
+            id={`ls-rate-radio-list-${roomSlotIndex}-${contract?.id || "c"}-${room.longStayRoomId}`}
+            name={`ls-rate-radio-list-room-${roomSlotIndex}`}
+            disabled={exceedsCap}
+            label={
+              exceedsCap
+                ? "Stay too long"
+                : isSelected
+                  ? `Selected for Room ${roomSlotIndex + 1}`
+                  : `Select for Room ${roomSlotIndex + 1}`
+            }
+            checked={isSelected}
+            onChange={() => onSelect && onSelect(contract, room)}
+            style={{ whiteSpace: "nowrap" }}
+          />
+        ) : (
+          <Button
+            variant={exceedsCap ? "outline-secondary" : "primary"}
+            size="sm"
+            disabled={exceedsCap}
+            onClick={() => onBook(contract, room)}
+            className="d-flex align-items-center gap-1"
+          >
+            <FaMoneyBillWave size={12} />
+            {exceedsCap ? "Stay too long" : "Book"}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -322,6 +393,24 @@ export default function LongStayRoomList() {
   const [error, setError] = useState(null);
   const [activeAccordion, setActiveAccordion] = useState("0");
   const [viewMode, setViewMode] = useState("grid"); // "grid" | "list"
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Multi-room selection — mirrors RoomList.jsx.
+  //
+  // Single-room searches (numRooms === 1) keep using `handleBook` —
+  // each room card renders the legacy "Book this room" button and the
+  // flow is unchanged.
+  //
+  // Multi-room searches (numRooms > 1) render a per-room outer
+  // Accordion. Each room card's button is swapped for a radio bound
+  // to the active slot. Important caveat: the long-stay-booking
+  // endpoint accepts ONE (contract, room) per booking today, so when
+  // the user picks different rooms per slot the combined handler uses
+  // Room 1's pick. The other slots' picks ride along as
+  // `roomBreakdown` for future backend work; the user is told this on
+  // the bottom CTA.
+  // ──────────────────────────────────────────────────────────────────────
+  const [selectedRooms, setSelectedRooms] = useState([]);
 
   // Shared Room-Type + Refund-Policy filters (same UX as /room-list).
   // Long-stay rooms carry `refundable` (boolean); they have no meal-plan
@@ -510,6 +599,8 @@ export default function LongStayRoomList() {
         checkIn: draft.payload.checkInDate,
         checkOut: draft.payload.checkOutDate,
         agentId: draft.payload.agentId || null,
+        // Optional "Booking Done By Employee" carried from LongStaySearch.
+        employeeId: draft.payload.employeeId || null,
         nationality: draft.payload.nationality || null,
         rooms: draft.payload.rooms || [],
         contract,
@@ -517,6 +608,89 @@ export default function LongStayRoomList() {
       })
     );
     navigate("/long-stay-booking-page");
+  };
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Multi-room helpers (see comment near `selectedRooms`).
+  // ──────────────────────────────────────────────────────────────────────
+  const numRooms = (draft?.payload?.rooms || []).length || 1;
+  const isMultiRoom = numRooms > 1;
+  const allRoomsSelected =
+    selectedRooms.length > 0 &&
+    selectedRooms.every((s) => s.contract !== null && s.room !== null);
+
+  useEffect(() => {
+    setSelectedRooms((prev) => {
+      if (prev.length === numRooms) return prev;
+      return Array.from({ length: numRooms }, (_, i) => ({
+        roomNo: i + 1,
+        contract: null,
+        room: null,
+      }));
+    });
+  }, [numRooms]);
+
+  const handleSlotSelect = (roomIndex, contract, room) => {
+    setSelectedRooms((prev) =>
+      prev.map((s, i) => {
+        if (i !== roomIndex) return s;
+        // Clicking already-selected (contract, room) clears the slot.
+        if (s.contract === contract && s.room === room) {
+          return { ...s, contract: null, room: null };
+        }
+        return { ...s, contract, room };
+      }),
+    );
+  };
+
+  /** Multi-room navigation. The long-stay-booking endpoint accepts ONE
+   *  (contract, room) per booking, so Room 1's pick is sent as the
+   *  legacy single-room shape. All slots' picks ride along as
+   *  `roomBreakdown` for future backend work. */
+  const handleProceedBooking = () => {
+    if (!allRoomsSelected || !draft) return;
+    try {
+      const primary = selectedRooms[0];
+      // Pre-flight: same cap check as handleBook.
+      if (
+        primary.contract.maxBookingDays &&
+        totalNights > primary.contract.maxBookingDays
+      ) {
+        toast.error(
+          `Selected contract caps stays at ${primary.contract.maxBookingDays} nights — your dates are ${totalNights}.`,
+        );
+        return;
+      }
+      sessionStorage.setItem(
+        "longStayBookingDraft",
+        JSON.stringify({
+          hotelId: draft.payload.hotelId,
+          hotelName: draft.meta.hotelName,
+          address: draft.meta?.address || "",
+          checkIn: draft.payload.checkInDate,
+          checkOut: draft.payload.checkOutDate,
+          agentId: draft.payload.agentId || null,
+          // Optional "Booking Done By Employee" carried from LongStaySearch.
+          employeeId: draft.payload.employeeId || null,
+          nationality: draft.payload.nationality || null,
+          rooms: draft.payload.rooms || [],
+          // Backend takes ONE (contract, room) — primary slot wins.
+          contract: primary.contract,
+          room: primary.room,
+          // Additive — every slot's pick rides along for any future
+          // backend that wants real per-room (contract, room) lists.
+          // LongStayBookingPage currently ignores this field.
+          roomBreakdown: selectedRooms.map((s, i) => ({
+            roomNo: i + 1,
+            contract: s.contract,
+            room: s.room,
+          })),
+        }),
+      );
+      navigate("/long-stay-booking-page");
+    } catch (err) {
+      console.error("Error preparing multi-room long-stay draft:", err);
+    }
   };
 
   // ── Loading ────────────────────────────────────────────────────────────────
@@ -750,6 +924,13 @@ export default function LongStayRoomList() {
                   </p>
                 </Card>
               ) : (
+                <>
+                {/* Per-room wrapper. Single-room renders the contracts
+                    Accordion once unwrapped (legacy). Multi-room
+                    renders it once per slot inside a "Room N"
+                    Accordion. */}
+                {(isMultiRoom ? selectedRooms : [null]).map((_slot, roomSlotIndex) => {
+                  const inner = (
                 <Accordion
                   activeKey={activeAccordion}
                   onSelect={(key) => setActiveAccordion(key)}
@@ -849,6 +1030,15 @@ export default function LongStayRoomList() {
                                   onBook={handleBook}
                                   extraAdults={partyExtras.extraAdults}
                                   extraChildren={partyExtras.children}
+                                  isMultiRoom={isMultiRoom}
+                                  roomSlotIndex={roomSlotIndex}
+                                  isSelected={
+                                    selectedRooms[roomSlotIndex]?.contract === c &&
+                                    selectedRooms[roomSlotIndex]?.room === r
+                                  }
+                                  onSelect={(ct, rm) =>
+                                    handleSlotSelect(roomSlotIndex, ct, rm)
+                                  }
                                 />
                               ))}
                               {(!c.rooms || c.rooms.length === 0) && (
@@ -875,6 +1065,15 @@ export default function LongStayRoomList() {
                                   onBook={handleBook}
                                   extraAdults={partyExtras.extraAdults}
                                   extraChildren={partyExtras.children}
+                                  isMultiRoom={isMultiRoom}
+                                  roomSlotIndex={roomSlotIndex}
+                                  isSelected={
+                                    selectedRooms[roomSlotIndex]?.contract === c &&
+                                    selectedRooms[roomSlotIndex]?.room === r
+                                  }
+                                  onSelect={(ct, rm) =>
+                                    handleSlotSelect(roomSlotIndex, ct, rm)
+                                  }
                                 />
                               ))}
                               {(!c.rooms || c.rooms.length === 0) && (
@@ -898,6 +1097,71 @@ export default function LongStayRoomList() {
                       </Alert>
                     )}
                 </Accordion>
+                  );
+                  if (!isMultiRoom) {
+                    return (
+                      <React.Fragment key="ls-single-room">{inner}</React.Fragment>
+                    );
+                  }
+                  const slot = selectedRooms[roomSlotIndex];
+                  return (
+                    <Accordion
+                      key={`ls-room-slot-${roomSlotIndex}`}
+                      defaultActiveKey={`ls-room-slot-${roomSlotIndex}`}
+                      className="mb-3 room-slot-accordion"
+                    >
+                      <Accordion.Item eventKey={`ls-room-slot-${roomSlotIndex}`}>
+                        <Accordion.Header>
+                          <div className="d-flex w-100 justify-content-between align-items-center pe-3">
+                            <span className="fw-semibold">
+                              <FaBed className="me-2 text-primary" />
+                              Room {roomSlotIndex + 1}
+                            </span>
+                            {slot?.contract && slot?.room ? (
+                              <Badge bg="success" className="ms-2">
+                                {slot.room.roomCategoryName
+                                  || `Category #${slot.room.hotelRoomCategoryId}`}
+                                {" — "}
+                                {formatPrice(
+                                  estimateStayPrice(slot.contract, slot.room),
+                                )}
+                              </Badge>
+                            ) : (
+                              <Badge bg="warning" text="dark" className="ms-2">
+                                Not selected
+                              </Badge>
+                            )}
+                          </div>
+                        </Accordion.Header>
+                        <Accordion.Body>{inner}</Accordion.Body>
+                      </Accordion.Item>
+                    </Accordion>
+                  );
+                })}
+
+                {/* Multi-room "Continue with Booking" CTA. The
+                    long-stay-booking endpoint accepts one (contract,
+                    room) per booking, so Room 1's pick is applied to
+                    all rooms. The notice below makes that explicit. */}
+                {isMultiRoom && (
+                  <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mt-3 p-3 border rounded bg-light">
+                    <div className="small text-muted">
+                      {allRoomsSelected
+                        ? `All ${numRooms} rooms selected. Note: every room in this booking will be charged at Room 1's selected (contract, room).`
+                        : `Pick a room for each of the ${numRooms} slots to continue. ${selectedRooms.filter((s) => s.contract && s.room).length}/${numRooms} selected.`}
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      disabled={!allRoomsSelected}
+                      onClick={handleProceedBooking}
+                    >
+                      <FaMoneyBillWave className="me-2" />
+                      Continue with Booking
+                    </Button>
+                  </div>
+                )}
+                </>
               )}
                 </Col>
               </Row>

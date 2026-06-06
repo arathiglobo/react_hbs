@@ -119,6 +119,15 @@ function BookingDetailBody({ booking: b }) {
               <small className="text-muted d-block">Address</small>
               <span>{fmt(b.address)}</span>
             </Col>
+            {/* Optional "Booking Done By Employee" — only rendered when
+                an employee was picked at search time. Backend returns
+                the resolved name in toDetailMap. */}
+            {b.employeeName && (
+              <Col md={6} className="mt-2">
+                <small className="text-muted d-block">Booked By Employee</small>
+                <span>{fmt(b.employeeName)}</span>
+              </Col>
+            )}
           </Row>
         </Card.Body>
       </Card>

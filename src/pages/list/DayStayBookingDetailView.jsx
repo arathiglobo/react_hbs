@@ -301,6 +301,16 @@ export default function DayStayBookingDetailView() {
                           ? `AED ${Number(selected.totalAmount).toFixed(2)}`
                           : "—"}
                       </Col>
+                      {/* Optional "Booking Done By Employee" — rendered
+                          only when an employee was selected at search
+                          time. Backend resolves the name from the
+                          joined employee row. */}
+                      {selected.employeeName && (
+                        <Col md={6}>
+                          <strong>Booked By Employee:</strong>{" "}
+                          {selected.employeeName}
+                        </Col>
+                      )}
                     </Row>
                   </Card.Body>
                 </Card>

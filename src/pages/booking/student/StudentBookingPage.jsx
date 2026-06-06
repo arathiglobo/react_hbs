@@ -25,11 +25,11 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  FaHotel, FaCalendarAlt, FaUsers, FaUtensils, FaUserTie,
-  FaGraduationCap, FaFileUpload, FaEnvelope, FaCheckCircle,
+  FaHotel, FaCalendarAlt, FaUsers, FaUtensils,
+  FaGraduationCap, FaFileUpload, FaEnvelope, FaCheckCircle, FaArrowLeft,
 } from "react-icons/fa";
 import {
-  Container, Row, Col, Card, Form, Button, Accordion, Badge,
+  Row, Col, Card, Form, Button, Accordion, Badge,
   Modal, Spinner, Alert,
 } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
@@ -49,6 +49,20 @@ const METHOD_UPLOAD = "STUDENT_ID_UPLOAD";
 const METHOD_MANUAL = "MANUAL_ADMIN_APPROVAL";
 const METHOD_EMAIL  = "INSTITUTIONAL_EMAIL";
 
+// Compact date label used by the right-column Booking Summary —
+// mirrors the helper /gov-employee-booking-page uses so the two
+// dedicated-flow booking pages render dates identically.
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return String(dateStr);
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+};
+
 export default function StudentBookingPage() {
   const navigate = useNavigate();
   const activeUserRole = localStorage.getItem("currentActiveRole");
@@ -59,6 +73,24 @@ export default function StudentBookingPage() {
   // Rooms (guest details per adult/child)
   const [rooms, setRooms] = useState([]);
 
+  // ── Lead passenger marker — { roomIdx, guestIdx } pointing at the
+  //    single guest the user has flagged as Lead. Mirrors the
+  //    gov-employee booking page UX. Defaults to the very first guest
+  //    (room 0, guest 0) so the column always has one selection on
+  //    first render. Children can't be Lead. Each guest's `isLead`
+  //    flag is added to the submitted `rooms[].guests` payload — the
+  //    backend ignores unknown fields, so single-room / legacy flows
+  //    are unaffected.
+  const [leadIndex, setLeadIndex] = useState({ roomIdx: 0, guestIdx: 0 });
+
+  const handleLeadSelect = (roomIdx, guestIdx) => {
+    // Skip selection if the target is a child — the radio is already
+    // disabled in the UI, this is a defensive guard.
+    const g = rooms?.[roomIdx]?.guests?.[guestIdx];
+    if (g?.isChild) return;
+    setLeadIndex({ roomIdx, guestIdx });
+  };
+
   // Primary guest
   const [primaryGuest, setPrimaryGuest] = useState({
     salutation: "", firstName: "", middleName: "", lastName: "",
@@ -67,8 +99,8 @@ export default function StudentBookingPage() {
 
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [bookingDoneByEmployeeId, setBookingDoneByEmployeeId] = useState("");
+  // "Booking Done By Employee" was moved to StudentSearch — the chosen
+  // employeeId arrives on bookingData.payload.employeeId.
 
   // ── Student verification state ─────────────────────────────────
   // Default to Method 1 (Student ID Upload) — Primary Method.
@@ -112,14 +144,8 @@ export default function StudentBookingPage() {
     })));
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
-        if (Array.isArray(res.data)) setEmployees(res.data);
-      } catch (e) { /* silent */ }
-    })();
-  }, []);
+  // Employee fetch removed — "Booking Done By Employee" is selected in
+  // StudentSearch and arrives on bookingData.payload.employeeId.
 
   useEffect(() => {
     const aId = bookingData?.payload?.agentId;
@@ -235,21 +261,18 @@ export default function StudentBookingPage() {
   // ── Form validation (mirrors HotelBookingPage) ────────────────
   const validateForm = () => {
     const errors = {};
-    if (!primaryGuest.salutation) errors.salutation = "Salutation is required";
-    if (!primaryGuest.firstName) errors.firstName = "First Name is required";
-    if (!primaryGuest.lastName) errors.lastName = "Last Name is required";
-    if (!primaryGuest.email) errors.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.email))
-      errors.email = "Please enter a valid email address";
-    if (!primaryGuest.phone) errors.phone = "Phone is required";
-    if (!primaryGuest.agentLpo) errors.agentLpo = "Agent LPO is required";
+    // Primary-guest validation removed — the Primary Guest Details
+    // card has been hidden (the Guest Details grid above is the
+    // single source of customer details, with the Lead radio marking
+    // the head guest). The submit payload derives primaryGuest from
+    // the lead row at build time.
     rooms.forEach((room, ri) => {
       room.guests.forEach((g, gi) => {
         const k = `room_${ri}_guest_${gi}`;
         if (!g.salutation) errors[`${k}_salutation`] = "Required";
         if (!g.firstName) errors[`${k}_firstName`] = "Required";
         if (!g.lastName) errors[`${k}_lastName`] = "Required";
-        if (!g.gender) errors[`${k}_gender`] = "Required";
+       
       });
     });
     return { errors, hasErrors: Object.keys(errors).length > 0 };
@@ -277,23 +300,58 @@ export default function StudentBookingPage() {
     const co = new Date(payload.checkOutDate);
     const nights = Math.max(1, Math.round((co - ci) / 86400000));
 
-    const allRooms = (rooms || []).map((room, idx) => ({
-      roomNo: idx + 1,
-      roomCategory: selectedRate.roomCategory,
-      mealPlan: selectedRate.mealPlan,
-      nonRefundable: !!selectedRate.nonRefundable,
-      rate: Number(selectedRate.rate || 0),
-      rateBeforeDiscount: Number(selectedRate.rateBeforeDiscount || selectedRate.rate || 0),
-      rateWithoutMarkup: Number(selectedRate.rate || 0),
-      adults: room.adults,
-      children: room.children,
-      childAges: room.childAges || [],
-      currency: selectedRate.currency || "AED",
-      guests: (room.guests || []).map((g) => ({
-        salutation: g.salutation, firstName: g.firstName, lastName: g.lastName,
-        gender: g.gender, isChild: !!g.isChild,
-      })),
-    }));
+    // Multi-room aware: when StudentRoomList sent a per-room
+    // `roomBreakdown` array (one entry per booked room), each room
+    // pulls its OWN roomCategory / mealPlan / rate / etc. from that
+    // slot. Without `roomBreakdown` (every legacy single-room flow),
+    // `slot` falls back to the combined `selectedRate` and behaves
+    // exactly as before — so no other flow is affected.
+    const allRooms = (rooms || []).map((room, idx) => {
+      const slot = bookingData.roomBreakdown?.[idx] || selectedRate;
+      return {
+        roomNo: idx + 1,
+        roomCategory: slot.roomCategory,
+        mealPlan: slot.mealPlan,
+        nonRefundable: !!slot.nonRefundable,
+        rate: Number(slot.rate || 0),
+        rateBeforeDiscount: Number(slot.rateBeforeDiscount || slot.rate || 0),
+        rateWithoutMarkup: Number(slot.rate || 0),
+        adults: room.adults,
+        children: room.children,
+        childAges: room.childAges || [],
+        currency: slot.currency || "AED",
+        guests: (room.guests || []).map((g, gi) => ({
+          salutation: g.salutation, firstName: g.firstName, lastName: g.lastName,
+          gender: g.gender, isChild: !!g.isChild,
+          // Lead flag mirrors /gov-employee-booking-page. Backend
+          // ignores unknown fields, so adding this stays backward-
+          // compatible with the existing /api/student-booking/create
+          // contract.
+          isLead: idx === leadIndex.roomIdx && gi === leadIndex.guestIdx,
+        })),
+      };
+    });
+
+    // Primary guest is now derived from the Lead-marked passenger in
+    // the Guest Details grid (the Primary Guest Details card is
+    // hidden). The contact fields the old card collected
+    // (email / phone / passportNo / agentLpo) aren't captured on the
+    // form any more, so they're left empty — the backend ignores
+    // missing optional values, and the existing
+    // /api/student-booking/create contract is preserved.
+    const leadGuest =
+      rooms[leadIndex.roomIdx]?.guests[leadIndex.guestIdx] || {};
+    const derivedPrimaryGuest = {
+      salutation: leadGuest.salutation || "",
+      firstName: leadGuest.firstName || "",
+      middleName: leadGuest.middleName || "",
+      lastName: leadGuest.lastName || "",
+      email: "",
+      phone: "",
+      passportNo: "",
+      agentLpo: "",
+      nativeCountry: "",
+    };
 
     const built = {
       agentId: String(payload.agentId || searchCtx?.agentId || ""),
@@ -305,7 +363,7 @@ export default function StudentBookingPage() {
       checkInDate: payload.checkInDate,
       checkOutDate: payload.checkOutDate,
       nights,
-      primaryGuest: { ...primaryGuest, nativeCountry: "" },
+      primaryGuest: derivedPrimaryGuest,
       rooms: allRooms,
       remarks,
       specialRequests,
@@ -314,7 +372,9 @@ export default function StudentBookingPage() {
       // Student verification — the method drives which extra
       // fields are sent to the backend.
       verificationMethod,
-      studentName: studentName.trim() || `${primaryGuest.firstName} ${primaryGuest.lastName}`.trim(),
+      studentName:
+        studentName.trim()
+        || `${derivedPrimaryGuest.firstName} ${derivedPrimaryGuest.lastName}`.trim(),
       institutionName: institutionName.trim(),
       studentIdNumber: studentIdNumber.trim(),
       studentIdExpiry,
@@ -328,7 +388,8 @@ export default function StudentBookingPage() {
       discountPercent: activePromotion?.discountPercent ?? null,
       discountAmount: activePromotion?.discountAmount ?? null,
       totalRateBeforeDiscount: allRooms.reduce((s, r) => s + Number(r.rateBeforeDiscount || 0), 0),
-      employeeId: bookingDoneByEmployeeId || null,
+      // employeeId is picked in StudentSearch and rides on bookingData.payload.
+      employeeId: bookingData?.payload?.employeeId || null,
     };
     setPendingPayload(built);
     setShowConfirmModal(true);
@@ -367,120 +428,73 @@ export default function StudentBookingPage() {
   }
 
   const { hotelStaticData, payload, selectedRate, activePromotion } = bookingData;
-  const totalBefore = Number(selectedRate.rateBeforeDiscount || 0) * (rooms.length || 1);
-  const totalAfter = Number(selectedRate.rate || 0) * (rooms.length || 1);
+  // Multi-room aware: when `roomBreakdown` is present the combined
+  // `selectedRate.rate` is ALREADY the sum across rooms; multiplying
+  // again by `rooms.length` would double-count. Sum per-room values
+  // directly instead. Legacy single-room flows keep
+  // `selectedRate.X × rooms.length`, which equals `selectedRate.X`
+  // when there is one room.
+  const totalBefore = bookingData.roomBreakdown?.length
+    ? bookingData.roomBreakdown.reduce(
+        (s, r) => s + Number(r.rateBeforeDiscount || r.rate || 0),
+        0,
+      )
+    : Number(selectedRate.rateBeforeDiscount || 0) * (rooms.length || 1);
+  const totalAfter = bookingData.roomBreakdown?.length
+    ? bookingData.roomBreakdown.reduce((s, r) => s + Number(r.rate || 0), 0)
+    : Number(selectedRate.rate || 0) * (rooms.length || 1);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hotel-booking-container">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="content-wrapper py-4 flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
-          <Container fluid="xl">
-            {/* Booking Summary card */}
-            <Row>
-              <Col>
-                <Card className="shadow-lg rounded-xl mb-3 booking-summary-card border-0 overflow-hidden">
-                  <Card.Header className="bg-gradient-secondary text-black py-2 rounded-top">
-                    <div className="d-flex justify-content-between align-items-center">
-                      <h4 className="mb-0 d-flex align-items-center">
-                        <FaHotel className="me-1 fs-4" /> Booking Summary
-                      </h4>
-                      <div className="d-flex align-items-center gap-3">
-                        {activePromotion && (
-                          <Badge bg="success" className="d-inline-flex align-items-center">
-                            <FaGraduationCap className="me-1" />
-                            Student Discount:
-                            {activePromotion.discountPercent ? ` ${activePromotion.discountPercent}%` : ""}
-                            {activePromotion.discountAmount ? ` + ${activePromotion.discountAmount}` : ""}
-                          </Badge>
-                        )}
-                        {agentAvailableBalance != null && (
-                          <span className="fw-bold" style={{ color: "#dc3545", fontSize: "0.95rem" }}>
-                            Available Balance: {Number(agentAvailableBalance).toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </Card.Header>
-                  <Card.Body className="p-4 bg-light">
-                    <Row className="gy-4">
-                      <Col md={6} lg={4}>
-                        <div className="hotel-info-card p-3 bg-white rounded shadow-sm h-100">
-                          <h5 className="fw-bold text-primary mb-3">{hotelStaticData.hotelName}</h5>
-                          <p className="text-muted mb-2">{hotelStaticData.address}</p>
-                          <span className="badge bg-warning text-dark me-2">⭐ {hotelStaticData.starRating} Star</span>
-                        </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Check-in</h6>
-                          <p className="mb-0 fw-semibold text-dark">{payload.checkInDate}</p>
-                        </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaCalendarAlt className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Check-out</h6>
-                          <p className="mb-0 fw-semibold text-dark">{payload.checkOutDate}</p>
-                        </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaUsers className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Guests</h6>
-                          <div className="text-start">
-                            {payload.rooms.map((room, i) => (
-                              <small key={i} className="d-block fw-semibold text-dark">
-                                Room {i + 1}: {room.adults} Adults
-                                {room.children ? `, ${room.children} Children` : ""}
-                              </small>
-                            ))}
-                          </div>
-                        </div>
-                      </Col>
-                      <Col md={6} lg={2}>
-                        <div className="info-card p-3 bg-white rounded shadow-sm h-100 text-center">
-                          <FaUtensils className="me-2 text-primary fs-5 mb-2" />
-                          <h6 className="fw-bold text-primary mb-2">Meal Plan</h6>
-                          <p className="mb-0 fw-semibold text-dark">{selectedRate.mealPlan}</p>
-                        </div>
-                      </Col>
-                    </Row>
-                    <hr className="my-4" />
-                    {activePromotion && totalBefore !== totalAfter && (
-                      <div className="pricing-section p-3 bg-white rounded shadow-sm mb-2">
-                        <div className="d-flex justify-content-between">
-                          <h6 className="mb-0 text-muted">Standard Total</h6>
-                          <h5 className="mb-0 text-decoration-line-through text-muted">{formatPrice(totalBefore)}</h5>
-                        </div>
-                      </div>
-                    )}
-                    <div className="pricing-section p-3 bg-gradient-success text-white rounded shadow-sm">
-                      <div className="d-flex justify-content-between">
-                        <h5 className="mb-0">Total Payable {activePromotion ? "(after Student discount)" : ""}</h5>
-                        <h4 className="mb-0 fw-bold">{formatPrice(totalAfter)}</h4>
-                      </div>
-                    </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
+        <main className="flex-grow-1 p-3" style={{ minWidth: 0, overflowX: "hidden" }}>
+          {/* Layout unified with /gov-employee-booking-page:
+                - top bar with Back + Available Balance
+                - left main column (lg=8): verification + guest details
+                  + special requests + booking done by
+                - right sticky column (lg=4): Booking Summary +
+                  Price Details + Action bar
+              Behavior (verification flow, validation, submit handler,
+              modal, payload) is preserved bit-for-bit. */}
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => navigate(-1)}
+              className="d-flex align-items-center"
+            >
+              <FaArrowLeft className="me-2" />
+              Back to Room List
+            </Button>
+            {agentAvailableBalance != null && (
+              <span
+                className="fw-bold"
+                style={{ color: "#dc3545", fontSize: "0.95rem" }}
+              >
+                Available Balance:{" "}
+                {Number(agentAvailableBalance).toFixed(2)}
+              </span>
+            )}
+          </div>
 
-            <Form onSubmit={handleSubmit}>
+          <Form onSubmit={handleSubmit}>
+            <Row>
+              {/* ─────────── Left main column ─────────── */}
+              <Col lg={8}>
               {/* ── Student Verification block ─────────────────────
                   The user must pick ONE of three verification methods.
                   Institution + ID number + expiry are common to all
                   three (admin always needs to identify the student).
                   The method picked here is saved on the booking row. */}
-              <Card className="mb-3 shadow-sm border-0">
-                <Card.Header className="bg-primary text-white py-3">
-                  <h5 className="mb-0 fw-bold d-flex align-items-center">
+              <Card className="mb-2 shadow-sm border-0">
+                <Card.Header className="bg-primary text-white py-2">
+                  <h6 className="mb-0 fw-bold d-flex align-items-center">
                     <FaGraduationCap className="me-2" /> Student Verification
-                  </h5>
+                  </h6>
                 </Card.Header>
-                <Card.Body className="p-4">
+                <Card.Body className="p-3">
                   <Alert variant="info" className="small mb-3">
                     Choose a verification method. The booking will be saved with status{" "}
                     <strong>PENDING_STUDENT_VERIFICATION</strong> until an admin Approves / Rejects
@@ -651,28 +665,57 @@ export default function StudentBookingPage() {
                 </Card.Body>
               </Card>
 
-              {/* Guest details */}
-              <Card className="mb-3 shadow-sm border-0">
-                <Card.Header className="bg-light text-center py-3">
-                  <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
+              {/* Guest details — single consolidated card that mirrors
+                  /gov-employee-booking-page:
+                    - compact left-aligned header (bg-light py-2 + h6)
+                    - alwaysOpen accordion so every room stays expanded
+                      together instead of one-at-a-time
+                    - column headers row (Passenger | Title | First Name
+                      | Surname | Gender) above the per-guest rows
+                  Field bindings + onChange handlers + validation keys
+                  are untouched, so behavior is identical. */}
+              <Card className="mb-2 shadow-sm border-0">
+                <Card.Header className="bg-light py-2">
+                  <h6 className="mb-0 fw-bold text-dark">Guest Details</h6>
                 </Card.Header>
                 <Card.Body className="p-0">
-                  <Accordion defaultActiveKey="0">
+                  <Accordion defaultActiveKey="0" alwaysOpen>
                     {rooms.map((room, roomIndex) => (
-                      <Accordion.Item key={roomIndex} eventKey={String(roomIndex)} className="mb-3">
+                      <Accordion.Item key={roomIndex} eventKey={String(roomIndex)}>
                         <Accordion.Header>
-                          <h6 className="mb-0 fw-bold">Room {roomIndex + 1} — {selectedRate.roomCategory}</h6>
+                          <span className="fw-bold">
+                            {/* Per-room label from roomBreakdown when
+                                present (multi-room flow); else the
+                                combined selectedRate.roomCategory
+                                (legacy single-room). */}
+                            Room {roomIndex + 1} —{" "}
+                            {bookingData.roomBreakdown?.[roomIndex]?.roomCategory
+                              || selectedRate.roomCategory}
+                          </span>
                         </Accordion.Header>
-                        <Accordion.Body className="p-4">
+                        <Accordion.Body className="p-3">
+                          {/* Column headers — mirrors the
+                              gov-employee booking page so the two
+                              dedicated-flow forms look identical. */}
+                          <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                            <Col md={2}>Passenger</Col>
+                            <Col md={2}>Title *</Col>
+                            <Col md={3}>First Name *</Col>
+                            <Col md={3}>Surname *</Col>
+                            <Col md={2} className="text-center">Lead</Col>
+                          </Row>
                           {room.guests.map((guest, gi) => {
                             const k = `room_${roomIndex}_guest_${gi}`;
+                            const isLead =
+                              leadIndex.roomIdx === roomIndex &&
+                              leadIndex.guestIdx === gi;
                             return (
                               <Row key={gi} className="align-items-center g-2 mb-2">
                                 <Col md={2}>
                                   <span className="fw-semibold text-muted">
                                     {guest.isChild
                                       ? `Child ${gi - room.adults + 1}`
-                                      : `Adult ${gi + 1}`} *
+                                      : `Adult ${gi + 1}`}
                                   </span>
                                 </Col>
                                 <Col md={2}>
@@ -691,19 +734,31 @@ export default function StudentBookingPage() {
                                                 onChange={(e) => handleGuestChange(roomIndex, gi, "firstName", e.target.value)} />
                                 </Col>
                                 <Col md={3}>
-                                  <Form.Control placeholder="Last Name"
+                                  <Form.Control placeholder="Surname"
                                                 isInvalid={!!validationErrors[`${k}_lastName`]}
                                                 value={guest.lastName}
                                                 onChange={(e) => handleGuestChange(roomIndex, gi, "lastName", e.target.value)} />
                                 </Col>
-                                <Col md={2}>
-                                  <Form.Select isInvalid={!!validationErrors[`${k}_gender`]}
-                                               value={guest.gender}
-                                               onChange={(e) => handleGuestChange(roomIndex, gi, "gender", e.target.value)}>
-                                    <option value="">Gender</option>
-                                    <option value="MALE">Male</option>
-                                    <option value="FEMALE">Female</option>
-                                  </Form.Select>
+                                {/* Gender column hidden by request.
+                                    State `guest.gender` keeps its
+                                    default empty string. */}
+                                <Col md={2} className="text-center">
+                                  {/* Lead radio — only adults can be
+                                      lead. Disabled+greyed for children
+                                      so the row still aligns. */}
+                                  <Form.Check
+                                    type="radio"
+                                    name="student-lead-guest"
+                                    id={`student-lead-${roomIndex}-${gi}`}
+                                    checked={isLead}
+                                    disabled={guest.isChild}
+                                    onChange={() => handleLeadSelect(roomIndex, gi)}
+                                    title={
+                                      guest.isChild
+                                        ? "Children cannot be the lead"
+                                        : "Mark as Lead passenger"
+                                    }
+                                  />
                                 </Col>
                               </Row>
                             );
@@ -715,61 +770,19 @@ export default function StudentBookingPage() {
                 </Card.Body>
               </Card>
 
-              {/* Primary Guest */}
-              <Card className="p-4 mb-3 shadow-sm border-0">
-                <h6 className="mb-3 fw-bold text-primary">Primary Guest Details</h6>
-                <Row className="g-2">
-                  <Col md={2}>
-                    <Form.Label>Salutation *</Form.Label>
-                    <Form.Select isInvalid={!!validationErrors.salutation}
-                                 value={primaryGuest.salutation}
-                                 onChange={(e) => handlePrimaryGuestChange("salutation", e.target.value)}>
-                      <option value="">Select</option>
-                      <option>Mr</option><option>Mrs</option><option>Ms</option><option>Dr</option>
-                    </Form.Select>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>First Name *</Form.Label>
-                    <Form.Control isInvalid={!!validationErrors.firstName}
-                                  value={primaryGuest.firstName}
-                                  onChange={(e) => handlePrimaryGuestChange("firstName", e.target.value)} />
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>Last Name *</Form.Label>
-                    <Form.Control isInvalid={!!validationErrors.lastName}
-                                  value={primaryGuest.lastName}
-                                  onChange={(e) => handlePrimaryGuestChange("lastName", e.target.value)} />
-                  </Col>
-                  <Col md={4}>
-                    <Form.Label>Email *</Form.Label>
-                    <Form.Control type="email" isInvalid={!!validationErrors.email}
-                                  value={primaryGuest.email}
-                                  onChange={(e) => handlePrimaryGuestChange("email", e.target.value)} />
-                    {validationErrors.email && <small className="text-danger">{validationErrors.email}</small>}
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>Phone *</Form.Label>
-                    <Form.Control isInvalid={!!validationErrors.phone}
-                                  value={primaryGuest.phone}
-                                  onChange={(e) => handlePrimaryGuestChange("phone", e.target.value)} />
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>Passport No</Form.Label>
-                    <Form.Control value={primaryGuest.passportNo}
-                                  onChange={(e) => handlePrimaryGuestChange("passportNo", e.target.value)} />
-                  </Col>
-                  <Col md={3}>
-                    <Form.Label>Agent LPO *</Form.Label>
-                    <Form.Control isInvalid={!!validationErrors.agentLpo}
-                                  value={primaryGuest.agentLpo}
-                                  onChange={(e) => handlePrimaryGuestChange("agentLpo", e.target.value)} />
-                  </Col>
-                </Row>
-              </Card>
+              {/* Primary Guest Details card hidden per spec — the
+                  Guest Details grid above is the single source of
+                  customer details, with the Lead radio marking the
+                  head guest. The submit payload still carries a
+                  `primaryGuest` object: it's derived from the lead
+                  guest's name fields in buildPayloadAndShowOrderSummary
+                  so the backend contract stays intact. */}
 
-              {/* Special requests + remarks */}
-              <Card className="p-4 mb-3 shadow-sm border-0">
-                <h6 className="mb-3 fw-bold text-primary">Special Requests & Remarks</h6>
+              {/* Special requests (Remarks textarea hidden by
+                  request — state `remarks` keeps its default empty
+                  string). */}
+              <Card className="p-2 mb-2 shadow-sm border-0">
+                <h6 className="mb-2 fw-bold text-primary">Special Requests</h6>
                 <div className="mb-3 d-flex flex-wrap gap-2">
                   {SPECIAL_REQUEST_OPTIONS.map((req) => (
                     <Form.Check key={req} type="checkbox" id={`sr-${req}`} label={req}
@@ -777,46 +790,179 @@ export default function StudentBookingPage() {
                                 onChange={() => toggleSpecialRequest(req)} />
                   ))}
                 </div>
-                <Form.Label>Remarks</Form.Label>
-                <Form.Control as="textarea" rows={2} value={remarks}
-                              onChange={(e) => setRemarks(e.target.value)} />
               </Card>
 
-              {/* Booking Done By */}
-              <Card className="p-4 mb-4 shadow-sm border-0 bg-light">
-                <h6 className="mb-3 fw-bold text-primary d-flex align-items-center">
-                  <FaUserTie className="me-2" /> Booking Done By
-                </h6>
-                <Row>
-                  <Col md={4}>
-                    <Form.Label>Employee</Form.Label>
-                    <Form.Select value={bookingDoneByEmployeeId}
-                                 onChange={(e) => setBookingDoneByEmployeeId(e.target.value)}>
-                      <option value="">Select Employee</option>
-                      {employees.map((emp) => (
-                        <option key={emp.employeeId} value={emp.employeeId}>
-                          {emp.firstName} {emp.lastName}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Col>
-                </Row>
-              </Card>
+              {/* "Booking Done By Employee" was moved into the
+                  StudentSearch criteria (optional). employeeId rides on
+                  bookingData.payload and is sent to
+                  /api/student-booking/create from there. */}
+              </Col>
 
-              {/* Action bar */}
-              <div className="d-flex justify-content-end gap-2 mt-4">
-                <div className="d-flex align-items-center me-2 fw-bold text-danger">
-                  New Total: {formatPrice(totalAfter)}
+              {/* ─────────── Right sticky summary column ─────────── */}
+              <Col lg={4} className="hbp-right-col">
+                <div className="hbp-sticky-summary">
+                  <Card className="shadow-sm rounded-3 mb-2 booking-summary-card border-0 overflow-hidden">
+                    <Card.Header className="bg-primary text-white py-2 rounded-top">
+                      <h6 className="mb-0 d-flex align-items-center">
+                        <FaHotel className="me-2" /> Booking Summary
+                      </h6>
+                    </Card.Header>
+                    <Card.Body className="p-2">
+                      <div className="mb-2">
+                        <div className="fw-bold text-primary mb-1">
+                          {hotelStaticData.hotelName}
+                        </div>
+                        <div className="text-muted small mb-2">
+                          {hotelStaticData.address}
+                        </div>
+                        <div className="d-flex flex-wrap align-items-center gap-2">
+                          <span className="badge bg-warning text-dark">
+                            ⭐ {hotelStaticData.starRating} Star
+                          </span>
+                          {selectedRate?.nonRefundable !== undefined && (
+                            <Badge
+                              bg={
+                                selectedRate.nonRefundable === true ||
+                                selectedRate.nonRefundable === "true"
+                                  ? "danger"
+                                  : "success"
+                              }
+                            >
+                              {selectedRate.nonRefundable === true ||
+                              selectedRate.nonRefundable === "true"
+                                ? "Non-Refundable"
+                                : "Flexible"}
+                            </Badge>
+                          )}
+                          {activePromotion && (
+                            <Badge
+                              bg="success"
+                              className="d-inline-flex align-items-center"
+                            >
+                              <FaGraduationCap className="me-1" /> Student
+                              Discount
+                              {activePromotion.discountPercent
+                                ? ` ${activePromotion.discountPercent}%`
+                                : ""}
+                              {activePromotion.discountAmount
+                                ? ` + ${activePromotion.discountAmount}`
+                                : ""}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaCalendarAlt className="me-2 text-primary" />
+                          Check-in
+                        </div>
+                        <div className="hbp-summary-value">
+                          {formatDateTime(payload.checkInDate)}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaCalendarAlt className="me-2 text-primary" />
+                          Check-out
+                        </div>
+                        <div className="hbp-summary-value">
+                          {formatDateTime(payload.checkOutDate)}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row align-items-start">
+                        <div className="hbp-summary-label">
+                          <FaUsers className="me-2 text-primary" />
+                          Guests
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {payload.rooms.map((room, i) => (
+                            <div key={i} className="small">
+                              Room {i + 1}: {room.adults} Adult
+                              {room.adults > 1 ? "s" : ""}
+                              {room.children
+                                ? `, ${room.children} Child${
+                                    room.children > 1 ? "ren" : ""
+                                  }`
+                                : ""}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaUtensils className="me-2 text-primary" />
+                          Meal Plan
+                        </div>
+                        <div className="hbp-summary-value">
+                          {selectedRate.mealPlan}
+                        </div>
+                      </div>
+                    </Card.Body>
+                  </Card>
+
+                  <Card className="shadow-sm rounded-3 border-0 hbp-price-card">
+                    <Card.Header className="bg-light py-2">
+                      <h6 className="mb-0 fw-bold">Price Details</h6>
+                    </Card.Header>
+                    <Card.Body className="p-2">
+                      {activePromotion && totalBefore !== totalAfter && (
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            Standard Total
+                          </div>
+                          <div className="hbp-summary-value text-decoration-line-through text-muted">
+                            {formatPrice(totalBefore)}
+                          </div>
+                        </div>
+                      )}
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">Rate</div>
+                        <div className="hbp-summary-value">
+                          {formatPrice(selectedRate.rate || 0)} ×{" "}
+                          {rooms.length || 1}
+                        </div>
+                      </div>
+                      <hr className="my-2" />
+                      <div className="hbp-summary-row fw-bold">
+                        <div className="hbp-summary-label text-danger">
+                          New Total
+                          {activePromotion ? " (after Student discount)" : ""}
+                        </div>
+                        <div className="hbp-summary-value text-danger">
+                          {formatPrice(totalAfter)}
+                        </div>
+                      </div>
+                    </Card.Body>
+                  </Card>
+
+                  <div className="hbp-action-bar mt-2 d-flex gap-2">
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => navigate(-1)}
+                      className="flex-grow-1"
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      variant="primary"
+                      type="submit"
+                      disabled={!isStudentInfoReady()}
+                      title={
+                        !isStudentInfoReady()
+                          ? "Complete student verification first"
+                          : ""
+                      }
+                      className="flex-grow-1"
+                    >
+                      Confirm Booking
+                    </Button>
+                  </div>
                 </div>
-                <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>
-                <Button variant="primary" type="submit"
-                        disabled={!isStudentInfoReady()}
-                        title={!isStudentInfoReady() ? "Complete student verification first" : ""}>
-                  Confirm Booking
-                </Button>
-              </div>
+              </Col>
+            </Row>
 
-              {/* Confirmation modal */}
+            {/* Confirmation modal */}
               <Modal show={showConfirmModal} onHide={() => setShowConfirmModal(false)}
                      centered backdrop="static" size="md">
                 <Modal.Header closeButton className="bg-primary text-white py-2">
@@ -905,7 +1051,6 @@ export default function StudentBookingPage() {
                 </Modal.Footer>
               </Modal>
             </Form>
-          </Container>
         </main>
       </div>
     </div>

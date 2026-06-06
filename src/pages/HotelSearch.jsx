@@ -352,6 +352,26 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   );
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
+  // Optional "Booking Done By Employee" selector — moved here from
+  // HotelBookingPage. When set, the employeeId rides on the payload all
+  // the way through RoomList → HotelBookingPage → /api/hotel-booking/create
+  // so it's persisted on the new HotelBooking row.
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
+        if (res.data && Array.isArray(res.data)) {
+          setEmployees(res.data);
+        }
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, []);
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [checkIn, setCheckIn] = useState("");
@@ -1414,6 +1434,43 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                     </Form.Group>
                   </Col>
 
+                  {/* Booking Done By Employee — OPTIONAL.
+                      Moved here from HotelBookingPage at the user's
+                      request; rides through the payload to the
+                      booking-create endpoint so it persists on the
+                      HotelBooking row. No validation: leaving it blank
+                      is a legitimate choice. */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Booking Done By Employee{" "}
+                        <span className="text-muted small">(optional)</span>
+                      </Form.Label>
+                      <Select
+                        options={employees.map((e) => ({
+                          value: e.employeeId,
+                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                        }))}
+                        value={selectedEmployee}
+                        onChange={(option) => setSelectedEmployee(option)}
+                        placeholder="Select employee"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "42px",
+                            border: "1px solid #dee2e6",
+                            "&:hover": { borderColor: "#86b7fe" },
+                          }),
+                        }}
+                      />
+                    </Form.Group>
+                  </Col>
+
                   {/* 4. Check-In */}
                   <Col lg={3} md={6}>
                     <Form.Group>
@@ -1873,8 +1930,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                    /images/flash-sale-logo.png (in public/).
                                    Falls back to the legacy text pill if the
                                    asset isn't found so the deal indicator
-                                   never disappears silently. */}
-                              {getHotelFeatureLabels(hotel).length > 0 && (
+                                   never disappears silently.
+                                   Hidden in the dedicated 24-hour search
+                                   (force24Hour) — that flow is its own
+                                   product and shouldn't surface generic
+                                   deals on the result cards. */}
+                              {!force24Hour && getHotelFeatureLabels(hotel).length > 0 && (
                                 <span
                                   className="flash-sale-badge flash-sale-corner"
                                   title="Limited-time deals available — see the badges below."
@@ -2008,8 +2069,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                         label isn't in DEAL_PILL_META.route.
                                         stopPropagation is added because a future
                                         row-level click handler shouldn't swallow
-                                        the navigation. */}
-                                    {getHotelFeatureLabels(hotel).length > 0 && (
+                                        the navigation.
+                                        Hidden in the dedicated 24-hour search
+                                        (force24Hour) — the operator is already
+                                        committed to that flow, listing other
+                                        deals here would be a distraction. */}
+                                    {!force24Hour && getHotelFeatureLabels(hotel).length > 0 && (
                                       <div className="available-deals-wrap">
                                         <div className="available-deals-label">
                                           Also Available Deals
@@ -2136,6 +2201,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                             rooms: roomsPayload,
                                             parentBookingCode:
                                               parentBookingCode || null,
+                                            // Optional "Booking Done By"
+                                            // selection — null when the
+                                            // user skipped the dropdown.
+                                            // Flows through RoomList ->
+                                            // HotelBookingPage unchanged
+                                            // (those layers spread payload
+                                            // through transparently).
+                                            employeeId:
+                                              selectedEmployee?.value || null,
                                             // 24 Hour Check-In flags — only
                                             // populated when the user opted
                                             // in. RoomList / HotelBookingPage
@@ -2167,8 +2241,16 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                             JSON.stringify({ payload, meta }),
                                           );
                                           setTimeout(() => {
-                                            const route =
-                                              apiId === 1
+                                            // Dedicated 24-hour route in
+                                            // 24-hour mode so the
+                                            // downstream room list and
+                                            // booking page can render
+                                            // 24-hour-specific UI without
+                                            // touching the inhouse
+                                            // /room-list flow.
+                                            const route = force24Hour
+                                              ? "/room-list-24hr"
+                                              : apiId === 1
                                                 ? "/room-list"
                                                 : "/api-room-list";
                                             window.open(route, "_blank");

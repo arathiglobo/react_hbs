@@ -22,7 +22,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  FaHotel, FaCalendarAlt, FaUsers, FaUtensils, FaUserTie,
+  FaHotel, FaCalendarAlt, FaUsers, FaUtensils,
   FaUserClock, FaFileUpload,
 } from "react-icons/fa";
 import {
@@ -54,10 +54,25 @@ export default function SeniorCitizenBookingPage() {
     email: "", nativeCountry: "IN",
   });
 
+  // ── Lead passenger marker — { roomIdx, guestIdx } pointing at the
+  //    single guest the user has flagged as Lead. Mirrors
+  //    /gov-employee-booking-page. Defaults to the first guest
+  //    (room 0, guest 0) so the column has a selection on first
+  //    render. Children can't be Lead. The submitted booking now
+  //    derives primaryGuest's name fields from this entry, replacing
+  //    the (now hidden) Primary Guest Details card.
+  const [leadIndex, setLeadIndex] = useState({ roomIdx: 0, guestIdx: 0 });
+
+  const handleLeadSelect = (roomIdx, guestIdx) => {
+    const g = rooms?.[roomIdx]?.guests?.[guestIdx];
+    if (g?.isChild) return;
+    setLeadIndex({ roomIdx, guestIdx });
+  };
+
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [bookingDoneByEmployeeId, setBookingDoneByEmployeeId] = useState("");
+  // "Booking Done By Employee" moved to SeniorCitizenSearch — the
+  // chosen employeeId arrives on bookingData.payload.employeeId.
 
   // Tourism Dirhams — flat add-on to the room total. Mirrors
   // HotelBookingPage where it's editable per booking.
@@ -106,14 +121,7 @@ export default function SeniorCitizenBookingPage() {
     })));
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
-        if (Array.isArray(res.data)) setEmployees(res.data);
-      } catch (e) { /* silent */ }
-    })();
-  }, []);
+  // Employee fetch removed — selected in SeniorCitizenSearch now.
 
   useEffect(() => {
     const aId = bookingData?.payload?.agentId;
@@ -184,19 +192,18 @@ export default function SeniorCitizenBookingPage() {
 
   const validateForm = () => {
     const errors = {};
-    if (!primaryGuest.salutation) errors.salutation = "Salutation is required";
-    if (!primaryGuest.firstName) errors.firstName = "First Name is required";
-    if (!primaryGuest.lastName) errors.lastName = "Last Name is required";
-    if (!primaryGuest.email) errors.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.email))
-      errors.email = "Please enter a valid email address";
+    // Primary-guest validation removed — the Primary Guest Details
+    // card has been hidden (the Guest Details grid above is the
+    // single source of customer details, with the Lead radio marking
+    // the head guest). The submit payload derives primaryGuest from
+    // the lead row at build time.
     rooms.forEach((room, ri) => {
       room.guests.forEach((g, gi) => {
         const k = `room_${ri}_guest_${gi}`;
         if (!g.salutation) errors[`${k}_salutation`] = "Required";
         if (!g.firstName) errors[`${k}_firstName`] = "Required";
         if (!g.lastName) errors[`${k}_lastName`] = "Required";
-        if (!g.gender) errors[`${k}_gender`] = "Required";
+       
       });
     });
     return { errors, hasErrors: Object.keys(errors).length > 0 };
@@ -259,24 +266,33 @@ export default function SeniorCitizenBookingPage() {
     const co = new Date(payload.checkOutDate);
     const nights = Math.max(1, Math.round((co - ci) / 86400000));
 
-    const allRooms = (rooms || []).map((room, idx) => ({
-      roomNo: idx + 1,
-      roomCategory: selectedRate.roomCategory,
-      mealPlan: selectedRate.mealPlan,
-      nonRefundable: !!selectedRate.nonRefundable,
-      rate: Number(selectedRate.rate || 0),
-      rateWithoutMarkup: Number(selectedRate.rate || 0),
-      rateBeforeDiscount: Number(selectedRate.rateBeforeDiscount || selectedRate.rate || 0),
-      adults: room.adults,
-      children: room.children,
-      childAges: room.childAges || [],
-      adultAges: room.adultAges || [],
-      currency: selectedRate.currency || "INR",
-      guests: (room.guests || []).map((g) => ({
-        salutation: g.salutation, firstName: g.firstName, lastName: g.lastName,
-        gender: g.gender, isChild: !!g.isChild, age: g.age,
-      })),
-    }));
+    // Multi-room aware: when SeniorCitizenRoomList sent a per-room
+    // `roomBreakdown` array (one entry per booked room), each room
+    // pulls its OWN roomCategory / mealPlan / rate / etc. from that
+    // slot. Without `roomBreakdown` (every legacy single-room flow),
+    // `slot` falls back to the combined `selectedRate` and behaves
+    // exactly as before — so no other flow is affected.
+    const allRooms = (rooms || []).map((room, idx) => {
+      const slot = bookingData.roomBreakdown?.[idx] || selectedRate;
+      return {
+        roomNo: idx + 1,
+        roomCategory: slot.roomCategory,
+        mealPlan: slot.mealPlan,
+        nonRefundable: !!slot.nonRefundable,
+        rate: Number(slot.rate || 0),
+        rateWithoutMarkup: Number(slot.rate || 0),
+        rateBeforeDiscount: Number(slot.rateBeforeDiscount || slot.rate || 0),
+        adults: room.adults,
+        children: room.children,
+        childAges: room.childAges || [],
+        adultAges: room.adultAges || [],
+        currency: slot.currency || "INR",
+        guests: (room.guests || []).map((g) => ({
+          salutation: g.salutation, firstName: g.firstName, lastName: g.lastName,
+          gender: g.gender, isChild: !!g.isChild, age: g.age,
+        })),
+      };
+    });
 
     const promoType = activePromotion?.discountType
       || (activePromotion?.discountPercent != null ? "PERCENTAGE"
@@ -300,7 +316,23 @@ export default function SeniorCitizenBookingPage() {
       discountPercent: promoType === "PERCENTAGE" ? Number(promoValue) : null,
       discountAmount:  promoType === "AMOUNT"     ? Number(promoValue) : null,
       totalRateBeforeDiscount: allRooms.reduce((s, r) => s + Number(r.rateBeforeDiscount || 0), 0),
-      primaryGuest: { ...primaryGuest },
+      // Primary guest is now derived from the Lead-marked passenger
+      // in the Guest Details grid (the Primary Guest Details card is
+      // hidden). Email / nativeCountry aren't captured on the form
+      // any more, so they're left empty — the backend ignores
+      // missing optional values, and the existing
+      // /api/senior-citizen-booking/create contract is preserved.
+      primaryGuest: (() => {
+        const lead = rooms[leadIndex.roomIdx]?.guests?.[leadIndex.guestIdx] || {};
+        return {
+          salutation: lead.salutation || "",
+          firstName: lead.firstName || "",
+          middleName: lead.middleName || "",
+          lastName: lead.lastName || "",
+          email: "",
+          nativeCountry: "",
+        };
+      })(),
       rooms: allRooms,
       remarks,
       specialRequests,
@@ -317,13 +349,19 @@ export default function SeniorCitizenBookingPage() {
       verificationMethod: "GOVT_ID_UPLOAD",
       // Mirror the proof name into the legacy "senior citizen name"
       // field so any backend validator that expects a value gets one.
-      seniorCitizenName: `${primaryGuest.firstName || ""} ${primaryGuest.lastName || ""}`.trim() || null,
+      // Source is the Lead-marked guest in the Guest Details grid.
+      seniorCitizenName: (() => {
+        const lead = rooms[leadIndex.roomIdx]?.guests?.[leadIndex.guestIdx] || {};
+        const full = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
+        return full || null;
+      })(),
       source: "B2B_PORTAL",
       createdByRole: (activeUserRole || "AGENT").toUpperCase(),
       bookingDate: new Date().toISOString().slice(0, 19),
       deadlineDate: `${payload.checkInDate}T23:59:59`,
       roomStatus: "CONFIRMED",
-      employeeId: bookingDoneByEmployeeId || null,
+      // employeeId is picked in SeniorCitizenSearch and rides on bookingData.payload.
+      employeeId: bookingData?.payload?.employeeId || null,
     };
     setPendingPayload(built);
     setShowConfirmModal(true);
@@ -367,10 +405,23 @@ export default function SeniorCitizenBookingPage() {
 
   const { hotelStaticData, payload, selectedRate, activePromotion } = bookingData;
   const tdAmount = parseFloat(tourismDirhams) || 0;
-  const totalBefore = Number(selectedRate.rateBeforeDiscount || 0) * (rooms.length || 1);
+  // Multi-room aware: when `roomBreakdown` is present the combined
+  // `selectedRate.rate` is ALREADY the sum across all rooms (each
+  // slot contributes its own rate). Multiplying again by `rooms.length`
+  // would double-count. Sum the per-room values directly instead.
+  // Legacy single-room flows keep `selectedRate.rate × rooms.length`,
+  // which equals `selectedRate.rate` when there is one room.
+  const totalBefore = bookingData.roomBreakdown?.length
+    ? bookingData.roomBreakdown.reduce(
+        (s, r) => s + Number(r.rateBeforeDiscount || r.rate || 0),
+        0,
+      )
+    : Number(selectedRate.rateBeforeDiscount || 0) * (rooms.length || 1);
   // New Total includes Tourism Dirhams as a flat add-on. The room-rate
   // subtotal is the senior-citizen-discounted rate × number of rooms.
-  const roomSubtotal = Number(selectedRate.rate || 0) * (rooms.length || 1);
+  const roomSubtotal = bookingData.roomBreakdown?.length
+    ? bookingData.roomBreakdown.reduce((s, r) => s + Number(r.rate || 0), 0)
+    : Number(selectedRate.rate || 0) * (rooms.length || 1);
   const totalAfter = roomSubtotal + tdAmount;
 
   const promoSummary = (() => {
@@ -404,13 +455,25 @@ export default function SeniorCitizenBookingPage() {
               <Row className="g-3">
                 {/* ── LEFT COLUMN — Guest + verification + proof ─────────── */}
                 <Col lg={8} className="hbp-left-col">
+                  {/* Guest Details — unified with
+                      /gov-employee-booking-page:
+                        - compact left-aligned Card.Header (bg-light
+                          py-2 + h6) with a small Back button
+                        - per-room accordion (alwaysOpen) so every
+                          room stays expanded together
+                        - column headers row (Passenger | Title |
+                          First Name | Surname | Gender | Lead)
+                        - Lead radio per guest row, disabled for
+                          children (mirrors the gov flow). The lead
+                          drives `primaryGuest` in the submit payload
+                          (the Primary Guest Details card is hidden). */}
                   <Card className="mb-2 shadow-sm border-0">
                     <Card.Header className="bg-light py-2">
                       <div className="d-flex align-items-center">
                         <Button variant="outline-secondary" size="sm"
                                 onClick={() => navigate(-1)}
                                 className="me-3">← Back</Button>
-                        <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
+                        <h6 className="mb-0 fw-bold text-dark">Guest Details</h6>
                       </div>
                     </Card.Header>
                     <Card.Body className="p-0">
@@ -424,23 +487,43 @@ export default function SeniorCitizenBookingPage() {
                             <Accordion.Header className="bg-primary text-white">
                               <h6 className="mb-0 fw-bold w-100 d-flex flex-wrap align-items-center gap-2">
                                 <span>
-                                  Room {roomIndex + 1} — {selectedRate.roomCategory}
+                                  {/* Per-room label when roomBreakdown is
+                                      present; otherwise the combined
+                                      selectedRate.roomCategory (which is
+                                      the legacy single-room shape). */}
+                                  Room {roomIndex + 1} — {
+                                    bookingData.roomBreakdown?.[roomIndex]?.roomCategory
+                                      || selectedRate.roomCategory
+                                  }
                                 </span>
                                 {Array.isArray(room.adultAges) && room.adultAges.some((a) => Number(a) >= 60) && (
                                   <Badge bg="success" className="ms-2">Senior Citizen Room</Badge>
                                 )}
                               </h6>
                             </Accordion.Header>
-                            <Accordion.Body className="p-4">
+                            <Accordion.Body className="p-3">
+                              {/* Column headers — mirrors the gov
+                                  flow so the two dedicated-flow
+                                  booking pages render identically. */}
+                              <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                                <Col md={2}>Passenger</Col>
+                                <Col md={2}>Title *</Col>
+                                <Col md={3}>First Name *</Col>
+                                <Col md={3}>Surname *</Col>
+                                <Col md={2} className="text-center">Lead</Col>
+                              </Row>
                               {room.guests.map((guest, gi) => {
                                 const k = `room_${roomIndex}_guest_${gi}`;
+                                const isLead =
+                                  leadIndex.roomIdx === roomIndex &&
+                                  leadIndex.guestIdx === gi;
                                 return (
                                   <Row key={gi} className="align-items-center g-2 mb-2">
                                     <Col md={2}>
                                       <span className="fw-semibold text-muted">
                                         {guest.isChild
                                           ? `Child ${gi - room.adults + 1}`
-                                          : `Adult ${gi + 1}${guest.age != null ? ` · ${guest.age} yrs` : ""}`} *
+                                          : `Adult ${gi + 1}${guest.age != null ? ` · ${guest.age} yrs` : ""}`}
                                       </span>
                                     </Col>
                                     <Col md={2}>
@@ -459,19 +542,33 @@ export default function SeniorCitizenBookingPage() {
                                                     onChange={(e) => handleGuestChange(roomIndex, gi, "firstName", e.target.value)} />
                                     </Col>
                                     <Col md={3}>
-                                      <Form.Control placeholder="Last Name"
+                                      <Form.Control placeholder="Surname"
                                                     isInvalid={!!validationErrors[`${k}_lastName`]}
                                                     value={guest.lastName}
                                                     onChange={(e) => handleGuestChange(roomIndex, gi, "lastName", e.target.value)} />
                                     </Col>
-                                    <Col md={2}>
-                                      <Form.Select isInvalid={!!validationErrors[`${k}_gender`]}
-                                                   value={guest.gender}
-                                                   onChange={(e) => handleGuestChange(roomIndex, gi, "gender", e.target.value)}>
-                                        <option value="">Gender</option>
-                                        <option value="MALE">Male</option>
-                                        <option value="FEMALE">Female</option>
-                                      </Form.Select>
+                                    {/* Gender column hidden by
+                                        request. State `guest.gender`
+                                        keeps its default empty
+                                        string. */}
+                                    <Col md={2} className="text-center">
+                                      {/* Lead radio — only adults can
+                                          be lead. Disabled+greyed for
+                                          children so the row still
+                                          aligns. */}
+                                      <Form.Check
+                                        type="radio"
+                                        name="sc-lead-guest"
+                                        id={`sc-lead-${roomIndex}-${gi}`}
+                                        checked={isLead}
+                                        disabled={guest.isChild}
+                                        onChange={() => handleLeadSelect(roomIndex, gi)}
+                                        title={
+                                          guest.isChild
+                                            ? "Children cannot be the lead"
+                                            : "Mark as Lead passenger"
+                                        }
+                                      />
                                     </Col>
                                   </Row>
                                 );
@@ -483,43 +580,19 @@ export default function SeniorCitizenBookingPage() {
                     </Card.Body>
                   </Card>
 
-                  {/* Primary Guest + Tourism Dirhams */}
-                  <Card className="p-3 mb-2 shadow-sm border-0">
-                    <h6 className="mb-2 fw-bold text-primary">Primary Guest Details</h6>
+                  {/* Primary Guest Details card hidden per spec —
+                      the Guest Details grid above is the single
+                      source of customer details, with the Lead radio
+                      marking the head guest. The submit payload still
+                      carries a `primaryGuest` object derived from
+                      the lead in buildPayloadAndShowOrderSummary, so
+                      the backend contract stays intact. Tourism
+                      Dirhams (an agent-entered flat add-on) remains
+                      below as a compact standalone card since the
+                      total payable depends on it. */}
+                  <Card className="p-2 mb-2 shadow-sm border-0">
+                    <h6 className="mb-2 fw-bold text-primary">Tourism Dirhams</h6>
                     <Row className="g-2">
-                      <Col md={2}>
-                        <Form.Label className="mb-1">Salutation *</Form.Label>
-                        <Form.Select isInvalid={!!validationErrors.salutation}
-                                     value={primaryGuest.salutation}
-                                     onChange={(e) => handlePrimaryGuestChange("salutation", e.target.value)}>
-                          <option value="">Select</option>
-                          <option>Mr</option><option>Mrs</option><option>Ms</option><option>Dr</option>
-                        </Form.Select>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Label className="mb-1">First Name *</Form.Label>
-                        <Form.Control isInvalid={!!validationErrors.firstName}
-                                      value={primaryGuest.firstName}
-                                      onChange={(e) => handlePrimaryGuestChange("firstName", e.target.value)} />
-                      </Col>
-                      <Col md={3}>
-                        <Form.Label className="mb-1">Last Name *</Form.Label>
-                        <Form.Control isInvalid={!!validationErrors.lastName}
-                                      value={primaryGuest.lastName}
-                                      onChange={(e) => handlePrimaryGuestChange("lastName", e.target.value)} />
-                      </Col>
-                      <Col md={4}>
-                        <Form.Label className="mb-1">Email *</Form.Label>
-                        <Form.Control type="email" isInvalid={!!validationErrors.email}
-                                      value={primaryGuest.email}
-                                      onChange={(e) => handlePrimaryGuestChange("email", e.target.value)} />
-                        {validationErrors.email && <small className="text-danger">{validationErrors.email}</small>}
-                      </Col>
-                      <Col md={4}>
-                        <Form.Label className="mb-1">Native Country</Form.Label>
-                        <Form.Control value={primaryGuest.nativeCountry}
-                                      onChange={(e) => handlePrimaryGuestChange("nativeCountry", e.target.value)} />
-                      </Col>
                       <Col md={4}>
                         <Form.Label className="mb-1">Tourism Dirhams (AED)</Form.Label>
                         <Form.Control type="number" min="0" step="0.01"
@@ -567,9 +640,11 @@ export default function SeniorCitizenBookingPage() {
                     </Row>
                   </Card>
 
-                  {/* Special requests + remarks */}
+                  {/* Special requests (Remarks textarea hidden by
+                      request — state `remarks` keeps its default
+                      empty string). */}
                   <Card className="p-3 mb-2 shadow-sm border-0">
-                    <h6 className="mb-2 fw-bold text-primary">Special Requests & Remarks</h6>
+                    <h6 className="mb-2 fw-bold text-primary">Special Requests</h6>
                     <div className="mb-2 d-flex flex-wrap gap-2">
                       {SPECIAL_REQUEST_OPTIONS.map((req) => (
                         <Form.Check key={req} type="checkbox" id={`sr-${req}`} label={req}
@@ -577,31 +652,12 @@ export default function SeniorCitizenBookingPage() {
                                     onChange={() => toggleSpecialRequest(req)} />
                       ))}
                     </div>
-                    <Form.Label className="mb-1">Remarks</Form.Label>
-                    <Form.Control as="textarea" rows={2} value={remarks}
-                                  onChange={(e) => setRemarks(e.target.value)} />
                   </Card>
 
-                  {/* Booking Done By */}
-                  <Card className="p-3 mb-2 shadow-sm border-0 bg-light">
-                    <h6 className="mb-2 fw-bold text-primary d-flex align-items-center">
-                      <FaUserTie className="me-2" /> Booking Done By
-                    </h6>
-                    <Row className="g-2">
-                      <Col md={4}>
-                        <Form.Label className="mb-1">Employee</Form.Label>
-                        <Form.Select value={bookingDoneByEmployeeId}
-                                     onChange={(e) => setBookingDoneByEmployeeId(e.target.value)}>
-                          <option value="">Select Employee</option>
-                          {employees.map((emp) => (
-                            <option key={emp.employeeId} value={emp.employeeId}>
-                              {emp.firstName} {emp.lastName}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                    </Row>
-                  </Card>
+                  {/* "Booking Done By Employee" was moved into the
+                      SeniorCitizenSearch criteria (optional). employeeId
+                      rides on bookingData.payload and is sent to
+                      /api/senior-citizen-booking/create from there. */}
                 </Col>
 
                 {/* ── RIGHT COLUMN — Sticky Booking Summary + Price ──────── */}
@@ -671,14 +727,9 @@ export default function SeniorCitizenBookingPage() {
                           </div>
                           <div className="hbp-summary-value">{selectedRate.mealPlan}</div>
                         </div>
-                        <div className="hbp-summary-row">
-                          <div className="hbp-summary-label">
-                            <FaUserClock className="me-2 text-primary" />Native Country
-                          </div>
-                          <div className="hbp-summary-value">
-                            {primaryGuest.nativeCountry || "—"}
-                          </div>
-                        </div>
+                        {/* Native Country row removed — the Primary
+                            Guest Details card was hidden and the field
+                            is no longer collected on this page. */}
                       </Card.Body>
                     </Card>
 

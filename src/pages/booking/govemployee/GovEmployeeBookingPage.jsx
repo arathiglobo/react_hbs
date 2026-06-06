@@ -30,7 +30,6 @@ import {
   FaCalendarAlt,
   FaUsers,
   FaUtensils,
-  FaUserTie,
   FaIdBadge,
   FaFileUpload,
   FaArrowLeft,
@@ -104,11 +103,12 @@ const GovEmployeeBookingPage = () => {
     agentLpo: "",
   });
 
-  // Remarks + special requests + employee that books
+  // Remarks + special requests.
+  // "Booking Done By Employee" was moved to GovEmployeeSearch — the
+  // chosen employeeId now arrives on bookingData.payload.employeeId
+  // and is read straight into the create payload below.
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [bookingDoneByEmployeeId, setBookingDoneByEmployeeId] = useState("");
 
   // ── Government employee verification block ──────────────────────
   const [verificationMethod, setVerificationMethod] = useState(METHOD_CODE);
@@ -158,17 +158,9 @@ const GovEmployeeBookingPage = () => {
     );
   }, []);
 
-  // ── Employee list (for "Booking Done By") ───────────────────────
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
-        if (Array.isArray(res.data)) setEmployees(res.data);
-      } catch (e) {
-        /* silent */
-      }
-    })();
-  }, []);
+  // Employee list fetch removed — "Booking Done By Employee" is now
+  // selected on GovEmployeeSearch and travels here on
+  // bookingData.payload.employeeId.
 
   // ── Agent credit balance ───────────────────────────────────────
   useEffect(() => {
@@ -305,7 +297,7 @@ const GovEmployeeBookingPage = () => {
         if (!g.salutation) errors[`${k}_salutation`] = "Required";
         if (!g.firstName) errors[`${k}_firstName`] = "Required";
         if (!g.lastName) errors[`${k}_lastName`] = "Required";
-        if (!g.gender) errors[`${k}_gender`] = "Required";
+        
       });
     });
 
@@ -403,34 +395,45 @@ const GovEmployeeBookingPage = () => {
     const co = new Date(payload.checkOutDate);
     const nights = Math.max(1, Math.round((co - ci) / 86400000));
 
-    // Per-room rate breakdown — replicate for each room.
-    const allRooms = (rooms || []).map((room, idx) => ({
-      roomNo: idx + 1,
-      roomCategory: selectedRate.roomCategory,
-      mealPlan: selectedRate.mealPlan,
-      nonRefundable: !!selectedRate.nonRefundable,
-      rate: Number(selectedRate.rate || 0),
-      rateBeforeDiscount: Number(
-        selectedRate.rateBeforeDiscount || selectedRate.rate || 0,
-      ),
-      rateWithoutMarkup: Number(selectedRate.rate || 0),
-      adults: room.adults,
-      children: room.children,
-      childAges: room.childAges || [],
-      currency: selectedRate.currency || "AED",
-      guests: (room.guests || []).map((g, gi) => ({
-        salutation: g.salutation,
-        firstName: g.firstName,
-        middleName: g.middleName || "",
-        lastName: g.lastName,
-        gender: g.gender,
-        isChild: !!g.isChild,
-        // Mark the lead guest so the backend knows who the primary
-        // contact is on the booking.
-        isLead:
-          idx === leadIndex.roomIdx && gi === leadIndex.guestIdx,
-      })),
-    }));
+    // Per-room rate breakdown.
+    //
+    // Multi-room aware: when GovEmployeeRoomList sent a per-room
+    // `roomBreakdown` array (one entry per booked room), each room
+    // pulls its OWN roomCategory / mealPlan / rate / etc. from that
+    // slot — so the DB receives real per-room rates. Without
+    // `roomBreakdown` (every legacy single-room flow), `slot` falls
+    // back to the combined `selectedRate` and behaves exactly as
+    // before — so no other flow is affected.
+    const allRooms = (rooms || []).map((room, idx) => {
+      const slot = bookingData.roomBreakdown?.[idx] || selectedRate;
+      return {
+        roomNo: idx + 1,
+        roomCategory: slot.roomCategory,
+        mealPlan: slot.mealPlan,
+        nonRefundable: !!slot.nonRefundable,
+        rate: Number(slot.rate || 0),
+        rateBeforeDiscount: Number(
+          slot.rateBeforeDiscount || slot.rate || 0,
+        ),
+        rateWithoutMarkup: Number(slot.rate || 0),
+        adults: room.adults,
+        children: room.children,
+        childAges: room.childAges || [],
+        currency: slot.currency || "AED",
+        guests: (room.guests || []).map((g, gi) => ({
+          salutation: g.salutation,
+          firstName: g.firstName,
+          middleName: g.middleName || "",
+          lastName: g.lastName,
+          gender: g.gender,
+          isChild: !!g.isChild,
+          // Mark the lead guest so the backend knows who the primary
+          // contact is on the booking.
+          isLead:
+            idx === leadIndex.roomIdx && gi === leadIndex.guestIdx,
+        })),
+      };
+    });
 
     // Derive the primary-guest block from the lead guest + the
     // contact-info card. Keeps the backend contract from the previous
@@ -482,7 +485,9 @@ const GovEmployeeBookingPage = () => {
         (s, r) => s + Number(r.rateBeforeDiscount || 0),
         0,
       ),
-      employeeId: bookingDoneByEmployeeId || null,
+      // employeeId is picked in GovEmployeeSearch and rides on
+      // bookingData.payload — backend stamps the Employee relation.
+      employeeId: bookingData?.payload?.employeeId || null,
     };
 
     setPendingPayload(built);
@@ -529,10 +534,21 @@ const GovEmployeeBookingPage = () => {
 
   const { hotelStaticData, payload, selectedRate, activePromotion } =
     bookingData;
-  const totalBefore =
-    Number(selectedRate.rateBeforeDiscount || 0) * (rooms.length || 1);
-  const totalAfter =
-    Number(selectedRate.rate || 0) * (rooms.length || 1);
+  // Multi-room aware: when `roomBreakdown` is present the combined
+  // `selectedRate.rate` is ALREADY the sum across all rooms.
+  // Multiplying again by `rooms.length` would double-count. Sum
+  // per-room values directly instead. Legacy single-room flows keep
+  // `selectedRate.X × rooms.length`, which equals `selectedRate.X`
+  // when there is one room.
+  const totalBefore = bookingData.roomBreakdown?.length
+    ? bookingData.roomBreakdown.reduce(
+        (s, r) => s + Number(r.rateBeforeDiscount || r.rate || 0),
+        0,
+      )
+    : Number(selectedRate.rateBeforeDiscount || 0) * (rooms.length || 1);
+  const totalAfter = bookingData.roomBreakdown?.length
+    ? bookingData.roomBreakdown.reduce((s, r) => s + Number(r.rate || 0), 0)
+    : Number(selectedRate.rate || 0) * (rooms.length || 1);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hotel-booking-container">
@@ -735,8 +751,13 @@ const GovEmployeeBookingPage = () => {
                           >
                             <Accordion.Header>
                               <span className="fw-bold">
+                                {/* Per-room label from roomBreakdown when
+                                    present (multi-room flow); else the
+                                    combined selectedRate.roomCategory
+                                    (legacy single-room). */}
                                 Room {roomIndex + 1} —{" "}
-                                {selectedRate.roomCategory}
+                                {bookingData.roomBreakdown?.[roomIndex]?.roomCategory
+                                  || selectedRate.roomCategory}
                               </span>
                             </Accordion.Header>
                             <Accordion.Body className="p-3">
@@ -748,8 +769,7 @@ const GovEmployeeBookingPage = () => {
                                 <Col md={2}>Title *</Col>
                                 <Col md={3}>First Name *</Col>
                                 <Col md={3}>Surname *</Col>
-                                <Col md={1}>Gender *</Col>
-                                <Col md={1} className="text-center">
+                                <Col md={2} className="text-center">
                                   Lead
                                 </Col>
                               </Row>
@@ -828,27 +848,11 @@ const GovEmployeeBookingPage = () => {
                                         }
                                       />
                                     </Col>
-                                    <Col md={1}>
-                                      <Form.Select
-                                        isInvalid={
-                                          !!validationErrors[`${k}_gender`]
-                                        }
-                                        value={guest.gender}
-                                        onChange={(e) =>
-                                          handleGuestChange(
-                                            roomIndex,
-                                            guestIndex,
-                                            "gender",
-                                            e.target.value,
-                                          )
-                                        }
-                                      >
-                                        <option value="">—</option>
-                                        <option value="MALE">M</option>
-                                        <option value="FEMALE">F</option>
-                                      </Form.Select>
-                                    </Col>
-                                    <Col md={1} className="text-center">
+                                    {/* Gender column hidden by
+                                        request. State `guest.gender`
+                                        keeps its default empty
+                                        string. */}
+                                    <Col md={2} className="text-center">
                                       {/* Lead radio — only adults can be
                                           lead. Disabled+greyed for children
                                           so the row still aligns. */}
@@ -888,10 +892,12 @@ const GovEmployeeBookingPage = () => {
                       LPO) ride along as empty strings until the
                       operator decides to capture them. */}
 
-                  {/* Special Requests + Remarks */}
+                  {/* Special Requests (Remarks textarea hidden by
+                      request — state `remarks` keeps its default
+                      empty string). */}
                   <Card className="p-2 mb-2 shadow-sm border-0">
                     <h6 className="mb-2 fw-bold text-primary">
-                      Special Requests &amp; Remarks
+                      Special Requests
                     </h6>
                     <div className="mb-2 d-flex flex-wrap gap-2">
                       {SPECIAL_REQUEST_OPTIONS.map((req) => (
@@ -905,42 +911,12 @@ const GovEmployeeBookingPage = () => {
                         />
                       ))}
                     </div>
-                    <Form.Label>Remarks</Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      rows={2}
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                    />
                   </Card>
 
-                  {/* Booking Done By */}
-                  <Card className="p-2 mb-2 shadow-sm border-0 bg-light">
-                    <h6 className="mb-2 fw-bold text-primary d-flex align-items-center">
-                      <FaUserTie className="me-2" /> Booking Done By
-                    </h6>
-                    <Row>
-                      <Col md={4}>
-                        <Form.Label>Employee</Form.Label>
-                        <Form.Select
-                          value={bookingDoneByEmployeeId}
-                          onChange={(e) =>
-                            setBookingDoneByEmployeeId(e.target.value)
-                          }
-                        >
-                          <option value="">Select Employee</option>
-                          {employees.map((emp) => (
-                            <option
-                              key={emp.employeeId}
-                              value={emp.employeeId}
-                            >
-                              {emp.firstName} {emp.lastName}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                    </Row>
-                  </Card>
+                  {/* "Booking Done By Employee" was moved into the
+                      GovEmployeeSearch criteria (optional). The chosen
+                      employeeId now rides on bookingData.payload and is
+                      sent to /api/gov-employee-booking/create from there. */}
                 </Col>
 
                 {/* ─────────── Right sticky summary column ─────────── */}

@@ -239,6 +239,24 @@ export default function GovEmployeeSearch() {
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
 
+  // Optional "Booking Done By Employee" — moved here from
+  // GovEmployeeBookingPage. employeeId flows through navigate state →
+  // GovEmployeeRoomList → GovEmployeeBookingPage's bookingData.payload.
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
+        if (res.data && Array.isArray(res.data)) setEmployees(res.data);
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
   const [agents, setAgents] = useState([]);
   const [agent, setAgent] = useState("");
   const [agentBalance, setAgentBalance] = useState(null);
@@ -573,6 +591,9 @@ export default function GovEmployeeSearch() {
         children: firstRoom.children,
         roomConfigurations: rooms,
         agentId: agent,
+        // Optional "Booking Done By Employee" selection — null when
+        // the user skipped the dropdown.
+        employeeId: selectedEmployee?.value || null,
       },
     });
   };
@@ -721,6 +742,33 @@ export default function GovEmployeeSearch() {
                           {errors.nationality}
                         </div>
                       )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* Booking Done By Employee — OPTIONAL.
+                      Replaces the same Card that used to live on the
+                      booking page. Threaded through to the create
+                      payload as employeeId. No validation. */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Booking Done By Employee{" "}
+                        <span className="text-muted small">(optional)</span>
+                      </Form.Label>
+                      <Select
+                        options={employees.map((e) => ({
+                          value: e.employeeId,
+                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                        }))}
+                        value={selectedEmployee}
+                        onChange={(opt) => setSelectedEmployee(opt)}
+                        placeholder="Select employee"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={SELECT_STYLES}
+                      />
                     </Form.Group>
                   </Col>
 

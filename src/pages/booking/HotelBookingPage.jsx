@@ -5,7 +5,6 @@ import {
   FaCalendarAlt,
   FaUsers,
   FaUtensils,
-  FaUserTie,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -40,7 +39,18 @@ const SPECIAL_REQUEST_OPTIONS = [
   "Smoking Room",
 ];
 
-const HotelBookingPage = () => {
+/**
+ * Optional `force24Hour` prop — set by the thin HotelBookingPage24Hour
+ * wrapper. When true, the post-booking redirect goes to
+ * /booking-details/24hr-booking-list instead of
+ * /booking-details/hotel-booking-list so the dedicated 24-hour
+ * Check-In flow lands on its own booking list. Defaults to false so
+ * the legacy /hotel-booking-page flow is unchanged.
+ */
+const HotelBookingPage = ({ force24Hour = false } = {}) => {
+  const postBookingListRoute = force24Hour
+    ? "/booking-details/24hr-booking-list"
+    : "/booking-details/hotel-booking-list";
   const navigate = useNavigate();
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
@@ -49,6 +59,22 @@ const HotelBookingPage = () => {
   const [bookingData, setBookingData] = useState(null);
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   const [rooms, setRooms] = useState([]);
+
+  // ── Lead passenger marker — { roomIdx, guestIdx } pointing at the
+  //    single guest the user has flagged as Lead. Mirrors the gov /
+  //    SC / Student booking pages. Defaults to the first guest
+  //    (room 0, guest 0) so the radio column always has one
+  //    selection on first render. Children can't be Lead. The
+  //    Lead-marked guest drives the `primaryGuest` payload object —
+  //    the (now hidden) "Lead Passenger" card no longer collects
+  //    Salutation / First Name / Middle Name / Last Name.
+  const [leadIndex, setLeadIndex] = useState({ roomIdx: 0, guestIdx: 0 });
+
+  const handleLeadSelect = (roomIdx, guestIdx) => {
+    const g = rooms?.[roomIdx]?.guests?.[guestIdx];
+    if (g?.isChild) return;
+    setLeadIndex({ roomIdx, guestIdx });
+  };
   const [primaryGuest, setPrimaryGuest] = useState({
     salutation: "",
     firstName: "",
@@ -58,13 +84,11 @@ const HotelBookingPage = () => {
     phone: "",
     passportNo: "",
     agentLpo: "",
-    employeeId: "",
   });
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
-  const [employees, setEmployees] = useState([]);
   const [tourismDirhams, setTourismDirhams] = useState("0");
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
@@ -77,20 +101,10 @@ const HotelBookingPage = () => {
   const [policiesLoading, setPoliciesLoading] = useState(false);
   const [policyAccepted, setPolicyAccepted] = useState(false);
 
-  // Fetch employees list
-  useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
-        if (res.data && Array.isArray(res.data)) {
-          setEmployees(res.data);
-        }
-      } catch (error) {
-        console.error("Error fetching employees:", error);
-      }
-    };
-    fetchEmployees();
-  }, []);
+  // Employee selection moved to HotelSearch (optional "Booking Done By"
+  // dropdown). The selected employeeId travels here on
+  // bookingData.payload.employeeId and is forwarded straight into the
+  // create payload — no fetch / no state needed on this page anymore.
 
   // Fetch the selected agent's available credit balance for display
   useEffect(() => {
@@ -240,23 +254,12 @@ const HotelBookingPage = () => {
     const errors = {};
     let hasErrors = false;
 
-    // Validate Primary Guest fields
-    if (!primaryGuest.salutation || primaryGuest.salutation.trim() === "") {
-      errors.salutation = "Salutation is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.firstName || primaryGuest.firstName.trim() === "") {
-      errors.firstName = "First Name is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.lastName || primaryGuest.lastName.trim() === "") {
-      errors.lastName = "Last Name is required";
-      hasErrors = true;
-    }
-    // Email / Phone / Passport No / Agent LPO are no longer collected
-    // on this page (the inputs were hidden) — drop their validations.
-    // If you re-introduce the inputs later, restore the corresponding
-    // `if (!primaryGuest.<field>) { ... }` blocks.
+    // Primary-guest validation removed — the Lead Passenger card
+    // has been hidden. The Guest Details grid above is the single
+    // source of customer details; the submit payload derives
+    // `primaryGuest` from Room 1 / Guest 1 at build time. If the
+    // inputs ever come back, restore the
+    // `if (!primaryGuest.<field>) { ... }` blocks here.
 
     // Validate Guest fields in rooms
     rooms.forEach((room, roomIndex) => {
@@ -275,10 +278,8 @@ const HotelBookingPage = () => {
           errors[`${guestKey}_lastName`] = "Last Name is required";
           hasErrors = true;
         }
-        if (!guest.gender || guest.gender.trim() === "") {
-          errors[`${guestKey}_gender`] = "Gender is required";
-          hasErrors = true;
-        }
+        // Gender validation removed — the field has been hidden
+        // from the Guest Details grid per spec.
       });
     });
 
@@ -398,7 +399,10 @@ const HotelBookingPage = () => {
         checkInDate: cinStr,
         checkOutDate: coutStr,
         nights: nights,
-        employeeId: primaryGuest.employeeId || null,
+        // employeeId is selected in HotelSearch's "Booking Done By Employee"
+        // dropdown (optional). It flows here via bookingData.payload and
+        // gets persisted on the new HotelBooking row.
+        employeeId: bookingData?.payload?.employeeId || null,
         roomStatus: bookingData.selectedRate.roomStatus,
         cancellationPolicy:
           bookingData.selectedRate.cancellationPolicy?.map(
@@ -462,43 +466,75 @@ const HotelBookingPage = () => {
         })(),
 
         // ✅ Primary guest details
-        primaryGuest: {
-          salutation: primaryGuest.salutation,
-          firstName: primaryGuest.firstName,
-          middleName: primaryGuest.middleName,
-          lastName: primaryGuest.lastName,
-          email: primaryGuest.email,
-          phone: primaryGuest.phone,
-          passportNo: primaryGuest.passportNo,
-          agentLpo: primaryGuest.agentLpo,
-          nativeCountry: bookingData.payload.nationality,
-        },
+        // The Lead Passenger card is hidden, so the name fields are
+        // sourced from the Lead-marked guest in the Guest Details
+        // grid above (defaults to Room 1 / Guest 1). Email / phone /
+        // passportNo / agentLpo are no longer collected on the form
+        // and are sent as empty strings. The backend ignores empty
+        // optional values, so the /api/hotel-booking/create contract
+        // is preserved.
+        primaryGuest: (() => {
+          const leadGuest =
+            rooms?.[leadIndex.roomIdx]?.guests?.[leadIndex.guestIdx] || {};
+          return {
+            salutation: leadGuest.salutation || "",
+            firstName: leadGuest.firstName || "",
+            middleName: leadGuest.middleName || "",
+            lastName: leadGuest.lastName || "",
+            email: "",
+            phone: "",
+            passportNo: "",
+            agentLpo: "",
+            nativeCountry: bookingData.payload.nationality,
+          };
+        })(),
 
         // ✅ Room & guest breakdown
-        rooms: rooms.map((room, roomIndex) => ({
-          roomNo: roomIndex + 1,
-          roomCategory: bookingData.selectedRate.roomCategory, // per room
-          mealPlan: bookingData.selectedRate.mealPlan,
-          nonRefundable:
-            bookingData.selectedRate.nonRefundable === true ||
-            bookingData.selectedRate.nonRefundable === "true"
-              ? true
-              : false,
-          currency: bookingData.selectedRate.currency || "AED",
-          rate: bookingData.selectedRate.rate,
-          rateWithoutMarkup: bookingData.selectedRate.rateWithoutMarkup,
-          adults: room.adults,
-          children: room.children,
-          childAges: room.childAges || [],
-          guests: room.guests.map((guest) => ({
-            salutation: guest.salutation,
-            firstName: guest.firstName,
-            middleName: guest.middleName || "",
-            lastName: guest.lastName,
-            gender: guest.gender,
-            isChild: guest.isChild,
-          })),
-        })),
+        //
+        // Multi-room aware: when RoomList.jsx sent a per-room
+        // `roomBreakdown` array (one entry per booked room), each room
+        // here pulls its OWN roomCategory / mealPlan / rate / etc. from
+        // that slot. Without `roomBreakdown` (every legacy single-room
+        // flow), `slot` falls back to the combined `selectedRate` and
+        // behaves exactly as before — so no other flow is affected.
+        //
+        // This is what unblocks multi-room booking: the backend needs
+        // each room's real category (e.g. "Junior Suite") to find
+        // availability — sending the combined label
+        // ("Junior Suite + Junior Suite") for every room makes the
+        // availability check fail with "Requested rooms are not
+        // available for selected dates."
+        rooms: rooms.map((room, roomIndex) => {
+          const slot =
+            bookingData.roomBreakdown?.[roomIndex] || bookingData.selectedRate;
+          return {
+            roomNo: roomIndex + 1,
+            roomCategory: slot.roomCategory, // per room
+            mealPlan: slot.mealPlan,
+            nonRefundable:
+              slot.nonRefundable === true || slot.nonRefundable === "true"
+                ? true
+                : false,
+            currency: slot.currency || "AED",
+            rate: slot.rate,
+            rateWithoutMarkup: slot.rateWithoutMarkup,
+            adults: room.adults,
+            children: room.children,
+            childAges: room.childAges || [],
+            guests: room.guests.map((guest, gi) => ({
+              salutation: guest.salutation,
+              firstName: guest.firstName,
+              middleName: guest.middleName || "",
+              lastName: guest.lastName,
+              gender: guest.gender,
+              isChild: guest.isChild,
+              // Lead flag mirrors the gov / SC / Student flows.
+              // Backend ignores unknown fields, so this stays
+              // backward-compatible with /api/hotel-booking/create.
+              isLead: roomIndex === leadIndex.roomIdx && gi === leadIndex.guestIdx,
+            })),
+          };
+        }),
 
         // ✅ Additional remarks
         remarks: remarks || "",
@@ -534,7 +570,12 @@ const HotelBookingPage = () => {
   // ✅ Confirm and post API only on OK
   const confirmBooking = async () => {
     if (!pendingPayload) return;
-    setShowConfirmModal(false);
+    // Keep the Order Summary modal OPEN while the API runs so the
+    // in-button "Processing..." spinner stays visible to the user.
+    // We only dismiss it once the create call succeeds, just before
+    // navigating to the booking list. Previously we closed the modal
+    // BEFORE the await, so the loader flashed off-screen and the user
+    // saw nothing happening.
     setIsSubmitting(true);
 
     try {
@@ -600,7 +641,13 @@ const HotelBookingPage = () => {
         bookingResponse.bookingId != 0
       ) {
         toast.success(bookingResponse.message);
-        navigate("/booking-details/hotel-booking-list");
+        // Dismiss the Order Summary modal only after success, so the
+        // in-button spinner remained visible for the full call.
+        setShowConfirmModal(false);
+        // Dedicated 24-hour booking list when this page is rendered
+        // via /hotel-booking-page-24hr; legacy hotel-booking-list
+        // otherwise.
+        navigate(postBookingListRoute);
       } else {
         toast.error("Booking submission failed. Please try again.");
       }
@@ -685,9 +732,9 @@ const HotelBookingPage = () => {
                           ← Back
                         </Button>
 
-                        <h5 className="mb-0 fw-bold text-dark">
+                        <h6 className="mb-0 fw-bold text-dark">
                           Guest Details
-                        </h5>
+                        </h6>
                       </div>
                     </Card.Header>
                     <Card.Body className="p-0">
@@ -696,7 +743,22 @@ const HotelBookingPage = () => {
                         defaultActiveKey={rooms.map((_, i) => i.toString())}
                         className="guest-details-accordion"
                       >
-                        {rooms.map((room, roomIndex) => (
+                        {rooms.map((room, roomIndex) => {
+                          // Per-room category / meal plan from the
+                          // multi-room breakdown when present (Room 1 gets
+                          // its own roomCategory + mealPlan, Room 2 gets
+                          // its own, etc.). Falls back to the aggregate
+                          // selectedRate for legacy single-room flows that
+                          // never populate roomBreakdown.
+                          const slot =
+                            bookingData?.roomBreakdown?.[roomIndex] ||
+                            selectedRate;
+                          const slotRoomNo = slot.roomNo ?? roomIndex + 1;
+                          const slotCategory =
+                            slot.roomCategory || selectedRate.roomCategory;
+                          const slotMealPlan =
+                            slot.mealPlan || selectedRate.mealPlan;
+                          return (
                           <Accordion.Item
                             key={roomIndex}
                             eventKey={roomIndex.toString()}
@@ -705,26 +767,41 @@ const HotelBookingPage = () => {
                             <Accordion.Header className="bg-primary text-white">
                               <h6 className="mb-0 fw-bold w-100 d-flex flex-wrap align-items-center gap-2">
                                 <span>
-                                  Room {roomIndex + 1} -{" "}
-                                  {selectedRate.roomCategory}
+                                  Room {slotRoomNo} -{" "}
+                                  {slotCategory}
                                 </span>
-                                {selectedRate?.mealPlan && (
+                                {slotMealPlan && (
                                   <Badge
                                     bg="light"
                                     text="dark"
                                     className="ms-2"
                                   >
                                     <FaUtensils className="me-1" />
-                                    {selectedRate.mealPlan}
+                                    {slotMealPlan}
                                   </Badge>
                                 )}
                               </h6>
                             </Accordion.Header>
-                            <Accordion.Body className="p-4">
-                              {room.guests.map((guest, guestIndex) => (
+                            <Accordion.Body className="p-3">
+                              {/* Column headers — mirrors the
+                                  gov / SC / Student booking pages so
+                                  every Guest Details grid in the
+                                  system looks identical. */}
+                              <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                                <Col md={2}>Passenger</Col>
+                                <Col md={2}>Title *</Col>
+                                <Col md={3}>First Name *</Col>
+                                <Col md={3}>Surname *</Col>
+                                <Col md={2} className="text-center">Lead</Col>
+                              </Row>
+                              {room.guests.map((guest, guestIndex) => {
+                                const isLead =
+                                  leadIndex.roomIdx === roomIndex &&
+                                  leadIndex.guestIdx === guestIndex;
+                                return (
                                 <div
                                   key={guestIndex}
-                                  className="guest-row mb-3"
+                                  className="guest-row mb-2"
                                 >
                                   <Row className="align-items-center g-2">
                                     <Col md={2}>
@@ -737,8 +814,7 @@ const HotelBookingPage = () => {
                                                 guestIndex - room.adults
                                               ]
                                             })`
-                                          : `Adult ${guestIndex + 1}`}{" "}
-                                        *
+                                          : `Adult ${guestIndex + 1}`}
                                       </span>
                                     </Col>
                                     <Col md={2}>
@@ -782,7 +858,7 @@ const HotelBookingPage = () => {
                                     <Col md={3}>
                                       <Form.Control
                                         type="text"
-                                        placeholder="First Name *"
+                                        placeholder="First Name"
                                         value={guest.firstName}
                                         onChange={(e) =>
                                           handleGuestChange(
@@ -814,7 +890,7 @@ const HotelBookingPage = () => {
                                     <Col md={3}>
                                       <Form.Control
                                         type="text"
-                                        placeholder="Last Name *"
+                                        placeholder="Surname"
                                         value={guest.lastName}
                                         onChange={(e) =>
                                           handleGuestChange(
@@ -843,163 +919,72 @@ const HotelBookingPage = () => {
                                         </Form.Control.Feedback>
                                       )}
                                     </Col>
-                                    <Col md={2}>
-                                      <Form.Select
-                                        value={guest.gender}
-                                        onChange={(e) =>
-                                          handleGuestChange(
+                                    {/* Gender column hidden by
+                                        request — the field is no
+                                        longer collected on this
+                                        page. The state `guest.gender`
+                                        keeps its default empty
+                                        string so the payload still
+                                        carries the key and the
+                                        backend contract stays
+                                        intact. */}
+                                    <Col md={2} className="text-center">
+                                      {/* Lead radio — only adults can
+                                          be lead. Disabled+greyed for
+                                          children so the row still
+                                          aligns. The Lead-marked guest
+                                          drives the `primaryGuest`
+                                          object in the submitted
+                                          payload, replacing the
+                                          (hidden) "Lead Passenger"
+                                          card above. */}
+                                      <Form.Check
+                                        type="radio"
+                                        name="hbp-lead-guest"
+                                        id={`hbp-lead-${roomIndex}-${guestIndex}`}
+                                        checked={isLead}
+                                        disabled={guest.isChild}
+                                        onChange={() =>
+                                          handleLeadSelect(
                                             roomIndex,
                                             guestIndex,
-                                            "gender",
-                                            e.target.value,
                                           )
                                         }
-                                        className="form-control-sm"
-                                        isInvalid={
-                                          !!validationErrors[
-                                            `room_${roomIndex}_guest_${guestIndex}_gender`
-                                          ]
+                                        title={
+                                          guest.isChild
+                                            ? "Children cannot be the lead"
+                                            : "Mark as Lead passenger"
                                         }
-                                      >
-                                        <option value="">Gender</option>
-                                        <option value="Male">Male</option>
-                                        <option value="Female">Female</option>
-                                        <option value="Other">Other</option>
-                                      </Form.Select>
-                                      {validationErrors[
-                                        `room_${roomIndex}_guest_${guestIndex}_gender`
-                                      ] && (
-                                        <Form.Control.Feedback type="invalid">
-                                          {
-                                            validationErrors[
-                                              `room_${roomIndex}_guest_${guestIndex}_gender`
-                                            ]
-                                          }
-                                        </Form.Control.Feedback>
-                                      )}
+                                      />
                                     </Col>
                                   </Row>
-                                  {guestIndex < room.guests.length - 1 && (
-                                    <hr className="my-3" />
-                                  )}
                                 </div>
-                              ))}
+                              );
+                              })}
                             </Accordion.Body>
                           </Accordion.Item>
-                        ))}
+                          );
+                        })}
                       </Accordion>
                     </Card.Body>
                   </Card>
 
-                  {/* Primary Guest */}
-                  <Card className="p-4 mb-4 shadow-sm border-0">
-                    <h5 className="mb-3 fw-bold">Lead Passenger</h5>
-                    <Row className="g-3">
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Salutation
-                          </Form.Label>
-                          <Form.Select
-                            value={primaryGuest.salutation}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange(
-                                "salutation",
-                                e.target.value,
-                              )
-                            }
-                            isInvalid={!!validationErrors.salutation}
-                          >
-                            <option value="">Select</option>
-                            <option value="Mr">Mr</option>
-                            <option value="Mrs">Mrs</option>
-                            <option value="Ms">Ms</option>
-                            <option value="Dr">Dr</option>
-                          </Form.Select>
-                          {validationErrors.salutation && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.salutation}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>First Name
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.firstName}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange(
-                                "firstName",
-                                e.target.value,
-                              )
-                            }
-                            isInvalid={!!validationErrors.firstName}
-                            required
-                          />
-                          {validationErrors.firstName && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.firstName}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>Middle Name</Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.middleName}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange(
-                                "middleName",
-                                e.target.value,
-                              )
-                            }
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Last Name
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.lastName}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange(
-                                "lastName",
-                                e.target.value,
-                              )
-                            }
-                            isInvalid={!!validationErrors.lastName}
-                            required
-                          />
-                          {validationErrors.lastName && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.lastName}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                      </Col>
-                      {/* Email / Phone / Passport No / Agent LPO
-                          inputs are hidden by request. The state
-                          fields (primaryGuest.email, .phone, etc.)
-                          are kept so the booking payload still has
-                          the keys, just with empty values. Restore
-                          the <Col md={3}> blocks below the original
-                          Last Name column if these fields need to
-                          come back. */}
-                    </Row>
-                  </Card>
+                  {/* Lead Passenger / Primary Guest card hidden by
+                      request — the Guest Details grid above is the
+                      single source of customer details. The submit
+                      payload still carries a `primaryGuest` object:
+                      `buildPayload` derives it from Room 1 / Guest 1
+                      (the first adult on the form) so the
+                      /api/hotel-booking/create contract stays intact.
+                      The booking-confirmation radios further down on
+                      the page are unrelated and unchanged. */}
 
-                  {/* Remarks & Requests */}
+                  {/* Tourism Dirhams & Special Requests (Remarks
+                      input hidden by request — the state `remarks`
+                      keeps its default empty string so the payload
+                      still carries the key). */}
                   <Card className="p-4 mb-2 shadow-sm border-0">
-                    <h5 className="mb-3 fw-bold">Remarks & Special Requests</h5>
+                    <h5 className="mb-3 fw-bold">Tourism Dirhams & Special Requests</h5>
                     <Row className="g-3">
                       <Col md={6}>
                         <Form.Group className="mb-3">
@@ -1011,18 +996,6 @@ const HotelBookingPage = () => {
                             placeholder="0"
                             min="0"
                             step="0.01"
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Remarks</Form.Label>
-                          <Form.Control
-                            as="textarea"
-                            rows={3}
-                            placeholder="Any remarks..."
-                            value={remarks}
-                            onChange={(e) => setRemarks(e.target.value)}
                           />
                         </Form.Group>
                       </Col>
@@ -1105,41 +1078,10 @@ const HotelBookingPage = () => {
                     </Row>
                   </Card>
 
-                  {/* Booking Done By Section */}
-                  <Card className="p-4 mb-4 shadow-sm border-0 bg-light">
-                    <h6 className="mb-3 fw-bold text-primary d-flex align-items-center">
-                      <FaUserTie className="me-2" /> Booking Done By
-                    </h6>
-                    <Row>
-                      <Col md={4}>
-                        <Form.Group>
-                          <Form.Label className="fw-semibold">
-                            Employee
-                          </Form.Label>
-                          <Form.Select
-                            value={primaryGuest.employeeId}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange(
-                                "employeeId",
-                                e.target.value,
-                              )
-                            }
-                            className="form-control"
-                          >
-                            <option value="">Select Employee</option>
-                            {employees.map((employee) => (
-                              <option
-                                key={employee.employeeId}
-                                value={employee.employeeId}
-                              >
-                                {employee.firstName} {employee.lastName}
-                              </option>
-                            ))}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </Card>
+                  {/* "Booking Done By Employee" was moved into the
+                      HotelSearch criteria (optional). The chosen
+                      employeeId now rides on bookingData.payload and is
+                      sent to /api/hotel-booking/create from there. */}
                 </Col>
 
                 {/* Right sticky column — Booking Summary + Price */}

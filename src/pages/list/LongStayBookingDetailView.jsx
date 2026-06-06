@@ -228,6 +228,16 @@ export default function LongStayBookingDetailView() {
                           label="Total Nights"
                           value={detail.totalNights}
                         />
+                        {/* Optional "Booking Done By Employee" — only
+                            rendered when an employee was picked at
+                            search time. Backend resolves the name from
+                            the joined employee row. */}
+                        {detail.employeeName && (
+                          <InfoRow
+                            label="Booked By Employee"
+                            value={detail.employeeName}
+                          />
+                        )}
                       </Col>
                     </Row>
                   </Card.Body>

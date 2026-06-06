@@ -257,6 +257,26 @@ export default function LongStaySearch() {
 
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
+  // Optional "Booking Done By Employee" — same pattern as HotelSearch.
+  // employeeId rides along on `payload` → RoomList draft →
+  // LongStayBookingPage create payload, so the backend can stamp the
+  // employee relation on LongStayBooking.
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
+        if (res.data && Array.isArray(res.data)) {
+          setEmployees(res.data);
+        }
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, []);
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
   // Minimum stay (nights) for the long-stay flow — pricing engine
@@ -832,7 +852,43 @@ export default function LongStaySearch() {
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
+                {/* Field order mirrors /new-booking/hotel (HotelSearch.jsx):
+                      1. Agent  2. Destination / City  3. Nationality
+                      4. Check-In  5. Nights  6. Check-Out  7. Rooms & Guests
+                    Only the JSX order is rearranged — every prop, handler,
+                    state binding, validation message and layout class is
+                    preserved bit-for-bit so behavior is unchanged. */}
                 <Row className="g-4">
+                  {/* 1. Agent */}
+                  {!isAgentRole && (
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">Agent</Form.Label>
+                        <Form.Select
+                          style={{ height: "42px" }}
+                          className="form-control-modern"
+                          value={agent}
+                          onChange={(e) => {
+                            setAgent(e.target.value);
+                            if (e.target.value) clearError("agent");
+                          }}
+                        >
+                          <option value="">Select Agent</option>
+                          {agents.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.companyName}
+                            </option>
+                          ))}
+                        </Form.Select>
+                        {errors.agent && (
+                          <div className="text-danger small mt-1">{errors.agent}</div>
+                        )}
+                        <AgentBalanceDisplay agentId={agent} />
+                      </Form.Group>
+                    </Col>
+                  )}
+
+                  {/* 2. Destination / City */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Destination</Form.Label>
@@ -876,6 +932,7 @@ export default function LongStaySearch() {
                     </Form.Group>
                   </Col>
 
+                  {/* 3. Nationality */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Nationality</Form.Label>
@@ -909,64 +966,41 @@ export default function LongStaySearch() {
                     </Form.Group>
                   </Col>
 
-                  {!isAgentRole && (
-                    <Col lg={3} md={6}>
-                      <Form.Group>
-                        <Form.Label className="fw-semibold text-dark">Agent</Form.Label>
-                        <Form.Select
-                          style={{ height: "42px" }}
-                          className="form-control-modern"
-                          value={agent}
-                          onChange={(e) => {
-                            setAgent(e.target.value);
-                            if (e.target.value) clearError("agent");
-                          }}
-                        >
-                          <option value="">Select Agent</option>
-                          {agents.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.companyName}
-                            </option>
-                          ))}
-                        </Form.Select>
-                        {errors.agent && (
-                          <div className="text-danger small mt-1">{errors.agent}</div>
-                        )}
-                        <AgentBalanceDisplay agentId={agent} />
-                      </Form.Group>
-                    </Col>
-                  )}
-
-                  <Col lg={2} md={6}>
+                  {/* Booking Done By Employee — OPTIONAL.
+                      Carries through to /api/longStayBooking/create as
+                      employeeId. No validation; blank is a valid skip. */}
+                  <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
-                        Nights{" "}
-                        <small className="text-muted fw-normal">
-                          (min {MIN_LONG_STAY_NIGHTS})
-                        </small>
+                        Booking Done By Employee{" "}
+                        <span className="text-muted small">(optional)</span>
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="number"
-                        // `min` is a hint to the browser spinner; the
-                        // authoritative check is in validateForm so
-                        // pasted / typed sub-30 values are flagged
-                        // explicitly to the user.
-                        min={MIN_LONG_STAY_NIGHTS}
-                        max={365}
-                        placeholder={`${MIN_LONG_STAY_NIGHTS}+`}
-                        value={nights}
-                        onChange={(e) => handleNightsChange(e.target.value)}
-                        onBlur={(e) => commitNights(e.target.value)}
-                        isInvalid={!!errors.nights}
+                      <Select
+                        options={employees.map((e) => ({
+                          value: e.employeeId,
+                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                        }))}
+                        value={selectedEmployee}
+                        onChange={(option) => setSelectedEmployee(option)}
+                        placeholder="Select employee"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "42px",
+                            border: "1px solid #dee2e6",
+                            "&:hover": { borderColor: "#86b7fe" },
+                          }),
+                        }}
                       />
-                      {errors.nights && (
-                        <div className="text-danger small mt-1">{errors.nights}</div>
-                      )}
                     </Form.Group>
                   </Col>
 
+                  {/* 4. Check-In */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
@@ -1037,6 +1071,38 @@ export default function LongStaySearch() {
                     </Form.Group>
                   </Col>
 
+                  {/* 5. Nights */}
+                  <Col lg={2} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nights{" "}
+                        <small className="text-muted fw-normal">
+                          (min {MIN_LONG_STAY_NIGHTS})
+                        </small>
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="number"
+                        // `min` is a hint to the browser spinner; the
+                        // authoritative check is in validateForm so
+                        // pasted / typed sub-30 values are flagged
+                        // explicitly to the user.
+                        min={MIN_LONG_STAY_NIGHTS}
+                        max={365}
+                        placeholder={`${MIN_LONG_STAY_NIGHTS}+`}
+                        value={nights}
+                        onChange={(e) => handleNightsChange(e.target.value)}
+                        onBlur={(e) => commitNights(e.target.value)}
+                        isInvalid={!!errors.nights}
+                      />
+                      {errors.nights && (
+                        <div className="text-danger small mt-1">{errors.nights}</div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 6. Check-Out */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-out</Form.Label>
@@ -1428,6 +1494,11 @@ export default function LongStaySearch() {
                                             agentId: String(agent),
                                             apiId: 1,
                                             rooms: roomsPayload,
+                                            // Optional "Booking Done By"
+                                            // selection — null when the
+                                            // user skipped the dropdown.
+                                            employeeId:
+                                              selectedEmployee?.value || null,
                                           };
                                           const meta = {
                                             hotelName: hotel.name,

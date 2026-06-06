@@ -87,6 +87,22 @@ export default function LastMinuteBookingForm() {
     agentLpo: "",
   });
 
+  // ── Lead passenger marker — { roomIdx, guestIdx } pointing at the
+  //    single guest the user has flagged as Lead. Mirrors
+  //    /hotel-booking-page / /senior-citizen-booking-page /
+  //    /gov-employee-booking-page / /student-booking-page. Defaults
+  //    to the first guest (room 0, guest 0) so the column always has
+  //    one selection on first render. Children can't be Lead. The
+  //    Lead-marked guest drives the submitted `customer` object
+  //    (replacing the hidden Primary Guest Details card).
+  const [leadIndex, setLeadIndex] = useState({ roomIdx: 0, guestIdx: 0 });
+
+  const handleLeadSelect = (roomIdx, guestIdx) => {
+    const g = rooms?.[roomIdx]?.guests?.[guestIdx];
+    if (g?.isChild) return;
+    setLeadIndex({ roomIdx, guestIdx });
+  };
+
   // Each "room" is a single room in this booking. The Last Minute search
   // returns one rate per room slot, so we default to a 1-room booking and
   // let the user add more rooms (each room duplicates the chosen rate).
@@ -151,31 +167,51 @@ export default function LastMinuteBookingForm() {
     return [label, feeText, dayText].filter(Boolean).join(" ");
   };
 
-  // ── Total price computed from per-night × nights × roomCount + extras ──
-  const markupPct = ctx?.room?.markup || 0;
-  const perNight = applyMarkup(ctx?.room?.lastMinuteRate || 0, markupPct);
-  const adultRate = applyMarkup(ctx?.room?.adultRate || 0, markupPct);
-  const childRate = applyMarkup(ctx?.room?.childRate || 0, markupPct);
+  // ── Per-room rate resolution ───────────────────────────────────────────
+  // When LastMinuteRoomList sent a multi-room pick, `ctx.roomBreakdown`
+  // is a list of { roomNo, rate } where `rate` is the full
+  // last-minute-rate object for that slot. Without breakdown (every
+  // legacy single-room flow), every room falls back to `ctx.room` —
+  // identical to the previous behavior.
+  const getRoomRate = (idx) =>
+    (ctx?.roomBreakdown && ctx.roomBreakdown[idx]?.rate) || ctx?.room || {};
+
+  // ── Total price — sum across rooms using EACH room's own rate ──
   const nights = Number(ctx?.nights || 1);
   const totalRoomCount = rooms.length;
   const { totalPrice, extraAdults, totalChildren } = useMemo(() => {
     let extra = 0;
     let kids = 0;
-    rooms.forEach((r) => {
+    let total = 0;
+    rooms.forEach((r, idx) => {
       const a = Number(r.adults) || 1;
       const c = Number(r.children) || 0;
-      extra += Math.max(0, a - 2);
+      const xa = Math.max(0, a - 2);
+      extra += xa;
       kids += c;
+      const rate = getRoomRate(idx);
+      const mk = rate?.markup || 0;
+      const perNightI = applyMarkup(rate?.lastMinuteRate || 0, mk);
+      const adultRateI = applyMarkup(rate?.adultRate || 0, mk);
+      const childRateI = applyMarkup(rate?.childRate || 0, mk);
+      total += perNightI * nights;
+      total += xa * adultRateI * nights;
+      total += c * childRateI * nights;
     });
-    const base = perNight * nights * totalRoomCount;
-    const adultExtra = extra * adultRate * nights;
-    const childExtra = kids * childRate * nights;
     return {
-      totalPrice: base + adultExtra + childExtra,
+      totalPrice: total,
       extraAdults: extra,
       totalChildren: kids,
     };
-  }, [perNight, adultRate, childRate, nights, totalRoomCount, rooms]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nights, totalRoomCount, rooms, ctx?.room, ctx?.roomBreakdown]);
+
+  // ── Backward-compat "primary" rate (used by the booking-summary card
+  //    and a few other display sites that aren't yet per-room aware). ──
+  const markupPct = ctx?.room?.markup || 0;
+  const perNight = applyMarkup(ctx?.room?.lastMinuteRate || 0, markupPct);
+  const adultRate = applyMarkup(ctx?.room?.adultRate || 0, markupPct);
+  const childRate = applyMarkup(ctx?.room?.childRate || 0, markupPct);
 
   // Resync rooms[].guests array when adults/children counts change.
   useEffect(() => {
@@ -266,26 +302,17 @@ export default function LastMinuteBookingForm() {
           errs[`room_${ri}_guest_${gi}_firstName`] = "Required";
         if (!g.lastName || !g.lastName.trim())
           errs[`room_${ri}_guest_${gi}_lastName`] = "Required";
-        if (!g.gender || !g.gender.trim())
-          errs[`room_${ri}_guest_${gi}_gender`] = "Required";
+        // Gender validation removed — the field has been hidden
+        // from the Guest Details grid per spec.
         if (g.isChild && (g.childAge == null || g.childAge === ""))
           errs[`room_${ri}_guest_${gi}_childAge`] = "Required";
       });
     });
 
-    // Primary guest mandatory fields.
-    if (!primaryGuest.salutation || !primaryGuest.salutation.trim())
-      errs.primary_salutation = "Required";
-    if (!primaryGuest.firstName || !primaryGuest.firstName.trim())
-      errs.primary_firstName = "Required";
-    if (!primaryGuest.lastName || !primaryGuest.lastName.trim())
-      errs.primary_lastName = "Required";
-    if (!primaryGuest.email || !primaryGuest.email.trim())
-      errs.primary_email = "Required";
-    else if (!/^\S+@\S+\.\S+$/.test(primaryGuest.email))
-      errs.primary_email = "Invalid email";
-    if (!primaryGuest.phone || !primaryGuest.phone.trim())
-      errs.primary_phone = "Required";
+    // Primary-guest validation removed — the Primary Guest Details
+    // card has been hidden. The Guest Details grid above is the
+    // single source of customer details; the submit payload derives
+    // `customer` from the Lead-marked guest at build time.
 
     return errs;
   };
@@ -364,10 +391,25 @@ export default function LastMinuteBookingForm() {
     const createdByRole =
       localStorage.getItem("currentActiveRole") || "agent";
 
+    // Primary Guest Details card is hidden — derive customer from
+    // the Lead-marked guest in the Guest Details grid above. Email
+    // / phone / passportNo / agentLpo are no longer collected on
+    // the form and are sent as empty strings. Nationality still
+    // comes from the search context. Backend ignores empty optional
+    // values, so the /api/last-minute-booking/create contract is
+    // preserved.
+    const leadGuest =
+      rooms?.[leadIndex.roomIdx]?.guests?.[leadIndex.guestIdx] || {};
     const customerWithNationality = {
-      ...primaryGuest,
+      salutation: leadGuest.salutation || "",
+      firstName: leadGuest.firstName || "",
+      middleName: leadGuest.middleName || "",
+      lastName: leadGuest.lastName || "",
+      email: "",
+      phone: "",
+      passportNo: "",
+      agentLpo: "",
       customerNationality:
-        primaryGuest.customerNationality ||
         ctx?.nationalityCode ||
         ctx?.nationalityName ||
         "",
@@ -378,6 +420,11 @@ export default function LastMinuteBookingForm() {
       checkInDate: toLocalDateTime(ctx.checkInDate),
       checkOutDate: toLocalDateTime(ctx.checkOutDate),
       agentId,
+      // Optional "Booking Done By Employee" — picked in
+      // LastMinuteBookingPage, threaded through LastMinuteRoomList.
+      // Backend's LastMinuteBookingServiceImpl resolves it via
+      // EmployeeRepository and stamps the relation on the HotelBooking row.
+      employeeId: ctx?.employeeId || null,
       nationalityId: ctx?.nationalityId ?? null,
       createdByRole,
       tourismDirham:
@@ -393,18 +440,30 @@ export default function LastMinuteBookingForm() {
         ...lastMinutePolicyGroups.noShowPolicies,
       ],
       customer: customerWithNationality,
-      rooms: rooms.map((r) => ({
-        adults: Number(r.adults) || 1,
-        children: Number(r.children) || 0,
-        guests: (r.guests || []).map((g) => ({
-          salutation: g.salutation,
-          firstName: g.firstName,
-          lastName: g.lastName,
-          gender: g.gender,
-          isChild: g.isChild,
-          childAge: g.isChild ? Number(g.childAge) || 5 : null,
-        })),
-      })),
+      rooms: rooms.map((r, idx) => {
+        const rr = getRoomRate(idx);
+        return {
+          // Per-room rateId — backend reads this when set, otherwise
+          // falls back to the top-level `lastMinuteRateId`. Lets each
+          // booked room carry its OWN rate (multi-room with different
+          // picks per slot).
+          lastMinuteRateId: rr?.lastMinuteRateId || null,
+          adults: Number(r.adults) || 1,
+          children: Number(r.children) || 0,
+          guests: (r.guests || []).map((g, gi) => ({
+            salutation: g.salutation,
+            firstName: g.firstName,
+            lastName: g.lastName,
+            gender: g.gender,
+            isChild: g.isChild,
+            childAge: g.isChild ? Number(g.childAge) || 5 : null,
+            // Lead flag mirrors the gov / SC / Student / Hotel
+            // booking pages. Backend ignores unknown fields so this
+            // stays backward-compatible with /api/last-minute-booking/create.
+            isLead: idx === leadIndex.roomIdx && gi === leadIndex.guestIdx,
+          })),
+        };
+      }),
       remarks:
         [remarks, specialRequests.length ? `Requests: ${specialRequests.join(", ")}` : null]
           .filter(Boolean)
@@ -494,7 +553,7 @@ export default function LastMinuteBookingForm() {
                     >
                       ← Back
                     </Button>
-                    <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
+                    <h6 className="mb-0 fw-bold text-dark">Guest Details</h6>
                     <Badge bg="warning" text="dark" className="ms-2">
                       LAST MINUTE
                     </Badge>
@@ -514,33 +573,55 @@ export default function LastMinuteBookingForm() {
                       >
                         <Accordion.Header className="bg-primary text-white">
                           <h6 className="mb-0 fw-bold w-100 d-flex flex-wrap align-items-center gap-2">
-                            <span>
-                              Room {roomIdx + 1} -{" "}
-                              {room.roomCategoryName ||
-                                `Category #${room.roomCategoryId}`}{" "}
-                              ({room.roomTypeName || `Type #${room.roomTypeId}`}){" "}
-                              ({r.adults} Adult{r.adults !== 1 ? "s" : ""},{" "}
-                              {r.children} Child{r.children !== 1 ? "ren" : ""})
-                            </span>
-                            {(room.mealPlanName || room.mealPlanId) && (
-                              <Badge bg="light" text="dark" className="ms-2">
-                                <FaUtensils className="me-1" />
-                                {room.mealPlanName || `#${room.mealPlanId || ""}`}
-                              </Badge>
-                            )}
+                            {(() => {
+                              // Per-room rate when LastMinuteRoomList sent
+                              // a roomBreakdown; otherwise the legacy
+                              // single-room `room` object.
+                              const rr = getRoomRate(roomIdx);
+                              return (
+                                <>
+                                  <span>
+                                    Room {roomIdx + 1} -{" "}
+                                    {rr.roomCategoryName ||
+                                      `Category #${rr.roomCategoryId}`}{" "}
+                                    ({rr.roomTypeName || `Type #${rr.roomTypeId}`}){" "}
+                                    ({r.adults} Adult{r.adults !== 1 ? "s" : ""},{" "}
+                                    {r.children} Child{r.children !== 1 ? "ren" : ""})
+                                  </span>
+                                  {(rr.mealPlanName || rr.mealPlanId) && (
+                                    <Badge bg="light" text="dark" className="ms-2">
+                                      <FaUtensils className="me-1" />
+                                      {rr.mealPlanName || `#${rr.mealPlanId || ""}`}
+                                    </Badge>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </h6>
                         </Accordion.Header>
-                        <Accordion.Body className="p-4">
-                          {/* Per-guest rows */}
-                          {r.guests.map((g, gIdx) => (
-                            <div key={gIdx} className="guest-row mb-3">
+                        <Accordion.Body className="p-3">
+                          {/* Column headers — mirrors the other
+                              dedicated-flow booking pages so every
+                              Guest Details grid looks identical. */}
+                          <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                            <Col md={2}>Passenger</Col>
+                            <Col md={2}>Title *</Col>
+                            <Col md={3}>First Name *</Col>
+                            <Col md={3}>Surname *</Col>
+                            <Col md={2} className="text-center">Lead</Col>
+                          </Row>
+                          {r.guests.map((g, gIdx) => {
+                            const isLead =
+                              leadIndex.roomIdx === roomIdx &&
+                              leadIndex.guestIdx === gIdx;
+                            return (
+                            <div key={gIdx} className="guest-row mb-2">
                               <Row className="align-items-center g-2">
                                 <Col md={2}>
                                   <span className="fw-semibold text-muted small">
                                     {g.isChild
                                       ? `Child ${gIdx - r.adults + 1}`
-                                      : `Adult ${gIdx + 1}`}{" "}
-                                    *
+                                      : `Adult ${gIdx + 1}`}
                                   </span>
                                 </Col>
                                 <Col md={2}>
@@ -567,7 +648,7 @@ export default function LastMinuteBookingForm() {
                                 <Col md={3}>
                                   <Form.Control
                                     size="sm"
-                                    placeholder="First Name *"
+                                    placeholder="First Name"
                                     value={g.firstName}
                                     isInvalid={!!validationErrors[`room_${roomIdx}_guest_${gIdx}_firstName`]}
                                     onChange={(e) => {
@@ -580,20 +661,10 @@ export default function LastMinuteBookingForm() {
                                     {validationErrors[`room_${roomIdx}_guest_${gIdx}_firstName`]}
                                   </Form.Control.Feedback>
                                 </Col>
-                                <Col md={2}>
-                                  <Form.Control
-                                    size="sm"
-                                    placeholder="Middle Name"
-                                    value={g.middleName}
-                                    onChange={(e) =>
-                                      setGuestField(roomIdx, gIdx, "middleName", e.target.value)
-                                    }
-                                  />
-                                </Col>
                                 <Col md={3}>
                                   <Form.Control
                                     size="sm"
-                                    placeholder="Last Name *"
+                                    placeholder="Surname"
                                     value={g.lastName}
                                     isInvalid={!!validationErrors[`room_${roomIdx}_guest_${gIdx}_lastName`]}
                                     onChange={(e) => {
@@ -606,27 +677,40 @@ export default function LastMinuteBookingForm() {
                                     {validationErrors[`room_${roomIdx}_guest_${gIdx}_lastName`]}
                                   </Form.Control.Feedback>
                                 </Col>
-                              </Row>
-                              <Row className="align-items-center g-2 mt-1">
-                                <Col md={{ offset: 2, span: 3 }}>
-                                  <Form.Select
-                                    size="sm"
-                                    value={g.gender}
-                                    isInvalid={!!validationErrors[`room_${roomIdx}_guest_${gIdx}_gender`]}
-                                    onChange={(e) =>
-                                      setGuestField(roomIdx, gIdx, "gender", e.target.value)
+                                {/* Gender column hidden by request
+                                    — the field is no longer
+                                    collected on this page. State
+                                    `g.gender` keeps its default
+                                    empty string so the payload still
+                                    carries the key. */}
+                                <Col md={2} className="text-center">
+                                  {/* Lead radio — only adults can be
+                                      lead. Disabled+greyed for
+                                      children so the row still
+                                      aligns. The Lead-marked guest
+                                      drives the `customer` payload. */}
+                                  <Form.Check
+                                    type="radio"
+                                    name="lm-lead-guest"
+                                    id={`lm-lead-${roomIdx}-${gIdx}`}
+                                    checked={isLead}
+                                    disabled={g.isChild}
+                                    onChange={() => handleLeadSelect(roomIdx, gIdx)}
+                                    title={
+                                      g.isChild
+                                        ? "Children cannot be the lead"
+                                        : "Mark as Lead passenger"
                                     }
-                                  >
-                                    <option value="">Gender</option>
-                                    <option value="Male">Male</option>
-                                    <option value="Female">Female</option>
-                                  </Form.Select>
-                                  <Form.Control.Feedback type="invalid">
-                                    {validationErrors[`room_${roomIdx}_guest_${gIdx}_gender`]}
-                                  </Form.Control.Feedback>
+                                  />
                                 </Col>
-                                {g.isChild && (
-                                  <Col md={3}>
+                              </Row>
+                              {/* Child age — only shown for children.
+                                  Kept as a tiny inline follow-up row
+                                  below the guest row so the validation
+                                  + alignment stay intact. */}
+                              {g.isChild && (
+                                <Row className="align-items-center g-2 mt-1">
+                                  <Col md={{ offset: 2, span: 3 }}>
                                     <Form.Control
                                       size="sm"
                                       type="number"
@@ -643,13 +727,11 @@ export default function LastMinuteBookingForm() {
                                       {validationErrors[`room_${roomIdx}_guest_${gIdx}_childAge`]}
                                     </Form.Control.Feedback>
                                   </Col>
-                                )}
-                              </Row>
-                              {gIdx < r.guests.length - 1 && (
-                                <hr className="my-3" />
+                                </Row>
                               )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </Accordion.Body>
                       </Accordion.Item>
                     ))}
@@ -657,139 +739,13 @@ export default function LastMinuteBookingForm() {
                 </Card.Body>
               </Card>
 
-              {/* ── Primary Guest ── */}
-              <Card className="p-4 mb-4 shadow-sm border-0">
-                <h5 className="mb-3 fw-bold">Primary Guest Details</h5>
-                <Row className="g-3">
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Salutation
-                      </Form.Label>
-                      <Form.Select
-                        value={primaryGuest.salutation}
-                        isInvalid={!!validationErrors.primary_salutation}
-                        onChange={(e) =>
-                          setPrimaryGuest({ ...primaryGuest, salutation: e.target.value })
-                        }
-                      >
-                        <option value="">SELECT</option>
-                        <option value="Mr">Mr</option>
-                        <option value="Mrs">Mrs</option>
-                        <option value="Ms">Ms</option>
-                        <option value="Dr">Dr</option>
-                      </Form.Select>
-                      <Form.Control.Feedback type="invalid">
-                        {validationErrors.primary_salutation}
-                      </Form.Control.Feedback>
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>First Name
-                      </Form.Label>
-                      <Form.Control
-                        value={primaryGuest.firstName}
-                        isInvalid={!!validationErrors.primary_firstName}
-                        onChange={(e) =>
-                          setPrimaryGuest({ ...primaryGuest, firstName: e.target.value })
-                        }
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {validationErrors.primary_firstName}
-                      </Form.Control.Feedback>
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Middle Name</Form.Label>
-                      <Form.Control
-                        value={primaryGuest.middleName}
-                        onChange={(e) =>
-                          setPrimaryGuest({ ...primaryGuest, middleName: e.target.value })
-                        }
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Last Name
-                      </Form.Label>
-                      <Form.Control
-                        value={primaryGuest.lastName}
-                        isInvalid={!!validationErrors.primary_lastName}
-                        onChange={(e) =>
-                          setPrimaryGuest({ ...primaryGuest, lastName: e.target.value })
-                        }
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {validationErrors.primary_lastName}
-                      </Form.Control.Feedback>
-                    </Form.Group>
-                  </Col>
-                  <Col md={4}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Email
-                      </Form.Label>
-                      <Form.Control
-                        type="email"
-                        value={primaryGuest.email}
-                        isInvalid={!!validationErrors.primary_email}
-                        onChange={(e) =>
-                          setPrimaryGuest({ ...primaryGuest, email: e.target.value })
-                        }
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {validationErrors.primary_email}
-                      </Form.Control.Feedback>
-                    </Form.Group>
-                  </Col>
-                  <Col md={4}>
-                    <Form.Group>
-                      <Form.Label>
-                        <span style={{ color: "red" }}>*</span>Phone
-                      </Form.Label>
-                      <Form.Control
-                        value={primaryGuest.phone}
-                        isInvalid={!!validationErrors.primary_phone}
-                        onChange={(e) =>
-                          setPrimaryGuest({ ...primaryGuest, phone: e.target.value })
-                        }
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {validationErrors.primary_phone}
-                      </Form.Control.Feedback>
-                    </Form.Group>
-                  </Col>
-                  <Col md={4}>
-                    <Form.Group>
-                      <Form.Label>Passport No.</Form.Label>
-                      <Form.Control
-                        value={primaryGuest.passportNo}
-                        onChange={(e) =>
-                          setPrimaryGuest({ ...primaryGuest, passportNo: e.target.value })
-                        }
-                      />
-                    </Form.Group>
-                  </Col>
-                  {/* Agent LPO — hidden for Last Minute bookings (kept in state
-                      so the existing payload mapping still works). */}
-                  <Col md={4} style={{ display: "none" }}>
-                    <Form.Group>
-                      <Form.Label>Agent LPO</Form.Label>
-                      <Form.Control
-                        value={primaryGuest.agentLpo}
-                        onChange={(e) =>
-                          setPrimaryGuest({ ...primaryGuest, agentLpo: e.target.value })
-                        }
-                      />
-                    </Form.Group>
-                  </Col>
-                </Row>
-              </Card>
+              {/* Primary Guest Details card hidden by request —
+                  the Guest Details grid above is the single source
+                  of customer details. The submit payload still
+                  carries a `customer` object: it's derived from the
+                  Lead-marked passenger when the booking is
+                  submitted, replacing the previous required name +
+                  email + phone form. */}
 
               {/* ── Special Requests ── */}
               <Card className="p-4 mb-2 shadow-sm border-0">
@@ -1166,16 +1122,27 @@ export default function LastMinuteBookingForm() {
                   </p>
                 </Col>
                 <Col xs={12}>
-                  <p className="mb-1">
-                    <strong>Primary Guest:</strong>{" "}
-                    {[primaryGuest.salutation, primaryGuest.firstName,
-                      primaryGuest.middleName, primaryGuest.lastName]
-                      .filter(Boolean)
-                      .join(" ")}
-                  </p>
-                  <p className="mb-0 text-muted small">
-                    {primaryGuest.email} · {primaryGuest.phone}
-                  </p>
+                  {/* Primary guest summary now reads the Lead-marked
+                      passenger straight off the rooms array — the
+                      Primary Guest Details card was hidden. */}
+                  {(() => {
+                    const leadGuest =
+                      rooms?.[leadIndex.roomIdx]?.guests?.[leadIndex.guestIdx]
+                      || {};
+                    return (
+                      <p className="mb-1">
+                        <strong>Primary Guest:</strong>{" "}
+                        {[
+                          leadGuest.salutation,
+                          leadGuest.firstName,
+                          leadGuest.middleName,
+                          leadGuest.lastName,
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      </p>
+                    );
+                  })()}
                 </Col>
                 <Col xs={12}>
                   <Alert variant="success" className="py-2 mb-0">

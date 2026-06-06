@@ -863,6 +863,13 @@ const OccupancyAndMinimumLength = () => {
   };
 
   const openCreateMin = () => {
+    // Populate the MarketType dropdown — mirrors the Occupancy tab's
+    // Create button (line 1480) which calls loadMarketTypes() inline.
+    // Without this the Minimum Length Create modal opens with an empty
+    // MarketType select unless the user first visited the Occupancy
+    // tab and triggered the load there.
+    loadMarketTypes();
+    loadHotelRoomDatas();
     setEditingMin(null);
     setIsViewModeMin(false);
     setFormDataMin({
@@ -884,6 +891,12 @@ const OccupancyAndMinimumLength = () => {
     console.log("Opening edit for minimum length item:", item);
     try {
       setIsLoading(true);
+
+      // Populate the MarketType dropdown so the saved marketTypeId
+      // matches a real option (otherwise the select shows blank even
+      // though the value is set). Mirrors openEditOcc on the Occupancy
+      // tab. Fire-and-forget — the modal still opens immediately.
+      loadMarketTypes();
 
       // Try different possible ID fields
       const itemId = item.minimumLengthId;

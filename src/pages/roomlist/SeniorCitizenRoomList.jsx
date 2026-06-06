@@ -49,6 +49,23 @@ export default function SeniorCitizenRoomList() {
   const [roomTypeOptions, setRoomTypeOptions] = useState([]);
   const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
 
+  // ──────────────────────────────────────────────────────────────────────
+  // Multi-room selection (per-room slots) — mirrors RoomList.jsx.
+  //
+  // Single-room searches (numRooms === 1) keep using the legacy
+  // `handleBooking` flow — the "Select & Continue" button renders
+  // exactly as before and navigates to /senior-citizen-booking-page
+  // with the single-room bookingData shape.
+  //
+  // Multi-room searches (numRooms > 1) render a per-room outer
+  // Accordion ("Room 1 / Room 2 / ..."), each with a radio in place of
+  // the button. `handleProceedBooking` combines selections into the
+  // legacy single-`selectedRate` shape (sum of per-room rates,
+  // concatenated category/meal labels). Per-room detail rides along as
+  // an additive `roomBreakdown` array.
+  // ──────────────────────────────────────────────────────────────────────
+  const [selectedRooms, setSelectedRooms] = useState([]);
+
   useEffect(() => {
     let cancelled = false;
     axiosInstance.get("/api/roomType?page=0&limit=10")
@@ -239,12 +256,145 @@ export default function SeniorCitizenRoomList() {
         hotelImage: ctx.hotelImage,
         phone: roomData.hotels?.[0]?.hotelPhoneNumber,
       },
-      payload: roomData.payload,
+      // Forward optional "Booking Done By Employee" from SeniorCitizenSearch
+      // onto payload so SeniorCitizenBookingPage can read it.
+      payload: { ...roomData.payload, employeeId: ctx.employeeId || null },
       activePromotion,
       searchCtx: ctx,
     };
     sessionStorage.setItem("seniorCitizenBookingData", JSON.stringify(data));
     navigate("/senior-citizen-booking-page");
+  };
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Multi-room helpers (see comment above near `selectedRooms`).
+  // ──────────────────────────────────────────────────────────────────────
+  const numRooms = (roomData?.payload?.rooms || []).length || 1;
+  const isMultiRoom = numRooms > 1;
+  const allRoomsSelected =
+    selectedRooms.length > 0 &&
+    selectedRooms.every((r) => r.selectedRate !== null);
+
+  /** Seed one selection slot per room as soon as the API result
+   *  arrives. Re-init only when slot count changes so filter / view
+   *  toggles preserve the user's picks. */
+  useEffect(() => {
+    setSelectedRooms((prev) => {
+      if (prev.length === numRooms) return prev;
+      return Array.from({ length: numRooms }, (_, i) => ({
+        roomNo: i + 1,
+        selectedRate: null,
+        category: null,
+      }));
+    });
+  }, [numRooms]);
+
+  /** Toggle the rate for one room slot. Clicking the already-selected
+   *  rate clears that slot. */
+  const handleRateSelect = (roomIndex, category, rate) => {
+    setSelectedRooms((prev) =>
+      prev.map((r, i) => {
+        if (i !== roomIndex) return r;
+        if (r.selectedRate === rate) {
+          return { ...r, selectedRate: null, category: null };
+        }
+        return { ...r, selectedRate: rate, category };
+      }),
+    );
+  };
+
+  /** Combine the per-room picks into the existing single-`selectedRate`
+   *  shape `/senior-citizen-booking-page` already understands, then
+   *  navigate. Also passes `roomBreakdown` — the booking page reads
+   *  per-room values from it when present (see SeniorCitizenBookingPage
+   *  `buildPayloadAndShowOrderSummary`); without it, the legacy
+   *  selectedRate-only path runs unchanged. */
+  const handleProceedBooking = () => {
+    if (!allRoomsSelected || !roomData) return;
+    try {
+      const hotelsdetail = roomData.hotels?.[0];
+      if (!hotelsdetail) {
+        alert("Hotel context missing. Please refresh and try again.");
+        return;
+      }
+      const primary = selectedRooms[0].selectedRate;
+
+      // Per slot, compute the discounted figure on the per-room rate.
+      // Each slot represents ONE room so we DON'T use
+      // `roomRateBasedOnRoomCount` (which is already × numberOfRooms).
+      const perSlot = selectedRooms.map((r) => {
+        const base = Number(r.selectedRate.totalRate ?? r.selectedRate.rate ?? 0);
+        const after = applyDiscount(base);
+        return { base, after };
+      });
+      const sumBefore = perSlot.reduce((s, p) => s + p.base, 0);
+      const sumAfter = perSlot.reduce((s, p) => s + p.after, 0);
+
+      const combinedSelectedRate = {
+        hotelId: hotelsdetail.hotelId,
+        hotelName: hotelsdetail.hotelName,
+        roomCategory: selectedRooms
+          .map((r) => r.category?.roomCategory)
+          .filter(Boolean)
+          .join(" + "),
+        mealPlan: selectedRooms
+          .map((r) => r.selectedRate?.mealPlan)
+          .filter(Boolean)
+          .join(" + "),
+        mealPlanCode: primary.mealPlanCode,
+        roomTypeCode: primary.roomTypeCode,
+        contractLabel: primary.contractLabel,
+        nonRefundable: primary.nonRefundable,
+        rateBeforeDiscount: sumBefore,
+        rate: sumAfter,
+        rateWithoutMarkup: sumAfter,
+        currency: primary.currency || "AED",
+        roomStatus: primary.roomStatus,
+        roomRateBasedOnRoomCount: sumAfter,
+        roomRateBasedOnRoomCount_WithoutMarkup: sumAfter,
+        cancellationPolicy: hotelsdetail.cancellationPolicies || [],
+      };
+
+      const data = {
+        selectedRate: combinedSelectedRate,
+        // Additive — read per-room by SeniorCitizenBookingPage when
+        // present. Legacy single-room flows pass no roomBreakdown.
+        roomBreakdown: selectedRooms.map((r, i) => {
+          const base = Number(r.selectedRate.totalRate ?? r.selectedRate.rate ?? 0);
+          const after = applyDiscount(base);
+          return {
+            roomNo: i + 1,
+            roomCategory: r.category?.roomCategory,
+            mealPlan: r.selectedRate?.mealPlan,
+            mealPlanCode: r.selectedRate?.mealPlanCode,
+            roomTypeCode: r.selectedRate?.roomTypeCode,
+            contractLabel: r.selectedRate?.contractLabel,
+            nonRefundable: !!r.selectedRate?.nonRefundable,
+            rate: after,
+            rateWithoutMarkup: after,
+            rateBeforeDiscount: base,
+            currency: r.selectedRate?.currency || "AED",
+            roomStatus: r.selectedRate?.roomStatus,
+          };
+        }),
+        hotelStaticData: {
+          hotelName: hotelsdetail.hotelName,
+          address: hotelsdetail.hotelAddress,
+          starRating: hotelsdetail.starRating,
+          hotelImage: ctx.hotelImage,
+          phone: hotelsdetail.hotelPhoneNumber,
+        },
+        // Same employeeId forwarding as the single-room flow above.
+        payload: { ...roomData.payload, employeeId: ctx.employeeId || null },
+        activePromotion,
+        searchCtx: ctx,
+      };
+      sessionStorage.setItem("seniorCitizenBookingData", JSON.stringify(data));
+      navigate("/senior-citizen-booking-page");
+    } catch (err) {
+      console.error("Error preparing multi-room bookingData:", err);
+      alert("Unable to proceed with booking. Please try again.");
+    }
   };
 
   if (loading) {
@@ -451,6 +601,14 @@ export default function SeniorCitizenRoomList() {
                 </Col>
 
                 <Col lg={9} md={8}>
+                  {/* Per-room outer wrapper. Single-room mode renders
+                      the inner Accordion once, unwrapped — identical
+                      to legacy behavior. Multi-room mode renders it
+                      once per slot, each wrapped in its own
+                      "Room N" Accordion. See RoomList.jsx for the
+                      same pattern. */}
+                  {(isMultiRoom ? selectedRooms : [null]).map((_slot, roomSlotIndex) => {
+                    const inner = (
                   <Accordion activeKey={activeAccordion} onSelect={(k) => setActiveAccordion(k)}>
                     {(hotel.roomCategories || []).map((category, index) => {
                       const eventKey = index.toString();
@@ -501,15 +659,37 @@ export default function SeniorCitizenRoomList() {
                                           {getRefundStatusBadge(rate.nonRefundable)}
                                         </div>
                                         <div className="rate-pricing text-center py-2">
-                                          {activePromotion && base !== after && (
-                                            <div className="text-decoration-line-through text-muted">
-                                              {formatPrice(base)}
+                                          {/* In single-room mode the
+                                              big price is the bulk
+                                              total (= per-room × N
+                                              rooms) and the "× N rooms"
+                                              subtitle explains it.
+                                              In multi-room mode each
+                                              slot is ONE room, so the
+                                              big price collapses to
+                                              the per-room rate and the
+                                              "× N rooms" line drops. */}
+                                          {(() => {
+                                            const slotBase = isMultiRoom
+                                              ? Number(rate.totalRate ?? rate.rate ?? 0)
+                                              : base;
+                                            const slotAfter = applyDiscount(slotBase);
+                                            return (
+                                              <>
+                                                {activePromotion && slotBase !== slotAfter && (
+                                                  <div className="text-decoration-line-through text-muted">
+                                                    {formatPrice(slotBase)}
+                                                  </div>
+                                                )}
+                                                <div className="current-price text-success">{formatPrice(slotAfter)}</div>
+                                              </>
+                                            );
+                                          })()}
+                                          {!isMultiRoom && (
+                                            <div className="text-muted small">
+                                              {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
                                             </div>
                                           )}
-                                          <div className="current-price text-success">{formatPrice(after)}</div>
-                                          <div className="text-muted small">
-                                            {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
-                                          </div>
                                           <div className="price-per-night small text-muted">per night</div>
                                         </div>
                                         <div className="rate-features small">
@@ -524,10 +704,35 @@ export default function SeniorCitizenRoomList() {
                                             </div>
                                           )}
                                         </div>
-                                        <Button variant="primary" className="w-100 mt-1 mb-1"
-                                                onClick={() => handleBooking(category, rate)}>
-                                          <FaMoneyBillWave className="me-2" /> Select & Continue
-                                        </Button>
+                                        {/* Single-room: legacy CTA.
+                                            Multi-room: radio bound to
+                                            the active slot. */}
+                                        {isMultiRoom ? (
+                                          <Form.Check
+                                            type="radio"
+                                            id={`sc-rate-radio-${roomSlotIndex}-${index}-${ri}`}
+                                            name={`sc-rate-radio-room-${roomSlotIndex}`}
+                                            className="w-100 mt-1 mb-1"
+                                            label={
+                                              selectedRooms[roomSlotIndex]
+                                                ?.selectedRate === rate
+                                                ? `Selected for Room ${roomSlotIndex + 1}`
+                                                : `Select for Room ${roomSlotIndex + 1}`
+                                            }
+                                            checked={
+                                              selectedRooms[roomSlotIndex]
+                                                ?.selectedRate === rate
+                                            }
+                                            onChange={() =>
+                                              handleRateSelect(roomSlotIndex, category, rate)
+                                            }
+                                          />
+                                        ) : (
+                                          <Button variant="primary" className="w-100 mt-1 mb-1"
+                                                  onClick={() => handleBooking(category, rate)}>
+                                            <FaMoneyBillWave className="me-2" /> Select & Continue
+                                          </Button>
+                                        )}
                                       </Card.Body>
                                     </Card>
                                   </Col>
@@ -546,6 +751,74 @@ export default function SeniorCitizenRoomList() {
                       </Alert>
                     )}
                   </Accordion>
+                    );
+                    if (!isMultiRoom) {
+                      return (
+                        <React.Fragment key="sc-single-room">{inner}</React.Fragment>
+                      );
+                    }
+                    const slotSelection = selectedRooms[roomSlotIndex];
+                    const slotPerRoomRate = slotSelection?.selectedRate
+                      ? applyDiscount(
+                          Number(
+                            slotSelection.selectedRate.totalRate ??
+                              slotSelection.selectedRate.rate ??
+                              0,
+                          ),
+                        )
+                      : null;
+                    return (
+                      <Accordion
+                        key={`sc-room-slot-${roomSlotIndex}`}
+                        defaultActiveKey={`sc-room-slot-${roomSlotIndex}`}
+                        className="mb-3 room-slot-accordion"
+                      >
+                        <Accordion.Item eventKey={`sc-room-slot-${roomSlotIndex}`}>
+                          <Accordion.Header>
+                            <div className="d-flex w-100 justify-content-between align-items-center pe-3">
+                              <span className="fw-semibold">
+                                <FaBed className="me-2 text-primary" />
+                                Room {roomSlotIndex + 1}
+                              </span>
+                              {slotSelection?.selectedRate ? (
+                                <Badge bg="success" className="ms-2">
+                                  {slotSelection.category?.roomCategory}
+                                  {" — "}
+                                  {formatPrice(slotPerRoomRate || 0)}
+                                </Badge>
+                              ) : (
+                                <Badge bg="warning" text="dark" className="ms-2">
+                                  Not selected
+                                </Badge>
+                              )}
+                            </div>
+                          </Accordion.Header>
+                          <Accordion.Body>{inner}</Accordion.Body>
+                        </Accordion.Item>
+                      </Accordion>
+                    );
+                  })}
+
+                  {/* Multi-room "Continue with Booking" CTA. Disabled
+                      until every slot has a rate. */}
+                  {isMultiRoom && (
+                    <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mt-3 p-3 border rounded bg-light">
+                      <div className="small text-muted">
+                        {allRoomsSelected
+                          ? `All ${numRooms} room${numRooms === 1 ? "" : "s"} selected. You can continue to booking.`
+                          : `Pick a rate for each of the ${numRooms} rooms to continue. ${selectedRooms.filter((r) => r.selectedRate).length}/${numRooms} selected.`}
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="lg"
+                        disabled={!allRoomsSelected}
+                        onClick={handleProceedBooking}
+                      >
+                        <FaMoneyBillWave className="me-2" />
+                        Continue with Booking
+                      </Button>
+                    </div>
+                  )}
                 </Col>
               </Row>
             </div>

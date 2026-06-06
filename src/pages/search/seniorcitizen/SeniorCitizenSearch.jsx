@@ -177,6 +177,25 @@ export default function SeniorCitizenSearch() {
 
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
+
+  // Optional "Booking Done By Employee" — moved here from
+  // SeniorCitizenBookingPage. Threaded through state →
+  // SeniorCitizenRoomList → SeniorCitizenBookingPage payload.
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
+        if (res.data && Array.isArray(res.data)) setEmployees(res.data);
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [checkIn, setCheckIn] = useState("");
@@ -482,6 +501,8 @@ export default function SeniorCitizenSearch() {
         adults: rooms.reduce((a, r) => a + r.adults, 0),
         children: rooms.reduce((a, r) => a + r.children, 0),
         agentId: agent,
+        // Optional "Booking Done By Employee" selection.
+        employeeId: selectedEmployee?.value || null,
         // Per-room breakdown — needed by SeniorCitizenRoomList to build
         // the room-search payload with the right adult ages.
         rooms: rooms.map((r) => ({
@@ -515,69 +536,14 @@ export default function SeniorCitizenSearch() {
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
+                {/* Field order mirrors /new-booking/hotel (HotelSearch.jsx):
+                      1. Agent  2. Destination / City  3. Nationality
+                      4. Check-In  5. Nights  6. Check-Out  7. Rooms & Guests
+                    Only the JSX order is rearranged — every prop, handler,
+                    state binding, validation message and layout class is
+                    preserved bit-for-bit so behavior is unchanged. */}
                 <Row className="g-4">
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Destination *</Form.Label>
-                      <Select
-                        options={destinationOptions}
-                        value={selectedDestination}
-                        onChange={(option) => {
-                          setSelectedDestination(option);
-                          if (option) clearError("destination");
-                        }}
-                        placeholder="Where do you want to go?"
-                        isSearchable isClearable
-                        className="modern-select"
-                        isLoading={isDestinationLoading}
-                        noOptionsMessage={() =>
-                          isDestinationLoading ? "Searching destinations..." : "Type to search destinations..."
-                        }
-                        onMenuOpen={() => {
-                          if (destinationOptions.length === 0) loadPopularDestinations();
-                        }}
-                        onInputChange={(inputValue, { action }) => {
-                          if (action === "input-change") debouncedCitySearch(inputValue);
-                        }}
-                        menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          control: (base) => ({ ...base, minHeight: "42px" }),
-                        }}
-                      />
-                      {errors.destination && (
-                        <div className="text-danger small mt-1">{errors.destination}</div>
-                      )}
-                    </Form.Group>
-                  </Col>
-
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Nationality *</Form.Label>
-                      <Select
-                        options={nationalityList}
-                        value={selectedNationality}
-                        onChange={(option) => {
-                          setSelectedNationality(option);
-                          if (option) clearError("nationality");
-                        }}
-                        onInputChange={(v) => v.length >= 2 && debouncedCountrySearch(v)}
-                        isLoading={isNationalityLoading}
-                        placeholder="Select nationality"
-                        isSearchable isClearable
-                        className="modern-select"
-                        menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          control: (base) => ({ ...base, minHeight: "42px" }),
-                        }}
-                      />
-                      {errors.nationality && (
-                        <div className="text-danger small mt-1">{errors.nationality}</div>
-                      )}
-                    </Form.Group>
-                  </Col>
-
+                  {/* 1. Agent */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Agent *</Form.Label>
@@ -613,14 +579,99 @@ export default function SeniorCitizenSearch() {
                     </Form.Group>
                   </Col>
 
-                  <Col lg={2} md={6}>
+                  {/* 2. Destination / City */}
+                  <Col lg={4} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Nights</Form.Label>
-                      <Form.Control style={{ height: "42px" }} type="number" min={1} max={60}
-                                    value={nights} onChange={(e) => handleNightsChange(e.target.value)} />
+                      <Form.Label className="fw-semibold text-dark">Destination *</Form.Label>
+                      <Select
+                        options={destinationOptions}
+                        value={selectedDestination}
+                        onChange={(option) => {
+                          setSelectedDestination(option);
+                          if (option) clearError("destination");
+                        }}
+                        placeholder="Where do you want to go?"
+                        isSearchable isClearable
+                        className="modern-select"
+                        isLoading={isDestinationLoading}
+                        noOptionsMessage={() =>
+                          isDestinationLoading ? "Searching destinations..." : "Type to search destinations..."
+                        }
+                        onMenuOpen={() => {
+                          if (destinationOptions.length === 0) loadPopularDestinations();
+                        }}
+                        onInputChange={(inputValue, { action }) => {
+                          if (action === "input-change") debouncedCitySearch(inputValue);
+                        }}
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({ ...base, minHeight: "42px" }),
+                        }}
+                      />
+                      {errors.destination && (
+                        <div className="text-danger small mt-1">{errors.destination}</div>
+                      )}
                     </Form.Group>
                   </Col>
 
+                  {/* 3. Nationality */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Nationality *</Form.Label>
+                      <Select
+                        options={nationalityList}
+                        value={selectedNationality}
+                        onChange={(option) => {
+                          setSelectedNationality(option);
+                          if (option) clearError("nationality");
+                        }}
+                        onInputChange={(v) => v.length >= 2 && debouncedCountrySearch(v)}
+                        isLoading={isNationalityLoading}
+                        placeholder="Select nationality"
+                        isSearchable isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({ ...base, minHeight: "42px" }),
+                        }}
+                      />
+                      {errors.nationality && (
+                        <div className="text-danger small mt-1">{errors.nationality}</div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* Booking Done By Employee — OPTIONAL.
+                      Replaces the Card that used to live on
+                      SeniorCitizenBookingPage. */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Booking Done By Employee{" "}
+                        <span className="text-muted small">(optional)</span>
+                      </Form.Label>
+                      <Select
+                        options={employees.map((e) => ({
+                          value: e.employeeId,
+                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                        }))}
+                        value={selectedEmployee}
+                        onChange={(opt) => setSelectedEmployee(opt)}
+                        placeholder="Select employee"
+                        isSearchable isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({ ...base, minHeight: "42px" }),
+                        }}
+                      />
+                    </Form.Group>
+                  </Col>
+
+                  {/* 4. Check-In */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in *</Form.Label>
@@ -639,6 +690,16 @@ export default function SeniorCitizenSearch() {
                     </Form.Group>
                   </Col>
 
+                  {/* 5. Nights */}
+                  <Col lg={2} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Nights</Form.Label>
+                      <Form.Control style={{ height: "42px" }} type="number" min={1} max={60}
+                                    value={nights} onChange={(e) => handleNightsChange(e.target.value)} />
+                    </Form.Group>
+                  </Col>
+
+                  {/* 6. Check-Out */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-out *</Form.Label>
@@ -652,6 +713,7 @@ export default function SeniorCitizenSearch() {
                     </Form.Group>
                   </Col>
 
+                  {/* 7. Rooms & Guests */}
                   <Col lg={4} md={6}>
                     <Form.Label className="fw-semibold text-dark">Rooms & Guests</Form.Label>
                     <Button variant="outline-primary" className="w-100 text-start rooms-summary-btn-modern"

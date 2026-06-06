@@ -16,6 +16,136 @@ import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import "../../../styles/HotelSearch.css";
 
+// ─────────────────────────────────────────────
+// Counter — same +/- counter as HotelSearch.jsx.
+// ─────────────────────────────────────────────
+function Counter({ value, min, max, onChange }) {
+  return (
+    <div className="rgs-counter">
+      <button
+        type="button"
+        className="rgs-counter-btn"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+      >
+        −
+      </button>
+      <span className="rgs-counter-val">{value}</span>
+      <button
+        type="button"
+        className="rgs-counter-btn"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// RoomGuestSelector — copied from HotelSearch.jsx so the Day Stay
+// search exposes the same per-room adults / children / child-ages
+// editor instead of the three separate top-level dropdowns it used
+// before. Aggregate totals are derived in the page component for the
+// existing search payload + price-row display.
+// ─────────────────────────────────────────────
+function RoomGuestSelector({ value, onChange }) {
+  const [rooms, setRooms] = useState(value);
+  const update = (next) => {
+    setRooms(next);
+    onChange && onChange(next);
+  };
+  const addRoom = () => update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  const removeRoom = (i) => update(rooms.filter((_, j) => j !== i));
+  const setAdults = (i, a) =>
+    update(rooms.map((r, j) => (j === i ? { ...r, adults: a } : r)));
+  const setChildren = (i, c) =>
+    update(
+      rooms.map((r, j) =>
+        j === i
+          ? {
+              ...r,
+              children: c,
+              childAges: Array.from({ length: c }, (_, k) => r.childAges[k] || 5),
+            }
+          : r
+      )
+    );
+  const setChildAge = (i, idx, age) =>
+    update(
+      rooms.map((r, j) => {
+        if (j !== i) return r;
+        const ages = [...r.childAges];
+        ages[idx] = age;
+        return { ...r, childAges: ages };
+      })
+    );
+
+  return (
+    <div className="rgs-wrap">
+      <div className="rgs-grid">
+        {rooms.map((room, i) => (
+          <div key={i} className="rgs-room-card">
+            <div className="rgs-room-header">
+              <span className="rgs-room-label">🛏 Room {i + 1}</span>
+              {rooms.length > 1 && (
+                <button type="button" className="rgs-remove-btn" onClick={() => removeRoom(i)}>
+                  ✕
+                </button>
+              )}
+            </div>
+            <div className="rgs-counters-col">
+              <div className="rgs-counter-row">
+                <div className="rgs-counter-info">
+                  <span className="rgs-counter-title">Adults</span>
+                  <span className="rgs-counter-sub">Age 18+</span>
+                </div>
+                <Counter value={room.adults} min={1} max={6} onChange={(v) => setAdults(i, v)} />
+              </div>
+              <div className="rgs-counter-row">
+                <div className="rgs-counter-info">
+                  <span className="rgs-counter-title">Children</span>
+                  <span className="rgs-counter-sub">Age 0–17</span>
+                </div>
+                <Counter value={room.children} min={0} max={4} onChange={(v) => setChildren(i, v)} />
+              </div>
+            </div>
+            {room.children > 0 && (
+              <div className="rgs-child-ages">
+                <span className="rgs-child-ages-label">Child ages</span>
+                <div className="rgs-child-ages-row">
+                  {Array.from({ length: room.children }).map((_, idx) => (
+                    <div key={idx} className="rgs-child-age-select">
+                      <label className="rgs-child-age-label">Child {idx + 1}</label>
+                      <Form.Select
+                        size="sm"
+                        value={room.childAges[idx] || 5}
+                        onChange={(e) => setChildAge(i, idx, parseInt(e.target.value))}
+                        className="rgs-age-dropdown"
+                      >
+                        {Array.from({ length: 18 }).map((__, age) => (
+                          <option key={age} value={age}>
+                            {age} {age === 1 ? "yr" : "yrs"}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
+          <span className="rgs-add-icon">+</span>
+          <span>Add Room</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * DayStaySearch — modelled after HotelSearch.jsx but for the Day Stay flow.
  *
@@ -46,6 +176,25 @@ export default function DayStaySearch() {
 
   const [nationalityList, setNationalityList] = useState([]);
   const [selectedNationality, setSelectedNationality] = useState(null);
+  // Optional "Booking Done By Employee" — mirrors HotelSearch / LongStay.
+  // employeeId flows on the payload → DayStayRoomList → DayStayBookingPage
+  // create payload, so the backend can stamp the employee relation.
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
+        if (res.data && Array.isArray(res.data)) {
+          setEmployees(res.data);
+        }
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, []);
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [agents, setAgents] = useState([]);
@@ -62,11 +211,15 @@ export default function DayStaySearch() {
   // checkInEndTime when launching the room list.
   const [checkInTime] = useState("00:00");
   const [checkOutTime] = useState("23:59");
-  const [adults, setAdults] = useState(1);
-  const [children, setChildren] = useState(0);
-  // Per-child ages (0-17). Length tracks `children`. Default age 5.
-  const [childAges, setChildAges] = useState([]);
-  const [rooms, setRooms] = useState(1);
+  // ── Rooms & Guests — array-of-rooms model, mirrors HotelSearch.jsx.
+  //
+  // Each room carries its own adults / children / per-child ages. The
+  // existing `/api/day-stay-booking/search` endpoint still expects
+  // single aggregate numbers (adults, children, rooms), so we derive
+  // totals just before sending the payload — the backend contract is
+  // unchanged.
+  const [rooms, setRooms] = useState([{ adults: 1, children: 0, childAges: [] }]);
+  const [roomsOpen, setRoomsOpen] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -217,17 +370,10 @@ export default function DayStaySearch() {
   }, [agent]);
 
   // Keep childAges length in lock-step with the children count.
-  useEffect(() => {
-    setChildAges((prev) => {
-      const n = Number(children) || 0;
-      if (prev.length === n) return prev;
-      if (prev.length < n) {
-        return [...prev, ...Array.from({ length: n - prev.length }, () => 5)];
-      }
-      return prev.slice(0, n);
-    });
-  }, [children]);
-
+  // (Removed) The previous `childAges` sync useEffect is gone —
+  // RoomGuestSelector now manages per-room child ages inside the
+  // `rooms` array, so the top-level useEffect is unnecessary.
+  //
   // (Removed) Default check-out time auto-fill — time is no longer
   // captured on this page. The full-day range is sent as-is.
 
@@ -239,6 +385,16 @@ export default function DayStaySearch() {
     });
   };
 
+  // ── Aggregate guest counts derived from the rooms array. Kept as a
+  //    plain computation (no useMemo) so we don't add stale-closure
+  //    hazards — the array is small. Used by the search payload, the
+  //    result-card price math, the "1 adult · 1 room" summary, and the
+  //    payload that opens the day-stay room list.
+  const totalAdults = rooms.reduce((a, r) => a + (Number(r.adults) || 0), 0);
+  const totalChildren = rooms.reduce((a, r) => a + (Number(r.children) || 0), 0);
+  const totalRooms = rooms.length;
+  const flatChildAges = rooms.flatMap((r) => r.childAges || []);
+
   const validate = () => {
     const e = {};
     if (!selectedNationality) e.nationality = "Nationality is required";
@@ -247,7 +403,7 @@ export default function DayStaySearch() {
     // Time-window validation removed — Day Stay search returns every
     // hotel with a contract for the date, regardless of hourly window.
     if (!isAgentRole && !agent) e.agent = "Agent is required";
-    if (!adults || Number(adults) < 1) e.adults = "At least one adult required";
+    if (totalAdults < 1) e.adults = "At least one adult required";
     return e;
   };
 
@@ -273,9 +429,10 @@ export default function DayStaySearch() {
         agentId: Number(agent),
         nationalityCode: selectedNationality?.code || null,
         checkInDate,
-        adults: Number(adults),
-        children: Number(children),
-        rooms: Number(rooms),
+        // Backend still consumes single numbers — derive from rooms[].
+        adults: totalAdults,
+        children: totalChildren,
+        rooms: totalRooms,
       };
       const res = await axiosInstance.post(
         "/api/day-stay-booking/search",
@@ -319,92 +476,19 @@ export default function DayStaySearch() {
               </div>
 
               <Form onSubmit={handleSearch} noValidate>
+                {/* Field order mirrors /new-booking/hotel (HotelSearch.jsx):
+                      1. Agent  2. Destination / City  3. Nationality
+                      4. Check-In  5. Rooms & Guests
+                    (Day Stay is single-day so Nights / Check-Out are
+                    intentionally absent.) The Adults / Children / Rooms
+                    trio + Child Ages row are replaced with one
+                    "Rooms & Guests" button + collapsible
+                    RoomGuestSelector, identical to HotelSearch's
+                    pattern. */}
                 <Row className="g-4">
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Destination
-                      </Form.Label>
-                      <Select
-                        options={destinationOptions}
-                        value={selectedDestination}
-                        onChange={(option) => {
-                          setSelectedDestination(option);
-                          if (option) clearError("destination");
-                        }}
-                        placeholder="Where do you want to go?"
-                        isSearchable
-                        isClearable
-                        isLoading={isDestinationLoading}
-                        noOptionsMessage={() =>
-                          isDestinationLoading
-                            ? "Searching destinations..."
-                            : "Type to search destinations..."
-                        }
-                        onMenuOpen={() => {
-                          if (destinationOptions.length === 0)
-                            loadPopularDestinations();
-                        }}
-                        onInputChange={(inputValue, { action }) => {
-                          if (action === "input-change")
-                            debouncedCitySearch(inputValue);
-                        }}
-                        menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "42px",
-                          }),
-                        }}
-                      />
-                      {errors.destination && (
-                        <div className="text-danger small mt-1">
-                          {errors.destination}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
-
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Nationality
-                      </Form.Label>
-                      <Select
-                        options={nationalityList}
-                        value={selectedNationality}
-                        onChange={(option) => {
-                          setSelectedNationality(option);
-                          if (option) clearError("nationality");
-                        }}
-                        onInputChange={(v, { action }) => {
-                          if (action === "input-change" && v.length >= 2)
-                            debouncedCountrySearch(v);
-                        }}
-                        isLoading={isNationalityLoading}
-                        placeholder="Select nationality"
-                        isSearchable
-                        isClearable
-                        menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "42px",
-                          }),
-                        }}
-                      />
-                      {errors.nationality && (
-                        <div className="text-danger small mt-1">
-                          {errors.nationality}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
-
+                  {/* 1. Agent */}
                   {!isAgentRole && (
-                  <Col lg={4} md={6}>
+                  <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Agent
@@ -454,6 +538,123 @@ export default function DayStaySearch() {
                   </Col>
                   )}
 
+                  {/* 2. Destination / City */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Destination
+                      </Form.Label>
+                      <Select
+                        options={destinationOptions}
+                        value={selectedDestination}
+                        onChange={(option) => {
+                          setSelectedDestination(option);
+                          if (option) clearError("destination");
+                        }}
+                        placeholder="Where do you want to go?"
+                        isSearchable
+                        isClearable
+                        isLoading={isDestinationLoading}
+                        noOptionsMessage={() =>
+                          isDestinationLoading
+                            ? "Searching destinations..."
+                            : "Type to search destinations..."
+                        }
+                        onMenuOpen={() => {
+                          if (destinationOptions.length === 0)
+                            loadPopularDestinations();
+                        }}
+                        onInputChange={(inputValue, { action }) => {
+                          if (action === "input-change")
+                            debouncedCitySearch(inputValue);
+                        }}
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "42px",
+                          }),
+                        }}
+                      />
+                      {errors.destination && (
+                        <div className="text-danger small mt-1">
+                          {errors.destination}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 3. Nationality */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nationality
+                      </Form.Label>
+                      <Select
+                        options={nationalityList}
+                        value={selectedNationality}
+                        onChange={(option) => {
+                          setSelectedNationality(option);
+                          if (option) clearError("nationality");
+                        }}
+                        onInputChange={(v, { action }) => {
+                          if (action === "input-change" && v.length >= 2)
+                            debouncedCountrySearch(v);
+                        }}
+                        isLoading={isNationalityLoading}
+                        placeholder="Select nationality"
+                        isSearchable
+                        isClearable
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "42px",
+                          }),
+                        }}
+                      />
+                      {errors.nationality && (
+                        <div className="text-danger small mt-1">
+                          {errors.nationality}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* Booking Done By Employee — OPTIONAL.
+                      Threaded through to /api/day-stay-booking/save
+                      as employeeId. No validation. */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Booking Done By Employee{" "}
+                        <span className="text-muted small">(optional)</span>
+                      </Form.Label>
+                      <Select
+                        options={employees.map((e) => ({
+                          value: e.employeeId,
+                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                        }))}
+                        value={selectedEmployee}
+                        onChange={(option) => setSelectedEmployee(option)}
+                        placeholder="Select employee"
+                        isSearchable
+                        isClearable
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "42px",
+                          }),
+                        }}
+                      />
+                    </Form.Group>
+                  </Col>
+
+                  {/* 4. Check-In Date */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
@@ -483,99 +684,46 @@ export default function DayStaySearch() {
                       contract's own start/end times are picked up when
                       the operator clicks "View Rooms". */}
 
-                  <Col lg={2} md={4}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Adults
-                      </Form.Label>
-                      <Form.Select
-                        style={{ height: "42px" }}
-                        value={adults}
-                        onChange={(e) => setAdults(Number(e.target.value))}
-                      >
-                        {Array.from({ length: 9 }).map((_, i) => (
-                          <option key={i + 1} value={i + 1}>
-                            {i + 1}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {errors.adults && (
-                        <div className="text-danger small mt-1">
-                          {errors.adults}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col lg={2} md={4}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Children
-                      </Form.Label>
-                      <Form.Select
-                        style={{ height: "42px" }}
-                        value={children}
-                        onChange={(e) => setChildren(Number(e.target.value))}
-                      >
-                        {Array.from({ length: 10 }).map((_, i) => (
-                          <option key={i} value={i}>
-                            {i}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
-                  </Col>
-                  <Col lg={2} md={4}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Rooms
-                      </Form.Label>
-                      <Form.Select
-                        style={{ height: "42px" }}
-                        value={rooms}
-                        onChange={(e) => setRooms(Number(e.target.value))}
-                      >
-                        {Array.from({ length: 9 }).map((_, i) => (
-                          <option key={i + 1} value={i + 1}>
-                            {i + 1}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
+                  {/* 5. Rooms & Guests — same UX as HotelSearch:
+                       one button that opens the RoomGuestSelector
+                       below. Replaces the previous three dropdowns
+                       (Adults / Children / Rooms) and the per-child
+                       age row. */}
+                  <Col lg={4} md={6}>
+                    <Form.Label className="fw-semibold text-dark">
+                      Rooms & Guests
+                    </Form.Label>
+                    <Button
+                      variant="outline-primary"
+                      className="w-100 text-start rooms-summary-btn-modern"
+                      type="button"
+                      onClick={() => setRoomsOpen((o) => !o)}
+                    >
+                      {totalAdults} adult{totalAdults !== 1 ? "s" : ""}
+                      {totalChildren
+                        ? `, ${totalChildren} child${totalChildren !== 1 ? "ren" : ""}`
+                        : ""}{" "}
+                      · {totalRooms} room{totalRooms !== 1 ? "s" : ""}
+                      <span className="float-end">{roomsOpen ? "▴" : "▾"}</span>
+                    </Button>
+                    {errors.adults && (
+                      <div className="text-danger small mt-1">{errors.adults}</div>
+                    )}
                   </Col>
                 </Row>
 
-                {/* Child ages — one age-dropdown per child (0-17). */}
-                {Number(children) > 0 && (
-                  <Row className="mt-3 g-2 align-items-end">
-                    <Col md={2}>
-                      <Form.Label className="fw-semibold text-dark mb-0">
-                        Child Ages
-                      </Form.Label>
+                {roomsOpen && (
+                  <Row className="g-3 mt-3">
+                    <Col md={12}>
+                      <RoomGuestSelector
+                        value={rooms}
+                        onChange={(next) => {
+                          setRooms(next);
+                          if (next.some((r) => Number(r.adults) > 0))
+                            clearError("adults");
+                        }}
+                      />
                     </Col>
-                    {Array.from({ length: Number(children) }).map((_, idx) => (
-                      <Col md={2} key={idx}>
-                        <Form.Label className="small text-muted mb-1">
-                          Child {idx + 1}
-                        </Form.Label>
-                        <Form.Select
-                          size="sm"
-                          value={childAges[idx] ?? 5}
-                          onChange={(e) =>
-                            setChildAges((prev) => {
-                              const next = [...prev];
-                              next[idx] = Number(e.target.value);
-                              return next;
-                            })
-                          }
-                        >
-                          {Array.from({ length: 18 }).map((__, age) => (
-                            <option key={age} value={age}>
-                              {age} {age === 1 ? "yr" : "yrs"}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </Col>
-                    ))}
                   </Row>
                 )}
 
@@ -671,12 +819,16 @@ export default function DayStaySearch() {
                 ).map((hotel) => {
                   const baseRate = Number(hotel.dayStayRate || 0);
                   const pct = Number(hotel.percentage || 0);
-                  // Pax-adjusted: base rate per room + extra adults + children.
-                  // First adult is included in base, extras pay adultRate;
-                  // children pay childRate.
-                  const adultsN = Number(adults) || 1;
-                  const childrenN = Number(children) || 0;
-                  const roomsN = Number(rooms) || 1;
+                  // Pax-adjusted: base rate per room + extra adults +
+                  // children. First adult per room is included in base,
+                  // extras pay adultRate; children pay childRate.
+                  // With multi-room, the aggregate is the sum across
+                  // rooms, so use the totals as before — the formula
+                  // shape is preserved bit-for-bit (no math regression
+                  // when the user picks one room with N adults).
+                  const adultsN = totalAdults || 1;
+                  const childrenN = totalChildren;
+                  const roomsN = totalRooms || 1;
                   const adultPer = Number(hotel.minAdultRate || 0);
                   const childPer = Number(hotel.minChildRate || 0);
                   const perRoom =
@@ -909,14 +1061,23 @@ export default function DayStaySearch() {
                                       windowStart: cStart,
                                       windowEnd: cEnd,
                                       agentId: agent,
+                                      // Optional "Booking Done By" selection
+                                      // — null when the user skipped it.
+                                      employeeId:
+                                        selectedEmployee?.value || null,
                                       nationality:
                                         selectedNationality?.code || "",
                                       nationalityLabel:
                                         selectedNationality?.label || "",
-                                      adults: Number(adults),
-                                      children: Number(children),
-                                      childAges: childAges,
-                                      rooms: Number(rooms),
+                                      // Aggregate counts derived from
+                                      // the rooms[] array. Backend +
+                                      // /day-stay-room-list still
+                                      // expect single numbers, so the
+                                      // contract is unchanged.
+                                      adults: totalAdults,
+                                      children: totalChildren,
+                                      childAges: flatChildAges,
+                                      rooms: totalRooms,
                                     };
                                     sessionStorage.setItem(
                                       "dayStayRoomListPayload",

@@ -275,6 +275,8 @@ import SeniorCitizenBookingList from "./pages/list/SeniorCitizenBookingList";
 import SeniorCitizenBookingDetailView from "./pages/list/SeniorCitizenBookingDetailView";
 import PackageAddOnReg from "./pages/Registration/PackageAddOnReg";
 import PackageAddOnRates from "./pages/Registration/PackageAddOnRates";
+import RoomList24Hour from "./pages/RoomList24Hour";
+import HotelBookingPage24Hour from "./pages/booking/HotelBookingPage24Hour";
 
 
 export default function App() {
@@ -398,6 +400,12 @@ export default function App() {
             in 24-hour mode (toggle hidden, time pickers visible, probe
             + uplift always applied). Keeps the normal route untouched. */}
         <Route path="/new-booking/hotel-24hr" element={<PrivateRoute><HotelSearch24Hour /></PrivateRoute>} />
+        {/* Dedicated 24-Hour Check-In room list + booking page — same
+            components as /room-list and /hotel-booking-page but with
+            `force24Hour` so the post-rate-pick navigation and the
+            post-booking redirect target the 24-hour-specific routes. */}
+        <Route path="/room-list-24hr" element={<PrivateRoute><RoomList24Hour /></PrivateRoute>} />
+        <Route path="/hotel-booking-page-24hr" element={<PrivateRoute><HotelBookingPage24Hour /></PrivateRoute>} />
         {/* Last Minute Booking (Phase 2) — separate search flow */}
         <Route path="/new-booking/last-minute-booking" element={<PrivateRoute><LastMinuteBookingPage /></PrivateRoute>} />
         {/* Last Minute Booking (Phase 3) — booking creation form */}

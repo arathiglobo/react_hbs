@@ -377,7 +377,7 @@ export const SchefferDriverSearch = () => {
               <div className="mb-4">
                 <h4 className="fw-bold text-primary mb-1">
                   <FaCar className="me-2" />
-                  Chauffeur / Scheffer Driver Search
+                  Chauffeur Driver Search
                 </h4>
                 <p className="text-muted small mb-0">
                   Book an hourly chauffeur rental — travel anywhere within the city for the package duration.

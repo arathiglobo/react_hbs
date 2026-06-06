@@ -79,6 +79,21 @@ export default function LongStayBookingPage() {
     nationality: "",
     gender: "",
   });
+  // ── Lead passenger marker — { roomIdx, guestIdx } pointing at the
+  //    single guest the user has flagged as Lead. Mirrors the gov /
+  //    SC / Student / Hotel / LastMinute booking pages. Defaults to
+  //    the first guest (room 0, guest 0) so the column always has
+  //    one selection on first render. Children can't be Lead. The
+  //    Lead-marked guest drives the submitted `primaryGuestName /
+  //    Details` (replacing the hidden Lead Passenger card).
+  const [leadIndex, setLeadIndex] = useState({ roomIdx: 0, guestIdx: 0 });
+
+  const handleLeadSelect = (roomIdx, guestIdx) => {
+    const g = rooms?.[roomIdx]?.guests?.[guestIdx];
+    if (g?.isChild) return;
+    setLeadIndex({ roomIdx, guestIdx });
+  };
+
   const [remarks, setRemarks] = useState("");
   const [tourismDirham, setTourismDirham] = useState("");
   const [quote, setQuote] = useState(null);
@@ -192,19 +207,10 @@ export default function LongStayBookingPage() {
 
   const validate = () => {
     const e = {};
-    if (!primaryGuest.salutation) e.salutation = "Salutation is required";
-    if (!primaryGuest.firstName.trim()) e.firstName = "First name is required";
-    if (!primaryGuest.lastName.trim()) e.lastName = "Last name is required";
-    if (!primaryGuest.email.trim()) {
-      e.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.email.trim())) {
-      e.email = "Enter a valid email";
-    }
-    if (!primaryGuest.phone.trim()) {
-      e.phone = "Phone is required";
-    } else if (!/^[+0-9\s\-()]{7,}$/.test(primaryGuest.phone.trim())) {
-      e.phone = "Enter a valid phone";
-    }
+    // Lead Passenger / Primary Guest validation removed — the card
+    // has been hidden. The Guest Details grid above is the single
+    // source of customer details; the submit payload derives the
+    // primary-guest fields from Room 1 / Guest 1 at build time.
     rooms.forEach((room, rIdx) => {
       room.guests.forEach((g, gIdx) => {
         if (!g.salutation) e[`r${rIdx}_g${gIdx}_salutation`] = "Required";
@@ -245,11 +251,21 @@ export default function LongStayBookingPage() {
   const confirmBooking = async () => {
     try {
       setSubmitting(true);
+      // Lead Passenger card is hidden — derive primary-guest fields
+      // from the Lead-marked guest in the Guest Details grid
+      // (defaults to Room 1 / Guest 1 if the user hasn't moved the
+      // radio). Email / phone / passportNo / nationality are no
+      // longer collected on the form and are sent as empty strings
+      // (or null on optional fields). The backend ignores empty
+      // optional values so the /api/longStayBooking/create contract
+      // stays intact.
+      const leadGuest =
+        rooms?.[leadIndex.roomIdx]?.guests?.[leadIndex.guestIdx] || {};
       const fullName = [
-        primaryGuest.salutation,
-        primaryGuest.firstName,
-        primaryGuest.middleName,
-        primaryGuest.lastName,
+        leadGuest.salutation,
+        leadGuest.firstName,
+        leadGuest.middleName,
+        leadGuest.lastName,
       ]
         .filter(Boolean)
         .join(" ")
@@ -259,29 +275,35 @@ export default function LongStayBookingPage() {
         longStayContractId: draft.contract.longStayContractId,
         longStayRoomId: draft.room.longStayRoomId,
         agentId: agentId ? Number(agentId) : null,
+        // Optional "Booking Done By Employee" — set in LongStaySearch,
+        // threaded through LongStayRoomList's draft into the create call.
+        // Backend's LongStayBookingService.create resolves it via
+        // EmployeeRepository and stamps the relation on the new
+        // long_stay_booking row.
+        employeeId: draft.employeeId || null,
         checkInDate: toLocalDateTime(draft.checkIn),
         checkOutDate: toLocalDateTime(draft.checkOut),
         primaryGuestName: fullName,
-        primaryGuestEmail: primaryGuest.email.trim(),
-        primaryGuestPhone: primaryGuest.phone.trim(),
-        nationality: primaryGuest.nationality || null,
+        primaryGuestEmail: "",
+        primaryGuestPhone: "",
+        nationality: null,
         remarks: remarks || null,
         tourismDirham:
           tourismDirham !== "" && !isNaN(Number(tourismDirham))
             ? Number(tourismDirham)
             : null,
         primaryGuestDetails: {
-          salutation: primaryGuest.salutation,
-          firstName: primaryGuest.firstName.trim(),
-          middleName: primaryGuest.middleName?.trim() || null,
-          lastName: primaryGuest.lastName.trim(),
-          email: primaryGuest.email.trim(),
-          phone: primaryGuest.phone.trim(),
-          passportNo: primaryGuest.passportNo?.trim() || null,
-          nationality: primaryGuest.nationality || null,
-          gender: primaryGuest.gender || null,
+          salutation: leadGuest.salutation || "",
+          firstName: (leadGuest.firstName || "").trim(),
+          middleName: leadGuest.middleName?.trim() || null,
+          lastName: (leadGuest.lastName || "").trim(),
+          email: "",
+          phone: "",
+          passportNo: null,
+          nationality: null,
+          gender: leadGuest.gender || null,
         },
-        rooms: rooms.map((room) => ({
+        rooms: rooms.map((room, rIdx) => ({
           adults: room.adults,
           children: room.children,
           childAges: room.childAges,
@@ -294,6 +316,10 @@ export default function LongStayBookingPage() {
             childAge: g.isChild
               ? room.childAges[gIdx - room.adults] ?? null
               : null,
+            // Lead flag mirrors the other dedicated-flow booking
+            // pages. Backend ignores unknown fields so this stays
+            // backward-compatible with /api/longStayBooking/create.
+            isLead: rIdx === leadIndex.roomIdx && gIdx === leadIndex.guestIdx,
           })),
         })),
       };
@@ -383,7 +409,7 @@ export default function LongStayBookingPage() {
                         >
                           ← Back
                         </Button>
-                        <h5 className="mb-0 fw-bold text-dark">Guest Details</h5>
+                        <h6 className="mb-0 fw-bold text-dark">Guest Details</h6>
                       </div>
                     </Card.Header>
                     <Card.Body className="p-0">
@@ -414,9 +440,24 @@ export default function LongStayBookingPage() {
                                 )}
                               </h6>
                             </Accordion.Header>
-                            <Accordion.Body className="p-4">
-                              {room.guests.map((g, gIdx) => (
-                                <div key={gIdx} className="guest-row mb-3">
+                            <Accordion.Body className="p-3">
+                              {/* Column headers — mirrors the rest
+                                  of the dedicated-flow booking pages
+                                  so every Guest Details grid looks
+                                  identical. */}
+                              <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                                <Col md={2}>Passenger</Col>
+                                <Col md={2}>Title *</Col>
+                                <Col md={3}>First Name *</Col>
+                                <Col md={3}>Surname *</Col>
+                                <Col md={2} className="text-center">Lead</Col>
+                              </Row>
+                              {room.guests.map((g, gIdx) => {
+                                const isLead =
+                                  leadIndex.roomIdx === rIdx &&
+                                  leadIndex.guestIdx === gIdx;
+                                return (
+                                <div key={gIdx} className="guest-row mb-2">
                                   <Row className="align-items-center g-2">
                                     <Col md={2}>
                                       <span className="fw-semibold text-muted">
@@ -427,8 +468,7 @@ export default function LongStayBookingPage() {
                                               room.childAges[gIdx - room.adults] ??
                                               "-"
                                             })`
-                                          : `Adult ${gIdx + 1}`}{" "}
-                                        *
+                                          : `Adult ${gIdx + 1}`}
                                       </span>
                                     </Col>
                                     <Col md={2}>
@@ -457,7 +497,7 @@ export default function LongStayBookingPage() {
                                     <Col md={3}>
                                       <Form.Control
                                         type="text"
-                                        placeholder="First Name *"
+                                        placeholder="First Name"
                                         value={g.firstName}
                                         onChange={(e) =>
                                           handleGuestChange(
@@ -476,7 +516,7 @@ export default function LongStayBookingPage() {
                                     <Col md={3}>
                                       <Form.Control
                                         type="text"
-                                        placeholder="Last Name *"
+                                        placeholder="Surname"
                                         value={g.lastName}
                                         onChange={(e) =>
                                           handleGuestChange(
@@ -492,31 +532,38 @@ export default function LongStayBookingPage() {
                                         }
                                       />
                                     </Col>
-                                    <Col md={2}>
-                                      <Form.Select
-                                        value={g.gender}
-                                        onChange={(e) =>
-                                          handleGuestChange(
-                                            rIdx,
-                                            gIdx,
-                                            "gender",
-                                            e.target.value
-                                          )
+                                    {/* Gender column hidden by
+                                        request. State `g.gender`
+                                        keeps its default empty
+                                        string so the payload key
+                                        stays intact. */}
+                                    <Col md={2} className="text-center">
+                                      {/* Lead radio — only adults can
+                                          be lead. Disabled+greyed for
+                                          children so the row still
+                                          aligns. The Lead-marked guest
+                                          drives the `primaryGuestName /
+                                          Details` payload. */}
+                                      <Form.Check
+                                        type="radio"
+                                        name="ls-lead-guest"
+                                        id={`ls-lead-${rIdx}-${gIdx}`}
+                                        checked={isLead}
+                                        disabled={g.isChild}
+                                        onChange={() =>
+                                          handleLeadSelect(rIdx, gIdx)
                                         }
-                                        className="form-control-sm"
-                                      >
-                                        <option value="">Gender</option>
-                                        <option value="Male">Male</option>
-                                        <option value="Female">Female</option>
-                                        <option value="Other">Other</option>
-                                      </Form.Select>
+                                        title={
+                                          g.isChild
+                                            ? "Children cannot be the lead"
+                                            : "Mark as Lead passenger"
+                                        }
+                                      />
                                     </Col>
                                   </Row>
-                                  {gIdx < room.guests.length - 1 && (
-                                    <hr className="my-3" />
-                                  )}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </Accordion.Body>
                           </Accordion.Item>
                         ))}
@@ -524,133 +571,17 @@ export default function LongStayBookingPage() {
                     </Card.Body>
                   </Card>
 
-                  {/* Lead Passenger */}
-                  <Card className="p-4 mb-4 shadow-sm border-0">
-                    <h5 className="mb-3 fw-bold">Lead Passenger</h5>
-                    <Row className="g-3">
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Salutation
-                          </Form.Label>
-                          <Form.Select
-                            value={primaryGuest.salutation}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("salutation", e.target.value)
-                            }
-                            isInvalid={!!errors.salutation}
-                          >
-                            <option value="">Select</option>
-                            <option value="Mr">Mr</option>
-                            <option value="Mrs">Mrs</option>
-                            <option value="Ms">Ms</option>
-                            <option value="Dr">Dr</option>
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>First Name
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.firstName}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("firstName", e.target.value)
-                            }
-                            isInvalid={!!errors.firstName}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>Middle Name</Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.middleName}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("middleName", e.target.value)
-                            }
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Last Name
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.lastName}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("lastName", e.target.value)
-                            }
-                            isInvalid={!!errors.lastName}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Email
-                          </Form.Label>
-                          <Form.Control
-                            type="email"
-                            value={primaryGuest.email}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("email", e.target.value)
-                            }
-                            isInvalid={!!errors.email}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>
-                            <span style={{ color: "red" }}>*</span>Phone
-                          </Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.phone}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("phone", e.target.value)
-                            }
-                            isInvalid={!!errors.phone}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>Passport No</Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={primaryGuest.passportNo}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange("passportNo", e.target.value)
-                            }
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>Nationality</Form.Label>
-                          <Form.Control
-                            type="text"
-                            maxLength={2}
-                            placeholder="e.g. AE"
-                            value={primaryGuest.nationality}
-                            onChange={(e) =>
-                              handlePrimaryGuestChange(
-                                "nationality",
-                                e.target.value.toUpperCase()
-                              )
-                            }
-                          />
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </Card>
+                  {/* Lead Passenger / Primary Guest Details card
+                      hidden by request — the Guest Details grid
+                      above is the single source of customer details.
+                      The submit payload still carries
+                      `primaryGuestName / Email / Phone` and
+                      `primaryGuestDetails` (derived from Room 1 /
+                      Guest 1 in confirmBooking) so the
+                      /api/longStayBooking/create contract stays
+                      intact. Email / phone / passport / nationality
+                      aren't collected on the form any more and ride
+                      along as empty strings. */}
 
                   {/* Stay & Room Details */}
                   <Card className="p-4 mb-4 shadow-sm border-0">
@@ -724,9 +655,11 @@ export default function LongStayBookingPage() {
                     </Row>
                   </Card>
 
-                  {/* Remarks & Tourism Dirhams */}
+                  {/* Tourism Dirhams (Remarks textarea hidden by
+                      request — state `remarks` keeps its default
+                      empty string so the payload key stays intact). */}
                   <Card className="p-4 mb-2 shadow-sm border-0">
-                    <h5 className="mb-3 fw-bold">Remarks &amp; Tourism Dirhams</h5>
+                    <h5 className="mb-3 fw-bold">Tourism Dirhams</h5>
                     <Row className="g-3">
                       <Col md={6}>
                         <Form.Group className="mb-3">
@@ -744,18 +677,6 @@ export default function LongStayBookingPage() {
                             placeholder="0.00"
                             value={tourismDirham}
                             onChange={(e) => setTourismDirham(e.target.value)}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Remarks</Form.Label>
-                          <Form.Control
-                            as="textarea"
-                            rows={3}
-                            placeholder="Any special requests or notes for the property"
-                            value={remarks}
-                            onChange={(e) => setRemarks(e.target.value)}
                           />
                         </Form.Group>
                       </Col>

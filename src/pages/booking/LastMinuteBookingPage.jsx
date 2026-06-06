@@ -226,6 +226,24 @@ export default function LastMinuteBookingPage() {
   const [selectedNationality, setSelectedNationality] = useState(null);
   const [isNationalityLoading, setIsNationalityLoading] = useState(false);
 
+  // Optional "Booking Done By Employee" — mirrors HotelSearch.
+  // employeeId rides the sessionStorage handoff through to
+  // LastMinuteBookingForm's create payload.
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await axiosInstance.get("/api/employee?page=0&limit=1000");
+        if (res.data && Array.isArray(res.data)) setEmployees(res.data);
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
   const [agents, setAgents] = useState([]);
   const [agent, setAgent] = useState("");
 
@@ -409,8 +427,36 @@ export default function LastMinuteBookingPage() {
               </div>
 
               <Form onSubmit={handleSearch}>
+                {/* Field order mirrors /new-booking/hotel (HotelSearch.jsx):
+                      1. Agent  2. Destination / City  3. Nationality
+                      4. Check-In  5. Nights  6. Check-Out  7. Rooms & Guests
+                    Only the JSX order is rearranged — every prop, handler,
+                    state binding, validation message and layout class is
+                    preserved bit-for-bit so behavior is unchanged. */}
                 <Row className="g-4">
-                  {/* Destination */}
+                  {/* 1. Agent */}
+                  {!isAgentRole && (
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Agent</Form.Label>
+                      <Form.Select
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        value={agent}
+                        onChange={(e) => { setAgent(e.target.value); if (e.target.value) clearError("agent"); }}
+                      >
+                        <option value="">Select Agent</option>
+                        {agents.map((a) => (
+                          <option key={a.id} value={a.id}>{a.companyName}</option>
+                        ))}
+                      </Form.Select>
+                      {errors.agent && <div className="text-danger small mt-1">{errors.agent}</div>}
+                      <AgentBalanceDisplay agentId={agent} />
+                    </Form.Group>
+                  </Col>
+                  )}
+
+                  {/* 2. Destination / City */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Destination</Form.Label>
@@ -440,7 +486,7 @@ export default function LastMinuteBookingPage() {
                     </Form.Group>
                   </Col>
 
-                  {/* Nationality */}
+                  {/* 3. Nationality */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Nationality</Form.Label>
@@ -464,45 +510,36 @@ export default function LastMinuteBookingPage() {
                     </Form.Group>
                   </Col>
 
-                  {/* Agent */}
-                  {!isAgentRole && (
-                  <Col lg={3} md={6}>
+                  {/* Booking Done By Employee — OPTIONAL. Carried
+                      through to /api/last-minute-booking/create as
+                      employeeId. No validation. */}
+                  <Col lg={4} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Agent</Form.Label>
-                      <Form.Select
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        value={agent}
-                        onChange={(e) => { setAgent(e.target.value); if (e.target.value) clearError("agent"); }}
-                      >
-                        <option value="">Select Agent</option>
-                        {agents.map((a) => (
-                          <option key={a.id} value={a.id}>{a.companyName}</option>
-                        ))}
-                      </Form.Select>
-                      {errors.agent && <div className="text-danger small mt-1">{errors.agent}</div>}
-                      <AgentBalanceDisplay agentId={agent} />
-                    </Form.Group>
-                  </Col>
-                  )}
-
-                  {/* Nights */}
-                  <Col lg={2} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Nights</Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="number"
-                        min={1}
-                        max={60}
-                        value={nights}
-                        onChange={(e) => handleNightsChange(e.target.value)}
+                      <Form.Label className="fw-semibold text-dark">
+                        Booking Done By Employee{" "}
+                        <span className="text-muted small">(optional)</span>
+                      </Form.Label>
+                      <Select
+                        options={employees.map((e) => ({
+                          value: e.employeeId,
+                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                        }))}
+                        value={selectedEmployee}
+                        onChange={(opt) => setSelectedEmployee(opt)}
+                        placeholder="Select employee"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                          control: (b) => ({ ...b, minHeight: "42px", border: "1px solid #dee2e6" }),
+                        }}
                       />
                     </Form.Group>
                   </Col>
 
-                  {/* Check-in (clamped to today/+1/+2) */}
+                  {/* 4. Check-In (clamped to today/+1/+2) */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
@@ -527,7 +564,23 @@ export default function LastMinuteBookingPage() {
                     </Form.Group>
                   </Col>
 
-                  {/* Check-out */}
+                  {/* 5. Nights */}
+                  <Col lg={2} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">Nights</Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        className="form-control-modern"
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={nights}
+                        onChange={(e) => handleNightsChange(e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+
+                  {/* 6. Check-Out */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-out</Form.Label>
@@ -547,7 +600,7 @@ export default function LastMinuteBookingPage() {
                     </Form.Group>
                   </Col>
 
-                  {/* Rooms & Guests */}
+                  {/* 7. Rooms & Guests */}
                   <Col lg={4} md={6}>
                     <Form.Label className="fw-semibold text-dark">Rooms & Guests</Form.Label>
                     <Button
@@ -614,6 +667,9 @@ export default function LastMinuteBookingPage() {
                 rooms,
                 nationality: selectedNationality,
                 agent,
+                // Optional "Booking Done By Employee" selection.
+                // null when the user skipped the dropdown.
+                employeeId: selectedEmployee?.value || null,
               }}
             />
           ) : (
