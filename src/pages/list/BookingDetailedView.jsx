@@ -160,8 +160,8 @@ export default function BookingDetailedView() {
     .toUpperCase();
   const isReconfirmed = normalizedStatus === "RECONFIRMED";
   const isCancelled = normalizedStatus === "CANCELLED";
-  const isCancellationAllowed =
-    String(booking?.refundStatus || "").toLowerCase() !== "non-refundable";
+  // const isCancellationAllowed =
+  //   String(booking?.refundStatus || "").toLowerCase() !== "non-refundable";
 
   // ── Action handlers (ported from HotelBookingList.jsx) ─────────────
   // Cancel
@@ -568,8 +568,8 @@ export default function BookingDetailedView() {
                       </Col>
                       <Col md={6}>
                         <InfoRow label="Agent" value={booking.agentName} />
-                        <InfoRow label="Source" value={booking.source} />
-                        <InfoRow label="Created By" value={booking.createdByRole} />
+                        {/* <InfoRow label="Source" value={booking.source} />
+                        <InfoRow label="Created By" value={booking.createdByRole} /> */}
                         {/* "Booking Done By Employee" picked in
                             HotelSearch — only rendered when an employee
                             was actually selected so unrelated bookings
@@ -611,13 +611,13 @@ export default function BookingDetailedView() {
                               .filter(Boolean)
                               .join(" ") || "-"}
                           />
-                          <InfoRow label="Email" value={booking.customer.email} />
-                          <InfoRow label="Phone" value={booking.customer.phone} />
+                          {/* <InfoRow label="Email" value={booking.customer.email} />
+                          <InfoRow label="Phone" value={booking.customer.phone} /> */}
                         </Col>
                         <Col md={6}>
-                          <InfoRow label="Passport No." value={booking.customer.passportNo} />
+                          {/* <InfoRow label="Passport No." value={booking.customer.passportNo} /> */}
                           <InfoRow label="Nationality" value={booking.customer.customerNationality} />
-                          <InfoRow label="Agent LPO" value={booking.customer.agentLpo} />
+                          {/* <InfoRow label="Agent LPO" value={booking.customer.agentLpo} /> */}
                         </Col>
                       </Row>
                     </div>
@@ -988,7 +988,14 @@ export default function BookingDetailedView() {
                     smaller screens via flex-wrap. The PROFORMA vs FINAL
                     pair flips off `isReconfirmed` so the operator only
                     sees the relevant pair for the current booking
-                    lifecycle stage. */}
+                    lifecycle stage.
+                    Whole row hidden when the booking is already
+                    cancelled — no action makes sense on a CANCELLED
+                    record (ADD NEW ITEM / NOTES / etc. all assume a
+                    live booking). Per-button !isCancelled checks below
+                    are now redundant but left in place for safety in
+                    case this wrapper is ever removed. */}
+                {!isCancelled && (
                 <div
                   style={{
                     marginBottom: "10px",
@@ -1012,7 +1019,8 @@ export default function BookingDetailedView() {
                     ADD NEW ITEM
                   </button>
 
-                  {!isCancelled && isCancellationAllowed && (
+                  {/* {!isCancelled && isCancellationAllowed && ( */}
+                  {!isCancelled &&  (
                     <button style={BUTTON_STYLE} onClick={openCancelModal}>
                       CANCEL
                     </button>
@@ -1121,6 +1129,7 @@ export default function BookingDetailedView() {
                     NOTES
                   </button>
                 </div>
+                )}
 
                 {/* ── Booking Date footer ───────────────────────────── */}
                 <div
