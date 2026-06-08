@@ -684,8 +684,38 @@ const ActivitySearch = () => {
                <Card.Body>
   <Form onSubmit={handleTourSearchSubmit}>
 
+     
+
     {/* 🔷 Row 1 — Nationality + Destinations (both required). */}
     <Row className="g-3 mb-3">
+
+       {!isAgentRole && (
+      <Col md={4}>
+
+       <div style={{ minWidth: 260 }}>
+                  <Form.Label className="fw-semibold text-dark mb-1 small">
+                    Agent
+                  </Form.Label>
+                  <Form.Select
+                    style={{ height: "42px" }}
+                    className="form-control-modern"
+                    value={agent}
+                    onChange={(e) => setAgent(e.target.value)}
+                  >
+                    <option value="">Select Agent</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.companyName}
+                      </option>
+                    ))}
+                  </Form.Select>
+                  <AgentBalanceDisplay agentId={agent} />
+                </div>
+                 {searchErrors.agent && (
+          <div className="text-danger small mt-1">{searchErrors.agent}</div>
+        )}
+      </Col>
+      )}
       <Col md={4}>
         <Form.Label className="fw-semibold">
           Nationality <span className="text-danger">*</span>
@@ -776,33 +806,7 @@ const ActivitySearch = () => {
         )}
       </Col>
 
-      {!isAgentRole && (
-      <Col md={4}>
-
-       <div style={{ minWidth: 260 }}>
-                  <Form.Label className="fw-semibold text-dark mb-1 small">
-                    Agent
-                  </Form.Label>
-                  <Form.Select
-                    style={{ height: "42px" }}
-                    className="form-control-modern"
-                    value={agent}
-                    onChange={(e) => setAgent(e.target.value)}
-                  >
-                    <option value="">Select Agent</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.companyName}
-                      </option>
-                    ))}
-                  </Form.Select>
-                  <AgentBalanceDisplay agentId={agent} />
-                </div>
-                 {searchErrors.agent && (
-          <div className="text-danger small mt-1">{searchErrors.agent}</div>
-        )}
-      </Col>
-      )}
+ 
 
     </Row>
 

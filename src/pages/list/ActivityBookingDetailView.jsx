@@ -27,6 +27,7 @@ import {
   Modal,
   Button,
   Alert,
+  Form,
 } from "react-bootstrap";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
@@ -102,18 +103,37 @@ export default function ActivityBookingDetailView() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
+  // ── Action-button modal / handler state (ported from
+  //    BookingDetailedView, adapted for the activity endpoints). ──
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
 
-  // ── Voucher modal state ─────────────────────────────────────────
-  // We don't pre-fetch the voucher URL — it's only computed when
-  // the user clicks the icon, since PDF generation is cheap but not
-  // free. The modal stays open with the iframe until the user
-  // dismisses it; subsequent clicks regenerate (server overwrites
-  // the same file path).
-  const [showVoucherModal, setShowVoucherModal] = useState(false);
-  const [voucherUrl, setVoucherUrl] = useState(null);
-  const [voucherLoading, setVoucherLoading] = useState(false);
+  // Update Book Status (PATCH confirmation-status with Agent LPO).
+  const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
+  const [confirmAgentLpo, setConfirmAgentLpo] = useState("");
+  const [confirmAgentLpoError, setConfirmAgentLpoError] = useState("");
+  const [updatingConfirmationStatus, setUpdatingConfirmationStatus] =
+    useState(false);
+
+  // Confirmation Number
+  const [showConfirmationNoModal, setShowConfirmationNoModal] = useState(false);
+  const [confirmationNoInput, setConfirmationNoInput] = useState("");
+  const [confirmationNoError, setConfirmationNoError] = useState("");
+  const [savingConfirmationNo, setSavingConfirmationNo] = useState(false);
+
+  // Booking Remark
+  const [showRemarkModal, setShowRemarkModal] = useState(false);
+  const [remarkInput, setRemarkInput] = useState("");
+  const [savingRemark, setSavingRemark] = useState(false);
+
+  // Resend mail
+  const [resendingMail, setResendingMail] = useState(false);
+
+  // Generic PDF preview — used by VOUCHER and INVOICE.
+  // pdfPreview shape: { url, label, type } | null.
+  const [pdfPreview, setPdfPreview] = useState(null);
+  const [generatingPdfType, setGeneratingPdfType] = useState(null);
 
   // Fetch the booking from the new endpoint. Fall back to the
   // location.state snapshot if the GET fails — keeps legacy rows
@@ -155,47 +175,233 @@ export default function ActivityBookingDetailView() {
     };
   }, [id, location.state]);
 
+  // Refresh helper — many handlers need to pull the latest booking
+  // shape after a mutation succeeds so the UI reflects the change.
+  const refetchBooking = async () => {
+    if (!id) return;
+    try {
+      const res = await axiosInstance.get(`/api/tour-activity-booking/${id}`);
+      setBooking(res.data || null);
+    } catch (err) {
+      console.error("Failed to refetch booking:", err);
+    }
+  };
+
+  // ── Cancel ──────────────────────────────────────────────────────
+  const openCancelModal = () => {
+    setCancellationReason("");
+    setShowCancelModal(true);
+  };
+
   const handleCancelBooking = async () => {
     if (!booking) return;
     try {
       setCancelling(true);
+      const params = cancellationReason.trim()
+        ? { reason: cancellationReason.trim() }
+        : undefined;
       const response = await axiosInstance.delete(
-        `/api/activity/delete/${booking.bookingId || booking.customBookingId}`,
+        `/api/tour-activity-booking/${id}/cancel`,
+        { params },
       );
-      if (response.data?.status === "success") {
-        toast.success("Booking cancelled");
+      if (
+        response.data?.success &&
+        String(response.data?.confirmationStatus || "").toLowerCase() ===
+          "cancelled"
+      ) {
+        toast.success(response.data?.message || "Booking cancelled");
         setShowCancelModal(false);
-        navigate(-1);
+        setCancellationReason("");
+        await refetchBooking();
       } else {
-        toast.error("Cancel failed");
+        toast.error(response.data?.message || "Failed to cancel booking");
       }
-    } catch {
-      toast.error("Error cancelling booking");
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Error cancelling booking",
+      );
     } finally {
       setCancelling(false);
     }
   };
 
-  const handleOpenVoucher = async () => {
-    if (!id) return;
-    setVoucherLoading(true);
-    setVoucherUrl(null);
-    setShowVoucherModal(true);
+  // ── Update Book Status (LPO + confirmStatus) ────────────────────
+  const openConfirmStatusModal = () => {
+    setConfirmAgentLpo(booking?.agentLpo || "");
+    setConfirmAgentLpoError("");
+    setShowConfirmStatusModal(true);
+  };
+
+  const updateConfirmationStatus = async () => {
+    const lpoTrimmed = (confirmAgentLpo || "").trim();
+    if (!lpoTrimmed) {
+      setConfirmAgentLpoError("Agent LPO is required");
+      return;
+    }
+    setConfirmAgentLpoError("");
     try {
-      const res = await axiosInstance.get(
-        `/api/tour-activity-booking/${id}/voucher`,
+      setUpdatingConfirmationStatus(true);
+      const response = await axiosInstance.patch(
+        `/api/tour-activity-booking/${id}/confirmation-status`,
+        { confirmStatus: true, agentLpo: lpoTrimmed },
       );
-      if (res.data?.url) {
-        setVoucherUrl(res.data.url);
+      if (response.data?.success) {
+        setShowConfirmStatusModal(false);
+        toast.success(
+          response.data?.message || "Confirmation status updated",
+        );
+        await refetchBooking();
       } else {
-        toast.error("Voucher URL missing in response");
+        toast.error(
+          response.data?.message ||
+            "Failed to update confirmation status",
+        );
       }
     } catch (err) {
       toast.error(
-        err.response?.data?.error || "Failed to generate voucher PDF",
+        err.response?.data?.message ||
+          "Failed to update confirmation status",
       );
     } finally {
-      setVoucherLoading(false);
+      setUpdatingConfirmationStatus(false);
+    }
+  };
+
+  // ── Confirmation Number ─────────────────────────────────────────
+  const openConfirmationNoModal = () => {
+    setConfirmationNoInput(booking?.confirmationNumber || "");
+    setConfirmationNoError("");
+    setShowConfirmationNoModal(true);
+  };
+
+  const saveConfirmationNo = async () => {
+    const value = (confirmationNoInput || "").trim();
+    if (!value) {
+      setConfirmationNoError("Confirmation Number is required");
+      return;
+    }
+    setConfirmationNoError("");
+    try {
+      setSavingConfirmationNo(true);
+      const response = await axiosInstance.patch(
+        `/api/tour-activity-booking/${id}/confirmation-status`,
+        { confirmationNumber: value },
+      );
+      if (response.data?.success) {
+        setShowConfirmationNoModal(false);
+        toast.success(
+          response.data?.message || "Confirmation number saved",
+        );
+        await refetchBooking();
+      } else {
+        toast.error(
+          response.data?.message || "Failed to save confirmation number",
+        );
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message ||
+          "Failed to save confirmation number",
+      );
+    } finally {
+      setSavingConfirmationNo(false);
+    }
+  };
+
+  // ── Booking Remark ──────────────────────────────────────────────
+  const openRemarkModal = () => {
+    setRemarkInput(booking?.remarks || "");
+    setShowRemarkModal(true);
+  };
+
+  const saveRemark = async () => {
+    const text = (remarkInput || "").trim();
+    if (!text) {
+      toast.error("Remark cannot be empty");
+      return;
+    }
+    try {
+      setSavingRemark(true);
+      const createdBy =
+        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
+        "user";
+      const response = await axiosInstance.post(
+        `/api/tour-activity-booking/${id}/notes`,
+        { noteText: text, createdBy },
+      );
+      if (response.data?.success !== false) {
+        setShowRemarkModal(false);
+        toast.success(response.data?.message || "Remark saved");
+        await refetchBooking();
+      } else {
+        toast.error(response.data?.message || "Failed to save remark");
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to save remark",
+      );
+    } finally {
+      setSavingRemark(false);
+    }
+  };
+
+  // ── Resend Mail to Agent ────────────────────────────────────────
+  const resendMailToAgent = async () => {
+    try {
+      setResendingMail(true);
+      const response = await axiosInstance.post(
+        `/api/tour-activity-booking/${id}/resend-mail`,
+      );
+      if (response.data?.success !== false) {
+        toast.success(
+          response.data?.message || "Mail resent to agent",
+        );
+      } else {
+        toast.error(response.data?.message || "Failed to resend mail");
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to resend mail",
+      );
+    } finally {
+      setResendingMail(false);
+    }
+  };
+
+  // ── Generic PDF preview (Voucher / Invoice) ─────────────────────
+  // Shared shape with BookingDetailedView so the modal markup at the
+  // bottom of this page can be a near copy. type matches the backend
+  // enum on /api/tour-activity-booking/{id}/pdf?type=...
+  const handleDownloadPdf = async (type, label) => {
+    try {
+      setGeneratingPdfType(type);
+      const response = await axiosInstance.get(
+        `/api/tour-activity-booking/${id}/pdf`,
+        { params: { type: type.toUpperCase() } },
+      );
+      if (
+        response.data?.status === "SUCCESS" &&
+        response.data?.pdfUrl
+      ) {
+        setPdfPreview({
+          url: response.data.pdfUrl,
+          label: label || type,
+          type: type.toUpperCase(),
+        });
+      } else {
+        toast.error(
+          response.data?.message ||
+            `Failed to generate ${label || type}`,
+        );
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message ||
+          `Error generating ${label || type}`,
+      );
+    } finally {
+      setGeneratingPdfType(null);
     }
   };
 
@@ -248,6 +454,13 @@ export default function ActivityBookingDetailView() {
     : Array.isArray(booking.childAgeArray)
     ? booking.childAgeArray
     : [];
+
+  // Single source of truth for "is this row in a finished /
+  // un-actionable state". Hides the whole bottom button row when
+  // true — same pattern as BookingDetailedView.
+  const isCancelled =
+    String(booking.status || "").toUpperCase() === "CANCELLED" ||
+    booking.cancelStatus === true;
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -654,39 +867,85 @@ export default function ActivityBookingDetailView() {
               </Card.Body>
             </Card>
 
-            {/* Bottom action buttons */}
-            <div
-              className="d-flex gap-2 justify-content-start flex-wrap"
-              style={{ marginTop: "16px", marginBottom: "20px" }}
-            >
-              {status === "upcoming" &&
-                booking.status !== "CANCELLED" &&
-                !booking.cancelStatus && (
-                  <button
-                    style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
-                    onClick={() => setShowCancelModal(true)}
-                    title="Cancel booking"
-                  >
-                    <FaTrash style={{ marginRight: "6px" }} />
-                    Cancel
-                  </button>
-                )}
-
-         
-              {!isLegacy && (
+            {/* Bottom action buttons — full set ported from
+                BookingDetailedView, minus RECONFIRM (activity
+                bookings are always confirmed at create time). The
+                whole row is hidden when the booking is cancelled —
+                no further action makes sense at that point. */}
+            {!isCancelled && (
+              <div
+                className="d-flex gap-2 justify-content-start flex-wrap"
+                style={{ marginTop: "16px", marginBottom: "20px" }}
+              >
+                {/* ADD NEW ITEM — opens the activity search with a
+                    parentBookingCode in the query so a follow-up
+                    booking can be linked back to this one. */}
                 <button
-                  style={{
-                    ...BUTTON_STYLE,
-                    backgroundColor: "#dc2626",
+                  style={BUTTON_STYLE}
+                  onClick={() => {
+                    const parent =
+                      booking.parentBookingCode || booking.bookingCode || "";
+                    navigate(
+                      `/new-booking/tours-and-activities?parentBookingCode=${encodeURIComponent(
+                        parent,
+                      )}`,
+                    );
                   }}
-                  onClick={handleOpenVoucher}
-                  title="Preview voucher PDF"
                 >
-                  <FaFilePdf style={{ marginRight: 6 }} />
-                  Voucher
+                  ADD NEW ITEM
                 </button>
-              )}
-            </div>
+
+                <button style={BUTTON_STYLE} onClick={openCancelModal}>
+                  CANCEL
+                </button>
+
+                <button
+                  style={BUTTON_STYLE}
+                  disabled={generatingPdfType === "VOUCHER"}
+                  onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
+                >
+                  {generatingPdfType === "VOUCHER"
+                    ? "GENERATING..."
+                    : "VOUCHER"}
+                </button>
+
+                <button
+                  style={BUTTON_STYLE}
+                  disabled={generatingPdfType === "INVOICE"}
+                  onClick={() => handleDownloadPdf("INVOICE", "Invoice")}
+                >
+                  {generatingPdfType === "INVOICE"
+                    ? "GENERATING..."
+                    : "INVOICE"}
+                </button>
+
+                <button
+                  style={BUTTON_STYLE}
+                  onClick={openConfirmStatusModal}
+                >
+                  UPDATE BOOK STATUS
+                </button>
+
+                <button
+                  style={BUTTON_STYLE}
+                  onClick={openConfirmationNoModal}
+                >
+                  CONFIRMATION NO.
+                </button>
+
+                <button
+                  style={BUTTON_STYLE}
+                  onClick={resendMailToAgent}
+                  disabled={resendingMail}
+                >
+                  {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                </button>
+
+                <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                  BOOKING REMARK
+                </button>
+              </div>
+            )}
          </Container>
         </main>
       </div>
@@ -700,11 +959,24 @@ export default function ActivityBookingDetailView() {
         <Modal.Header closeButton={!cancelling}>
           <Modal.Title>Cancel Activity Booking</Modal.Title>
         </Modal.Header>
-        <Modal.Body className="text-center py-4">
-          <p className="mb-1 text-muted">
+        <Modal.Body className="py-4">
+          <p className="mb-2 text-muted text-center">
             Are you sure you want to cancel this booking?
           </p>
-          <h5 className="mb-0">{code}</h5>
+          <h5 className="mb-3 text-center">{code}</h5>
+          <Form.Group>
+            <Form.Label className="small fw-semibold text-muted">
+              Reason <span className="text-muted fw-normal">(optional)</span>
+            </Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              placeholder="Why is this booking being cancelled?"
+              value={cancellationReason}
+              onChange={(e) => setCancellationReason(e.target.value)}
+              disabled={cancelling}
+            />
+          </Form.Group>
         </Modal.Body>
         <Modal.Footer className="justify-content-center border-0 pb-4">
           <Button
@@ -726,12 +998,164 @@ export default function ActivityBookingDetailView() {
         </Modal.Footer>
       </Modal>
 
-      {/* Voucher modal — iframe-embedded PDF preview. The iframe
-          src is set from the server's public URL response, so the
-          preview reflects the same file a Download would yield. */}
+      {/* Update Book Status — Agent LPO required. */}
       <Modal
-        show={showVoucherModal}
-        onHide={() => setShowVoucherModal(false)}
+        show={showConfirmStatusModal}
+        onHide={() =>
+          !updatingConfirmationStatus && setShowConfirmStatusModal(false)
+        }
+        centered
+      >
+        <Modal.Header closeButton={!updatingConfirmationStatus}>
+          <Modal.Title>Update Book Status</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="py-3">
+          <Form.Group>
+            <Form.Label className="small fw-semibold text-muted">
+              Agent LPO <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Agent LPO"
+              value={confirmAgentLpo}
+              onChange={(e) => {
+                setConfirmAgentLpo(e.target.value);
+                if (confirmAgentLpoError) setConfirmAgentLpoError("");
+              }}
+              isInvalid={!!confirmAgentLpoError}
+              disabled={updatingConfirmationStatus}
+            />
+            <Form.Control.Feedback type="invalid">
+              {confirmAgentLpoError}
+            </Form.Control.Feedback>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="light"
+            onClick={() => setShowConfirmStatusModal(false)}
+            disabled={updatingConfirmationStatus}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="dark"
+            onClick={updateConfirmationStatus}
+            disabled={updatingConfirmationStatus}
+          >
+            {updatingConfirmationStatus ? (
+              <Spinner size="sm" className="me-2" />
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Confirmation Number */}
+      <Modal
+        show={showConfirmationNoModal}
+        onHide={() =>
+          !savingConfirmationNo && setShowConfirmationNoModal(false)
+        }
+        centered
+      >
+        <Modal.Header closeButton={!savingConfirmationNo}>
+          <Modal.Title>Confirmation Number</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="py-3">
+          <Form.Group>
+            <Form.Label className="small fw-semibold text-muted">
+              Confirmation No. <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Supplier confirmation number"
+              value={confirmationNoInput}
+              onChange={(e) => {
+                setConfirmationNoInput(e.target.value);
+                if (confirmationNoError) setConfirmationNoError("");
+              }}
+              isInvalid={!!confirmationNoError}
+              disabled={savingConfirmationNo}
+            />
+            <Form.Control.Feedback type="invalid">
+              {confirmationNoError}
+            </Form.Control.Feedback>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="light"
+            onClick={() => setShowConfirmationNoModal(false)}
+            disabled={savingConfirmationNo}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="dark"
+            onClick={saveConfirmationNo}
+            disabled={savingConfirmationNo}
+          >
+            {savingConfirmationNo ? (
+              <Spinner size="sm" className="me-2" />
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Booking Remark */}
+      <Modal
+        show={showRemarkModal}
+        onHide={() => !savingRemark && setShowRemarkModal(false)}
+        centered
+      >
+        <Modal.Header closeButton={!savingRemark}>
+          <Modal.Title>Booking Remark</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="py-3">
+          <Form.Group>
+            <Form.Label className="small fw-semibold text-muted">
+              Remark
+            </Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={5}
+              placeholder="Add an operator note for this booking"
+              value={remarkInput}
+              onChange={(e) => setRemarkInput(e.target.value)}
+              disabled={savingRemark}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="light"
+            onClick={() => setShowRemarkModal(false)}
+            disabled={savingRemark}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="dark"
+            onClick={saveRemark}
+            disabled={savingRemark}
+          >
+            {savingRemark ? <Spinner size="sm" className="me-2" /> : "Save"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Generic PDF preview modal — driven by pdfPreview state.
+          Same iframe-in-modal pattern as before but reused for
+          both VOUCHER and INVOICE types (the label updates per
+          request). The "Open in new tab" affordance is preserved so
+          users can pop the file out / download it. */}
+      <Modal
+        show={!!pdfPreview}
+        onHide={() => setPdfPreview(null)}
         size="xl"
         centered
         backdrop="static"
@@ -740,42 +1164,34 @@ export default function ActivityBookingDetailView() {
         <Modal.Header closeButton>
           <Modal.Title className="d-flex align-items-center">
             <FaFilePdf className="me-2 text-danger" />
-            Voucher Preview
+            {pdfPreview?.label || "PDF"} Preview
           </Modal.Title>
         </Modal.Header>
         <Modal.Body style={{ padding: 0, height: "75vh" }}>
-          {voucherLoading ? (
-            <div className="text-center py-5">
-              <Spinner animation="border" variant="primary" />
-              <p className="mt-3 text-muted">Generating voucher…</p>
-            </div>
-          ) : voucherUrl ? (
+          {pdfPreview?.url ? (
             <iframe
-              title="Voucher PDF"
-              src={voucherUrl}
+              title={`${pdfPreview.label || "PDF"} preview`}
+              src={pdfPreview.url}
               style={{ width: "100%", height: "100%", border: 0 }}
             />
           ) : (
             <div className="text-center py-5 text-muted">
-              Voucher URL unavailable.
+              PDF URL unavailable.
             </div>
           )}
         </Modal.Body>
         <Modal.Footer>
-          {voucherUrl && (
+          {pdfPreview?.url && (
             <a
               className="btn btn-outline-primary"
-              href={voucherUrl}
+              href={pdfPreview.url}
               target="_blank"
               rel="noreferrer"
             >
               Open in new tab
             </a>
           )}
-          <Button
-            variant="secondary"
-            onClick={() => setShowVoucherModal(false)}
-          >
+          <Button variant="secondary" onClick={() => setPdfPreview(null)}>
             Close
           </Button>
         </Modal.Footer>

@@ -2128,7 +2128,7 @@ const handleAmenityChange = (e) => {
                           <Col md={3}>
                             <Form.Group className="mb-3">
                               <Form.Label>
-                                State/Province{" "}
+                                City{" "}
                                 <span className="text-danger">*</span>
                               </Form.Label>
                               <Form.Select
@@ -2162,7 +2162,7 @@ const handleAmenityChange = (e) => {
                           <Col md={3}>
                             <Form.Group className="mb-3">
                               <Form.Label>
-                                Place <span className="text-danger">*</span>
+                                Location <span className="text-danger">*</span>
                               </Form.Label>
                               <Form.Select
                                 key={`place-${places.length}-${formData.stateId}`}
@@ -2197,7 +2197,7 @@ const handleAmenityChange = (e) => {
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Locality / Area</Form.Label>
+                              <Form.Label>Sub Location</Form.Label>
                               <InputGroup>
                                 <Form.Select
                                   key={`subloc-${subLocations.length}-${formData.placeId}`}
