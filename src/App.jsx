@@ -49,6 +49,7 @@ import CabProviderReg from "./pages/Registration/CabProviderReg";
 import CabRates from "./pages/Registration/CabRates";
 import ActivityProviderReg from "./pages/Registration/ActivityProviderReg";
 import ActivityRates from "./pages/Registration/ActivityRates";
+import ActivityRateView from "./pages/Registration/ActivityRateView";
 import PackageReg from "./pages/Registration/PackageReg";
 import PackageDetailedView from "./pages/Registration/PackageDetailedView";
 import PackageRates from "./pages/Registration/PackageRates";
@@ -488,6 +489,7 @@ export default function App() {
         <Route path="/cab-rates" element={<PrivateRoute><CabRates /></PrivateRoute>} />
         <Route path="/registration/activityProvider" element={<PrivateRoute><ActivityProviderReg /></PrivateRoute>} />
         <Route path="/activity-rates" element={<PrivateRoute><ActivityRates /></PrivateRoute>} />
+        <Route path="/registration/activity-rate/view/:id" element={<PrivateRoute><ActivityRateView /></PrivateRoute>} />
         <Route path="/registration/package" element={<PrivateRoute><PackageReg /></PrivateRoute>} />
         <Route path="/registration/package/view/:id" element={<PrivateRoute><PackageDetailedView /></PrivateRoute>} />
         <Route path="/package-rates" element={<PrivateRoute><PackageRates /></PrivateRoute>} />
