@@ -181,6 +181,26 @@ const ActivitySearch = () => {
   // Index for the gallery thumbnail strip inside the details modal.
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  // ── Result presentation: sort + view mode + price-range filter ──
+  // Sort: NONE / price asc / price desc — applied client-side on
+  // `totalRate`. View: list (default, horizontal cards) or grid
+  // (vertical cards, 3 per row on lg). Persisted only in component
+  // state — refreshing the page resets both.
+  const [sortOrder, setSortOrder] = useState("NONE");
+  const [viewMode, setViewMode] = useState("list");
+
+  // ── Agent credit gate ────────────────────────────────────────────
+  // Mirrors the RoomList pattern: a numeric balance fetched once an
+  // agent is selected, plus a soft "insufficient credit" popup that
+  // appears on Book Now when the activity's total exceeds the
+  // available balance. OK on the popup resumes the original Book Now
+  // call (with skipCreditCheck=true) so the user still lands on the
+  // booking page where they can choose online payment.
+  const [agentBalance, setAgentBalance] = useState(null);
+  const [showInsufficientCreditModal, setShowInsufficientCreditModal] =
+    useState(false);
+  const [pendingBookingFn, setPendingBookingFn] = useState(null);
+
   // ── Agent selector (mirrors HotelSearch.jsx pattern) ─────────────────
   const [agent, setAgent] = useState("");
   const [agents, setAgents] = useState([]);
@@ -198,6 +218,41 @@ const ActivitySearch = () => {
   useEffect(() => {
     loadAgents();
   }, []);
+
+  // Fetch the selected agent's available credit balance for the
+  // pre-booking gate. Resets to null whenever the agent selection
+  // clears, so an agent that's never been picked never gates a
+  // booking. Identical contract to the RoomList implementation.
+  useEffect(() => {
+    const aId = agent ? String(agent).trim() : "";
+    if (!aId) {
+      setAgentBalance(null);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled)
+          setAgentBalance(res?.data?.availableCreditLimit ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent]);
+
+  // Returns true when the activity total exceeds the available
+  // balance. Skipped (returns false) when no balance is loaded — the
+  // server-side check at booking time remains authoritative.
+  const isInsufficientBalance = (requiredAmount) => {
+    if (agentBalance == null) return false;
+    const required = Number(requiredAmount) || 0;
+    const available = Number(agentBalance) || 0;
+    return required > available;
+  };
 
   // Country & Destination state
   const [nationalityList, setNationalityList] = useState([]);
@@ -542,27 +597,48 @@ const ActivitySearch = () => {
     }
   };
 
-  const handleBookNow = (activity) => {
-    // Navigate to ActivityBookingPage and carry over search data and
-    // selected activity data. Forward both the new `destinations`
-    // list and a single `destination` (first selected) so the booking
-    // page keeps working whether it reads either shape.
-    navigate("/new-booking/tours-and-activities/booking", {
-      state: {
-        activity,
-        searchCriteria: {
-          nationality,
-          destination: destinations[0] || null,
-          destinations,
-          tourDate,
-          tourDuration,
-          adults: tourAdults,
-          children: tourChildren,
-          childAges: tourChildAges,
-          agent,
-        }
-      }
-    });
+  const handleBookNow = (activity, skipCreditCheck = false) => {
+    // Pre-booking credit gate. When the activity's total exceeds the
+    // agent's available balance we raise the InsufficientCreditModal
+    // — clicking OK re-enters this same function with
+    // skipCreditCheck=true so the booking still opens (online / cash
+    // payment available on the booking page).
+    const total = Number(activity?.totalRate) || 0;
+    if (!skipCreditCheck && isInsufficientBalance(total)) {
+      setPendingBookingFn(() => () => handleBookNow(activity, true));
+      setShowInsufficientCreditModal(true);
+      return;
+    }
+
+    // Open the booking page in a NEW window so the search results
+    // stay open in the original tab — mirrors the RoomList →
+    // HotelBookingPage flow. window.open can't carry React Router
+    // location.state, so we persist the activity + searchCriteria in
+    // sessionStorage; ActivityBookingPage reads sessionStorage when
+    // location.state is empty (fresh-tab fallback).
+    const payload = {
+      activity,
+      searchCriteria: {
+        nationality,
+        destination: destinations[0] || null,
+        destinations,
+        tourDate,
+        tourDuration,
+        adults: tourAdults,
+        children: tourChildren,
+        childAges: tourChildAges,
+        agent,
+      },
+    };
+    try {
+      sessionStorage.setItem(
+        "activityBookingPayload",
+        JSON.stringify(payload),
+      );
+    } catch (e) {
+      console.error("Failed to persist activity booking payload:", e);
+    }
+    window.open("/new-booking/tours-and-activities/booking", "_blank");
   };
 
   const renderStars = (rating) => {
@@ -774,10 +850,10 @@ const ActivitySearch = () => {
         <Form.Control.Feedback type="invalid">
           {searchErrors.tourDuration}
         </Form.Control.Feedback>
-        <small className="text-muted">
+        {/* <small className="text-muted">
           Filters results to activities whose duration falls in this window.
           Activities with no duration data are kept.
-        </small>
+        </small> */}
       </Col>
     </Row>
 
@@ -911,10 +987,11 @@ const ActivitySearch = () => {
                 </div>
               )}
 
-              {/* Results Display — denser horizontal card layout:
-                  left thumbnail with city/rating overlay chips, middle
-                  block with title + description + key facts, right
-                  block with pricing + actions. */}
+              {/* Results Display — wrapped in a Row with a left
+                  filter sidebar (sort + view toggle, scaffolded for
+                  more filters later) and the results column on the
+                  right. Default view is "list" (horizontal cards);
+                  "grid" stacks cards into 3-per-row tiles. */}
               {hasTourSearched && !tourLoading && tourResults.length > 0 && (
                 <div className="mt-4">
                   <div className="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
@@ -928,10 +1005,103 @@ const ActivitySearch = () => {
                         )
                       </span>
                     </h5>
+
+                    {/* View toggle — list (default) / grid. Mirrors
+                        the toggle pattern used on RoomList so the
+                        whole app feels uniform. */}
+                    <div className="btn-group shadow-sm gap-1" role="group">
+                      <Button
+                        variant={
+                          viewMode === "list" ? "primary" : "outline-primary"
+                        }
+                        size="sm"
+                        onClick={() => setViewMode("list")}
+                        title="List view"
+                      >
+                        <span className="fs-5" style={{ lineHeight: 1 }}>
+                          ☰
+                        </span>
+                      </Button>
+                      <Button
+                        variant={
+                          viewMode === "grid" ? "primary" : "outline-primary"
+                        }
+                        size="sm"
+                        onClick={() => setViewMode("grid")}
+                        title="Grid view"
+                      >
+                        <span className="fs-5" style={{ lineHeight: 1 }}>
+                          ⊞
+                        </span>
+                      </Button>
+                    </div>
                   </div>
 
                   <Row className="g-3">
-                    {tourResults.map((activity) => {
+                    {/* ── Left filter sidebar ── */}
+                    <Col lg={3} md={4}>
+                      <Card className="border-0 shadow-sm">
+                        <Card.Body className="p-3">
+                          <h6 className="fw-bold mb-3">Filters</h6>
+
+                          <div className="mb-3">
+                            <div className="small text-muted mb-1">
+                              Sort by price
+                            </div>
+                            <Form.Check
+                              type="radio"
+                              id="sort-none"
+                              name="sort-order"
+                              label="Default"
+                              checked={sortOrder === "NONE"}
+                              onChange={() => setSortOrder("NONE")}
+                            />
+                            <Form.Check
+                              type="radio"
+                              id="sort-asc"
+                              name="sort-order"
+                              label="Low to High"
+                              checked={sortOrder === "ASC"}
+                              onChange={() => setSortOrder("ASC")}
+                            />
+                            <Form.Check
+                              type="radio"
+                              id="sort-desc"
+                              name="sort-order"
+                              label="High to Low"
+                              checked={sortOrder === "DESC"}
+                              onChange={() => setSortOrder("DESC")}
+                            />
+                          </div>
+
+                          {sortOrder !== "NONE" && (
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="p-0"
+                              onClick={() => setSortOrder("NONE")}
+                            >
+                              Clear sort
+                            </Button>
+                          )}
+                        </Card.Body>
+                      </Card>
+                    </Col>
+
+                    {/* ── Results column ── */}
+                    <Col lg={9} md={8}>
+                      <Row className="g-3">
+                        {[...tourResults]
+                          .sort((a, b) => {
+                            if (sortOrder === "ASC")
+                              return (Number(a.totalRate) || 0) -
+                                (Number(b.totalRate) || 0);
+                            if (sortOrder === "DESC")
+                              return (Number(b.totalRate) || 0) -
+                                (Number(a.totalRate) || 0);
+                            return 0;
+                          })
+                          .map((activity) => {
                       const adultRate = Number(activity.adultRate) || 0;
                       const childRate = Number(activity.childRate) || 0;
                       const baseTotal = Number(activity.totalRateWithoutMarkup) || 0;
@@ -944,17 +1114,33 @@ const ActivitySearch = () => {
                         activity.durationHr != null || activity.durationMin != null
                           ? `${activity.durationHr || 0}h ${activity.durationMin || 0}m`
                           : activity.duration;
+                      // Grid mode stacks the three inner cells
+                      // vertically (image on top, info middle,
+                      // price/actions bottom) at full width inside
+                      // each tile. List mode keeps the original
+                      // horizontal split (3 / 6 / 3). The
+                      // ternaries below pick the right Bootstrap
+                      // breakpoints depending on viewMode.
+                      const isGrid = viewMode === "grid";
+                      const innerImgCols  = isGrid ? { xs: 12 } : { md: 3 };
+                      const innerInfoCols = isGrid ? { xs: 12 } : { md: 6 };
+                      const innerPayCols  = isGrid ? { xs: 12 } : { md: 3 };
                       return (
-                        <Col key={activity.id} xs={12}>
+                        <Col
+                          key={activity.id}
+                          xs={12}
+                          md={isGrid ? 6 : 12}
+                          lg={isGrid ? 4 : 12}
+                        >
                           <Card
-                            className="border-0 shadow-sm activity-result-card"
+                            className="border-0 shadow-sm activity-result-card h-100"
                             style={{ borderRadius: 14, overflow: "hidden" }}
                           >
                             <Card.Body className="p-0">
                               <Row className="g-0">
                                 {/* ── Thumbnail (with overlay badges) ── */}
-                                <Col md={3} className="bg-light position-relative">
-                                  <div style={{ height: "100%", minHeight: 180 }}>
+                                <Col {...innerImgCols} className="bg-light position-relative">
+                                  <div style={{ height: isGrid ? 180 : "100%", minHeight: 180 }}>
                                     <LazyImage
                                       src={activity.activityImage}
                                       alt={activity.activityName}
@@ -979,7 +1165,7 @@ const ActivitySearch = () => {
                                 </Col>
 
                                 {/* ── Title + description + facts ── */}
-                                <Col md={6} className="p-3 d-flex flex-column">
+                                <Col {...innerInfoCols} className="p-3 d-flex flex-column">
                                   <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
                                     <h5 className="fw-bold mb-0 text-dark">
                                       {activity.activityName || "Activity"}
@@ -1032,8 +1218,10 @@ const ActivitySearch = () => {
 
                                 {/* ── Pricing + actions ── */}
                                 <Col
-                                  md={3}
-                                  className="p-3 d-flex flex-column justify-content-between border-start text-center bg-light"
+                                  {...innerPayCols}
+                                  className={`p-3 d-flex flex-column justify-content-between text-center bg-light ${
+                                    isGrid ? "border-top" : "border-start"
+                                  }`}
                                 >
                                   <div>
                                     <div className="text-muted small">Total from</div>
@@ -1089,6 +1277,8 @@ const ActivitySearch = () => {
                         </Col>
                       );
                     })}
+                      </Row>
+                    </Col>
                   </Row>
                 </div>
               )}
@@ -1456,6 +1646,59 @@ const ActivitySearch = () => {
                   Book Now
                 </Button>
               )}
+            </Modal.Footer>
+          </Modal>
+
+          {/* Insufficient credit modal — informational gate. Mirrors
+              the RoomList implementation: Cancel just closes; OK
+              re-runs the original handleBookNow with skipCreditCheck
+              so the user still lands on the booking page where they
+              can pick online / cash payment. */}
+          <Modal
+            show={showInsufficientCreditModal}
+            onHide={() => {
+              setShowInsufficientCreditModal(false);
+              setPendingBookingFn(null);
+            }}
+            centered
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton>
+              <Modal.Title>Insufficient Credit Limit</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p className="mb-2">
+                Your available credit limit is not enough to cover this
+                booking.
+              </p>
+              <p className="mb-0 text-muted small">
+                You can still continue — please choose{" "}
+                <strong>online payment</strong> on the booking page to
+                complete this reservation.
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowInsufficientCreditModal(false);
+                  setPendingBookingFn(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  const fn = pendingBookingFn;
+                  setShowInsufficientCreditModal(false);
+                  setPendingBookingFn(null);
+                  if (typeof fn === "function") fn();
+                }}
+              >
+                OK, continue
+              </Button>
             </Modal.Footer>
           </Modal>
         </main>

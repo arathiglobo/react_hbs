@@ -185,6 +185,113 @@ const CabBookingPage = () => {
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
 
+  // ── Per-leg pickup / dropoff details ────────────────────────────────
+  // Only the fields relevant to the chosen leg type are surfaced on the
+  // UI; the others stay null in the payload. The full set is persisted
+  // on the cab booking entity (backend additive change), so the booking
+  // detail view + voucher can render either flavour.
+  // Note: Estimated Arrival Time is NOT in this state — it now comes from
+  // the airport master (searchCriteria.pickupEstimatedArrivalTime) and is
+  // rendered read-only on the page.
+  const [pickupDetails, setPickupDetails] = useState({
+    arrivingFrom: "",
+    flightNo: "",
+    greetingSign: "",
+  });
+
+  // HQ amount — operator-side adjustment to the supplier-side total.
+  // Sent to the backend as `adjustmentAmount` on the booking payload.
+  // Free-form string in state so the user can type the value naturally;
+  // converted to a Number at submit time. Blank → null (no adjustment).
+  const [hqAmount, setHqAmount] = useState("");
+  const [dropoffDetails, setDropoffDetails] = useState({
+    departingTo: "",
+    flightNo: "",
+    terminal: "",
+    departureTime: searchCriteria.dropoffTime || "",
+  });
+  // Hotel addresses auto-fetched from /api/hotels/lookup when the leg
+  // type is HOTEL. We resolve by matching hotelName (case-insensitive),
+  // scoped by destination cityId when known. Empty string falls back to
+  // "—" on the UI; the resolved value is also forwarded in the booking
+  // payload so the voucher PDF doesn't need a second lookup.
+  const [pickupHotelAddress, setPickupHotelAddress] = useState("");
+  const [dropoffHotelAddress, setDropoffHotelAddress] = useState("");
+
+  // Default the greeting sign to the lead passenger's full name once the
+  // operator fills it in. Only seeds when the field is still blank so an
+  // explicitly entered sign isn't clobbered.
+  useEffect(() => {
+    if (
+      searchCriteria.pickupType === "AIRPORT" &&
+      !pickupDetails.greetingSign
+    ) {
+      const leadName = [
+        leadGuest?.salutation,
+        leadGuest?.firstName,
+        leadGuest?.lastName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      if (leadName) {
+        setPickupDetails((prev) =>
+          prev.greetingSign ? prev : { ...prev, greetingSign: leadName },
+        );
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    leadGuest?.firstName,
+    leadGuest?.lastName,
+    leadGuest?.salutation,
+    searchCriteria.pickupType,
+  ]);
+
+  // Lookup hotel addresses whenever a leg is HOTEL. /api/hotels/lookup
+  // returns rows with `hotelName` + `address`; we filter by name. The
+  // lookup is keyed by (cityId, hotelName) so it only fires once.
+  useEffect(() => {
+    const cityId = searchCriteria.city?.value || searchCriteria.destination?.value;
+    const fetchAddr = async (name, setter) => {
+      if (!name) {
+        setter("");
+        return;
+      }
+      try {
+        const params = { search: name, limit: 50 };
+        if (cityId) params.cityId = cityId;
+        const res = await axiosInstance.get("/api/hotels/lookup", { params });
+        const arr = Array.isArray(res.data) ? res.data : [];
+        const hit = arr.find(
+          (h) =>
+            (h.hotelName || "").trim().toLowerCase() ===
+            name.trim().toLowerCase(),
+        ) || arr[0];
+        setter(hit?.address || "");
+      } catch (err) {
+        console.warn("Hotel address lookup failed:", err);
+        setter("");
+      }
+    };
+    if (searchCriteria.pickupType === "HOTEL") {
+      fetchAddr(searchCriteria.pickupName, setPickupHotelAddress);
+    } else {
+      setPickupHotelAddress("");
+    }
+    if (searchCriteria.dropoffType === "HOTEL") {
+      fetchAddr(searchCriteria.dropoffName, setDropoffHotelAddress);
+    } else {
+      setDropoffHotelAddress("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    searchCriteria.pickupType,
+    searchCriteria.pickupName,
+    searchCriteria.dropoffType,
+    searchCriteria.dropoffName,
+  ]);
+
   useEffect(() => {
     const cabId = cab?.cabid || cab?.cabId;
     if (!cabId) {
@@ -374,16 +481,67 @@ const CabBookingPage = () => {
       driverContact: transporterDetails.driverContact,
       sellingPrice: String(sellingWithTd.toFixed(2)),
       totalPrice: String(totalWithTd.toFixed(2)),
-      // Pickup / Drop-off details forwarded from the search page.
+      // Pickup / Drop-off details forwarded from the search page. The
+      // per-leg fields (arrivingFrom / flightNo / greetingSign /
+      // departingTo / terminal / hotelAddress) are entered on the new
+      // Pick Up Details / Drop Off Details cards above; for legs that
+      // don't apply the field stays null so the entity row keeps a
+      // clean NULL instead of an empty-string artefact.
       pickupType: searchCriteria.pickupType || null,
       pickupName: searchCriteria.pickupName || null,
       pickupTime:
-        searchCriteria.pickupType === "AIRPORT" && searchCriteria.pickupTime
-          ? searchCriteria.pickupTime
+        searchCriteria.pickupType === "AIRPORT"
+          ? searchCriteria.pickupEstimatedArrivalTime ||
+            searchCriteria.pickupTime ||
+            null
+          : null,
+      pickupArrivingFrom:
+        searchCriteria.pickupType === "AIRPORT"
+          ? pickupDetails.arrivingFrom || null
+          : null,
+      pickupFlightNo:
+        searchCriteria.pickupType === "AIRPORT"
+          ? pickupDetails.flightNo || null
+          : null,
+      pickupGreetingSign:
+        searchCriteria.pickupType === "AIRPORT"
+          ? pickupDetails.greetingSign || null
+          : null,
+      pickupHotelAddress:
+        searchCriteria.pickupType === "HOTEL"
+          ? pickupHotelAddress || null
           : null,
       dropoffType: searchCriteria.dropoffType || null,
       dropoffName: searchCriteria.dropoffName || null,
-      dropoffTime: searchCriteria.dropoffTime || null,
+      dropoffTime:
+        searchCriteria.dropoffType === "AIRPORT"
+          ? dropoffDetails.departureTime ||
+            searchCriteria.dropoffTime ||
+            null
+          : null,
+      dropoffDepartingTo:
+        searchCriteria.dropoffType === "AIRPORT"
+          ? dropoffDetails.departingTo || null
+          : null,
+      dropoffFlightNo:
+        searchCriteria.dropoffType === "AIRPORT"
+          ? dropoffDetails.flightNo || null
+          : null,
+      dropoffTerminal:
+        searchCriteria.dropoffType === "AIRPORT"
+          ? dropoffDetails.terminal || null
+          : null,
+      dropoffHotelAddress:
+        searchCriteria.dropoffType === "HOTEL"
+          ? dropoffHotelAddress || null
+          : null,
+      // HQ amount (operator-side Adjustment Amt). Blank → null so the
+      // backend stores SQL NULL instead of 0 (lets reports tell apart
+      // "no adjustment" from "zero adjustment").
+      adjustmentAmount:
+        hqAmount !== "" && !isNaN(Number(hqAmount))
+          ? Number(hqAmount)
+          : null,
       policyAccepted: true,
       acceptedTermsAndConditions: true,
       acceptedCancellationPolicies: true,
@@ -531,6 +689,274 @@ const CabBookingPage = () => {
                   </Card.Body>
                 </Card>
 
+                {/* ── Pick Up Details ────────────────────────────────
+                     Type-aware leg card. For AIRPORT pickups we collect
+                     Arriving From / Flight No / Estimated Arrival Time
+                     / Greeting Sign; for HOTEL pickups we just display
+                     the hotel name + address auto-fetched from the
+                     /api/hotels/lookup endpoint. Empty when no pickup
+                     was selected on the search page. */}
+                {searchCriteria.pickupType && (
+                  <Card className="border rounded-3 mb-4 overflow-hidden">
+                    <Card.Header
+                      className="py-2 px-4 text-dark border-bottom"
+                      style={{ backgroundColor: "#f1f3f5" }}
+                    >
+                      <span className="fw-semibold">
+                        Pick Up Details
+                        <span className="text-muted small ms-2">
+                          —{" "}
+                          {searchCriteria.pickupType === "AIRPORT"
+                            ? "Airport"
+                            : searchCriteria.pickupType === "HOTEL"
+                              ? "Accommodation"
+                              : "Place"}
+                        </span>
+                      </span>
+                    </Card.Header>
+                    <Card.Body className="px-4 pt-3 pb-3">
+                      {searchCriteria.pickupType === "AIRPORT" && (
+                        <>
+                          <div className="mb-3">
+                            <strong>Airport Name : </strong>
+                            {searchCriteria.pickupName || "—"}
+                          </div>
+                          <Row className="g-3">
+                            <Col md={6}>
+                              <Form.Label className="small text-muted fw-semibold mb-1">
+                                Arriving From
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="Arriving From*"
+                                value={pickupDetails.arrivingFrom}
+                                onChange={(e) =>
+                                  setPickupDetails((p) => ({
+                                    ...p,
+                                    arrivingFrom: e.target.value,
+                                  }))
+                                }
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label className="small text-muted fw-semibold mb-1">
+                                Flight No.
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="Flight No.*"
+                                value={pickupDetails.flightNo}
+                                onChange={(e) =>
+                                  setPickupDetails((p) => ({
+                                    ...p,
+                                    flightNo: e.target.value,
+                                  }))
+                                }
+                              />
+                            </Col>
+                            {/* Read-only — sourced from the airport master
+                                (set on /master/Airport per airport) and
+                                forwarded through CabSearch.jsx. Empty
+                                means the master row has no value yet, so
+                                we show a hint pointing the operator at
+                                the right setup page. */}
+                            <Col md={6}>
+                              <Form.Label className="small text-muted fw-semibold mb-1">
+                                Estimated Arrival Time
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                value={
+                                  searchCriteria.pickupEstimatedArrivalTime || ""
+                                }
+                                placeholder="Configure on the airport master"
+                                readOnly
+                                disabled
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label className="small text-muted fw-semibold mb-1">
+                                Greeting Sign
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="Name on the greeting sign"
+                                value={pickupDetails.greetingSign}
+                                onChange={(e) =>
+                                  setPickupDetails((p) => ({
+                                    ...p,
+                                    greetingSign: e.target.value,
+                                  }))
+                                }
+                              />
+                            </Col>
+                          </Row>
+                          <div className="small text-muted mt-3">
+                            <strong>Note:</strong> Driver will call you before
+                            the ride. The driver will contact you in advance and
+                            we will send you their contact number via SMS. We
+                            will put the sign in the front of the bus, so you
+                            could easily identify it. Please note that on group
+                            trips, drivers do not meet you in the arrivals hall,
+                            but wait for a signal from the group leader that
+                            they are ready to board.
+                          </div>
+                        </>
+                      )}
+                      {searchCriteria.pickupType === "HOTEL" && (
+                        <>
+                          <div className="mb-2">
+                            <strong>Hotel Name : </strong>
+                            {searchCriteria.pickupName || "—"}
+                          </div>
+                          <div>
+                            <div className="small text-muted fw-semibold">
+                              Hotel Address
+                            </div>
+                            <div>{pickupHotelAddress || "—"}</div>
+                          </div>
+                        </>
+                      )}
+                      {searchCriteria.pickupType === "PLACE" && (
+                        <div>
+                          <strong>Place : </strong>
+                          {searchCriteria.pickupName || "—"}
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
+                )}
+
+                {/* ── Drop Off Details ───────────────────────────────
+                     Same pattern as Pick Up but for the drop leg. For
+                     AIRPORT drops we collect Departing To / Flight No /
+                     Terminal / Departure Time; for HOTEL drops we
+                     display the hotel name + auto-fetched address. */}
+                {searchCriteria.dropoffType && (
+                  <Card className="border rounded-3 mb-4 overflow-hidden">
+                    <Card.Header
+                      className="py-2 px-4 text-dark border-bottom"
+                      style={{ backgroundColor: "#f1f3f5" }}
+                    >
+                      <span className="fw-semibold">
+                        Drop Off Details
+                        <span className="text-muted small ms-2">
+                          —{" "}
+                          {searchCriteria.dropoffType === "AIRPORT"
+                            ? "Airport"
+                            : searchCriteria.dropoffType === "HOTEL"
+                              ? "Accommodation"
+                              : "Place"}
+                        </span>
+                      </span>
+                    </Card.Header>
+                    <Card.Body className="px-4 pt-3 pb-3">
+                      {searchCriteria.dropoffType === "AIRPORT" && (
+                        <>
+                          <div className="mb-3">
+                            <strong>Airport Name : </strong>
+                            {searchCriteria.dropoffName || "—"}
+                          </div>
+                          <Row className="g-3">
+                            <Col md={6}>
+                              <Form.Label className="small text-muted fw-semibold mb-1">
+                                Departing To
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="Departing To"
+                                value={dropoffDetails.departingTo}
+                                onChange={(e) =>
+                                  setDropoffDetails((p) => ({
+                                    ...p,
+                                    departingTo: e.target.value,
+                                  }))
+                                }
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label className="small text-muted fw-semibold mb-1">
+                                Flight No.
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="Flight No."
+                                value={dropoffDetails.flightNo}
+                                onChange={(e) =>
+                                  setDropoffDetails((p) => ({
+                                    ...p,
+                                    flightNo: e.target.value,
+                                  }))
+                                }
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label className="small text-muted fw-semibold mb-1">
+                                Select Terminal
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="e.g. Terminal 3"
+                                value={dropoffDetails.terminal}
+                                onChange={(e) =>
+                                  setDropoffDetails((p) => ({
+                                    ...p,
+                                    terminal: e.target.value,
+                                  }))
+                                }
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <Form.Label className="small text-muted fw-semibold mb-1">
+                                Departure Time
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                type="text"
+                                placeholder="e.g. 07 Hrs 00 Min"
+                                value={dropoffDetails.departureTime}
+                                onChange={(e) =>
+                                  setDropoffDetails((p) => ({
+                                    ...p,
+                                    departureTime: e.target.value,
+                                  }))
+                                }
+                              />
+                            </Col>
+                          </Row>
+                        </>
+                      )}
+                      {searchCriteria.dropoffType === "HOTEL" && (
+                        <>
+                          <div className="mb-2">
+                            <strong>Hotel Name : </strong>
+                            {searchCriteria.dropoffName || "—"}
+                          </div>
+                          <div>
+                            <div className="small text-muted fw-semibold">
+                              Hotel Address
+                            </div>
+                            <div>{dropoffHotelAddress || "—"}</div>
+                          </div>
+                        </>
+                      )}
+                      {searchCriteria.dropoffType === "PLACE" && (
+                        <div>
+                          <strong>Place : </strong>
+                          {searchCriteria.dropoffName || "—"}
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
+                )}
+
                 {/* ── Passenger Details — single source of truth for
                      traveller data. The row marked "Lead" is also
                      persisted as the customer/lead-passenger record;
@@ -565,7 +991,7 @@ const CabBookingPage = () => {
                         <Col md={2}>Title</Col>
                         <Col md={2}>First Name</Col>
                         <Col md={2}>Last Name</Col>
-                        <Col md={2}>Passport</Col>
+                        <Col md={2}>Contact No.</Col>
                         <Col md={2} className="text-center">
                           Lead
                         </Col>
@@ -655,18 +1081,26 @@ const CabBookingPage = () => {
                                   }
                                 />
                               </Col>
+                              {/* Contact No. — captured per-passenger so the
+                                  operator can dispatch updates to whoever is
+                                  actually in the cab. The Lead row's value
+                                  is what flows into customerDTO.contactNumber
+                                  on save (existing behaviour). */}
                               <Col xs={6} md={2}>
                                 <Form.Control
                                   size="sm"
                                   type="text"
-                                  placeholder="Passport (opt)"
-                                  value={g.passportNo}
+                                  placeholder="Contact No."
+                                  value={g.contactNumber || ""}
                                   onChange={(e) =>
                                     handleGuestChange(
                                       idx,
-                                      "passportNo",
+                                      "contactNumber",
                                       e.target.value,
                                     )
+                                  }
+                                  isInvalid={
+                                    !!validationErrors[`guest_${idx}_contactNumber`]
                                   }
                                 />
                               </Col>
@@ -807,6 +1241,38 @@ const CabBookingPage = () => {
                   </Card>
                 )}
 
+                {/* ── HQ amount — operator-side Adjustment Amt persisted
+                     to cab booking's adjustmentAmount column. Lives
+                     below the passenger details (per spec) so it sits
+                     with the other operator-managed fields. The value
+                     still rolls into the Total on the right-hand Price
+                     Details card. */}
+                <Card className="border rounded-3 mb-4 overflow-hidden">
+                  <Card.Header
+                    className="py-2 px-4 text-dark border-bottom"
+                    style={{ backgroundColor: "#f1f3f5" }}
+                  >
+                    <span className="fw-semibold">HQ amount</span>
+                  </Card.Header>
+                  <Card.Body className="px-4 pt-3 pb-3">
+                    <Row className="g-3 align-items-center">
+                      <Col md={4}>
+                        <Form.Label className="small text-muted fw-semibold mb-1">
+                          HQ amount
+                        </Form.Label>
+                        <Form.Control
+                          size="sm"
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={hqAmount}
+                          onChange={(e) => setHqAmount(e.target.value)}
+                        />
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+
               </Col>
 
               {/* Right sticky column — Price Details + Confirm action.
@@ -826,7 +1292,12 @@ const CabBookingPage = () => {
                           tourismDirham !== "" && !isNaN(Number(tourismDirham))
                             ? Number(tourismDirham)
                             : 0;
-                        const grandTotal = Number(totalRate || 0) + tdNum;
+                        const hqNum =
+                          hqAmount !== "" && !isNaN(Number(hqAmount))
+                            ? Number(hqAmount)
+                            : 0;
+                        const grandTotal =
+                          Number(totalRate || 0) + tdNum + hqNum;
                         return (
                           <>
                             <div className="hbp-summary-row">
@@ -1127,7 +1598,6 @@ const CabBookingPage = () => {
                     <th>#</th>
                     <th>Type</th>
                     <th>Name</th>
-                    <th>Passport</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1143,7 +1613,6 @@ const CabBookingPage = () => {
                         {[g.salutation, g.firstName, g.lastName]
                           .filter(Boolean).join(" ") || "—"}
                       </td>
-                      <td>{g.passportNo || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1172,10 +1641,6 @@ const CabBookingPage = () => {
             <Col md={6} className="mt-2">
               <small className="text-muted d-block">Email</small>
               <span>{primaryGuest.emailId || "—"}</span>
-            </Col>
-            <Col md={6} className="mt-2">
-              <small className="text-muted d-block">Passport</small>
-              <span>{primaryGuest.passportNumber || "—"}</span>
             </Col>
           </Row>
 

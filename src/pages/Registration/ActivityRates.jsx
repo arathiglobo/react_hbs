@@ -736,14 +736,18 @@ const ActivityRates = () => {
     finally { setIsLoading(false); }
   };
 
-  const handleView = async (item) => {
-    setIsLoading(true);
-    try {
-      const r = await axiosInstance.get(`/api/activityRate/${item.activityRateId}`);
-      if (!r.data) { toast.error("Failed to fetch details"); return; }
-      setEditing(r.data); setIsViewMode(true); loadFormData(r.data); setShowModal(true);
-    } catch { toast.error("Failed to fetch details"); }
-    finally { setIsLoading(false); }
+  // View icon → full-page activity view.
+  // Conceptually requested at /registration/package/view/:id, but that
+  // route is already taken by TravelPackage (PackageDetailedView) — so
+  // activity rates use /registration/activity-rate/view/:id. The view
+  // renders the complete activity record plus inclusions, T&C, and
+  // cancellation policies, with a red banner when none of them are set.
+  const handleView = (item) => {
+    if (!item?.activityRateId) {
+      toast.error("Missing activity reference");
+      return;
+    }
+    navigate(`/registration/activity-rate/view/${item.activityRateId}`);
   };
 
   const handleDelete = (item) => {
@@ -830,10 +834,12 @@ const ActivityRates = () => {
               <div>
                 <Button variant="outline-primary" size="sm" className="mb-2 me-3"
                   onClick={() => navigate("/registration/activityProvider")}>
-                  <FaBackward className="me-2"/>Back to Activity Providers
+                  <FaBackward className="me-2"/>Back
                 </Button>
                 <span className="fw-semibold">
-                  <FaDollarSign className="me-2 text-success"/>Activity Rates
+                 <FaDollarSign className="me-2 text-success" />
+  Activity Rates{" "}
+  <span className="fs-6 fw-normal">for</span>
                   {providerId
                     ? <span className="text-muted ms-2">({providerName || `Provider ID: ${providerId}`})</span>
                     : <span className="text-warning ms-2">(No Provider Selected)</span>}
@@ -941,7 +947,7 @@ const ActivityRates = () => {
 
                     <Form.Group className="mb-3">
                       <Form.Label>Activity Details <span className="text-danger">*</span></Form.Label>
-                      <Form.Control as="textarea" rows={3} value={formData.activityDetails} disabled={isViewMode}
+                      <Form.Control as="textarea" rows={6} value={formData.activityDetails} disabled={isViewMode}
                         isInvalid={!!validationErrors.activityDetails}
                         onChange={e=>handleFieldChange("activityDetails",e.target.value)}/>
                       <Form.Control.Feedback type="invalid">{validationErrors.activityDetails}</Form.Control.Feedback>

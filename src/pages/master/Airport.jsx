@@ -14,6 +14,10 @@ export default function Airport() {
   const [editing, setEditing] = useState(null);
   const [airportName, setAirportName] = useState("");
   const [airportCode, setAirportCode] = useState("");
+  // Per-airport meet-and-greet buffer surfaced as a read-only "Estimated
+  // Arrival Time" on /cab-booking-page. Free-form so the operator can
+  // capture any unit they like (e.g. "02 Hrs 00 Min", "45 Min").
+  const [estimatedArrivalTime, setEstimatedArrivalTime] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(0);
@@ -117,6 +121,7 @@ export default function Airport() {
     cityId: selectedCity || null,
     placeId: selectedPlace || null,
     subLocationId: selectedSubLocation || null,
+    estimatedArrivalTime: estimatedArrivalTime.trim() || null,
   });
 
   const validateForm = () => {
@@ -330,6 +335,7 @@ export default function Airport() {
     setEditing(null);
     setAirportName("");
     setAirportCode("");
+    setEstimatedArrivalTime("");
     setSelectedRegion("");
     setSelectedRegionOption(null);
     setSelectedCountry("");
@@ -360,6 +366,7 @@ export default function Airport() {
     setEditing(item);
     setAirportName(item.airportName || "");
     setAirportCode(item.airportCode || "");
+    setEstimatedArrivalTime(item.estimatedArrivalTime || "");
     setSelectedRegion(item.regionId || "");
     setSelectedCountry(item.countryId || "");
     setSelectedCity(item.cityId || "");
@@ -570,6 +577,25 @@ export default function Airport() {
                         }}
                         placeholder="e.g. DXB"
                         maxLength={20}
+                      />
+                    </Form.Group>
+                  </Col>
+
+                  {/* Estimated Arrival Time — per-airport buffer surfaced
+                      on /cab-booking-page as a read-only display value.
+                      Free-form so the operator can capture any unit they
+                      like (e.g. "02 Hrs 00 Min"). */}
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label>Estimated Arrival Time</Form.Label>
+                      <Form.Control
+                        value={estimatedArrivalTime}
+                        onChange={(e) => {
+                          setEstimatedArrivalTime(e.target.value);
+                          setError("");
+                        }}
+                        placeholder="e.g. 02 Hrs 00 Min"
+                        maxLength={32}
                       />
                     </Form.Group>
                   </Col>

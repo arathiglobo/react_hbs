@@ -122,6 +122,10 @@ const CabRates = () => {
     privateTotal: "",
     privatePerPax: "",
     luggage: false,
+    // Per-route driver/distance fields surfaced on the search-result View
+    // modal. Optional — blank means the modal renders "—" for that line.
+    driverWaitingTime: "",
+    distance: "",
   });
 
   const [transfersRows, setTransfersRows] = useState([newTransferRow(1)]);
@@ -360,6 +364,17 @@ const CabRates = () => {
         privatePerPaxRate:
           row.privatePerPax !== "" && row.privatePerPax != null
             ? parseFloat(row.privatePerPax)
+            : null,
+        // Per-route driver-side details. Blank values become null so the
+        // server stores SQL NULL (treated as "—" on the search View modal)
+        // rather than empty-string / zero artefacts.
+        driverWaitingTime:
+          row.driverWaitingTime && String(row.driverWaitingTime).trim() !== ""
+            ? String(row.driverWaitingTime).trim()
+            : null,
+        distance:
+          row.distance !== "" && row.distance != null
+            ? parseFloat(row.distance)
             : null,
       })),
       // T&C / Cancellation rows — drop blanks; backend stores via
@@ -654,6 +669,9 @@ const CabRates = () => {
           : "",
         pickupTime: detail.pickupTime || "",
         dropoffTime: detail.dropoffTime || "",
+        driverWaitingTime: detail.driverWaitingTime || "",
+        distance:
+          detail.distance != null ? detail.distance.toString() : "",
         cabRatesdetailsId: detail.cabRatesdetailsId || null,
       }));
     setTransfersRows(transfers.length > 0 ? transfers : [newTransferRow(1)]);
@@ -1161,6 +1179,8 @@ const CabRates = () => {
                           <th style={{ minWidth: 130 }}>Private (Total)</th>
                           <th style={{ minWidth: 130 }}>Private Per Pax</th>
                           <th style={{ minWidth: 70 }}>Luggage</th>
+                          <th style={{ minWidth: 130 }}>Driver Waiting Time</th>
+                          <th style={{ minWidth: 110 }}>Distance (Km)</th>
                           {!isViewMode && <th style={{ minWidth: 90 }}>Actions</th>}
                         </tr>
                       </thead>
@@ -1280,6 +1300,22 @@ const CabRates = () => {
                                 type="checkbox"
                                 checked={row.luggage}
                                 onChange={(e) => updateTransferRow(row.id, "luggage", e.target.checked)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="text" size="sm" placeholder="e.g. 45 Min"
+                                value={row.driverWaitingTime || ""}
+                                onChange={(e) => updateTransferRow(row.id, "driverWaitingTime", e.target.value)}
+                                disabled={isViewMode}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="number" step="0.001" size="sm" placeholder="Km"
+                                value={row.distance || ""}
+                                onChange={(e) => updateTransferRow(row.id, "distance", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>

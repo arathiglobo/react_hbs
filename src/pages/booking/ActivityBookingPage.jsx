@@ -11,7 +11,7 @@ import {
   Spinner,
   Modal,
 } from "react-bootstrap";
-import { FaTicketAlt, FaUserAlt, FaCheckCircle, FaCalendarAlt, FaMapMarkerAlt, FaUsers, FaClock, FaPlus, FaRoute, FaShoppingCart } from "react-icons/fa";
+import { FaTicketAlt, FaCheckCircle, FaCalendarAlt, FaMapMarkerAlt, FaUsers, FaClock, FaPlus, FaRoute } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
@@ -36,20 +36,31 @@ const normalizeActivityPolicies = (rows) => {
 const ActivityBookingPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { activity, searchCriteria } = location.state || {};
+
+  // Two entry points: in-tab navigate (Router state) or new-window
+  // open via window.open (no Router state — payload arrived via
+  // sessionStorage instead, see ActivitySearch.handleBookNow). We
+  // read sessionStorage once, on mount, so the page survives a hard
+  // refresh inside the booking tab too.
+  const [{ activity, searchCriteria }] = useState(() => {
+    if (location.state?.activity && location.state?.searchCriteria) {
+      return location.state;
+    }
+    try {
+      const raw = sessionStorage.getItem("activityBookingPayload");
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error("Failed to parse activityBookingPayload:", e);
+    }
+    return {};
+  });
 
   // If accessed directly without state, redirect or show an error
   const hasValidState = !!activity && !!searchCriteria;
 
-  const [primaryGuest, setPrimaryGuest] = useState({
-    salutation: "Mr",
-    firstName: "",
-    lastName: "",
-    contactNumber: "",
-    emailId: "",
-    passportNumber: "",
-    lpo: "",
-  });
+  // Primary-guest contact card was removed per spec. The chosen lead
+  // passenger row in the pax manifest below is now the "primary".
+  // No standalone state needed.
 
   // ── Pax manifest (one row per adult + child) ─────────────────────
   // Pattern mirrors HotelBookingPage / CabBookingPage: seed the list
@@ -92,30 +103,8 @@ const ActivityBookingPage = () => {
   }, []);
   const [guests, setGuests] = useState(initialGuests);
 
-  // Adult 1 ↔ primary guest two-way sync (name + salutation only).
-  useEffect(() => {
-    if (guests.length === 0) return;
-    setGuests((prev) => {
-      const next = [...prev];
-      if (!next[0]) return prev;
-      const a1 = next[0];
-      if (
-        a1.salutation === primaryGuest.salutation &&
-        a1.firstName === primaryGuest.firstName &&
-        a1.lastName === primaryGuest.lastName
-      ) {
-        return prev;
-      }
-      next[0] = {
-        ...a1,
-        salutation: primaryGuest.salutation || a1.salutation,
-        firstName: primaryGuest.firstName,
-        lastName: primaryGuest.lastName,
-      };
-      return next;
-    });
-    // eslint-disable-next-line
-  }, [primaryGuest.salutation, primaryGuest.firstName, primaryGuest.lastName]);
+  // Primary-guest sync effect removed — there's no longer a separate
+  // primary-guest state. The pax manifest IS the source of truth.
 
   const handleGuestChange = (index, field, value) => {
     setGuests((prev) => {
@@ -124,16 +113,6 @@ const ActivityBookingPage = () => {
       next[index] = { ...next[index], [field]: value };
       return next;
     });
-    // Mirror Adult 1 → primary guest contact card for the three name
-    // fields. Other fields stay local to each pax row.
-    if (
-      index === 0 &&
-      ["salutation", "firstName", "lastName"].includes(field)
-    ) {
-      setPrimaryGuest((prev) =>
-        prev[field] === value ? prev : { ...prev, [field]: value }
-      );
-    }
     const key = `guest_${index}_${field}`;
     if (validationErrors[key]) {
       setValidationErrors((prev) => {
@@ -151,6 +130,14 @@ const ActivityBookingPage = () => {
   const [policyLoading, setPolicyLoading] = useState(false);
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [activityPolicies, setActivityPolicies] = useState(emptyActivityPolicies);
+
+  // ── Lead passenger + payment mode (refactor) ─────────────────────
+  // Lead is picked by radio in the Passenger Details table; defaults
+  // to the first adult. Payment mode drives the credit/online/cash
+  // dropdown in the right-hand summary card — mirrors HotelBookingPage
+  // patterns and gets forwarded to the backend as `paymentMode`.
+  const [leadIndex, setLeadIndex] = useState(0);
+  const [paymentMode, setPaymentMode] = useState("CREDIT");
 
   // Itinerary state
   const [itineraryList, setItineraryList] = useState([]);
@@ -275,65 +262,15 @@ const ActivityBookingPage = () => {
 
   const totalRate = activity.totalRate || activity.totalRateWithoutMrk || 0;
 
-  const handlePrimaryGuestChange = (field, value) => {
-    setPrimaryGuest((prev) => ({ ...prev, [field]: value }));
-
-    // Real-time validation for email format
-    if (field === "emailId" && value.trim() !== "") {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-        setValidationErrors((prev) => ({
-          ...prev,
-          emailId: "Please enter a valid email address",
-        }));
-        return;
-      }
-    }
-
-    // Clear validation error when user starts typing
-    const errorKey = field;
-    if (validationErrors[errorKey]) {
-      setValidationErrors((prev) => {
-        const updated = { ...prev };
-        delete updated[errorKey];
-        return updated;
-      });
-    }
-  };
+  // handlePrimaryGuestChange removed with the Primary Guest card.
 
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
 
-    if (!primaryGuest.salutation || primaryGuest.salutation.trim() === "") {
-      errors.salutation = "Salutation is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.firstName || primaryGuest.firstName.trim() === "") {
-      errors.firstName = "First Name is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.lastName || primaryGuest.lastName.trim() === "") {
-      errors.lastName = "Last Name is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.contactNumber || primaryGuest.contactNumber.trim() === "") {
-      errors.contactNumber = "Contact Number is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.emailId || primaryGuest.emailId.trim() === "") {
-      errors.emailId = "Email Id is required";
-      hasErrors = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.emailId)) {
-      errors.emailId = "Please enter a valid email address";
-      hasErrors = true;
-    }
-    if (!primaryGuest.lpo || primaryGuest.lpo.trim() === "") {
-      errors.lpo = "LPO is required";
-      hasErrors = true;
-    }
-
-    // Each pax row needs first + last name; adult rows also need a
-    // salutation. Children can leave salutation blank.
+    // Each pax row needs salutation (adults), first name, surname,
+    // gender. Lead passenger must reference a real row. Primary-guest
+    // contact / email / LPO checks were removed along with the card.
     guests.forEach((g, idx) => {
       if (!g.firstName || !g.firstName.trim()) {
         errors[`guest_${idx}_firstName`] = "Required";
@@ -347,7 +284,21 @@ const ActivityBookingPage = () => {
         errors[`guest_${idx}_salutation`] = "Required";
         hasErrors = true;
       }
+      if (!g.gender || !g.gender.trim()) {
+        errors[`guest_${idx}_gender`] = "Required";
+        hasErrors = true;
+      }
     });
+
+    if (
+      guests.length === 0 ||
+      leadIndex == null ||
+      leadIndex < 0 ||
+      leadIndex >= guests.length
+    ) {
+      errors.lead = "Please pick a lead passenger.";
+      hasErrors = true;
+    }
 
     return { errors, hasErrors };
   };
@@ -412,6 +363,18 @@ const ActivityBookingPage = () => {
 
       const userId = sessionStorage.getItem("userId") || localStorage.getItem("userId") || "1";
 
+      // Build customerDTO from the chosen lead passenger row. Contact,
+      // email, passport and LPO were dropped from the UI per spec, so
+      // we send empty strings here (backend already tolerates these
+      // being blank). paymentMode is forwarded so the backend can
+      // route Credit / Online / Cash flows correctly.
+      const lead =
+        guests[leadIndex] || guests[0] || {
+          salutation: "",
+          firstName: "",
+          lastName: "",
+        };
+
       const payload = {
         activityId: activity.id || activity.activityId,
         tourDate: formatDateToDDMMYYYY(searchCriteria.tourDate),
@@ -422,14 +385,16 @@ const ActivityBookingPage = () => {
         totalPrice: String(totalRate),
         agentId: parseInt(agentId),
         userId: parseInt(userId),
+        paymentMode, // CREDIT | ONLINE | CASH
+        leadPassengerIndex: leadIndex,
         customerDTO: {
-          salutation: primaryGuest.salutation,
-          firstName: primaryGuest.firstName,
-          lastName: primaryGuest.lastName,
-          contactNumber: primaryGuest.contactNumber,
-          emailId: primaryGuest.emailId,
-          passportNumber: primaryGuest.passportNumber,
-          lpo: primaryGuest.lpo
+          salutation: lead.salutation || "",
+          firstName: lead.firstName || "",
+          lastName: lead.lastName || "",
+          contactNumber: "",
+          emailId: "",
+          passportNumber: "",
+          lpo: "",
         },
         // Full pax manifest — backend can persist into activity_guest
         // once the schema lands. Today's backend ignores unknown
@@ -459,7 +424,15 @@ const ActivityBookingPage = () => {
       };
 
       console.log("Activity Booking Payload:", payload);
-      const response = await axiosInstance.post("/api/activity/book", payload);
+      // New endpoint: persists every payload field into the dedicated
+      // tourandactivity_* tables (booking + guests + policies +
+      // itineraries) so the detail view + voucher can re-render
+      // everything. The legacy /api/activity/book endpoint still
+      // exists for the make-your-own-package flow and is unchanged.
+      const response = await axiosInstance.post(
+        "/api/tour-activity-booking/save",
+        payload,
+      );
 
       if (response && (response.data?.success !== false && response.status === 200)) {
         toast.success("Activity booked successfully!");
@@ -495,10 +468,10 @@ const ActivityBookingPage = () => {
             
             <Row className="g-4">
               {/* Left Column: Guest Details */}
-              <Col lg={8}>
+              <Col lg={8} className="hbp-left-col">
                 {/* Itinerary Option Section */}
-                <Card className="shadow-sm border-0 rounded-4 mb-4 overflow-hidden">
-                  <Card.Header className="bg-white border-bottom-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
+                <Card className="mb-2 shadow-sm border-0">
+                  <Card.Header className="bg-light py-2 d-flex justify-content-between align-items-center">
                     <div>
                       <h5 className="fw-bold text-dark d-flex align-items-center m-0">
                         <FaRoute className="me-2 text-primary" />
@@ -547,52 +520,72 @@ const ActivityBookingPage = () => {
                   </Card.Body>
                 </Card>
 
-                {/* ── Pax Manifest ─────────────────────────────────────
-                     One compact row per traveller (Adult 1..N, Child
-                     1..M). Adult 1 mirrors the Primary Guest card
-                     below — name/salutation flow both ways so the
-                     operator types each detail only once. */}
+                {/* ── Pax Manifest ──────────────────────────────────
+                     Trimmed per spec: only Salutation, First Name,
+                     Surname, Gender, and a Lead Passenger radio per
+                     traveller. The Primary Guest card was removed —
+                     the lead row IS the primary contact, and its
+                     name/salutation get forwarded to the backend as
+                     `customerDTO` so the existing API contract still
+                     works without changes. UI layout mirrors the
+                     /senior-citizen-booking-page Guest Details grid. */}
                 {guests.length > 0 && (
-                  <Card className="shadow-sm border-0 rounded-4 mb-4">
-                    <Card.Header className="bg-white border-bottom-0 pt-3 pb-1 px-4">
-                      <h6 className="fw-bold text-dark d-flex align-items-center m-0">
-                        <FaUsers className="me-2 text-primary" />
-                        Passenger Details
-                        <span className="text-muted small ms-2 fw-normal">
-                          ({totalAdults} Adult{totalAdults !== 1 ? "s" : ""}
-                          {totalChildren > 0
-                            ? `, ${totalChildren} Child${totalChildren !== 1 ? "ren" : ""}`
-                            : ""}
-                          )
-                        </span>
-                      </h6>
-                      <small className="text-muted">
-                        Adult 1 will auto-fill the Primary Guest card below.
-                      </small>
+                  <Card className="mb-2 shadow-sm border-0">
+                    <Card.Header className="bg-light py-2">
+                      <div className="d-flex align-items-center">
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() =>
+                            navigate("/new-booking/tours-and-activities")
+                          }
+                          className="me-3"
+                        >
+                          ← Back
+                        </Button>
+                        <h6 className="mb-0 fw-bold text-dark">
+                          Guest Details
+                          <span className="text-muted small ms-2 fw-normal">
+                            ({totalAdults} Adult
+                            {totalAdults !== 1 ? "s" : ""}
+                            {totalChildren > 0
+                              ? `, ${totalChildren} Child${totalChildren !== 1 ? "ren" : ""}`
+                              : ""}
+                            )
+                          </span>
+                        </h6>
+                      </div>
                     </Card.Header>
-                    <Card.Body className="px-4 pt-2 pb-3">
+                    <Card.Body className="px-4 pt-3 pb-3">
+                      {/* Column header (md+) */}
+                      <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+                        <Col md={2}>Passenger</Col>
+                        <Col md={2}>Title *</Col>
+                        <Col md={3}>First Name *</Col>
+                        <Col md={3}>Surname *</Col>
+                        <Col md={1}>Gender</Col>
+                        <Col md={1} className="text-center">Lead</Col>
+                      </Row>
                       {guests.map((g, idx) => {
                         const adultSeat = idx + 1;
                         const childSeat = idx - totalAdults + 1;
                         const label = g.isChild
                           ? `Child ${childSeat}${g.age != null ? ` (Age ${g.age})` : ""}`
                           : `Adult ${adultSeat}`;
+                        const isLead = leadIndex === idx;
                         return (
                           <Row key={idx} className="g-2 align-items-center mb-2">
                             <Col xs={12} md={2}>
                               <span className="fw-semibold text-muted small">
                                 {label}
-                                {idx === 0 && (
-                                  <span className="text-danger ms-1">*</span>
-                                )}
-                                {idx === 0 && (
+                                {isLead && (
                                   <Badge
                                     bg="primary-subtle"
                                     text="primary"
                                     className="ms-2"
                                     style={{ fontSize: "0.6rem" }}
                                   >
-                                    Primary
+                                    Lead
                                   </Badge>
                                 )}
                               </span>
@@ -637,7 +630,7 @@ const ActivityBookingPage = () => {
                               <Form.Control
                                 size="sm"
                                 type="text"
-                                placeholder="Last Name"
+                                placeholder="Surname"
                                 value={g.lastName}
                                 onChange={(e) =>
                                   handleGuestChange(idx, "lastName", e.target.value)
@@ -645,15 +638,28 @@ const ActivityBookingPage = () => {
                                 isInvalid={!!validationErrors[`guest_${idx}_lastName`]}
                               />
                             </Col>
-                            <Col xs={6} md={2}>
-                              <Form.Control
+                            <Col xs={6} md={1}>
+                              <Form.Select
                                 size="sm"
-                                type="text"
-                                placeholder="Passport (opt)"
-                                value={g.passportNo}
+                                value={g.gender}
                                 onChange={(e) =>
-                                  handleGuestChange(idx, "passportNo", e.target.value)
+                                  handleGuestChange(idx, "gender", e.target.value)
                                 }
+                                isInvalid={!!validationErrors[`guest_${idx}_gender`]}
+                              >
+                                <option value="">—</option>
+                                <option value="MALE">M</option>
+                                <option value="FEMALE">F</option>
+                                <option value="OTHER">O</option>
+                              </Form.Select>
+                            </Col>
+                            <Col xs={6} md={1} className="text-center">
+                              <Form.Check
+                                type="radio"
+                                name="lead-passenger"
+                                id={`lead-${idx}`}
+                                checked={isLead}
+                                onChange={() => setLeadIndex(idx)}
                               />
                             </Col>
                           </Row>
@@ -663,244 +669,188 @@ const ActivityBookingPage = () => {
                   </Card>
                 )}
 
-                <Card className="shadow-sm border-0 rounded-4 mb-4">
-                  <Card.Header className="bg-white border-bottom-0 pt-4 pb-0 px-4">
-                    <h5 className="fw-bold text-dark d-flex align-items-center m-0">
-                      <FaUserAlt className="me-2 text-primary" />
-                      Primary Guest Details
-                    </h5>
-                    <small className="text-muted">Auto-filled from Adult 1 above — add the contact details here</small>
-                  </Card.Header>
-                  <Card.Body className="p-4">
-                    <Row className="g-3">
-                      <Col md={2}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Salutation <span className="text-danger">*</span></Form.Label>
-                          <Form.Select
-                            value={primaryGuest.salutation}
-                            onChange={(e) => handlePrimaryGuestChange("salutation", e.target.value)}
-                            isInvalid={!!validationErrors.salutation}
-                          >
-                            <option value="Mr">Mr</option>
-                            <option value="Mrs">Mrs</option>
-                            <option value="Ms">Ms</option>
-                            <option value="Miss">Miss</option>
-                            <option value="Dr">Dr</option>
-                          </Form.Select>
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.salutation}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={5}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">First Name <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="First name"
-                            value={primaryGuest.firstName}
-                            onChange={(e) => handlePrimaryGuestChange("firstName", e.target.value)}
-                            isInvalid={!!validationErrors.firstName}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.firstName}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={5}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Last Name <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="Last name"
-                            value={primaryGuest.lastName}
-                            onChange={(e) => handlePrimaryGuestChange("lastName", e.target.value)}
-                            isInvalid={!!validationErrors.lastName}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.lastName}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Contact Number <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="Contact number"
-                            value={primaryGuest.contactNumber}
-                            onChange={(e) => handlePrimaryGuestChange("contactNumber", e.target.value)}
-                            isInvalid={!!validationErrors.contactNumber}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.contactNumber}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Email ID <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="email"
-                            placeholder="Email address"
-                            value={primaryGuest.emailId}
-                            onChange={(e) => handlePrimaryGuestChange("emailId", e.target.value)}
-                            isInvalid={!!validationErrors.emailId}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.emailId}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">Passport Number <span className="text-muted fw-normal">(Optional)</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="Passport number"
-                            value={primaryGuest.passportNumber}
-                            onChange={(e) => handlePrimaryGuestChange("passportNumber", e.target.value)}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="small fw-semibold text-muted">LPO Number <span className="text-danger">*</span></Form.Label>
-                          <Form.Control
-                            type="text"
-                            placeholder="LPO number"
-                            value={primaryGuest.lpo}
-                            onChange={(e) => handlePrimaryGuestChange("lpo", e.target.value)}
-                            isInvalid={!!validationErrors.lpo}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.lpo}
-                          </Form.Control.Feedback>
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
+                {/* Primary Guest Details card removed per spec —
+                    the lead passenger row in the Passenger Details
+                    grid above now carries that data. Contact / email /
+                    LPO / passport are no longer captured here. */}
               </Col>
 
-              {/* Right Column: Order Summary */}
-              <Col lg={4}>
-                <Card className="shadow-sm border-0 rounded-4 sticky-top overflow-hidden" style={{ top: "20px" }}>
-                  <Card.Header className="bg-primary text-white border-bottom-0 p-4">
-                    <h5 className="mb-0 fw-bold d-flex align-items-center">
-                      <FaShoppingCart className="me-2" size={18} />
-                      Booking Summary
-                    </h5>
-                  </Card.Header>
-                  <Card.Body className="p-0">
-                    {/* Activity Info */}
-                    <div className="p-4 border-bottom">
-                      <div className="d-flex mb-4">
-                        <div className="me-3 position-relative" style={{ width: "84px", height: "84px" }}>
-                          <img 
-                            src={activity.activityImage || "https://via.placeholder.com/84?text=Activity"} 
-                            alt={activity.activityName}
-                            className="rounded-3 shadow-sm"
-                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                          />
-                        </div>
+              {/* Right sticky column — Booking Summary + Price.
+                  Styled to match HotelBookingPage (hbp-* classes
+                  shared via HotelBookingPage.css). Three stacked
+                  cards: Booking Summary (primary header), Payment
+                  Mode (light header), Price Details (light header),
+                  then an hbp-action-bar with Back + Confirm. */}
+              <Col lg={4} className="hbp-right-col">
+                <div className="hbp-sticky-summary">
+                  {/* ── Booking Summary ─────────────────────────── */}
+                  <Card className="shadow-sm rounded-3 mb-3 booking-summary-card border-0 overflow-hidden">
+                    <Card.Header className="bg-primary text-white py-2 rounded-top">
+                      <h6 className="mb-0 d-flex align-items-center">
+                        <FaTicketAlt className="me-2" /> Booking Summary
+                      </h6>
+                    </Card.Header>
+                    <Card.Body className="p-3">
+                      <div className="mb-3 d-flex align-items-start gap-2">
+                        <img
+                          src={
+                            activity.activityImage ||
+                            "https://via.placeholder.com/56?text=Activity"
+                          }
+                          alt={activity.activityName}
+                          style={{
+                            width: 56,
+                            height: 56,
+                            objectFit: "cover",
+                            borderRadius: 6,
+                          }}
+                        />
                         <div className="flex-grow-1">
-                          <h6 className="fw-bold mb-1 text-dark lh-sm">{activity.activityName}</h6>
-                          <div className="mt-2">
-                            <span className="badge bg-primary-subtle text-primary rounded-pill px-3 py-1 fw-semibold small">
-                              ID: {activity.id || activity.activityId}
-                            </span>
+                          <div className="fw-bold text-primary mb-1">
+                            {activity.activityName}
                           </div>
+                          <span className="badge bg-light text-dark border">
+                            ID: {activity.id || activity.activityId}
+                          </span>
                         </div>
                       </div>
 
-                      <div className="booking-info-grid bg-light rounded-4 p-3 mb-3 border border-light-subtle">
-                        <div className="d-flex align-items-start mb-3">
-                          <div className="icon-box bg-white rounded-3 p-2 shadow-sm me-3 border border-light">
-                            <FaCalendarAlt className="text-primary" />
-                          </div>
-                          <div>
-                            <small className="d-block text-muted fw-semibold">Tour Date</small>
-                            <span className="fw-bold text-dark">{searchCriteria.tourDate}</span>
-                          </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaCalendarAlt className="me-2 text-primary" />
+                          Tour Date
                         </div>
-                        {activity.duration && (
-                          <div className="d-flex align-items-start mb-3">
-                            <div className="icon-box bg-white rounded-3 p-2 shadow-sm me-3 border border-light">
-                              <FaClock className="text-warning" />
-                            </div>
-                            <div>
-                              <small className="d-block text-muted fw-semibold">Duration</small>
-                              <span className="fw-bold text-dark">{activity.duration} hrs</span>
-                            </div>
-                          </div>
-                        )}
-                        <div className="d-flex align-items-start">
-                          <div className="icon-box bg-white rounded-3 p-2 shadow-sm me-3 border border-light">
-                            <FaMapMarkerAlt className="text-danger" />
-                          </div>
-                          <div>
-                            <small className="d-block text-muted fw-semibold">Destination</small>
-                            <span className="fw-bold text-dark">{searchCriteria.destination?.label || "N/A"}</span>
-                          </div>
+                        <div className="hbp-summary-value">
+                          {searchCriteria.tourDate}
                         </div>
                       </div>
-
-                      <div className="d-flex justify-content-between p-2 bg-light rounded-pill px-3">
-                        <span className="small fw-semibold text-muted">Adults: <span className="text-dark">{searchCriteria.adults}</span></span>
-                        <span className="small fw-semibold text-muted">Children: <span className="text-dark">{searchCriteria.children}</span></span>
-                      </div>
-                    </div>
-
-                    {/* Price Summary */}
-                    <div className="p-4 bg-light bg-opacity-50">
-                      <div className="d-flex justify-content-between align-items-center mb-3">
-                        <span className="text-muted fw-medium">Activity Fare</span>
-                        <span className="fw-bold text-dark">{formatPrice(totalRate)}</span>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center mb-3">
-                        <span className="text-muted fw-medium">Taxes & Fees</span>
-                        <span className="fw-bold text-success gratuity-text">FREE</span>
-                      </div>
-                      
-                      <div className="my-4 border-top border-light-subtle"></div>
-                      
-                      <div className="d-flex justify-content-between align-items-center">
-                        <span className="fw-bold text-dark fs-5">Total Amount</span>
-                        <div className="text-end">
-                          <span className="d-block fw-bold text-primary fs-3">{formatPrice(totalRate)}</span>
-                          <small className="text-muted" style={{ fontSize: '0.7rem' }}>Inclusive of all taxes</small>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaMapMarkerAlt className="me-2 text-primary" />
+                          Destination
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {searchCriteria.destination?.label || "N/A"}
                         </div>
                       </div>
-                    </div>
+                      {activity.duration && (
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaClock className="me-2 text-primary" />
+                            Duration
+                          </div>
+                          <div className="hbp-summary-value">
+                            {activity.duration} hrs
+                          </div>
+                        </div>
+                      )}
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaUsers className="me-2 text-primary" />
+                          Guests
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {searchCriteria.adults} Adult
+                          {searchCriteria.adults > 1 ? "s" : ""}
+                          {searchCriteria.children
+                            ? `, ${searchCriteria.children} Child${
+                                searchCriteria.children > 1 ? "ren" : ""
+                              }`
+                            : ""}
+                        </div>
+                      </div>
+                    </Card.Body>
+                  </Card>
 
-                    {/* Submit Button */}
-                    <div className="p-4">
-                      <Button
-                        variant="success"
-                        className="w-100 py-3 rounded-4 fw-bold fs-5 shadow-sm d-flex justify-content-center align-items-center btn-confirm"
-                        onClick={openPolicyReview}
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <Spinner animation="border" size="sm" className="me-2" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <FaCheckCircle className="me-2" /> Confirm Booking
-                          </>
-                        )}
-                      </Button>
-                      <p className="text-center text-muted small mt-3 mb-0" style={{ fontSize: '0.75rem' }}>
-                        By confirming, you agree to our <span className="text-primary cursor-pointer">Terms & Conditions</span>
-                      </p>
-                    </div>
-                  </Card.Body>
-                </Card>
+                  {/* ── Payment Mode ─────────────────────────────── */}
+                  <Card className="shadow-sm rounded-3 mb-3 border-0">
+                    <Card.Header className="bg-light py-2">
+                      <h6 className="mb-0 fw-bold">Payment</h6>
+                    </Card.Header>
+                    <Card.Body className="p-3">
+                      <Form.Group>
+                        <Form.Label className="small fw-semibold text-muted">
+                          Mode of Payment{" "}
+                          <span className="text-danger">*</span>
+                        </Form.Label>
+                        <Form.Select
+                          value={paymentMode}
+                          onChange={(e) => setPaymentMode(e.target.value)}
+                        >
+                          <option value="CREDIT">Credit Limit</option>
+                          <option value="ONLINE">Online Payment</option>
+                          <option value="CASH">Cash</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Card.Body>
+                  </Card>
+
+                  {/* ── Price Details ────────────────────────────── */}
+                  <Card className="shadow-sm rounded-3 border-0 hbp-price-card">
+                    <Card.Header className="bg-light py-2">
+                      <h6 className="mb-0 fw-bold">Price Details</h6>
+                    </Card.Header>
+                    <Card.Body className="p-3">
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">Activity Fare</div>
+                        <div className="hbp-summary-value">
+                          {formatPrice(totalRate)}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">Taxes &amp; Fees</div>
+                        <div className="hbp-summary-value text-success">
+                          FREE
+                        </div>
+                      </div>
+                      <hr className="my-2" />
+                      <div className="hbp-summary-row fw-bold">
+                        <div className="hbp-summary-label text-danger">
+                          New Total
+                        </div>
+                        <div className="hbp-summary-value text-danger">
+                          {formatPrice(totalRate)}
+                        </div>
+                      </div>
+                    </Card.Body>
+                  </Card>
+
+                  {/* ── Action bar ───────────────────────────────── */}
+                  <div className="hbp-action-bar mt-3 d-flex gap-2">
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() =>
+                        navigate("/new-booking/tours-and-activities")
+                      }
+                      className="flex-grow-1"
+                      disabled={isSubmitting}
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      variant="primary"
+                      type="button"
+                      onClick={openPolicyReview}
+                      disabled={isSubmitting}
+                      className="flex-grow-1 d-flex justify-content-center align-items-center"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <FaCheckCircle className="me-2" /> Confirm Booking
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </Col>
             </Row>
           </Container>
@@ -1025,119 +975,214 @@ const ActivityBookingPage = () => {
         </Modal.Footer>
       </Modal>
 
+      {/* ── Confirm Booking modal ──────────────────────────────────
+          Styled to match HotelBookingPage's "Confirm Your Booking"
+          modal: primary-blue header, light-grey body holding a
+          single bordered white card with the activity name at top,
+          a two-column key/value grid (Tour Date, Destination,
+          Adults, Children, Lead Passenger, Payment Mode), a
+          Payable row, a Rate Split panel, and a green-tick
+          acceptance line. Footer mirrors HBP (Cancel + Confirm). */}
       <Modal
         show={showBookingSummaryModal}
         onHide={() => !isSubmitting && setShowBookingSummaryModal(false)}
-        size="lg"
         centered
         backdrop="static"
       >
-        <Modal.Header closeButton={!isSubmitting}>
-          <Modal.Title>
-            <FaCheckCircle className="text-success me-2" />
-            Booking Summary
+        <Modal.Header
+          closeButton={!isSubmitting}
+          className="bg-primary text-white py-2"
+          style={{ borderBottom: "none" }}
+        >
+          <Modal.Title className="fw-semibold d-flex align-items-center">
+            <FaTicketAlt className="me-2" /> Confirm Your Booking
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body>
-          <Row className="g-3">
-            <Col md={4}>
-              <img
-                src={activity.activityImage || "https://via.placeholder.com/240?text=Activity"}
-                alt={activity.activityName}
-                className="w-100 rounded-3 mb-2"
-                style={{ height: 150, objectFit: "cover" }}
-              />
-              <h6 className="fw-bold mb-1">{activity.activityName}</h6>
-              <Badge bg="primary" className="rounded-pill">
-                ID: {activity.id || activity.activityId}
-              </Badge>
-            </Col>
-            <Col md={8}>
-              <Row className="g-2 small">
-                <Col md={6}>
-                  <strong>Tour Date:</strong> {searchCriteria.tourDate}
-                </Col>
-                <Col md={6}>
-                  <strong>Destination:</strong>{" "}
-                  {searchCriteria.destination?.label || "N/A"}
-                </Col>
-                <Col md={6}>
+        <Modal.Body className="px-3 py-2 bg-light">
+          <div className="border rounded-3 bg-white shadow-sm p-2">
+            {/* Activity name + ID, matches HBP's hotelName+address row. */}
+            <div className="mb-2">
+              <p className="mb-0 d-flex align-items-center flex-wrap">
+                <span className="fw-bold text-primary fs-5">
+                  {activity.activityName}
+                </span>
+                {/* {(activity.id || activity.activityId) && (
+                  <span className="text-muted small ms-2">
+                    · ID: {activity.id || activity.activityId}
+                  </span>
+                )} */}
+              </p>
+              {searchCriteria.destination?.label && (
+                <p className="text-muted small mb-0 mt-1">
+                  <FaMapMarkerAlt className="me-1" />
+                  {searchCriteria.destination.label}
+                </p>
+              )}
+            </div>
+
+            <hr className="my-2" />
+
+            <Row className="gy-2">
+              <Col xs={6}>
+                <p className="mb-1">
+                  <strong>Tour Date:</strong>
+                  <br />
+                  <span className="text-dark">
+                    {searchCriteria.tourDate || "—"}
+                  </span>
+                </p>
+              </Col>
+              <Col xs={6}>
+                <p className="mb-1">
+                  <strong>Destination:</strong>
+                  <br />
+                  <span className="text-dark">
+                    {searchCriteria.destination?.label || "—"}
+                  </span>
+                </p>
+              </Col>
+              <Col xs={6}>
+                <p className="mb-1">
                   <strong>Adults:</strong> {searchCriteria.adults}
-                </Col>
-                <Col md={6}>
-                  <strong>Children:</strong> {searchCriteria.children}
-                </Col>
-                <Col md={6}>
-                  <strong>Primary Guest:</strong>{" "}
-                  {primaryGuest.salutation} {primaryGuest.firstName}{" "}
-                  {primaryGuest.lastName}
-                </Col>
-                <Col md={6}>
-                  <strong>Contact:</strong> {primaryGuest.contactNumber}
-                </Col>
-                <Col md={6}>
-                  <strong>Email:</strong> {primaryGuest.emailId}
-                </Col>
-                <Col md={6}>
-                  <strong>LPO:</strong> {primaryGuest.lpo}
-                </Col>
-                <Col md={12}>
-                  <strong>Selected Itineraries:</strong>{" "}
-                  {selectedItineraries.length > 0
-                    ? selectedItineraries
-                        .map((id) => itineraryList.find((item) => item.itineraryId === id)?.itineraryHeading)
+                </p>
+              </Col>
+              <Col xs={6}>
+                <p className="mb-1">
+                  <strong>Children:</strong> {searchCriteria.children || 0}
+                </p>
+              </Col>
+              <Col xs={6}>
+                <p className="mb-1">
+                  <strong>Lead Passenger:</strong>
+                  <br />
+                  <span className="text-dark">
+                    {(() => {
+                      const lead = guests[leadIndex] || guests[0];
+                      if (!lead) return "—";
+                      const name = `${lead.salutation || ""} ${lead.firstName || ""} ${lead.lastName || ""}`.trim();
+                      return name || "—";
+                    })()}
+                  </span>
+                </p>
+              </Col>
+              <Col xs={6}>
+                <p className="mb-1">
+                  <strong>Payment Mode:</strong>
+                  <br />
+                  <span className="text-dark">
+                    {paymentMode === "CREDIT"
+                      ? "Credit Limit"
+                      : paymentMode === "ONLINE"
+                      ? "Online Payment"
+                      : "Cash"}
+                  </span>
+                </p>
+              </Col>
+              {selectedItineraries.length > 0 && (
+                <Col xs={12}>
+                  <p className="mb-1">
+                    <strong>Selected Itineraries:</strong>
+                    <br />
+                    <span className="text-dark small">
+                      {selectedItineraries
+                        .map(
+                          (id) =>
+                            itineraryList.find(
+                              (item) => item.itineraryId === id,
+                            )?.itineraryHeading,
+                        )
                         .filter(Boolean)
-                        .join(", ")
-                    : "None"}
+                        .join(", ")}
+                    </span>
+                  </p>
                 </Col>
-              </Row>
+              )}
 
-              <div className="border rounded-3 p-3 mt-3 bg-light">
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Activity Fare</span>
-                  <strong>{formatPrice(totalRate)}</strong>
+              <Col xs={12}>
+                {/* Payable row — same plain-border style as HBP. */}
+                <div className="p-2 rounded bg-white border mt-2 d-flex justify-content-between align-items-center">
+                  <h6 className="mb-0 fw-bold">Payable</h6>
+                  <h5 className="mb-0 fw-bold">{formatPrice(totalRate)}</h5>
                 </div>
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Taxes & Fees</span>
-                  <strong className="text-success">FREE</strong>
-                </div>
-                <div className="d-flex justify-content-between border-top pt-2">
-                  <span className="fw-bold">Total Amount</span>
-                  <strong className="text-primary fs-5">
-                    {formatPrice(totalRate)}
-                  </strong>
-                </div>
-              </div>
+              </Col>
+            </Row>
 
-              <div className="small text-success mt-3">
-                <FaCheckCircle className="me-1" />
-                Inclusions, terms and conditions, and cancellation policies accepted.
+            {/* Rate Split — fare + taxes breakdown. */}
+            <div className="mt-2 p-2 bg-white border rounded">
+              <h6 className="fw-bold mb-1">Rate Split</h6>
+              <div className="d-flex justify-content-between">
+                <span>Activity Fare</span>
+                <span>{formatPrice(totalRate)}</span>
               </div>
-            </Col>
-          </Row>
+              <div className="d-flex justify-content-between">
+                <span>Taxes &amp; Fees</span>
+                <span className="text-success">FREE</span>
+              </div>
+              <hr className="my-1" />
+              <div className="d-flex justify-content-between fw-bold">
+                <span>Total</span>
+                <span>{formatPrice(totalRate)}</span>
+              </div>
+            </div>
+
+            {/* Acceptance line — identical green tick + small text. */}
+            <div className="mt-2 p-2 bg-white border rounded d-flex align-items-center">
+              <span
+                className="me-2 d-inline-flex align-items-center justify-content-center"
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  background: "#16a34a",
+                  color: "#fff",
+                  fontSize: "0.7rem",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                }}
+                aria-hidden="true"
+              >
+                ✓
+              </span>
+              <span className="small text-dark">
+                Inclusions, terms and conditions, and cancellation policies
+                accepted
+              </span>
+            </div>
+
+            <div className="mt-2 text-center">
+              <p className="text-muted small mb-0">
+                Please review the booking details carefully before
+                confirming.
+              </p>
+            </div>
+          </div>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
           <Button
             variant="outline-secondary"
-            disabled={isSubmitting}
             onClick={() => setShowBookingSummaryModal(false)}
+            disabled={isSubmitting}
           >
-            Back
+            <i className="bi bi-x-circle me-1"></i> Cancel
           </Button>
           <Button
-            variant="success"
-            disabled={isSubmitting}
+            variant="primary"
             onClick={confirmBooking}
+            disabled={isSubmitting}
+            className="px-4 fw-semibold"
           >
             {isSubmitting ? (
               <>
-                <Spinner size="sm" animation="border" className="me-2" />
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                  aria-hidden="true"
+                ></span>
                 Processing...
               </>
             ) : (
               <>
-                <FaCheckCircle className="me-2" />
-                Confirm & Book
+                <FaCheckCircle className="me-2" /> Confirm &amp; Book
               </>
             )}
           </Button>

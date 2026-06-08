@@ -8,6 +8,7 @@ import {
   Spinner,
   Table,
   ProgressBar,
+  Modal,
 } from "react-bootstrap";
 import { FaCar, FaSearch } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -243,6 +244,11 @@ export const CabSearch = () => {
   const [transferLoading, setTransferLoading] = useState(false);
   const [hasTransferSearched, setHasTransferSearched] = useState(false);
 
+  // ── View modal — shows full transfer details for one (cab, detail) row.
+  // Held as { cab, detail } or null. Driven by the View button on each
+  // search-result card. Does not touch the booking flow.
+  const [viewModal, setViewModal] = useState(null);
+
   // ── Booking type toggle for search results ───────────────────────────
   // "Shared"  → show SIC rates priced by passenger count
   //             (paying pax = adults + children whose age > 3).
@@ -298,6 +304,16 @@ export const CabSearch = () => {
   const [agent, setAgent] = useState("");
   const [agents, setAgents] = useState([]);
 
+  // ── Currency dropdown ────────────────────────────────────────────────
+  // Sourced from /api/currency and rendered as currencyCode-only options
+  // (the master row's `name` / `value` aren't surfaced in the picker per
+  // spec). The picked code is carried through to the booking page state
+  // so downstream conversion logic can use it; the search payload itself
+  // is unchanged, so no other flow is affected.
+  const [currencyOptions, setCurrencyOptions] = useState([]);
+  const [isCurrencyLoading, setIsCurrencyLoading] = useState(false);
+  const [currency, setCurrency] = useState(null);
+
   const loadAgents = async () => {
     try {
       const res = await axiosInstance.get("/api/agent");
@@ -310,6 +326,42 @@ export const CabSearch = () => {
 
   useEffect(() => {
     loadAgents();
+  }, []);
+
+  // Load currencies once on mount. The endpoint is paginated; we ask for a
+  // generous limit so the whole master list comes back in one call. We map
+  // each row to a {value, label} where label is *only* the currencyCode —
+  // per spec the user picks "AED" / "INR" etc, not the full currency name.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsCurrencyLoading(true);
+        const res = await axiosInstance.get("/api/currency", {
+          params: { page: 0, limit: 200 },
+        });
+        if (cancelled) return;
+        const arr = Array.isArray(res.data) ? res.data : [];
+        const opts = arr
+          .filter((c) => c && c.currencyCode && !c.isDeleted)
+          .map((c) => ({
+            value: c.currencyCode,
+            label: c.currencyCode,
+            currencyId: c.currencyId,
+          }));
+        setCurrencyOptions(opts);
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("Currency lookup failed:", err);
+          setCurrencyOptions([]);
+        }
+      } finally {
+        if (!cancelled) setIsCurrencyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── New search criteria (Juniper-style layout) ────────────────────────
@@ -441,6 +493,10 @@ export const CabSearch = () => {
           source: "AIRPORT",
           locationId: a.id,
           locationName: a.airportName,
+          // Per-airport meet-and-greet buffer configured on the airport
+          // master; surfaced read-only on /cab-booking-page so it
+          // travels through with the selected airport.
+          estimatedArrivalTime: a.estimatedArrivalTime || "",
         })),
       );
     } catch {
@@ -1235,10 +1291,21 @@ export const CabSearch = () => {
           pickupType: pickupKind === "HOTEL" ? "HOTEL" : pickupKind,
           pickupName: pickupItem?.locationName || "",
           pickupTime: arrivalTime,
+          // Master-configured estimated arrival buffer for the picked
+          // airport — carried through so the booking page renders it
+          // read-only instead of asking the operator to retype it.
+          pickupEstimatedArrivalTime:
+            pickupKind === "AIRPORT"
+              ? pickupItem?.estimatedArrivalTime || ""
+              : "",
           dropoffType: dropoffKind === "HOTEL" ? "HOTEL" : dropoffKind,
           dropoffName: dropoffItem?.locationName || "",
           dropoffTime: dropDepartureTime || "",
           arrivalTime,
+          // Currency code (e.g. "AED") chosen on the search page — carried
+          // through so the booking page / downstream invoice can apply
+          // conversion. Null when the user didn't pick one.
+          currencyCode: currency?.value || null,
         },
       },
     });
@@ -1297,8 +1364,40 @@ export const CabSearch = () => {
                           5. Arrival time
                           6. Drop type + dependent facility
                           7. Pax (Adults + Children + Child ages) */}
-                    <Row className="g-3 mb-3 align-items-end">
-                      <Col md={6}>
+                    {/* Row 1 — Agent / City / Transfer Date
+                        align-items-start keeps all three labels on the same
+                        baseline; the "Change drop off city?" checkbox under
+                        the City Select just hangs below without pushing the
+                        Agent / Transfer Date controls down. */}
+                    <Row className="g-3 mb-3 align-items-start">
+                      {!isAgentRole && (
+                        <Col md={3}>
+                          <Form.Label className="fw-semibold">
+                            Agent <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Select
+                            style={{ height: "46px" }}
+                            value={agent}
+                            isInvalid={!!validationErrors.agent}
+                            onChange={(e) => {
+                              setAgent(e.target.value);
+                              if (e.target.value) clearError("agent");
+                            }}
+                          >
+                            <option value="">Select Agent</option>
+                            {agents.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.companyName}
+                              </option>
+                            ))}
+                          </Form.Select>
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.agent}
+                          </Form.Control.Feedback>
+                          {agent && <AgentBalanceDisplay agentId={agent} />}
+                        </Col>
+                      )}
+                      <Col md={isAgentRole ? 9 : 6}>
                         <Form.Label className="fw-semibold">
                           City <span className="text-danger">*</span>
                         </Form.Label>
@@ -1388,33 +1487,6 @@ export const CabSearch = () => {
                           {validationErrors.pickupDate}
                         </Form.Control.Feedback>
                       </Col>
-                           {!isAgentRole && (
-                        <Col md={3}>
-                          <Form.Label className="fw-semibold">
-                            Agent <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Form.Select
-                            style={{ height: "47px" }}
-                            value={agent}
-                            isInvalid={!!validationErrors.agent}
-                            onChange={(e) => {
-                              setAgent(e.target.value);
-                              if (e.target.value) clearError("agent");
-                            }}
-                          >
-                            <option value="">Select Agent</option>
-                            {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.companyName}
-                              </option>
-                            ))}
-                          </Form.Select>
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.agent}
-                          </Form.Control.Feedback>
-                          {agent && <AgentBalanceDisplay agentId={agent} />}
-                        </Col>
-                      )}
                     </Row>
 
                     {changeDropCity && (
@@ -1605,6 +1677,11 @@ export const CabSearch = () => {
                           onChange={(e) => {
                             setDropoffKind(e.target.value);
                             setDropoffItem(null);
+                            // Accommodation drops don't carry a departure
+                            // time — clear any previously entered value so a
+                            // stale time isn't sent once the field is hidden.
+                            if (e.target.value === "HOTEL")
+                              setDropDepartureTime("");
                             if (e.target.value) clearError("dropoffKind");
                             clearError("dropoffItem");
                           }}
@@ -1696,19 +1773,31 @@ export const CabSearch = () => {
                         )}
                       </Col>
 
-                      <Col md={2}>
-                        <Form.Label className="fw-semibold">
-                          Departure Time
-                        </Form.Label>
-                        <Form.Control
-                          style={{ height: "46px" }}
-                          type="time"
-                          value={dropDepartureTime}
-                          onChange={(e) => setDropDepartureTime(e.target.value)}
-                        />
-                      </Col>
+                      {/* Departure Time is hidden when the drop is an
+                          Accommodation — a hotel drop has no onward
+                          departure time to capture. Widens to md=6 so the
+                          row stays balanced now that Adults / Children
+                          have moved to their own row below. */}
+                      {dropoffKind !== "HOTEL" && (
+                        <Col md={6}>
+                          <Form.Label className="fw-semibold">
+                            Departure Time
+                          </Form.Label>
+                          <Form.Control
+                            style={{ height: "46px" }}
+                            type="time"
+                            value={dropDepartureTime}
+                            onChange={(e) =>
+                              setDropDepartureTime(e.target.value)
+                            }
+                          />
+                        </Col>
+                      )}
+                    </Row>
 
-                      <Col md={2}>
+                    {/* Row 4 — Adults / Children / Nationality */}
+                    <Row className="g-3 mb-3 align-items-end">
+                      <Col md={3}>
                         <Form.Label className="fw-semibold">Adults</Form.Label>
                         <Form.Select
                           style={{ height: "46px" }}
@@ -1727,7 +1816,7 @@ export const CabSearch = () => {
                         </Form.Select>
                       </Col>
 
-                      <Col md={2}>
+                      <Col md={3}>
                         <Form.Label className="fw-semibold">
                           Children
                         </Form.Label>
@@ -1744,6 +1833,61 @@ export const CabSearch = () => {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+
+                      {/* Nationality — reuses the existing nationalityList +
+                          debouncedCountrySearch hooks that were already wired
+                          for the legacy form (kept invisible until now). The
+                          dropdown is sourced from /api/country?limit=50 on
+                          mount and re-queried as the user types. */}
+                      <Col md={6}>
+                        <Form.Label className="fw-semibold">
+                          Nationality
+                        </Form.Label>
+                        <Select
+                          options={nationalityList}
+                          value={nationality}
+                          onChange={(opt) => {
+                            setNationality(opt);
+                            if (opt) clearError("nationality");
+                          }}
+                          onInputChange={handleCountryInputChange}
+                          isLoading={isNationalityLoading}
+                          placeholder="Search Nationality"
+                          isSearchable
+                          isClearable
+                          menuPortalTarget={document.body}
+                          styles={{
+                            ...customSelectStyles,
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                        />
+                      </Col>
+                    </Row>
+
+                    {/* Row 5 — Currency selector (currencyCode-only). The
+                        chosen code is carried forward to the booking page
+                        for downstream conversion; the search payload is
+                        unchanged. */}
+                    <Row className="g-3 mb-3 align-items-end">
+                      <Col md={3}>
+                        <Form.Label className="fw-semibold">
+                          Currency
+                        </Form.Label>
+                        <Select
+                          options={currencyOptions}
+                          value={currency}
+                          isLoading={isCurrencyLoading}
+                          onChange={(opt) => setCurrency(opt)}
+                          placeholder="Select currency"
+                          isSearchable
+                          isClearable
+                          menuPortalTarget={document.body}
+                          styles={{
+                            ...customSelectStyles,
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                        />
                       </Col>
                     </Row>
 
@@ -3041,15 +3185,26 @@ export const CabSearch = () => {
                                                   : label}
                                               </div>
                                             )}
-                                            <Button
-                                              variant="primary"
-                                              className="px-4 fw-semibold"
-                                              onClick={() =>
-                                                handleBookNow(cab, detail)
-                                              }
-                                            >
-                                              Select
-                                            </Button>
+                                            <div className="d-flex gap-2 justify-content-md-end">
+                                              <Button
+                                                variant="outline-secondary"
+                                                className="px-3 fw-semibold"
+                                                onClick={() =>
+                                                  setViewModal({ cab, detail })
+                                                }
+                                              >
+                                                View
+                                              </Button>
+                                              <Button
+                                                variant="primary"
+                                                className="px-4 fw-semibold"
+                                                onClick={() =>
+                                                  handleBookNow(cab, detail)
+                                                }
+                                              >
+                                                Select
+                                              </Button>
+                                            </div>
                                           </Col>
                                         </Row>
                                       </Card.Body>
@@ -3088,6 +3243,151 @@ export const CabSearch = () => {
           </Card>
         </main>
       </div>
+
+      {/* ── Transfer details view modal ────────────────────────────────
+          Triggered by the "View" button on each result-card row. Shows the
+          fields prescribed by spec:
+          - title:        "<Transfer Type> - <Vehicle Name>"
+          - From / To:    location names + the source label (Airport /
+                          Accommodation / Place) the user picked on the
+                          form (pickupKind / dropoffKind).
+          - table row:    Transfer Date / Transfer Type / Nationality /
+                          Duration / Passenger / Vehicle Name
+          - Transfer Info: driverWaitingTime + distance (from the backend
+                          rate row — null falls back to "—").
+          - Vehicle Capacity: vehicleMaxCapacity / vehicleMaxLuggage on the
+                          cab row (falls back to capacityMax when not set).
+          - Disclaimer:   static legal text (intentional — same on every
+                          row, supplied by the business). */}
+      <Modal
+        show={!!viewModal}
+        onHide={() => setViewModal(null)}
+        size="lg"
+        centered
+      >
+        {viewModal && (() => {
+          const { cab, detail } = viewModal;
+          const labelForKind = (k) =>
+            k === "AIRPORT"
+              ? "Airport"
+              : k === "HOTEL"
+                ? "Accommodation"
+                : k === "PLACE"
+                  ? "Place"
+                  : "";
+          const transferTypeLabel =
+            String(detail.types || "").toUpperCase() === "SIC"
+              ? "Shared Transfer"
+              : "Private Transfer";
+          const totalChildren = Number(transferChildren) || 0;
+          const totalAdults = Number(transferAdults) || 0;
+          const passengerLabel = `${totalAdults} Adult${
+            totalAdults !== 1 ? "s" : ""
+          }${
+            totalChildren > 0
+              ? `, ${totalChildren} Child${totalChildren !== 1 ? "ren" : ""}`
+              : ""
+          }`;
+          const transferDateLabel = transferPickupDate
+            ? new Date(transferPickupDate).toLocaleDateString(undefined, {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })
+            : "—";
+          const fromLabel = `${
+            cab.originLocationName || detail.pickup || "—"
+          }${pickupKind ? ` (${labelForKind(pickupKind)})` : ""}`;
+          const toLabel = `${
+            cab.destinationLocationName || detail.dropOff || "—"
+          }${dropoffKind ? ` (${labelForKind(dropoffKind)})` : ""}`;
+          const waitingTime = detail.driverWaitingTime || "—";
+          const distanceLabel =
+            detail.distance != null
+              ? `${Number(detail.distance).toFixed(3)} Km`
+              : "—";
+          const maxPax =
+            cab.vehicleMaxCapacity ?? cab.capacityMax ?? "—";
+          const maxLuggage =
+            cab.vehicleMaxLuggage ?? "—";
+          return (
+            <>
+              <Modal.Header closeButton>
+                <Modal.Title className="fs-5">
+                  {transferTypeLabel} — {cab.cabname || "Vehicle"} or similar
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <div className="mb-3">
+                  <div>
+                    <strong>From:</strong> {fromLabel}
+                  </div>
+                  <div>
+                    <strong>To:</strong> {toLabel}
+                  </div>
+                </div>
+
+                <Table responsive bordered size="sm" className="mb-3">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Transfer Date</th>
+                      <th>Transfer Type</th>
+                      <th>Nationality</th>
+                      <th>Duration</th>
+                      <th>Passenger</th>
+                      <th>Vehicle Name</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>{transferDateLabel}</td>
+                      <td>{transferTypeLabel}</td>
+                      <td>{nationality?.label || "—"}</td>
+                      <td>{detail.hourDetails || "NA"}</td>
+                      <td>{passengerLabel}</td>
+                      <td>
+                        {transferTypeLabel.split(" ")[0]} — {cab.cabname}{" "}
+                        or similar
+                      </td>
+                    </tr>
+                  </tbody>
+                </Table>
+
+                <h6 className="fw-bold mt-4 mb-2">Transfer Info</h6>
+                <div className="mb-1">
+                  <strong>Driver Waiting Time:</strong> {waitingTime}
+                </div>
+                <div className="mb-3">
+                  <strong>Distance:</strong> {distanceLabel}
+                </div>
+
+                <h6 className="fw-bold mt-4 mb-2">Vehicle Capacity</h6>
+                <div className="mb-3">
+                  Max Pax Per Vehicle : {maxPax}
+                  {"    |    "}
+                  Max Luggage Per Vehicle : {maxLuggage}
+                </div>
+
+                <h6 className="fw-bold mt-4 mb-2">Disclaimer</h6>
+                <p className="small text-muted mb-0">
+                  Whilst we believe all our transfer information and reports
+                  to be accurate we shall not be liable in any way to you or
+                  to any third parties should any such information or reports
+                  prove to be incorrect or incomplete in any way.
+                </p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => setViewModal(null)}
+                >
+                  Close
+                </Button>
+              </Modal.Footer>
+            </>
+          );
+        })()}
+      </Modal>
     </div>
   );
 };

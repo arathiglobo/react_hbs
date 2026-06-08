@@ -409,6 +409,10 @@ const ActivityBookingList = () => {
                   <Table hover className="mb-0 align-middle saas-table">
                     <thead>
                       <tr>
+                        {/* SNo as the first column — 1-indexed
+                            within the current filtered list, so
+                            sorting/filtering renumbers naturally. */}
+                        <th style={{ width: "60px" }} className="text-center">SNo</th>
                         {role === "admin" && <th>Agent</th>}
                         <th>Booking</th>
                         <th>Customer</th>
@@ -422,20 +426,23 @@ const ActivityBookingList = () => {
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan={role === "admin" ? 8 : 7} className="text-center py-5">
+                          <td colSpan={role === "admin" ? 9 : 8} className="text-center py-5">
                             <Spinner animation="border" variant="primary" />
                             <p className="mt-2 text-muted mb-0">Loading bookings...</p>
                           </td>
                         </tr>
                       ) : filteredBookings.length === 0 ? (
                         <tr>
-                          <td colSpan={role === "admin" ? 8 : 7} className="text-center py-5 text-muted">
+                          <td colSpan={role === "admin" ? 9 : 8} className="text-center py-5 text-muted">
                             No bookings found
                           </td>
                         </tr>
                       ) : (
-                        filteredBookings.map((b) => (
+                        filteredBookings.map((b, rowIdx) => (
                           <tr key={b.customBookingId}>
+                            <td className="text-center fw-semibold text-muted">
+                              {rowIdx + 1}
+                            </td>
                             {role === "admin" && (
                               <td>
                                 <span className="fw-medium text-dark">
@@ -480,13 +487,13 @@ const ActivityBookingList = () => {
                               <span
                                 className="px-2 py-1 rounded"
                                 style={{
-                                  backgroundColor: "#eff8ff",
-                                  color: "#175cd3",
+                                  // backgroundColor: "#eff8ff",
+                                  // color: "#175cd3",
                                   fontSize: "0.7rem",
                                   fontWeight: 600,
                                 }}
                               >
-                                {b.noOfAdult || 0}A / {b.noOfChild || 0}C
+                                {b.noOfAdult || 0} ADT / {b.noOfChild || 0} CHD
                               </span>
                             </td>
                             <td className="text-end" style={{ whiteSpace: "nowrap" }}>
