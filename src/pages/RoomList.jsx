@@ -102,6 +102,17 @@ const RoomList = ({ force24Hour = false } = {}) => {
   const [roomTypeOptions, setRoomTypeOptions] = useState([]);
   const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
 
+  // Insufficient-credit warning modal. When the picked rate (single-room)
+  // or the combined rate (multi-room) exceeds the agent's available
+  // balance, we DON'T block the user — instead we surface a popup
+  // explaining that credit is short and they'll need to pay online, and
+  // on OK we resume the original booking flow. The deferred action is
+  // captured in `pendingBookingFn` so the same modal can serve both the
+  // single-room and multi-room paths.
+  const [showInsufficientCreditModal, setShowInsufficientCreditModal] =
+    useState(false);
+  const [pendingBookingFn, setPendingBookingFn] = useState(null);
+
   // ──────────────────────────────────────────────────────────────────────
   // Multi-room selection (per-room slots).
   //
@@ -239,9 +250,34 @@ const RoomList = ({ force24Hour = false } = {}) => {
     fetchRooms();
   }, [location.state]);
 
-  const handleBooking = async (rate) => {
+  // Whether the picked amount exceeds the agent's available balance.
+  // When true, callers raise the InsufficientCreditModal instead of
+  // blocking — the user can still continue to the booking page and pay
+  // online. Returns false (skip gate) when agentBalance is not loaded
+  // or not applicable (e.g. non-agent role) — the server-side check at
+  // confirm-booking time remains the authoritative gate.
+  const isInsufficientBalance = (requiredAmount) => {
+    if (agentBalance == null) return false;
+    const required = Number(requiredAmount) || 0;
+    const available = Number(agentBalance) || 0;
+    return required > available;
+  };
+
+  const handleBooking = async (rate, skipCreditCheck = false) => {
     const { payload, hotels } = roomData;
     const hotelsdetail = hotels[0];
+
+    // Single-room credit gate. `roomRateBasedOnRoomCount` is the total for
+    // the whole search (per-room rate × numberOfRooms) so it's already the
+    // full payable amount for this booking. When the balance is short we
+    // raise a modal — and once the user clicks OK, we re-enter this
+    // function with skipCreditCheck=true so the rest of the flow runs
+    // unchanged (booking page can then handle online payment).
+    if (!skipCreditCheck && isInsufficientBalance(rate.roomRateBasedOnRoomCount)) {
+      setPendingBookingFn(() => () => handleBooking(rate, true));
+      setShowInsufficientCreditModal(true);
+      return;
+    }
 
     console.log("hotelsdetail::", hotelsdetail);
     // console.log("rate::", rate);
@@ -405,7 +441,7 @@ const RoomList = ({ force24Hour = false } = {}) => {
    *  change. The "Continue with Booking" CTA is only shown in the
    *  multi-room branch, which is currently used by inhouse (apiId 1)
    *  searches. */
-  const handleProceedBooking = () => {
+  const handleProceedBooking = (skipCreditCheck = false) => {
     if (!allRoomsSelected || !roomData) return;
     try {
       const { payload, hotels, meta } = roomData;
@@ -420,6 +456,17 @@ const RoomList = ({ force24Hour = false } = {}) => {
           (acc, r) => acc + (Number(r.selectedRate?.[key]) || 0),
           0,
         );
+
+      // Multi-room credit gate. Each slot is ONE room, so sum(totalRate)
+      // across slots is the full payable amount — matches what we send
+      // as `combinedSelectedRate.rate` below. On insufficient credit we
+      // raise the same popup the single-room flow uses; OK re-enters
+      // this function with skipCreditCheck=true to continue normally.
+      if (!skipCreditCheck && isInsufficientBalance(sum("totalRate"))) {
+        setPendingBookingFn(() => () => handleProceedBooking(true));
+        setShowInsufficientCreditModal(true);
+        return;
+      }
 
       const combinedSelectedRate = {
         hotelId: hotelsdetail.hotelId,
@@ -819,6 +866,58 @@ const RoomList = ({ force24Hour = false } = {}) => {
                 </p>
               </Modal.Body>
             </Modal>
+            {/* Insufficient Credit Modal — informational gate. Does NOT
+                block the booking; the user clicks OK and we resume the
+                original handleBooking / handleProceedBooking path with
+                skipCreditCheck=true, so they land on the booking page
+                where they can complete payment online. */}
+            <Modal
+              show={showInsufficientCreditModal}
+              onHide={() => {
+                setShowInsufficientCreditModal(false);
+                setPendingBookingFn(null);
+              }}
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header closeButton>
+                <Modal.Title>Insufficient Credit Limit</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <p className="mb-2">
+                  Your available credit limit is not enough to cover this
+                  booking.
+                </p>
+                <p className="mb-0 text-muted small">
+                  You can still continue — please choose{" "}
+                  <strong>online payment</strong> on the booking page to
+                  complete this reservation.
+                </p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowInsufficientCreditModal(false);
+                    setPendingBookingFn(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    const fn = pendingBookingFn;
+                    setShowInsufficientCreditModal(false);
+                    setPendingBookingFn(null);
+                    if (typeof fn === "function") fn();
+                  }}
+                >
+                  OK, continue
+                </Button>
+              </Modal.Footer>
+            </Modal>
             {/* No Availability Modal */}
             <Modal
               show={showUnavailableModal}
@@ -1160,7 +1259,7 @@ const RoomList = ({ force24Hour = false } = {}) => {
                             <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-2">
                               <Card className="rate-card h-100 shadow-sm">
                                 {viewMode === "grid" ? (
-                                  <Card.Body className="p-3 pb-2 d-flex flex-column gap-2">
+                                  <Card.Body className="p-2 pb-0 d-flex flex-column gap-2">
                                     {/* Header */}
                                     <div className="rate-header d-flex justify-content-between align-items-start">
                                       <div>
@@ -1283,33 +1382,73 @@ const RoomList = ({ force24Hour = false } = {}) => {
                                     )}
                                   </Card.Body>
                                 ) : (
-                                  <Card.Body className="p-3 py-2 d-flex flex-row justify-content-between align-items-center gap-3">
-                                    <div className="d-flex flex-column flex-grow-1">
-                                      <div className="d-flex align-items-center gap-3 mb-2">
-                                        <div className="d-flex align-items-center gap-2">
+                                  <Card.Body className="p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap">
+                                    <div
+                                      className="d-flex flex-column flex-grow-1"
+                                      style={{ minWidth: 0 }}
+                                    >
+                                      <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
+                                        <div
+                                          className="d-flex align-items-center gap-2 flex-shrink-0"
+                                          style={{
+                                            whiteSpace: "nowrap",
+                                            minWidth: "200px",
+                                          }}
+                                        >
                                           {getMealPlanIcon(rate.mealPlan)}
-                                          <span className="fw-semibold">{rate.mealPlan}</span>
+                                          <span className="fw-semibold text-truncate">
+                                            {rate.mealPlan}
+                                          </span>
                                         </div>
-                                        {getRefundStatusBadgeInRoomList(rate.nonRefundable)}
-                                        <div className="d-flex align-items-center mb-0">
-                                          {getRoomStatusBadge(rate.roomStatus)}
+                                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                          {getRefundStatusBadgeInRoomList(
+                                            rate.nonRefundable,
+                                          )}
+                                          {rate.roomStatus === "On Request" ? (
+                                            <Badge
+                                              bg="warning"
+                                              text="dark"
+                                              className="px-2 py-1 fw-bold border border-warning"
+                                            >
+                                              On Request
+                                            </Badge>
+                                          ) : (
+                                            <Badge bg="success">Available</Badge>
+                                          )}
                                         </div>
                                       </div>
-                                      <div className="rate-features small text-muted d-flex gap-4">
-                                        <div className="feature-item d-flex align-items-center">
-                                          <FaInfoCircle className="me-2" />
-                                          {rate.contractLabel}
+                                      <div
+                                        className="rate-features small text-muted d-flex flex-wrap gap-3"
+                                        style={{ minWidth: 0 }}
+                                      >
+                                        <div className="feature-item d-flex align-items-center text-truncate">
+                                          <FaInfoCircle className="me-2 flex-shrink-0" />
+                                          <span className="text-truncate">
+                                            {rate.contractLabel}
+                                          </span>
                                         </div>
-                                        {rate.cancellationPolicies?.length > 0 && (
-                                          <div className="feature-item d-flex align-items-center text-truncate" style={{ maxWidth: '350px' }}>
-                                            <FaShieldAlt className="me-2" />
-                                            {rate.cancellationPolicies[0].policyText}
+                                        {rate.cancellationPolicies?.length >
+                                          0 && (
+                                          <div
+                                            className="feature-item d-flex align-items-center text-truncate"
+                                            style={{ maxWidth: "320px" }}
+                                          >
+                                            <FaShieldAlt className="me-2 flex-shrink-0" />
+                                            <span className="text-truncate">
+                                              {
+                                                rate.cancellationPolicies[0]
+                                                  .policyText
+                                              }
+                                            </span>
                                           </div>
                                         )}
                                       </div>
                                     </div>
-                                    
-                                    <div className="text-end px-4 border-start border-end" style={{ minWidth: '220px' }}>
+
+                                    <div
+                                      className="text-end px-3 border-start border-end flex-shrink-0"
+                                      style={{ minWidth: "150px" }}
+                                    >
                                       <div className="fs-5 fw-bold text-primary">
                                         {formatPrice(
                                           isMultiRoom
@@ -1319,7 +1458,8 @@ const RoomList = ({ force24Hour = false } = {}) => {
                                       </div>
                                       {!isMultiRoom && (
                                         <div className="text-muted small">
-                                          {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
+                                          {formatPrice(rate.totalRate || 0)} ×{" "}
+                                          {rate.numberOfRooms || 1} rooms
                                         </div>
                                       )}
                                       <div className="small text-muted">
@@ -1327,7 +1467,7 @@ const RoomList = ({ force24Hour = false } = {}) => {
                                       </div>
                                     </div>
 
-                                    <div className="ps-2">
+                                    <div className="flex-shrink-0">
                                       {isMultiRoom ? (
                                         <Form.Check
                                           type="radio"
@@ -1356,9 +1496,9 @@ const RoomList = ({ force24Hour = false } = {}) => {
                                       ) : (
                                         <Button
                                           variant="primary"
-                                          className="book-now-btn px-4 py-2"
+                                          className="book-now-btn px-3 py-2"
                                           onClick={() => handleBooking(rate)}
-                                          style={{ whiteSpace: 'nowrap' }}
+                                          style={{ whiteSpace: "nowrap" }}
                                         >
                                           <FaMoneyBillWave className="me-2" />
                                           View Details
@@ -1444,14 +1584,14 @@ const RoomList = ({ force24Hour = false } = {}) => {
                 <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mt-3 p-3 border rounded bg-light">
                   <div className="small text-muted">
                     {allRoomsSelected
-                      ? `All ${numRooms} room${numRooms === 1 ? "" : "s"} selected. You can continue to booking.`
+                      ? `All ${numRooms} room${numRooms === 1 ? "" : "s"} selected. You can continue with booking.`
                       : `Pick a rate for each of the ${numRooms} rooms to continue. ${selectedRooms.filter((r) => r.selectedRate).length}/${numRooms} selected.`}
                   </div>
                   <Button
                     variant="primary"
                     size="lg"
                     disabled={!allRoomsSelected}
-                    onClick={handleProceedBooking}
+                    onClick={() => handleProceedBooking()}
                   >
                     <FaMoneyBillWave className="me-2" />
                     Continue with Booking

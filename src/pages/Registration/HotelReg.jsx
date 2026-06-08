@@ -50,6 +50,7 @@ const tabOrder = [
   "terms-conditions",
 ];
 
+
 const HotelReg = () => {
   // Stepper state
   const [activeTab, setActiveTab] = useState(tabOrder[0]);
@@ -2161,7 +2162,7 @@ const handleAmenityChange = (e) => {
                           <Col md={3}>
                             <Form.Group className="mb-3">
                               <Form.Label>
-                                City <span className="text-danger">*</span>
+                                Place <span className="text-danger">*</span>
                               </Form.Label>
                               <Form.Select
                                 key={`place-${places.length}-${formData.stateId}`}
@@ -2196,7 +2197,7 @@ const handleAmenityChange = (e) => {
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Locality</Form.Label>
+                              <Form.Label>Locality / Area</Form.Label>
                               <InputGroup>
                                 <Form.Select
                                   key={`subloc-${subLocations.length}-${formData.placeId}`}

@@ -1469,6 +1469,50 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             <strong>Nights:</strong> {pendingPayload.nights}
                           </p>
                         </Col>
+
+                        {/* Room category + meal plan — same WHAT-am-I-booking
+                            info that the per-room Accordion.Header shows in
+                            the Guest Details section. Uses roomBreakdown for
+                            multi-room searches, else falls back to the
+                            aggregate selectedRate. */}
+                        {(() => {
+                          const slots =
+                            Array.isArray(bookingData?.roomBreakdown) &&
+                            bookingData.roomBreakdown.length > 0
+                              ? bookingData.roomBreakdown
+                              : [
+                                  {
+                                    roomNo: 1,
+                                    roomCategory: selectedRate.roomCategory,
+                                    mealPlan: selectedRate.mealPlan,
+                                  },
+                                ];
+                          return slots.map((s, i) => (
+                            <React.Fragment key={i}>
+                              <Col xs={6}>
+                                <p className="mb-1">
+                                  <strong>Room Category:</strong>
+                                  <br />
+                                  <span className="text-dark">
+                                    {slots.length > 1
+                                      ? `Room ${s.roomNo ?? i + 1} - `
+                                      : ""}
+                                    {s.roomCategory || "—"}
+                                  </span>
+                                </p>
+                              </Col>
+                              <Col xs={6}>
+                                <p className="mb-1">
+                                  <strong>Meal Plan:</strong>
+                                  <br />
+                                  <span className="text-dark">
+                                    {s.mealPlan || "—"}
+                                  </span>
+                                </p>
+                              </Col>
+                            </React.Fragment>
+                          ));
+                        })()}
                         {/* <Col xs={12}>
                           <p className="mb-1">
                             <strong>Cancellation Policy:</strong>
