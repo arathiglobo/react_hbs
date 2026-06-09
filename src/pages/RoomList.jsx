@@ -1255,9 +1255,45 @@ const RoomList = ({ force24Hour = false } = {}) => {
 
                       <Accordion.Body className="room-rates-section">
                         <Row>
-                          {filteredRates.map((rate, rateIndex) => (
+                          {filteredRates.map((rate, rateIndex) => {
+                            // Highlight ONLY the card chosen for THIS room
+                            // slot. Other slots' picks must not change the
+                            // appearance of cards in this slot's list.
+                            const isSelectedForThisSlot = isMultiRoom &&
+                              selectedRooms[roomSlotIndex]?.selectedRate === rate;
+                            return (
                             <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-2">
-                              <Card className="rate-card h-100 shadow-sm">
+                              <Card
+                                className={`rate-card h-100 shadow-sm${isSelectedForThisSlot ? " rate-card-selected" : ""}`}
+                                style={
+                                  isSelectedForThisSlot
+                                    ? {
+                                        borderColor: "#198754",
+                                        borderWidth: "2px",
+                                        backgroundColor: "#e8f5ec",
+                                        position: "relative",
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {isSelectedForThisSlot && (
+                                  <span
+                                    style={{
+                                      position: "absolute",
+                                      top: "6px",
+                                      right: "6px",
+                                      backgroundColor: "#198754",
+                                      color: "#fff",
+                                      fontSize: "0.7rem",
+                                      fontWeight: 700,
+                                      padding: "2px 6px",
+                                      borderRadius: "4px",
+                                      zIndex: 1,
+                                    }}
+                                  >
+                                    ✓ Selected
+                                  </span>
+                                )}
                                 {viewMode === "grid" ? (
                                   <Card.Body className="p-2 pb-0 d-flex flex-column gap-2">
                                     {/* Header */}
@@ -1509,7 +1545,8 @@ const RoomList = ({ force24Hour = false } = {}) => {
                                 )}
                               </Card>
                             </Col>
-                          ))}
+                            );
+                          })}
                         </Row>
                       </Accordion.Body>
                     </Accordion.Item>
@@ -1602,54 +1639,11 @@ const RoomList = ({ force24Hour = false } = {}) => {
               </Row>
             </div>
 
-            {/* Additional Information Section */}
+            {/* Policies Section — Cancellation, Amendment, Child, and
+                Additional Policy folded into a single card. The earlier
+                "Additional Information" card was removed; child policy
+                and the additional-policy fees now live here. */}
             <div className="mt-4">
-              <Card className="mb-4">
-                <Card.Header as="h6">Additional Information</Card.Header>
-                <Card.Body>
-                  {payload.apiId === 1 && policyList && policyList.policies ? (
-                    <div className="policy-details">
-                      {/* Child Policy */}
-                      {policyList.policies?.childPolicy &&
-                        policyList.policies.childPolicy.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="text-primary mb-2">
-                              <FaUsers className="me-2" />
-                              Child Policy
-                            </h6>
-                            {policyList.policies.childPolicy.map(
-                              (policy, index) => (
-                                <p key={index} className="mb-2 text-muted">
-                                  {policy.policyText}
-                                </p>
-                              ),
-                            )}
-                          </div>
-                        )}
-                    </div>
-                  ) : (
-                    <ul className="mb-0 text-muted">
-                      <li>
-                        Mandatory gala dinner fees may apply on certain dates.
-                        Please contact the hotel directly for more information.
-                      </li>
-                      <li>
-                        Additional taxes or resort fees may be collected at the
-                        property during check-in.
-                      </li>
-                      <li>
-                        Special requests are subject to availability and may
-                        incur additional charges.
-                      </li>
-                      <li>
-                        Photo identification and a credit card or cash deposit
-                        may be required at check-in for incidental charges.
-                      </li>
-                    </ul>
-                  )}
-                </Card.Body>
-              </Card>
-
               <Card className="mb-4">
                 <Card.Header as="h6">Policies</Card.Header>
                 <Card.Body>
@@ -1728,6 +1722,65 @@ const RoomList = ({ force24Hour = false } = {}) => {
                             )}
                           </div>
                         )}
+
+                      {/* Child Policy — moved in from the dropped
+                          "Additional Information" section. */}
+                      {policyList.policies?.childPolicy &&
+                        policyList.policies.childPolicy.length > 0 && (
+                          <div className="mb-3">
+                            <h6 className="text-primary mb-2">
+                              <FaUsers className="me-2" />
+                              Child Policy
+                            </h6>
+                            {policyList.policies.childPolicy.map(
+                              (policy, index) => (
+                                <p key={index} className="mb-2 text-muted">
+                                  {policy.policyText}
+                                </p>
+                              ),
+                            )}
+                          </div>
+                        )}
+
+                      {/* Additional Policy — fees stored on the policy
+                          row (no-show, early-departure, non-refundable).
+                          Suppress empty zero/null amounts so the section
+                          stays clean for hotels that don't configure any. */}
+                      {policyList.policies?.additionalPolicy && (() => {
+                        const ap = policyList.policies.additionalPolicy;
+                        const formatFee = (amt, type) => {
+                          if (amt === null || amt === undefined || Number(amt) === 0) return null;
+                          const suffix = String(type || "").toUpperCase() === "PERCENT" ? "%" : "";
+                          return `${amt}${suffix}`;
+                        };
+                        const noShow = formatFee(ap.noShowFee, ap.noShowFeeType);
+                        const earlyDep = formatFee(ap.earlyDepartureFee, ap.earlyDepartureFeeType);
+                        const nonRef = formatFee(ap.nonRefundableFee, ap.nonRefundableFeeType);
+                        if (!noShow && !earlyDep && !nonRef) return null;
+                        return (
+                          <div className="mb-3">
+                            <h6 className="text-info mb-2">
+                              <FaInfoCircle className="me-2" />
+                              Additional Policy
+                            </h6>
+                            {noShow && (
+                              <p className="mb-1 text-muted">
+                                <strong>No-Show Fee:</strong> {noShow}
+                              </p>
+                            )}
+                            {earlyDep && (
+                              <p className="mb-1 text-muted">
+                                <strong>Early Departure Fee:</strong> {earlyDep}
+                              </p>
+                            )}
+                            {nonRef && (
+                              <p className="mb-1 text-muted">
+                                <strong>Non-Refundable Fee:</strong> {nonRef}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* General Policies */}
                       <Row className="g-3 mt-3">

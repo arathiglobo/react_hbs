@@ -88,6 +88,10 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  // Payment mode — mirrors the selector on /new-booking/meet-and-space/book.
+  // Default keeps the legacy behaviour (CREDITLIMIT) so existing flows that
+  // don't surface the selector still work.
+  const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
   const [pendingPayload, setPendingPayload] = useState(null);
   const [tourismDirhams, setTourismDirhams] = useState("0");
   const [remarks, setRemarks] = useState("");
@@ -627,7 +631,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       // Booking List can label the row correctly.
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
-        { ...pendingPayload, paymentMode: "CREDITLIMIT" },
+        { ...pendingPayload, paymentMode },
       );
 
       const bookingResponse = response.data;
@@ -984,9 +988,9 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                       keeps its default empty string so the payload
                       still carries the key). */}
                   <Card className="p-4 mb-2 shadow-sm border-0">
-                    <h5 className="mb-3 fw-bold">Tourism Dirhams & Special Requests</h5>
+                    <h5 className="mb-3 fw-bold">Special Requests</h5>
                     <Row className="g-3">
-                      <Col md={6}>
+                      {/* <Col md={6}>
                         <Form.Group className="mb-3">
                           <Form.Label>Tourism Dirhams (AED)</Form.Label>
                           <Form.Control
@@ -998,10 +1002,10 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             step="0.01"
                           />
                         </Form.Group>
-                      </Col>
+                      </Col> */}
                       <Col md={12}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Special Request</Form.Label>
+                          {/* <Form.Label>Special Request</Form.Label> */}
                           <div className="special-request-grid">
                             {SPECIAL_REQUEST_OPTIONS.map((request) => (
                               <Form.Check
@@ -1075,6 +1079,33 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             </Form.Group>
                           </Col>
                         )}
+                    </Row>
+                  </Card>
+
+                  {/* Payment Mode — sits under Special Requests on the
+                      left column. Drives the paymentMode field on the
+                      /api/hotel-booking/create payload. */}
+                  <Card className="p-4 mb-2 shadow-sm border-0">
+                    <h5 className="mb-3 fw-bold">Payment Mode</h5>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold mb-1">
+                            Mode
+                          </Form.Label>
+                          <Form.Select
+                            value={paymentMode}
+                            onChange={(e) => setPaymentMode(e.target.value)}
+                          >
+                            <option value="CREDITLIMIT">Credit Limit</option>
+                            <option value="ONLINE">Online</option>
+                            <option value="CASH">Cash</option>
+                            <option value="CARD">Card</option>
+                            <option value="BANK_TRANSFER">Bank Transfer</option>
+                            <option value="CHEQUE">Cheque</option>
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
                     </Row>
                   </Card>
 
@@ -1177,14 +1208,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             )}
                           </div>
                         </div>
-                        <div className="hbp-summary-row">
+                        {/* <div className="hbp-summary-row">
                           <div className="hbp-summary-label">
                             Tourism Dirhams
                           </div>
                           <div className="hbp-summary-value">
                             {formatPrice(tourismDirhamsAmount)}
                           </div>
-                        </div>
+                        </div> */}
                         <hr className="my-2" />
                         <div className="hbp-summary-row fw-bold">
                           <div className="hbp-summary-label text-danger">
@@ -1577,13 +1608,13 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             )}
                           </span>
                         </div>
-                        <div className="d-flex justify-content-between">
+                        {/* <div className="d-flex justify-content-between">
                           <span>Tourism Dirhams</span>
                           <span>{formatPrice(tourismDirhamsAmount)}</span>
-                        </div>
+                        </div> */}
                         <hr className="my-1" />
                         <div className="d-flex justify-content-between fw-bold">
-                          <span>Total (Selling + TD)</span>
+                          <span>Total (Selling)</span>
                           <span>{formatPrice(sellingPriceWithTd)}</span>
                         </div>
                       </div>

@@ -411,6 +411,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const [starRating, setStarRating] = useState(null);
   const [hotelType, setHotelType] = useState([]);
   const [channelType, setChannelType] = useState([]);
+  // Available Deals multi-select filter (array of option values).
+  // Empty array = no filter. Matching is OR across selected options.
+  const [availableDeals, setAvailableDeals] = useState([]);
   const [sortBy, setSortBy] = useState("priceAsc");
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
@@ -478,6 +481,23 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     // { value: "jumeirah", label: "Jumeirah" },
     // { value: "ratehawk", label: "Ratehawk" },
     // { value: "darina", label: "Darina" },
+  ];
+
+  // Available Deals filter options. Each option maps to a per-hotel
+  // predicate evaluated against the feature-flag map and the search
+  // DTO's hasDestinationSales flag. "Flash Sale" matches any hotel
+  // with at least one feature label (mirrors the corner badge logic).
+  const availableDealsOptions = [
+    { value: "flashSale",        label: "Flash Sale" },
+    { value: "longStay",         label: "Long Stay" },
+    { value: "twentyFourHour",   label: "24 Hour Check-In" },
+    { value: "lastMinute",       label: "Last Minute" },
+    { value: "dayStay",          label: "Day Stay" },
+    { value: "meetingSpace",     label: "Meeting & Space" },
+    { value: "govEmployee",      label: "Govt Employee Discount" },
+    { value: "studentDiscount",  label: "Student Discount" },
+    { value: "seniorCitizen",    label: "Senior Citizen" },
+    { value: "destinationSales", label: "Destination Sales" },
   ];
 
   useEffect(() => {
@@ -664,6 +684,29 @@ export default function HotelSearch({ force24Hour = false } = {}) {
       );
     }
 
+    // Available Deals — OR-match across the selected option values.
+    if (availableDeals.length > 0) {
+      const selected = new Set(availableDeals.map((d) => d.value));
+      const hasFeatureLabel = (hotel, label) =>
+        getHotelFeatureLabels(hotel).some(
+          (f) => String(f).toLowerCase() === String(label).toLowerCase()
+        );
+      results = results.filter((hotel) => {
+        if (selected.has("flashSale") && getHotelFeatureLabels(hotel).length > 0) return true;
+        if (selected.has("longStay") && hasFeatureLabel(hotel, "Long Stay")) return true;
+        if (selected.has("twentyFourHour") && hasFeatureLabel(hotel, "24 Hour Check-In")) return true;
+        if (selected.has("lastMinute") && hasFeatureLabel(hotel, "Last Minute")) return true;
+        if (selected.has("dayStay") && hasFeatureLabel(hotel, "Day Stay")) return true;
+        if (selected.has("meetingSpace") && hasFeatureLabel(hotel, "Meeting & Space")) return true;
+        if (selected.has("govEmployee") &&
+            (hasFeatureLabel(hotel, "Govt Employee Discount") || hasFeatureLabel(hotel, "Govt Employee"))) return true;
+        if (selected.has("studentDiscount") && hasFeatureLabel(hotel, "Student Discount")) return true;
+        if (selected.has("seniorCitizen") && hasFeatureLabel(hotel, "Senior Citizen")) return true;
+        if (selected.has("destinationSales") && hotel.hasDestinationSales === true) return true;
+        return false;
+      });
+    }
+
     // ── 24 Hour Check-In transform ──────────────────────────────────
     // When the toggle is on, keep ONLY hotels the probe marked eligible
     // and uplift the displayed price by the configured percentage.
@@ -693,6 +736,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 
     return results;
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
+      availableDeals, featureFlagsMap,
       is24HourCheckin, twentyFourHourMap]);
 
   // Union of active feature labels across hotels currently in view. Order
@@ -934,6 +978,10 @@ export default function HotelSearch({ force24Hour = false } = {}) {
             rating: hotel.starRating || 0,
             hotelType: "hotel",
             channelType: hotel.apiType?.toLowerCase() || "inhouse",
+            // Surface the backend-computed promotion flag so the
+            // "Destination Sales" pill and filter actually work.
+            hasDestinationSales: !!hotel.hasDestinationSales,
+            flashSale: !!hotel.flashSale,
           }))
         : [];
 
@@ -1119,6 +1167,10 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                 rating: hotel.starRating || 0,
                 hotelType: "hotel",
                 channelType: hotel.apiType?.toLowerCase() || "inhouse",
+                // Surface backend promotion flags so the
+                // "Destination Sales" pill + filter actually work.
+                hasDestinationSales: !!hotel.hasDestinationSales,
+                flashSale: !!hotel.flashSale,
               }))
             : [];
 
@@ -1819,6 +1871,47 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                               ))}
                             </div>
                           </Form.Group>
+
+                          <hr />
+
+                          <Form.Group>
+                            <Form.Label className="fw-semibold small d-flex justify-content-between align-items-center">
+                              <span>Available Deals</span>
+                              {availableDeals.length > 0 && (
+                                <span
+                                  role="button"
+                                  className="text-primary small"
+                                  style={{ cursor: "pointer", fontWeight: 500 }}
+                                  onClick={() => setAvailableDeals([])}
+                                >
+                                  Clear
+                                </span>
+                              )}
+                            </Form.Label>
+                            <div className="filter-checkbox-list">
+                              {availableDealsOptions.map((item) => (
+                                <Form.Check
+                                  key={item.value}
+                                  type="checkbox"
+                                  id={`deal-${item.value}`}
+                                  label={item.label}
+                                  checked={availableDeals.some(
+                                    (d) => d.value === item.value,
+                                  )}
+                                  onChange={(e) => {
+                                    if (e.target.checked)
+                                      setAvailableDeals([...availableDeals, item]);
+                                    else
+                                      setAvailableDeals(
+                                        availableDeals.filter(
+                                          (d) => d.value !== item.value,
+                                        ),
+                                      );
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </Form.Group>
                         </Card.Body>
                       </Card>
                     </div>
@@ -1876,6 +1969,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                               setStarRating(null);
                               setHotelType([]);
                               setChannelType([]);
+                              setAvailableDeals([]);
                               setSortBy("priceAsc");
                               setHotelSearchTerm("");
                             }}
@@ -1926,37 +2020,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                 overflow: "hidden",
                               }}
                             >
-                              {/* Flash-deal badge — image placed at
-                                   /images/flash-sale-logo.png (in public/).
-                                   Falls back to the legacy text pill if the
-                                   asset isn't found so the deal indicator
-                                   never disappears silently.
-                                   Hidden in the dedicated 24-hour search
-                                   (force24Hour) — that flow is its own
-                                   product and shouldn't surface generic
-                                   deals on the result cards. */}
-                              {!force24Hour && getHotelFeatureLabels(hotel).length > 0 && (
-                                <span
-                                  className="flash-sale-badge flash-sale-corner"
-                                  title="Limited-time deals available — see the badges below."
-                                  aria-label="Flash Sale"
-                                >
-                                  <img
-                                    src="/images/flash-sale-logo.png"
-                                    alt="Flash Sale"
-                                    className="flash-sale-img"
-                                    onError={(e) => {
-                                      // Asset missing — degrade to a small
-                                      // CSS-only fallback so the corner is
-                                      // still flagged for the operator.
-                                      const fallback = document.createElement("span");
-                                      fallback.className = "flash-sale-pill";
-                                      fallback.innerHTML = '<span class="flash-dot"></span> Flash Sale';
-                                      e.target.replaceWith(fallback);
-                                    }}
-                                  />
-                                </span>
-                              )}
+                              {/* Corner Flash Sale logo removed — the badge
+                                  next to "Rate Available" carries the same
+                                  signal and is more prominent there. */}
                               <Row className="g-0">
                                 <Col md={4}>
                                   <div
@@ -2042,22 +2108,65 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                         "Address Not Available"}
                                     </p>
 
-                                    {hotel.badge && (
-                                      <span
-                                        style={{
-                                          backgroundColor: "#28a745",
-                                          color: "white",
-                                          padding: "4px 8px",
-                                          borderRadius: "4px",
-                                          fontSize: "0.75rem",
-                                          display: "inline-block",
-                                          marginBottom: "6px",
-                                          alignSelf: "flex-start",
-                                        }}
-                                      >
-                                        {hotel.badge}
-                                      </span>
-                                    )}
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        flexWrap: "wrap",
+                                        gap: "6px",
+                                        marginBottom: "6px",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      {hotel.badge && (
+                                        <span
+                                          style={{
+                                            backgroundColor: "#28a745",
+                                            color: "white",
+                                            padding: "4px 8px",
+                                            borderRadius: "4px",
+                                            fontSize: "0.75rem",
+                                            display: "inline-block",
+                                          }}
+                                        >
+                                          {hotel.badge}
+                                        </span>
+                                      )}
+                                      {/* Flash Sale badge — shown beside Rate Available
+                                          when the hotel has any active deal feature.
+                                          Uses the same /images/flash-sale-logo.png asset
+                                          as the corner badge; falls back to a text pill
+                                          so the indicator never disappears silently. */}
+                                      {!force24Hour && getHotelFeatureLabels(hotel).length > 0 && (
+                                        <span
+                                          className="flash-sale-badge flash-sale-inline"
+                                          aria-label="Flash Sale"
+                                          title="Flash Sale"
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            height: "64px",
+                                          }}
+                                        >
+                                          <img
+                                            src="/images/flash-sale-logo.png"
+                                            alt="Flash Sale"
+                                            style={{ height: "60px", width: "auto" }}
+                                            onError={(e) => {
+                                              const fallback = document.createElement("span");
+                                              fallback.style.background = "#ff3b30";
+                                              fallback.style.color = "#fff";
+                                              fallback.style.padding = "8px 18px";
+                                              fallback.style.borderRadius = "8px";
+                                              fallback.style.fontSize = "1.1rem";
+                                              fallback.style.fontWeight = "800";
+                                              fallback.style.letterSpacing = "0.5px";
+                                              fallback.textContent = "FLASH SALE";
+                                              e.target.replaceWith(fallback);
+                                            }}
+                                          />
+                                        </span>
+                                      )}
+                                    </div>
 
                                     {/* Per-hotel "Also Available Deals" — each
                                         pill is a clickable shortcut to the
@@ -2074,12 +2183,29 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                         (force24Hour) — the operator is already
                                         committed to that flow, listing other
                                         deals here would be a distraction. */}
-                                    {!force24Hour && getHotelFeatureLabels(hotel).length > 0 && (
+                                    {!force24Hour && (getHotelFeatureLabels(hotel).length > 0 || hotel.hasDestinationSales) && (
                                       <div className="available-deals-wrap">
                                         <div className="available-deals-label">
                                           Also Available Deals
                                         </div>
                                         <div className="deal-pills-row">
+                                          {/* Destination Sales — display-only badge that
+                                              indicates the hotel has at least one of:
+                                              Special Rate / Discount / Stay Pay. Not
+                                              clickable; no navigation. */}
+                                          {hotel.hasDestinationSales && (
+                                            <span
+                                              className="deal-pill deal-destination-sales"
+                                              title="Destination Sales"
+                                              style={{
+                                                backgroundColor: "#6f42c1",
+                                                color: "#fff",
+                                                cursor: "default",
+                                              }}
+                                            >
+                                              Destination Sales
+                                            </span>
+                                          )}
                                           {getHotelFeatureLabels(hotel).map((label) => {
                                             const meta = DEAL_PILL_META[label] || { cls: "" };
                                             const isClickable = !!meta.route;

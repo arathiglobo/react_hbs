@@ -587,16 +587,19 @@ export default function StayPayPromotion() {
                         </div>
                         {formData.validityList.map((v, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity From
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
+                                size="sm"
                                 value={v.from}
                                 onChange={(e) => {
                                   const updated = [...formData.validityList];
                                   updated[i].from = e.target.value;
-                                  // Clear Validity To if it becomes invalid (before or equal to From date)
                                   const currentToDate = formData.validityList[i].to;
-                                  if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                  if (currentToDate && e.target.value && new Date(currentToDate) < new Date(e.target.value)) {
                                     updated[i].to = "";
                                   }
                                   setFormData({
@@ -606,11 +609,15 @@ export default function StayPayPromotion() {
                                 }}
                               />
                             </Col>
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity To
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
+                                size="sm"
                                 value={v.to}
-                                min={getMinValidityToDate(v.from)}
+                                min={v.from || undefined}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -621,7 +628,7 @@ export default function StayPayPromotion() {
                                 }
                               />
                             </Col>
-                            <Col xs="auto">
+                            <Col md={2} className="text-end">
                               {i > 0 && (
                                 <Button
                                   size="sm"
@@ -653,16 +660,19 @@ export default function StayPayPromotion() {
                         </div>
                         {formData.blackoutDates.map((b, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity From
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
+                                size="sm"
                                 value={b.from}
                                 onChange={(e) => {
                                   const updated = [...formData.blackoutDates];
                                   updated[i].from = e.target.value;
-                                  // Clear Blackout To if it becomes invalid (before or equal to From date)
                                   const currentToDate = formData.blackoutDates[i].to;
-                                  if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                                  if (currentToDate && e.target.value && new Date(currentToDate) < new Date(e.target.value)) {
                                     updated[i].to = "";
                                   }
                                   setFormData({
@@ -672,11 +682,15 @@ export default function StayPayPromotion() {
                                 }}
                               />
                             </Col>
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity To
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
+                                size="sm"
                                 value={b.to}
-                                min={getMinValidityToDate(b.from)}
+                                min={b.from || undefined}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -687,7 +701,7 @@ export default function StayPayPromotion() {
                                 }
                               />
                             </Col>
-                            <Col xs="auto">
+                            <Col md={2} className="text-end">
                               {i > 0 && (
                                 <Button
                                   size="sm"

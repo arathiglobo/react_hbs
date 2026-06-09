@@ -202,7 +202,11 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
               childRate: r.childRate ?? 0,
               extraBed: !!r.extraBed,
               meal: !!r.meal,
-              refundable: !!r.refundable,
+              // Legacy rows may not carry a refundable value; default to
+              // Refundable so the mandatory radio always loads a selection.
+              refundable: r.refundable === null || r.refundable === undefined
+                ? true
+                : !!r.refundable,
             })),
             isLive: !!e.isLive,
             checkInWindowDays: e.checkInWindowDays != null ? Number(e.checkInWindowDays) : 2,
@@ -246,7 +250,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                     childRate: s.suggestedChildRate || 0,
                     extraBed: false,
                     meal: false,
-                    refundable: false,
+                    refundable: true,
                   });
                 }
               });
@@ -310,7 +314,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
           childRate: field === "childRate" ? Number(value) : 0,
           meal: false,
           extraBed: field === "adultRate" || field === "childRate" ? Number(value) > 0 : false,
-          refundable: false,
+          refundable: true,
         });
       }
       return { ...prev, roomRates: updated };
@@ -404,6 +408,14 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
     }
     if (!formData.roomRates.length) {
       errs.roomRates = "Please enter at least one rate.";
+    }
+
+    // Refundable selection is mandatory on every room category.
+    const missingRefundable = formData.roomRates.some(
+      (r) => r.refundable !== true && r.refundable !== false
+    );
+    if (missingRefundable) {
+      errs.roomRates = "Please select Refundable or Non Refundable for every room category.";
     }
 
     // Client-side rate check incorporating markup percentage as a discount off normal rate
@@ -867,14 +879,38 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                           key={room.hotelRoomcategoryId}
                           className="border rounded-4 bg-white p-3 mb-4 shadow-sm"
                         >
-                          <div className="d-flex justify-content-between align-items-center mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <span className="fw-semibold text-uppercase">{room.roomCategory}</span>
-                            <Form.Check
-                              label="Is Refundable"
-                              onChange={(e) =>
-                                handleRefundableChange(room.hotelRoomcategoryId, e.target.checked)
-                              }
-                            />
+                            {(() => {
+                              const current = formData.roomRates.find(
+                                (r) => r.hotelRoomcategoryId === String(room.hotelRoomcategoryId)
+                              );
+                              const isRefundable    = current?.refundable === true;
+                              const isNonRefundable = current?.refundable === false;
+                              const groupName = `lm-refundable-${room.hotelRoomcategoryId}`;
+                              return (
+                                <div className="d-flex align-items-center gap-3">
+                                  <Form.Check
+                                    type="radio"
+                                    inline
+                                    name={groupName}
+                                    id={`${groupName}-yes`}
+                                    label="Refundable"
+                                    checked={isRefundable}
+                                    onChange={() => handleRefundableChange(room.hotelRoomcategoryId, true)}
+                                  />
+                                  <Form.Check
+                                    type="radio"
+                                    inline
+                                    name={groupName}
+                                    id={`${groupName}-no`}
+                                    label="Non Refundable"
+                                    checked={isNonRefundable}
+                                    onChange={() => handleRefundableChange(room.hotelRoomcategoryId, false)}
+                                  />
+                                </div>
+                              );
+                            })()}
                           </div>
  
                           <Table bordered hover responsive size="sm">

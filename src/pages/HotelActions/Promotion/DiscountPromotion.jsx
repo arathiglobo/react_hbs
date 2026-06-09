@@ -598,9 +598,13 @@ export default function DiscountPromotion() {
                         </div>
                         {formData.validityList.map((v, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity From
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
+                                size="sm"
                                 value={v.from}
                                 onChange={(e) =>
                                   handleDateChange(
@@ -612,11 +616,15 @@ export default function DiscountPromotion() {
                                 }
                               />
                             </Col>
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity To
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
+                                size="sm"
                                 value={v.to}
-                                min={getMinValidityToDate(v.from)}
+                                min={v.from || undefined}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -627,7 +635,7 @@ export default function DiscountPromotion() {
                                 }
                               />
                             </Col>
-                            <Col xs="auto">
+                            <Col md={2} className="text-end">
                               {i > 0 && (
                                 <Button
                                   size="sm"
@@ -659,9 +667,13 @@ export default function DiscountPromotion() {
                         </div>
                         {formData.blackoutDates.map((b, i) => (
                           <Row key={i} className="align-items-center mb-2">
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity From
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
+                                size="sm"
                                 value={b.from}
                                 onChange={(e) =>
                                   handleDateChange(
@@ -673,11 +685,15 @@ export default function DiscountPromotion() {
                                 }
                               />
                             </Col>
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity To
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
+                                size="sm"
                                 value={b.to}
-                                min={getMinValidityToDate(b.from)}
+                                min={b.from || undefined}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -688,7 +704,7 @@ export default function DiscountPromotion() {
                                 }
                               />
                             </Col>
-                            <Col xs="auto">
+                            <Col md={2} className="text-end">
                               {i > 0 && (
                                 <Button
                                   size="sm"

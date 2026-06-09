@@ -150,12 +150,12 @@ export default function CreateContractRate() {
     setFormData({ ...formData, validityList: updated });
   };
 
-  // ✅ Handle refundable toggle
-  const handleRefundableChange = (roomId, checked) => {
+  // ✅ Handle refundable radio (Refundable / Non Refundable)
+  const handleRefundableChange = (roomId, isRefundable) => {
     setFormData((prev) => {
       const updatedRates = [...prev.roomRates];
       updatedRates.forEach((r) => {
-        if (r.hotelRoomcategoryId === String(roomId)) r.refundable = checked;
+        if (r.hotelRoomcategoryId === String(roomId)) r.refundable = isRefundable;
       });
       return { ...prev, roomRates: updatedRates };
     });
@@ -200,6 +200,14 @@ export default function CreateContractRate() {
 
       if (!hasValidRates) {
         errors.roomRates = "Please enter at least one valid rate (rate, adult rate, or child rate).";
+      }
+
+      // Refundable selection is mandatory on every room category.
+      const missingRefundable = formData.roomRates.some(
+        (r) => r.refundable !== true && r.refundable !== false
+      );
+      if (missingRefundable) {
+        errors.roomRates = "Please select Refundable or Non Refundable for every room category.";
       }
     }
 
@@ -274,7 +282,7 @@ export default function CreateContractRate() {
             field === "adultRate" || field === "childRate"
               ? Number(value) > 0
               : false,
-          refundable: false,
+          refundable: true,
         });
       }
 
@@ -679,44 +687,44 @@ export default function CreateContractRate() {
                           key={room.hotelRoomcategoryId}
                           className="border rounded-4 bg-white p-3 mb-4 shadow-sm"
                         >
-                          <div className="d-flex justify-content-between align-items-center mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <span className="fw-semibold text-uppercase">
                               {room.roomCategory}
                             </span>
-                            <div className="d-flex align-items-center gap-3">
-                              {/* <div className="d-flex align-items-center gap-2">
-                                <Form.Label className="mb-0 fw-semibold text-primary">
-                                  Base Rate:
-                                </Form.Label>
-                                <Form.Control
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                  style={{ width: "120px" }}
-                                  value={
-                                    formData.baseRates.find(
-                                      (r) => r.hotelRoomcategoryId === String(room.hotelRoomcategoryId)
-                                    )?.baseRate || ""
-                                  }
-                                  onChange={(e) =>
-                                    handleBaseRateChange(
-                                      room.hotelRoomcategoryId,
-                                      e.target.value
-                                    )
-                                  }
-                                />
-                              </div> */}
-                              <Form.Check
-                                label="Is Refundable"
-                                onChange={(e) =>
-                                  handleRefundableChange(
-                                    room.hotelRoomcategoryId,
-                                    e.target.checked
-                                  )
-                                }
-                              />
-                            </div>
+                            {(() => {
+                              const current = formData.roomRates.find(
+                                (r) => r.hotelRoomcategoryId === String(room.hotelRoomcategoryId)
+                              );
+                              const isRefundable    = current?.refundable === true;
+                              const isNonRefundable = current?.refundable === false;
+                              const groupName = `create-refundable-${room.hotelRoomcategoryId}`;
+                              return (
+                                <div className="d-flex align-items-center gap-3">
+                                  <Form.Check
+                                    type="radio"
+                                    inline
+                                    name={groupName}
+                                    id={`${groupName}-yes`}
+                                    label="Refundable"
+                                    checked={isRefundable}
+                                    onChange={() =>
+                                      handleRefundableChange(room.hotelRoomcategoryId, true)
+                                    }
+                                  />
+                                  <Form.Check
+                                    type="radio"
+                                    inline
+                                    name={groupName}
+                                    id={`${groupName}-no`}
+                                    label="Non Refundable"
+                                    checked={isNonRefundable}
+                                    onChange={() =>
+                                      handleRefundableChange(room.hotelRoomcategoryId, false)
+                                    }
+                                  />
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <Table bordered hover responsive size="sm">

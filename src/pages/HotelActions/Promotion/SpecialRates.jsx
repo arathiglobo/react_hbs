@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Spinner,
+  FloatingLabel,
 } from "react-bootstrap";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash } from "react-icons/fa";
 import Select from "react-select";
@@ -680,6 +681,7 @@ const SpecialRates = () => {
                           <Button
                             size="sm"
                             variant="outline-primary"
+                            
                             onClick={() => handleAddDate("validityList")}
                           >
                             <FaPlus /> Add
@@ -689,8 +691,11 @@ const SpecialRates = () => {
                           <Row key={i} className="align-items-center mb-2">
                             {/* FROM DATE */}
                             <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity From
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
                                 size="sm"
                                 value={v.from}
                                 onChange={(e) =>
@@ -698,7 +703,7 @@ const SpecialRates = () => {
                                     "validityList",
                                     i,
                                     "from",
-                                    e.target.value,
+                                    e.target.value
                                   )
                                 }
                               />
@@ -706,11 +711,14 @@ const SpecialRates = () => {
 
                             {/* TO DATE */}
                             <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                Validity To
+                              </Form.Label>
                               <Form.Control
-                                type="datetime-local"
+                                type="date"
                                 size="sm"
                                 value={v.to}
-                                min={getMinValidityToDate(v.from)}
+                                min={v.from || undefined}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -758,6 +766,9 @@ const SpecialRates = () => {
                           <Row key={i} className="align-items-center mb-2 g-2">
                             {/* FROM DATE */}
                             <Col md={5}>
+                            <Form.Label className="mb-1 small fw-semibold">
+                                Validity From
+                              </Form.Label>
                               <Form.Control
                                 type="datetime-local"
                                 size="sm"
@@ -775,6 +786,9 @@ const SpecialRates = () => {
 
                             {/* TO DATE */}
                             <Col md={5}>
+                            <Form.Label className="mb-1 small fw-semibold">
+                                Validity to
+                              </Form.Label>
                               <Form.Control
                                 type="datetime-local"
                                 size="sm"

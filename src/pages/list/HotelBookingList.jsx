@@ -30,30 +30,22 @@ import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
-// Column widths — increased so every cell can render its content
-// without truncation. Total ~1560px; the surrounding wrapper has
-// `overflowX: "auto"` so on narrower viewports a horizontal scrollbar
-// kicks in. Pair this with the table's `minWidth` (see the <Table>
-// `style` below) so `tableLayout: "fixed"` doesn't shrink columns to
-// fit a small viewport.
+// Column widths — soft hints for the auto-layout table. Cells will
+// flex if content requires more space; horizontal scroll only kicks
+// in at very narrow viewports because the wrapper has overflowX:auto.
 const COLUMN_WIDTHS = {
-  sn: "55px",
-  agentName: "110px",
-  customerName: "150px",
-  bookingCode: "110px",
-  referenceCode: "210px",
-  bookDate: "105px",
-  bookingDetails: "290px",
-  deadlineDate: "130px",
-  paymentMode: "160px",
-  notification: "130px",
-  action: "130px",
+  sn: "40px",
+  agentName: "90px",
+  customerName: "120px",
+  bookingCode: "95px",
+  referenceCode: "160px",
+  bookDate: "90px",
+  bookingDetails: "230px",
+  deadlineDate: "105px",
+  paymentMode: "110px",
+  notification: "100px",
+  action: "110px",
 };
-
-// Minimum total table width — sum of COLUMN_WIDTHS so the table never
-// gets squeezed below the point where columns become unreadable. The
-// wrapper container scrolls horizontally past this width.
-const TABLE_MIN_WIDTH = "1580px";
 
 // Resolve a human-readable Payment Mode label from whatever shape the
 // backend sends. Most rows will have `paymentMode` directly; older
@@ -1137,7 +1129,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                     className="thin-scrollbar"
                     style={{
                       overflowX: "auto",
-                      // custom scrollbar via className below
+                      width: "100%",
                     }}
                   >
                     <Table
@@ -1145,17 +1137,15 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                       size="sm"
                       className="mb-0 align-middle table-bordered"
                       style={{
-                        tableLayout: "fixed",
-                        // Use the wider of 100% or the column-sum minimum.
-                        // The wrapper has `overflowX: "auto"` so on narrower
-                        // viewports the table extends past the visible area
-                        // and the user can scroll horizontally instead of
-                        // seeing truncated cells.
+                        // Auto layout so the table fits the page width and
+                        // column widths flex to content. Falls back to a
+                        // horizontal scroll only on extremely narrow viewports.
+                        tableLayout: "auto",
                         width: "100%",
-                        minWidth: TABLE_MIN_WIDTH,
-                        fontSize: "0.82rem",
+                        fontSize: "0.78rem",
                         borderCollapse: "separate",
                         borderSpacing: 0,
+                        wordBreak: "break-word",
                       }}
                     >
                       <thead
@@ -1638,13 +1628,13 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                           transition: "all 0.2s ease",
                                           opacity: isUpdating ? 0.6 : 1,
                                         }}
-                                        onClick={() => {
-                                          if (isNotConfirmed && !isUpdating) {
-                                            handleConfirmStatusClick(b);
-                                          } else if (!isUpdating) {
-                                            handleConfirmBookingClick(b);
-                                          }
-                                        }}
+                                        // onClick={() => {
+                                        //   if (isNotConfirmed && !isUpdating) {
+                                        //      handleConfirmStatusClick(b);
+                                        //   } else if (!isUpdating) {
+                                        //      handleConfirmBookingClick(b);
+                                        //   }
+                                        // }}
                                       >
                                         {isUpdating ? (
                                           <Spinner

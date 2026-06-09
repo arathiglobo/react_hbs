@@ -153,7 +153,11 @@ export default function EditContractRate() {
             childRate: room.childRate || 0,
             meal: Boolean(room.meal),
             extraBed: Boolean(room.extraBed),
-            refundable: Boolean(room.refundable),
+            // Legacy rows may carry null; treat as Refundable by default so the
+            // new mandatory radio always loads a selection.
+            refundable: room.refundable === null || room.refundable === undefined
+              ? true
+              : Boolean(room.refundable),
           })) || [];
 
           setFormData({
@@ -264,12 +268,12 @@ export default function EditContractRate() {
     setFormData({ ...formData, validityList: updated });
   };
 
-  // ✅ Handle refundable toggle
-  const handleRefundableChange = (roomId, checked) => {
+  // ✅ Handle refundable radio (Refundable / Non Refundable)
+  const handleRefundableChange = (roomId, isRefundable) => {
     setFormData((prev) => {
       const updatedRates = [...prev.roomRates];
       updatedRates.forEach((r) => {
-        if (r.hotelRoomcategoryId === String(roomId)) r.refundable = checked;
+        if (r.hotelRoomcategoryId === String(roomId)) r.refundable = isRefundable;
       });
       return { ...prev, roomRates: updatedRates };
     });
@@ -301,6 +305,17 @@ export default function EditContractRate() {
 
     if (!hasValidRates) {
       return "Please enter at least one valid rate (rate, adult rate, or child rate).";
+    }
+
+    // Refundable selection is mandatory per room category.
+    const categoriesMissingRefundable = new Set();
+    formData.roomRates.forEach((r) => {
+      if (r.refundable !== true && r.refundable !== false) {
+        categoriesMissingRefundable.add(r.hotelRoomcategoryId);
+      }
+    });
+    if (categoriesMissingRefundable.size > 0) {
+      return "Please select Refundable or Non Refundable for every room category.";
     }
 
     return null;
@@ -353,7 +368,7 @@ export default function EditContractRate() {
             field === "adultRate" || field === "childRate"
               ? Number(value) > 0
               : false,
-          refundable: false,
+          refundable: true,
         });
       }
 
@@ -695,24 +710,44 @@ export default function EditContractRate() {
                           key={room.hotelRoomcategoryId}
                           className="border rounded-4 bg-white p-3 mb-4 shadow-sm"
                         >
-                          <div className="d-flex justify-content-between align-items-center mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <span className="fw-semibold text-uppercase">
                               {room.roomCategory}
                             </span>
-                            <Form.Check
-                              label="Is Refundable"
-                              checked={
-                                formData.roomRates.find(
-                                  (r) => r.hotelRoomcategoryId === String(room.hotelRoomcategoryId)
-                                )?.refundable || false
-                              }
-                              onChange={(e) =>
-                                handleRefundableChange(
-                                  room.hotelRoomcategoryId,
-                                  e.target.checked
-                                )
-                              }
-                            />
+                            {(() => {
+                              const current = formData.roomRates.find(
+                                (r) => r.hotelRoomcategoryId === String(room.hotelRoomcategoryId)
+                              );
+                              const isRefundable = current?.refundable === true;
+                              const isNonRefundable = current?.refundable === false;
+                              const groupName = `refundable-${room.hotelRoomcategoryId}`;
+                              return (
+                                <div className="d-flex align-items-center gap-3">
+                                  <Form.Check
+                                    type="radio"
+                                    inline
+                                    name={groupName}
+                                    id={`${groupName}-yes`}
+                                    label="Refundable"
+                                    checked={isRefundable}
+                                    onChange={() =>
+                                      handleRefundableChange(room.hotelRoomcategoryId, true)
+                                    }
+                                  />
+                                  <Form.Check
+                                    type="radio"
+                                    inline
+                                    name={groupName}
+                                    id={`${groupName}-no`}
+                                    label="Non Refundable"
+                                    checked={isNonRefundable}
+                                    onChange={() =>
+                                      handleRefundableChange(room.hotelRoomcategoryId, false)
+                                    }
+                                  />
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <Table bordered hover responsive size="sm">

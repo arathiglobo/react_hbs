@@ -2102,6 +2102,34 @@ const AgentReg = () => {
                             disabled={isViewMode}
                             className={isViewMode ? "bg-light" : ""}
                           />
+                          {/* Preview block — shows the existing logo
+                              fetched from the backend (base64 string)
+                              OR a freshly-picked File via object URL.
+                              Without this, on edit it was impossible to
+                              tell whether the saved logo was loaded. */}
+                          {formData.agentLogo && (
+                            <div className="mt-2">
+                              <img
+                                src={
+                                  formData.agentLogo instanceof File
+                                    ? URL.createObjectURL(formData.agentLogo)
+                                    : (typeof formData.agentLogo === "string"
+                                        ? (formData.agentLogo.startsWith("data:")
+                                            ? formData.agentLogo
+                                            : `data:image/*;base64,${formData.agentLogo}`)
+                                        : null)
+                                }
+                                alt="Company Logo"
+                                style={{
+                                  maxHeight: "60px",
+                                  maxWidth: "100%",
+                                  border: "1px solid #ddd",
+                                  borderRadius: "4px",
+                                  padding: "2px",
+                                }}
+                              />
+                            </div>
+                          )}
                         </Form.Group>
                       </Col>
                       <Col md={3}>

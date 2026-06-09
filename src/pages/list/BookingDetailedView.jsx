@@ -96,15 +96,27 @@ export default function BookingDetailedView() {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Role gate for admin-only actions (currently: "Send Email" on the
+  // PDF preview modal). Matches the convention used on HotelBookingPage.
+  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
+
   // ── Action-button modal / handler state (ported from HotelBookingList) ──
   // Cancel
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancellingBooking, setCancellingBooking] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
 
-  // Reconfirm (simple confirm modal)
+  // Reconfirm (Confirm / Reject popup)
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
+
+  // Reject (follow-up modal from Reconfirm → Reject)
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectedBy, setRejectedBy] = useState("");
+  const [rejectedByError, setRejectedByError] = useState("");
+  const [rejectionRemarks, setRejectionRemarks] = useState("");
+  const [rejectingBooking, setRejectingBooking] = useState(false);
 
   // Update Book Status (PATCH confirmation-status with Agent LPO)
   const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
@@ -126,6 +138,16 @@ export default function BookingDetailedView() {
 
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
+
+  // Send Document Email — generic modal used by Voucher / Invoice
+  // / Proforma buttons to email the document to a custom address.
+  const [showSendEmailModal, setShowSendEmailModal] = useState(false);
+  const [sendEmailDocType, setSendEmailDocType] = useState(null); // VOUCHER | PROFORMA_VOUCHER | INVOICE | PROFORMA_INVOICE
+  const [sendEmailDocLabel, setSendEmailDocLabel] = useState("");
+  const [sendEmailRecipient, setSendEmailRecipient] = useState("");
+  const [sendEmailNote, setSendEmailNote] = useState("");
+  const [sendEmailError, setSendEmailError] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   // PDF generation feedback
   const [generatingPdfType, setGeneratingPdfType] = useState(null);
@@ -160,6 +182,18 @@ export default function BookingDetailedView() {
     .toUpperCase();
   const isReconfirmed = normalizedStatus === "RECONFIRMED";
   const isCancelled = normalizedStatus === "CANCELLED";
+  // Agent Reference and Confirmation Number can only be SAVED once the
+  // booking is confirmed-or-better; before that the booking is still
+  // tentative and these fields don't apply yet.
+  const isConfirmedOrLater =
+    normalizedStatus === "CONFIRMED" ||
+    normalizedStatus === "RECONFIRMED" ||
+    normalizedStatus === "COMPLETED";
+  // Voucher / Invoice (vs Proforma equivalents) become available the
+  // moment the supplier confirms the booking — Confirmed is the same UX
+  // as ReConfirmed here. Cancelled bookings also keep the final-doc
+  // buttons (handled separately by the isCancelled branch).
+  const showsFinalDocs = isReconfirmed || normalizedStatus === "CONFIRMED";
   // const isCancellationAllowed =
   //   String(booking?.refundStatus || "").toLowerCase() !== "non-refundable";
 
@@ -222,10 +256,8 @@ export default function BookingDetailedView() {
       // controller binding and 404s, hence this switch.
       const response = await axiosInstance.patch(
         `/api/booking-confirmation/${id}/confirmation-status`,
-        { confirmStatus: true }
+        { action: "CONFIRM", confirmStatus: true }
       );
-      // Backend returns ConfirmationStatusUpdateResponse { success,
-      // message, confirmationStatus }. success is always a real boolean.
       if (response.data && response.data.success === true) {
         setShowConfirmModal(false);
         toast.success(
@@ -246,44 +278,98 @@ export default function BookingDetailedView() {
     }
   };
 
-  // Update Book Status (PATCH /api/booking-confirmation/{id}/confirmation-status)
-  const openConfirmStatusModal = () => {
+  // Reject flow: Reconfirm popup → "Reject" → opens this modal
+  const openRejectModal = () => {
+    setShowConfirmModal(false);
+    setRejectedBy("");
+    setRejectedByError("");
+    setRejectionRemarks("");
+    setShowRejectModal(true);
+  };
+
+  const rejectBooking = async () => {
+    const rb = (rejectedBy || "").trim();
+    if (!rb) {
+      setRejectedByError("Rejected By is required");
+      return;
+    }
+    setRejectedByError("");
+    try {
+      setRejectingBooking(true);
+      const response = await axiosInstance.patch(
+        `/api/booking-confirmation/${id}/confirmation-status`,
+        {
+          action: "REJECT",
+          rejectedBy: rb,
+          rejectionRemarks: (rejectionRemarks || "").trim() || null,
+        }
+      );
+      if (response.data && response.data.success === true) {
+        setShowRejectModal(false);
+        toast.success(response.data.message || "Booking rejected.");
+        await fetchBooking();
+      } else {
+        toast.error(response.data?.message || "Failed to reject booking.");
+      }
+    } catch (error) {
+      console.error("Error rejecting booking:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to reject booking. Please try again."
+      );
+    } finally {
+      setRejectingBooking(false);
+    }
+  };
+
+  // Agent Reference modal — uses dedicated endpoint POST
+  // /api/booking-customer/{id}/agent-reference. On open, fetches the
+  // currently saved value so the user can see and edit it.
+  const openConfirmStatusModal = async () => {
     setConfirmAgentLpo("");
     setConfirmAgentLpoError("");
     setShowConfirmStatusModal(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/booking-customer/${id}/agent-reference`
+      );
+      const saved = res?.data?.agentLpo;
+      if (saved) setConfirmAgentLpo(saved);
+    } catch (err) {
+      // Non-fatal: modal still opens; user can type a new value.
+      console.warn("Could not prefill agent reference:", err?.message);
+    }
   };
 
   const updateConfirmationStatus = async () => {
     const lpoTrimmed = (confirmAgentLpo || "").trim();
     if (!lpoTrimmed) {
-      setConfirmAgentLpoError("Agent LPO is required");
+      setConfirmAgentLpoError("Agent Reference is required");
       return;
     }
     setConfirmAgentLpoError("");
     try {
       setUpdatingConfirmationStatus(true);
-      const response = await axiosInstance.patch(
-        `/api/booking-confirmation/${id}/confirmation-status`,
-        { confirmStatus: true, agentLpo: lpoTrimmed }
+      const response = await axiosInstance.post(
+        `/api/booking-customer/${id}/agent-reference`,
+        { agentLpo: lpoTrimmed }
       );
       if (response.data && response.data.success) {
         setShowConfirmStatusModal(false);
-        setConfirmAgentLpo("");
-        setConfirmAgentLpoError("");
         toast.success(
-          response.data.message || "Confirmation status updated successfully!"
+          response.data.message || "Agent Reference updated successfully"
         );
         await fetchBooking();
       } else {
         toast.error(
-          response.data?.message || "Failed to update confirmation status."
+          response.data?.message || "Failed to update Agent Reference."
         );
       }
     } catch (error) {
-      console.error("Error updating confirmation status:", error);
+      console.error("Error updating Agent Reference:", error);
       toast.error(
         error.response?.data?.message ||
-          "Failed to update confirmation status. Please try again."
+          "Failed to update Agent Reference. Please try again."
       );
     } finally {
       setUpdatingConfirmationStatus(false);
@@ -291,10 +377,23 @@ export default function BookingDetailedView() {
   };
 
   // Confirmation Number (reuses the same PATCH endpoint with a confirmationNumber field)
-  const openConfirmationNoModal = () => {
-    setConfirmationNoInput(booking?.referenceNumber || "");
+  const openConfirmationNoModal = async () => {
+    setConfirmationNoInput("");
     setConfirmationNoError("");
     setShowConfirmationNoModal(true);
+    // Pre-fill with the value already saved against this booking. The
+    // backend booking-detail response carries the latest confirmationNumber
+    // (also exposed via /api/booking-customer/{id}/agent-reference), so we
+    // hit that endpoint to stay consistent with the Agent Reference flow.
+    try {
+      const res = await axiosInstance.get(
+        `/api/booking-customer/${id}/agent-reference`
+      );
+      const saved = res?.data?.confirmationNumber;
+      if (saved) setConfirmationNoInput(saved);
+    } catch (err) {
+      console.warn("Could not prefill confirmation number:", err?.message);
+    }
   };
 
   const saveConfirmationNo = async () => {
@@ -308,7 +407,7 @@ export default function BookingDetailedView() {
       setSavingConfirmationNo(true);
       const response = await axiosInstance.patch(
         `/api/booking-confirmation/${id}/confirmation-status`,
-        { confirmationNumber: value }
+        { action: "CONFIRMATION_NO", confirmationNumber: value }
       );
       if (response.data && response.data.success) {
         setShowConfirmationNoModal(false);
@@ -346,17 +445,17 @@ export default function BookingDetailedView() {
     }
     try {
       setSavingRemark(true);
-      const createdBy =
-        localStorage.getItem("UserName") ||
-        sessionStorage.getItem("UserName") ||
-        "user";
+      // Save to HotelBooking.remarks (what the detail page's Remarks
+      // section reads, and what the voucher template renders). The
+      // separate /notes endpoint persists ad-hoc Related Notes which
+      // are different from the Booking Remark.
       const response = await axiosInstance.post(
-        `/api/hotel-booking/${id}/notes`,
-        { noteText: text, createdBy }
+        `/api/hotel-booking/${id}/remark`,
+        { remarks: text }
       );
       if (response.data && response.data.success !== false) {
         setShowRemarkModal(false);
-        toast.success(response.data?.message || "Remark saved successfully!");
+        toast.success(response.data?.message || "Remark saved successfully");
         await fetchBooking();
       } else {
         toast.error(response.data?.message || "Failed to save remark.");
@@ -394,6 +493,57 @@ export default function BookingDetailedView() {
       );
     } finally {
       setResendingMail(false);
+    }
+  };
+
+  // Send Document Email handlers
+  const openSendEmailModal = (docType, label) => {
+    setSendEmailDocType(docType);
+    setSendEmailDocLabel(label);
+    setSendEmailRecipient("");
+    setSendEmailNote("");
+    setSendEmailError("");
+    setShowSendEmailModal(true);
+  };
+
+  const sendDocumentEmail = async () => {
+    const email = (sendEmailRecipient || "").trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) {
+      setSendEmailError("Email is required");
+      return;
+    }
+    if (!emailRegex.test(email)) {
+      setSendEmailError("Enter a valid email address");
+      return;
+    }
+    setSendEmailError("");
+    try {
+      setSendingEmail(true);
+      const response = await axiosInstance.post(
+        `/api/booking-document-email/${id}`,
+        {
+          email,
+          docType: sendEmailDocType,
+          note: (sendEmailNote || "").trim() || null,
+        }
+      );
+      if (response.data && response.data.success === true) {
+        toast.success(
+          response.data.message || `${sendEmailDocLabel} sent to ${email}`
+        );
+        setShowSendEmailModal(false);
+      } else {
+        toast.error(response.data?.message || "Failed to send document.");
+      }
+    } catch (error) {
+      console.error("Error sending document email:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to send document. Please try again."
+      );
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -995,6 +1145,38 @@ export default function BookingDetailedView() {
                     live booking). Per-button !isCancelled checks below
                     are now redundant but left in place for safety in
                     case this wrapper is ever removed. */}
+                {isCancelled && (
+                  <div
+                    style={{
+                      marginBottom: "10px",
+                      display: "flex",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      style={BUTTON_STYLE}
+                      disabled={generatingPdfType === "VOUCHER"}
+                      onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
+                    >
+                      {generatingPdfType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
+                    </button>
+                    <button
+                      style={BUTTON_STYLE}
+                      disabled={generatingPdfType === "COMPLETED"}
+                      onClick={() => handleDownloadPdf("COMPLETED", "Invoice")}
+                    >
+                      {generatingPdfType === "COMPLETED" ? "GENERATING..." : "INVOICE"}
+                    </button>
+                    <button
+                      style={BUTTON_STYLE}
+                      onClick={resendMailToAgent}
+                      disabled={resendingMail}
+                    >
+                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                    </button>
+                  </div>
+                )}
                 {!isCancelled && (
                 <div
                   style={{
@@ -1026,40 +1208,40 @@ export default function BookingDetailedView() {
                     </button>
                   )}
 
-                  {!isReconfirmed && !isCancelled && (
+                  {!showsFinalDocs && !isCancelled && (
                     <button style={BUTTON_STYLE} onClick={openConfirmModal}>
                       RECONFIRM
                     </button>
                   )}
 
-                  {!isReconfirmed && !isCancelled && (
+                  {!showsFinalDocs && !isCancelled && (
                     <>
                       <button
                         style={BUTTON_STYLE}
-                        disabled={generatingPdfType === "VOUCHER"}
+                        disabled={generatingPdfType === "PROFORMA_VOUCHER"}
                         onClick={() =>
-                          handleDownloadPdf("VOUCHER", "Proforma Voucher")
+                          handleDownloadPdf("PROFORMA_VOUCHER", "Proforma Voucher")
                         }
                       >
-                        {generatingPdfType === "VOUCHER"
+                        {generatingPdfType === "PROFORMA_VOUCHER"
                           ? "GENERATING..."
                           : "PROFORMA VOUCHER"}
                       </button>
                       <button
                         style={BUTTON_STYLE}
-                        disabled={generatingPdfType === "CONFIRMATION"}
+                        disabled={generatingPdfType === "PROFORMA_INVOICE"}
                         onClick={() =>
-                          handleDownloadPdf("CONFIRMATION", "Proforma Invoice")
+                          handleDownloadPdf("PROFORMA_INVOICE", "Proforma Invoice")
                         }
                       >
-                        {generatingPdfType === "CONFIRMATION"
+                        {generatingPdfType === "PROFORMA_INVOICE"
                           ? "GENERATING..."
                           : "PROFORMA INVOICE"}
                       </button>
                     </>
                   )}
 
-                  {isReconfirmed && !isCancelled && (
+                  {showsFinalDocs && !isCancelled && (
                     <>
                       <button
                         style={BUTTON_STYLE}
@@ -1087,16 +1269,36 @@ export default function BookingDetailedView() {
                   {!isCancelled && (
                     <button
                       style={BUTTON_STYLE}
-                      onClick={openConfirmStatusModal}
+                      onClick={() => {
+                        // Show the button for every live booking so the
+                        // operator can see the action exists, but block the
+                        // modal from opening until the booking is at least
+                        // Confirmed (mirrors the backend J1 guard).
+                        if (!isConfirmedOrLater) {
+                          toast.error(
+                            "Agent Reference can only be added once the booking is Confirmed or ReConfirmed."
+                          );
+                          return;
+                        }
+                        openConfirmStatusModal();
+                      }}
                     >
-                      UPDATE BOOK STATUS
+                      ADD AGENT REFERENCE
                     </button>
                   )}
 
                   {!isCancelled && (
                     <button
                       style={BUTTON_STYLE}
-                      onClick={openConfirmationNoModal}
+                      onClick={() => {
+                        if (!isConfirmedOrLater) {
+                          toast.error(
+                            "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed."
+                          );
+                          return;
+                        }
+                        openConfirmationNoModal();
+                      }}
                     >
                       CONFIRMATION NO.
                     </button>
@@ -1286,14 +1488,14 @@ export default function BookingDetailedView() {
                     }}
                   >
                     <Button
-                      variant="secondary"
-                      onClick={() => setShowConfirmModal(false)}
+                      variant="danger"
+                      onClick={openRejectModal}
                       disabled={confirmingBooking}
                     >
-                      Cancel
+                      Reject
                     </Button>
                     <Button
-                      variant="primary"
+                      variant="success"
                       onClick={confirmBooking}
                       disabled={confirmingBooking}
                     >
@@ -1304,10 +1506,186 @@ export default function BookingDetailedView() {
                             size="sm"
                             className="me-2"
                           />
-                          Reconfirming...
+                          Confirming...
                         </>
                       ) : (
-                        "OK"
+                        "Confirm"
+                      )}
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Reject Booking Modal (follow-up from Reconfirm → Reject) ── */}
+                <Modal
+                  show={showRejectModal}
+                  onHide={() => {
+                    if (!rejectingBooking) setShowRejectModal(false);
+                  }}
+                  centered
+                  backdrop="static"
+                  keyboard={false}
+                >
+                  <Modal.Header
+                    closeButton={!rejectingBooking}
+                    style={{
+                      backgroundColor: "#fff",
+                      borderBottom: "2px solid #e9ecef",
+                    }}
+                  >
+                    <Modal.Title className="fw-bold d-flex align-items-center">
+                      <FaExclamationCircle className="me-2 text-danger" />
+                      <span>Reject Booking</span>
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body style={{ padding: "1.5rem" }}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold">
+                        Rejected By <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={rejectedBy}
+                        onChange={(e) => {
+                          setRejectedBy(e.target.value);
+                          if (rejectedByError) setRejectedByError("");
+                        }}
+                        isInvalid={!!rejectedByError}
+                        placeholder="Enter name"
+                        disabled={rejectingBooking}
+                        autoFocus
+                      />
+                      <Form.Control.Feedback type="invalid">
+                        {rejectedByError}
+                      </Form.Control.Feedback>
+                    </Form.Group>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="fw-semibold">
+                        Remarks <span className="text-muted small">(optional)</span>
+                      </Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={rejectionRemarks}
+                        onChange={(e) => setRejectionRemarks(e.target.value)}
+                        placeholder="Reason for rejection"
+                        disabled={rejectingBooking}
+                      />
+                    </Form.Group>
+                  </Modal.Body>
+                  <Modal.Footer
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderTop: "1px solid #dee2e6",
+                    }}
+                  >
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowRejectModal(false)}
+                      disabled={rejectingBooking}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={rejectBooking}
+                      disabled={rejectingBooking}
+                    >
+                      {rejectingBooking ? (
+                        <>
+                          <Spinner animation="border" size="sm" className="me-2" />
+                          Rejecting...
+                        </>
+                      ) : (
+                        "Reject Booking"
+                      )}
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Send Document Email Modal ─────────────────────── */}
+                <Modal
+                  show={showSendEmailModal}
+                  onHide={() => {
+                    if (!sendingEmail) setShowSendEmailModal(false);
+                  }}
+                  centered
+                  backdrop="static"
+                  keyboard={false}
+                >
+                  <Modal.Header
+                    closeButton={!sendingEmail}
+                    style={{
+                      backgroundColor: "#fff",
+                      borderBottom: "2px solid #e9ecef",
+                    }}
+                  >
+                    <Modal.Title className="fw-bold">
+                      Send {sendEmailDocLabel} via Email
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body style={{ padding: "1.5rem" }}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold">
+                        Recipient Email <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="email"
+                        value={sendEmailRecipient}
+                        onChange={(e) => {
+                          setSendEmailRecipient(e.target.value);
+                          if (sendEmailError) setSendEmailError("");
+                        }}
+                        isInvalid={!!sendEmailError}
+                        placeholder="recipient@example.com"
+                        disabled={sendingEmail}
+                        autoFocus
+                      />
+                      <Form.Control.Feedback type="invalid">
+                        {sendEmailError}
+                      </Form.Control.Feedback>
+                    </Form.Group>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="fw-semibold">
+                        Note <span className="text-muted small">(optional)</span>
+                      </Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={sendEmailNote}
+                        onChange={(e) => setSendEmailNote(e.target.value)}
+                        placeholder="Add a message for the recipient"
+                        disabled={sendingEmail}
+                      />
+                    </Form.Group>
+                    <div className="text-muted small">
+                      A fresh PDF will be generated and attached automatically.
+                    </div>
+                  </Modal.Body>
+                  <Modal.Footer
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderTop: "1px solid #dee2e6",
+                    }}
+                  >
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowSendEmailModal(false)}
+                      disabled={sendingEmail}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={sendDocumentEmail}
+                      disabled={sendingEmail}
+                    >
+                      {sendingEmail ? (
+                        <>
+                          <Spinner animation="border" size="sm" className="me-2" />
+                          Sending...
+                        </>
+                      ) : (
+                        "Send Email"
                       )}
                     </Button>
                   </Modal.Footer>
@@ -1337,13 +1715,13 @@ export default function BookingDetailedView() {
                   >
                     <Modal.Title className="fw-bold d-flex align-items-center">
                       <FaExclamationCircle className="me-2 text-warning" />
-                      <span>Update Booking Status</span>
+                      <span>Update Agent Reference</span>
                     </Modal.Title>
                   </Modal.Header>
                   <Modal.Body style={{ padding: "1.5rem" }}>
                     <div className="text-center">
                       <p className="fs-6 mb-3">
-                        Are you sure you want to confirm this booking?
+                        Are you sure you want to update the agent reference?
                       </p>
                       <div className="text-muted small mb-3">
                         <div>
@@ -1362,11 +1740,11 @@ export default function BookingDetailedView() {
                       className="text-start"
                     >
                       <Form.Label className="fw-semibold mb-1">
-                        Agent LPO <span className="text-danger">*</span>
+                        Agent Reference <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Control
                         type="text"
-                        placeholder="Enter Agent LPO"
+                        placeholder="Enter Agent Reference"
                         value={confirmAgentLpo}
                         onChange={(e) => {
                           setConfirmAgentLpo(e.target.value);
@@ -1464,7 +1842,7 @@ export default function BookingDetailedView() {
                       </Form.Label>
                       <Form.Control
                         type="text"
-                        placeholder="Enter Confirmation Number"
+                        placeholder="Enter Hotel Confirmation Number"
                         value={confirmationNoInput}
                         onChange={(e) => {
                           setConfirmationNoInput(e.target.value);
@@ -1651,6 +2029,35 @@ export default function BookingDetailedView() {
               >
                 Download
               </Button>
+              {/* Send Email — admin-only. Agents see the
+                  download + new-tab buttons but cannot dispatch
+                  documents by email from this UI. */}
+              {isAdmin && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    const labelToDocType = {
+                      "Voucher": "VOUCHER",
+                      "Proforma Voucher": "PROFORMA_VOUCHER",
+                      "Invoice": "INVOICE",
+                      "Proforma Invoice": "PROFORMA_INVOICE",
+                    };
+                    const dt =
+                      labelToDocType[pdfPreview.label] ||
+                      (pdfPreview.type === "PROFORMA_VOUCHER"
+                        ? "PROFORMA_VOUCHER"
+                        : pdfPreview.type === "PROFORMA_INVOICE"
+                        ? "PROFORMA_INVOICE"
+                        : pdfPreview.type === "COMPLETED"
+                        ? "INVOICE"
+                        : "VOUCHER");
+                    openSendEmailModal(dt, pdfPreview.label || "Document");
+                  }}
+                >
+                  ✉ Send Email
+                </Button>
+              )}
             </>
           )}
           <Button
