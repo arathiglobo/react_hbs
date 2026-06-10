@@ -13,6 +13,7 @@ import { FaArrowLeft, FaPlus, FaTrash, FaSave } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
 
 const PolicyUpdate = () => {
@@ -165,7 +166,10 @@ const PolicyUpdate = () => {
               >
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              <h4 className="fw-semibold text-dark mb-0">Update Policy Details</h4>
+              <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
+                Update Policy Details
+                <HotelTitleBadge hotelId={id} />
+              </h4>
             </div>
 
             <Card className="shadow-sm border-0 p-4 rounded-4 bg-white">

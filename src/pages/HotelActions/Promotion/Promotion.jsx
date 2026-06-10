@@ -208,6 +208,23 @@ const Promotion = () => {
     }
   };
 
+  // Normalise the multiple date shapes the promotion endpoints return
+  // ("yyyy-MM-ddTHH:mm:ss", "dd-MM-yyyy", "yyyy-MM-dd", legacy "dd-MM-yyyy HH:mm:ss")
+  // into a stable display string for the validity modal & list cells.
+  // Without this the modal showed whatever the API happened to emit,
+  // which differed across Special Rate / Discount / Stay Pay.
+  const formatValidity = (raw) => {
+    if (!raw) return "—";
+    const str = String(raw);
+    // ISO with T separator: 2026-07-01T00:00:00 → 2026-07-01
+    if (str.includes("T")) return str.split("T")[0];
+    // DD-MM-YYYY[ HH:mm:ss]: flip to YYYY-MM-DD for readability
+    const m = str.match(/^(\d{2})-(\d{2})-(\d{4})/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    // Anything else (already YYYY-MM-DD or just a date) — pass through.
+    return str;
+  };
+
   // ✅ Handle navigation for creation
   const handleGo = () => {
     if (!formData.type) return toast.error("Please select a promotion type");
@@ -339,8 +356,8 @@ const Promotion = () => {
                         <td>{promo.promotionCode || "—"}</td>
                         <td>{promo.dayType || "—"}</td>
                         <td>
-                          <Badge 
-                            bg={promo.status ? "success" : "secondary"}
+                          <Badge
+                            bg={promo.status ? "success" : "danger"}
                             style={{ cursor: "pointer" }}
                             onClick={() => handleStatusToggle(promo)}
                             title={`Click to ${promo.status ? 'deactivate' : 'activate'} promotion`}
@@ -349,10 +366,11 @@ const Promotion = () => {
                           </Badge>
                         </td>
                         <td>
-                          <div className="d-flex gap-3 justify-content-center">
-                            <FaEdit
-                              className="text-warning"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                          <div className="d-flex gap-2 justify-content-center">
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => {
                                 const type = promo.promotionType?.toLowerCase();
                                 if (type.includes("special")) {
@@ -375,14 +393,19 @@ const Promotion = () => {
                                 }
                               }}
                               title="Edit"
-                            />
+                            >
+                              <FaEdit /> Edit
+                            </Button>
 
-                            <FaTrash
-                              className="text-danger"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleDelete(promo)}
                               title="Delete"
-                            />
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -554,8 +577,8 @@ const Promotion = () => {
                           {selectedPromo.promotionValidityDTO.discountValidities?.map(
                             (v, i) => (
                               <tr key={i}>
-                                <td>{v.validityFrom || "—"}</td>
-                                <td>{v.validityTo || "—"}</td>
+                                <td>{formatValidity(v.validityFrom)}</td>
+                                <td>{formatValidity(v.validityTo)}</td>
                                 <td>
                                   <Badge bg="success">Live</Badge>
                                 </td>
@@ -580,8 +603,8 @@ const Promotion = () => {
                           {selectedPromo.promotionValidityDTO.blackOutValidities?.map(
                             (b, i) => (
                               <tr key={i}>
-                                <td>{b.blackOutFrom || "—"}</td>
-                                <td>{b.blackOutTo || "—"}</td>
+                                <td>{formatValidity(b.blackOutFrom)}</td>
+                                <td>{formatValidity(b.blackOutTo)}</td>
                                 <td>
                                   <Badge bg="secondary">—</Badge>
                                 </td>

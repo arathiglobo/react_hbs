@@ -77,6 +77,13 @@ const CompulsoryEventsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [editEvent, setEditEvent] = useState(null);
 
+  // Status-toggle modal state — mirrors the ContractRate pattern: the
+  // Active/Inactive badge in each row opens a small confirmation modal
+  // that PATCHes /api/compulsoryEvent/{id}/status with the flipped value.
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+
   // Search + pagination
   const [searchTerm, setSearchTerm] = useState("");
   const itemsPerPage = 8;
@@ -261,6 +268,43 @@ const CompulsoryEventsPage = () => {
       validityTo: "",
     });
     setShowModal(true);
+  };
+
+  // Open status-toggle modal — same UX as /contract-rate.
+  const handleStatusToggle = (event) => {
+    setSelectedEvent(event);
+    setShowStatusModal(true);
+  };
+
+  // PATCH the new isLive value, refresh the list, close the modal.
+  // Matches the ContractRate flow (uses the same HotelContractRatePatchDTO
+  // body shape on the backend: { isLive: boolean }).
+  const updateEventStatus = async () => {
+    if (!selectedEvent) return;
+    try {
+      setStatusUpdating(true);
+      const payload = { isLive: !selectedEvent.isLive };
+      await axiosInstance.patch(
+        `/api/compulsoryEvent/${selectedEvent.supplymentId}/status`,
+        payload
+      );
+      toast.success(
+        selectedEvent.isLive
+          ? "Compulsory event deactivated"
+          : "Compulsory event activated"
+      );
+      await fetchEvents();
+      setShowStatusModal(false);
+      setSelectedEvent(null);
+    } catch (error) {
+      console.error("Status toggle failed:", error);
+      toast.error(
+        error?.response?.data?.message ||
+          "Failed to update compulsory event status"
+      );
+    } finally {
+      setStatusUpdating(false);
+    }
   };
 
   // Handle delete
@@ -561,161 +605,135 @@ const CompulsoryEventsPage = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid className="px-0">
-            <Card className="shadow-sm border-0 rounded-4">
-              {/* ================= Header ================= */}
-              <Card.Header className="bg-white border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
-                <div className="d-flex align-items-center gap-3 mb-3">
-                  <Button
-                    variant="outline-primary"
-                    onClick={() => navigate(`/hotel-details/${id}`)}
-                    className="d-flex align-items-center btn-sm gap-2"
-                  >
-                    <FaArrowLeft />
-                    Back
-                  </Button>
-                  <div className="fw-semibold fs-4 text-dark">
-                    Compulsory Events
-                  </div>
-                  <HotelTitleBadge hotelId={id} className="ms-2" />
-                </div>
+            {/* Page header — mirrors /contract-rate: outline-primary
+                Back + h3 title + HotelTitleBadge, sitting ABOVE the
+                card rather than inside Card.Header. */}
+            <div className="d-flex align-items-center gap-3 mb-3">
+              <Button
+                variant="outline-primary"
+                onClick={() => navigate(`/hotel-details/${id}`)}
+                className="d-flex align-items-center btn-sm gap-2"
+              >
+                <FaArrowLeft />
+                Back
+              </Button>
+              <h3 className="mb-0">Compulsory Events</h3>
+              <HotelTitleBadge hotelId={id} className="ms-2" />
+            </div>
 
-                <div className="d-flex align-items-center gap-2 flex-grow-1 justify-content-end">
-                  <div
-                    className="position-relative"
-                    style={{
-                      width: "260px",
-                      maxWidth: "100%",
-                      marginRight: "270px",
+            <Card className="shadow-sm rounded-xl mb-3">
+              {/* Card header — same shape as /contract-rate: primary-
+                  colored title span on the left, plain search input in
+                  the middle, btn-green "+ Create" on the right. */}
+              <Card.Header className="d-flex justify-content-between align-items-center text-white">
+                <span
+                  className="fw-semibold cursor-pointer text-primary"
+                  style={{ padding: "10px" }}
+                >
+                  Compulsory Events
+                </span>
+                <Form.Group className="hotel-search-bar position-relative">
+                  <Form.Control
+                    type="text"
+                    placeholder="Search supplements..."
+                    className="form-control-modern-sm"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
                     }}
-                  >
-                    <Form.Control
-                      type="text"
-                      placeholder="Search supplements..."
-                      value={searchTerm}
-                      onChange={(e) => {
-                        setSearchTerm(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      className="rounded-pill ps-3 text-dark"
-                      style={{
-                        fontSize: "0.9rem",
-                        height: "38px",
-                        borderColor: "#dee2e6",
-                      }}
-                    />
-                    {searchTerm && (
-                      <button
-                        type="button"
-                        className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
-                        style={{
-                          border: "none",
-                          background: "none",
-                          color: "#6c757d",
-                          padding: "0 10px",
-                          fontSize: "1rem",
-                        }}
-                        onClick={() => {
-                          setSearchTerm("");
-                          setCurrentPage(1);
-                        }}
-                      >
-                        <i className="fas fa-times"></i>
-                      </button>
-                    )}
-                  </div>
-
-                  <Button
-                    className="ms-2 btn-green rounded-pill px-4 fw-semibold"
-                    onClick={handleCreate}
-                    style={{
-                      fontSize: "0.9rem",
-                      height: "38px",
-                      lineHeight: "1.2",
-                    }}
-                  >
-                    + Create
-                  </Button>
-                </div>
+                  />
+                </Form.Group>
+                <Button className="btn-green create-btn" onClick={handleCreate}>
+                  + Create
+                </Button>
               </Card.Header>
 
               {/* ================= Table ================= */}
               <Card.Body className="p-0">
                 <Table
-                  responsive
-                  hover
                   striped
-                  className="mb-0 align-middle text-center"
+                  bordered
+                  hover
+                  responsive
+                  className="mb-0 align-middle"
                 >
-                  <thead className="table-light align-middle">
+                  <thead>
                     <tr>
-                      <th style={{ width: "80px" }}>S/N</th>
+                      <th style={{ width: 100 }}>S/N</th>
                       <th>Supplement Code</th>
                       <th>Tagline</th>
                       <th>Status</th>
-                      <th style={{ width: "160px" }}>Actions</th>
+                      <th style={{ width: 160 }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={5} className="text-center py-5 text-muted">
-                          <Spinner
-                            animation="border"
-                            size="sm"
-                            className="me-2"
-                          />
-                          Loading events...
+                        <td colSpan={5} className="text-center py-4">
+                          <Spinner animation="border" variant="primary" />
                         </td>
                       </tr>
                     ) : currentData.length > 0 ? (
                       currentData.map((ev, idx) => (
-                        <tr
-                          key={ev.supplymentId}
-                          style={{
-                            backgroundColor:
-                              idx % 2 === 0 ? "#f9f9f9" : "#ffffff",
-                          }}
-                        >
+                        <tr key={ev.supplymentId}>
                           <td>{(currentPage - 1) * itemsPerPage + idx + 1}</td>
                           <td className="text-capitalize">
                             {ev.supplymentCode}
                           </td>
                           <td className="text-capitalize">{ev.supplyments}</td>
                           <td>
+                            {/* Clickable Active/Inactive badge — opens
+                                the confirm modal, then PATCHes the new
+                                isLive value. Color & label follow the
+                                /contract-rate convention. */}
                             <Badge
-                              bg="success"
-                              className="px-3 py-2 rounded-pill fw-normal"
+                              bg={ev.isLive ? "success" : "danger"}
+                              style={{ cursor: "pointer" }}
+                              onClick={() => handleStatusToggle(ev)}
+                              title={`Click to ${
+                                ev.isLive ? "deactivate" : "activate"
+                              } compulsory event`}
                             >
-                              Active
+                              {ev.isLive ? "Active" : "Inactive"}
                             </Badge>
                           </td>
                           <td>
-                            <div className="d-flex justify-content-center gap-3">
-                              <FaCopy
-                                className="text-info"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                            <div className="d-flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline-info"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => openCopy(ev)}
                                 title="Copy"
-                              />
-                              <FaEdit
-                                className="text-warning"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaCopy /> Copy
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => openEdit(ev)}
                                 title="Edit"
-                              />
-                              <FaTrash
-                                className="text-danger"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEdit /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => handleDelete(ev)}
                                 title="Delete"
-                              />
+                              >
+                                <FaTrash /> Delete
+                              </Button>
                             </div>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={5} className="text-center py-5 text-muted">
+                        <td colSpan={5} className="text-center py-4 text-muted">
                           No events found.
                         </td>
                       </tr>
@@ -1343,6 +1361,56 @@ const CompulsoryEventsPage = () => {
                   }}
                 >
                   {editEvent ? "Update" : "Create"}
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Status-toggle confirmation modal — mirrors /contract-rate.
+                Asks the operator to confirm, then PATCHes the new
+                isLive value via updateEventStatus(). */}
+            <Modal
+              show={showStatusModal}
+              onHide={() => setShowStatusModal(false)}
+              centered
+              size="sm"
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header closeButton={!statusUpdating}>
+                <Modal.Title>Confirm Status Change</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <p>
+                  Are you sure you want to{" "}
+                  {selectedEvent?.isLive ? "deactivate" : "activate"} this
+                  compulsory event?
+                </p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowStatusModal(false)}
+                  disabled={statusUpdating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={updateEventStatus}
+                  disabled={statusUpdating}
+                >
+                  {statusUpdating ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Processing...
+                    </>
+                  ) : (
+                    "Confirm"
+                  )}
                 </Button>
               </Modal.Footer>
             </Modal>

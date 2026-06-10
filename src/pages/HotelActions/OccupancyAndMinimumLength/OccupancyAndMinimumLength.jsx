@@ -1503,7 +1503,7 @@ const OccupancyAndMinimumLength = () => {
                   </Button>
                 </Card.Header>
                 <Card.Body className="p-0">
-                  <Table responsive hover striped className="mb-0 align-middle">
+                  <Table responsive hover striped bordered className="mb-0 align-middle">
                     <thead>
                       <tr>
                         <th style={{ width: 100 }}>S/N</th>
@@ -1539,25 +1539,39 @@ const OccupancyAndMinimumLength = () => {
                             )}
                           </td>
                           <td>
+                            {/* Action buttons — icon-only triplet
+                                replaced with labelled outline buttons.
+                                Same onClick handlers, no behavior
+                                changes. The Fa* icons sit inside the
+                                buttons as visual cues. */}
                             <div className="d-flex gap-2">
-                              <FaEdit
-                                className="text-primary occupancyEdit"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="occupancyEdit d-flex align-items-center gap-1"
                                 onClick={() => openEditOcc(item)}
                                 title="Edit"
-                              />
-                              <FaEye
-                                className="text-info view occupancyView"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEdit /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-info"
+                                className="occupancyView d-flex align-items-center gap-1"
                                 onClick={() => handleViewOcc(item)}
                                 title="View"
-                              />
-                              <FaTrash
-                                className="text-danger delete occupancyDelete"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                className="occupancyDelete d-flex align-items-center gap-1"
                                 onClick={() => handleDeleteOcc(item)}
                                 title="Delete"
-                              />
+                              >
+                                <FaTrash /> Delete
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -2211,25 +2225,38 @@ const OccupancyAndMinimumLength = () => {
                             )}
                           </td>
                           <td>
+                            {/* Action buttons — icon-only triplet
+                                replaced with labelled outline buttons.
+                                Same onClick handlers, no behavior
+                                changes. */}
                             <div className="d-flex gap-2">
-                              <FaEdit
-                                className="text-primary minLengthEdit"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="minLengthEdit d-flex align-items-center gap-1"
                                 onClick={() => openEditMin(item)}
                                 title="Edit"
-                              />
-                              <FaEye
-                                className="text-info view minLengthView"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEdit /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-info"
+                                className="minLengthView d-flex align-items-center gap-1"
                                 onClick={() => handleViewMin(item)}
                                 title="View"
-                              />
-                              <FaTrash
-                                className="text-danger delete minLengthDelete"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                className="minLengthDelete d-flex align-items-center gap-1"
                                 onClick={() => handleDeleteMin(item)}
                                 title="Delete"
-                              />
+                              >
+                                <FaTrash /> Delete
+                              </Button>
                             </div>
                           </td>
                         </tr>

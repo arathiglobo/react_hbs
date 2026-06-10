@@ -14,7 +14,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Card, Row, Col, Button, Table, Form, Modal, Spinner, Badge } from "react-bootstrap";
-import { FaPlus, FaEdit, FaTrash, FaArrowLeft, FaGraduationCap } from "react-icons/fa";
+import { FaEdit, FaTrash, FaArrowLeft, FaGraduationCap } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
@@ -40,6 +40,11 @@ export default function StudentDiscountPromotion() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+
+  // Status-toggle modal state — mirrors the ContractRate pattern.
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -101,6 +106,40 @@ export default function StudentDiscountPromotion() {
     }
   };
 
+  // Open the confirm modal for the row whose badge was clicked.
+  const handleStatusToggle = (row) => {
+    setSelectedRow(row);
+    setShowStatusModal(true);
+  };
+
+  // PATCH the flipped active value, refresh the list, close the modal.
+  const updateRowStatus = async () => {
+    if (!selectedRow) return;
+    try {
+      setStatusUpdating(true);
+      await axiosInstance.patch(
+        `/api/hotel-student-discount-promotion/${selectedRow.promotionId}/status`,
+        { active: !selectedRow.active }
+      );
+      toast.success(
+        selectedRow.active
+          ? "Student discount deactivated"
+          : "Student discount activated"
+      );
+      await fetchAll();
+      setShowStatusModal(false);
+      setSelectedRow(null);
+    } catch (err) {
+      console.error("Status toggle failed:", err);
+      toast.error(
+        err?.response?.data?.message ||
+          "Failed to update student-discount status"
+      );
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this promotion?")) return;
     try {
@@ -118,68 +157,125 @@ export default function StudentDiscountPromotion() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm border-0">
-            <Card.Body>
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                  <Button variant="link" className="p-0 me-2" onClick={() => navigate(`/hotel-details/${hotelId}`)}>
-                    <FaArrowLeft /> Back
-                  </Button>
-                  <h5 className="d-inline">
-                    <FaGraduationCap className="me-2 text-primary" />
-                    Student Discount
-                  </h5>
-                  <HotelTitleBadge hotelId={hotelId} className="ms-2" />
-                  <div className="text-muted small mt-1">Hotel ID: {hotelId}</div>
-                </div>
-                <Button variant="primary" size="sm" onClick={openCreate}>
-                  <FaPlus className="me-1" /> Add Discount
-                </Button>
-              </div>
+          {/* Page header — mirrors LastMinuteContractRate. The
+              FaGraduationCap accent is kept beside the h3 to preserve
+              the page's visual identity. */}
+          <div className="d-flex align-items-center gap-3 mb-3">
+            <Button
+              variant="outline-primary"
+              onClick={() => navigate(`/hotel-details/${hotelId}`)}
+              className="d-flex align-items-center btn-sm gap-2"
+            >
+              <FaArrowLeft />
+              Back
+            </Button>
+            <h3 className="mb-0 d-flex align-items-center">
+              <FaGraduationCap className="me-2 text-primary" />
+              Student Discount
+            </h3>
+            <HotelTitleBadge hotelId={hotelId} className="ms-2" />
+          </div>
 
-              {loading ? (
-                <div className="text-center py-5"><Spinner animation="border" /></div>
-              ) : (
-                <Table striped bordered hover responsive size="sm">
-                  <thead className="table-light">
+          <Card className="shadow-sm rounded-xl mb-3">
+            <Card.Header className="d-flex justify-content-between align-items-center text-white">
+              <span
+                className="fw-semibold cursor-pointer text-primary"
+                style={{ padding: "10px" }}
+              >
+                Student Discount
+              </span>
+              <Button className="btn-green create-btn" onClick={openCreate}>
+                + Create
+              </Button>
+            </Card.Header>
+
+            <Card.Body className="p-0">
+              <Table
+                striped
+                bordered
+                hover
+                responsive
+                className="mb-0 align-middle"
+              >
+                <thead>
+                  <tr>
+                    <th style={{ width: 100 }}>S/N</th>
+                    <th>Discount %</th>
+                    <th>Discount Amount</th>
+                    <th>Valid From</th>
+                    <th>Valid To</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th style={{ width: 160 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
                     <tr>
-                      <th>#</th>
-                      <th>Discount %</th>
-                      <th>Discount Amount</th>
-                      <th>Valid From</th>
-                      <th>Valid To</th>
-                      <th>Description</th>
-                      <th>Active</th>
-                      <th>Actions</th>
+                      <td colSpan={8} className="text-center py-4">
+                        <Spinner animation="border" />
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {rows.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center text-muted py-4">No student discount configured yet.</td></tr>
-                    ) : (
-                      rows.map((r, i) => (
-                        <tr key={r.promotionId}>
-                          <td>{i + 1}</td>
-                          <td>{r.discountPercent ?? "-"}</td>
-                          <td>{r.discountAmount ?? "-"}</td>
-                          <td>{r.validFrom || "-"}</td>
-                          <td>{r.validTo || "-"}</td>
-                          <td>{r.description || "-"}</td>
-                          <td><Badge bg={r.active ? "success" : "secondary"}>{r.active ? "YES" : "NO"}</Badge></td>
-                          <td>
-                            <Button size="sm" variant="outline-primary" className="me-1" onClick={() => openEdit(r)}>
-                              <FaEdit />
+                  ) : rows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="text-center text-muted py-4"
+                      >
+                        No student discount configured yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((r, i) => (
+                      <tr key={r.promotionId}>
+                        <td>{i + 1}</td>
+                        <td>{r.discountPercent ?? "-"}</td>
+                        <td>{r.discountAmount ?? "-"}</td>
+                        <td>{r.validFrom || "-"}</td>
+                        <td>{r.validTo || "-"}</td>
+                        <td>{r.description || "-"}</td>
+                        <td>
+                          {/* Clickable Active/Inactive badge — opens
+                              the confirm modal then PATCHes /status.
+                              Mirrors /contract-rate. */}
+                          <Badge
+                            bg={r.active ? "success" : "danger"}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => handleStatusToggle(r)}
+                            title={`Click to ${
+                              r.active ? "deactivate" : "activate"
+                            } promotion`}
+                          >
+                            {r.active ? "Active" : "Inactive"}
+                          </Badge>
+                        </td>
+                        <td>
+                          <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => openEdit(r)}
+                              title="Edit"
+                            >
+                              <FaEdit /> Edit
                             </Button>
-                            <Button size="sm" variant="outline-danger" onClick={() => handleDelete(r.promotionId)}>
-                              <FaTrash />
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleDelete(r.promotionId)}
+                              title="Delete"
+                            >
+                              <FaTrash /> Delete
                             </Button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </Table>
-              )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </Table>
             </Card.Body>
           </Card>
         </main>
@@ -228,6 +324,54 @@ export default function StudentDiscountPromotion() {
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
           <Button variant="primary" onClick={handleSave}>{editingId ? "Update" : "Create"}</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Status-toggle confirmation modal — mirrors /contract-rate. */}
+      <Modal
+        show={showStatusModal}
+        onHide={() => setShowStatusModal(false)}
+        centered
+        size="sm"
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!statusUpdating}>
+          <Modal.Title>Confirm Status Change</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            Are you sure you want to{" "}
+            {selectedRow?.active ? "deactivate" : "activate"} this Student
+            Discount?
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowStatusModal(false)}
+            disabled={statusUpdating}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={updateRowStatus}
+            disabled={statusUpdating}
+          >
+            {statusUpdating ? (
+              <>
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                  aria-hidden="true"
+                ></span>
+                Processing...
+              </>
+            ) : (
+              "Confirm"
+            )}
+          </Button>
         </Modal.Footer>
       </Modal>
     </div>

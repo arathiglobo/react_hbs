@@ -14,6 +14,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import Swal from "sweetalert2";
 
 /**
@@ -108,6 +109,7 @@ export default function LastMinuteContractRate() {
               Back
             </Button>
             <h3 className="mb-0">Last Minute Contract Rates</h3>
+            <HotelTitleBadge hotelId={hotelId} className="ms-2" />
           </div>
 
           <Card className="shadow-sm rounded-xl mb-3">
@@ -174,16 +176,24 @@ export default function LastMinuteContractRate() {
                         </td>
                         <td>
                           <div className="d-flex gap-2">
-                            <FaEdit
-                              className="text-primary"
-                              style={{ cursor: "pointer", fontSize: 18 }}
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleEdit(rate.lastMinuteContractRateId)}
-                            />
-                            <FaTrash
-                              className="text-danger"
-                              style={{ cursor: "pointer", fontSize: 18 }}
+                              title="Edit"
+                            >
+                              <FaEdit /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleDelete(rate.lastMinuteContractRateId, rate.rateCode)}
-                            />
+                              title="Delete"
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>

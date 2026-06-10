@@ -7,9 +7,10 @@ import {
   Spinner,
   Badge,
   Form,
+  Modal,
   Pagination,
 } from "react-bootstrap";
-import { FaArrowLeft, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaEdit, FaTrash } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -26,6 +27,13 @@ export default function LongStayContract() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
+
+  // Status-toggle modal state — mirrors the /contract-rate pattern:
+  // clicking the Active/Inactive badge opens a small confirmation
+  // modal that PATCHes /status only after the operator confirms.
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedContract, setSelectedContract] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
 
   const fetchContracts = async (pageNum = 0) => {
     try {
@@ -67,15 +75,38 @@ export default function LongStayContract() {
     }
   };
 
-  const handleStatusToggle = async (contract) => {
+  // Open the confirm modal for the row whose badge was clicked.
+  // Same two-step UX as /contract-rate — avoids accidental flips.
+  const handleStatusToggle = (contract) => {
+    setSelectedContract(contract);
+    setShowStatusModal(true);
+  };
+
+  // Actually flip the status — fires only after the operator confirms.
+  // Backend endpoint is unchanged (PATCH /status?isLive=...).
+  const updateContractStatus = async () => {
+    if (!selectedContract) return;
     try {
+      setStatusUpdating(true);
       await axiosInstance.patch(
-        `/api/longStayContract/${contract.longStayContractId}/status?isLive=${!contract.isLive}`
+        `/api/longStayContract/${selectedContract.longStayContractId}/status?isLive=${!selectedContract.isLive}`
       );
-      toast.success("Status updated");
-      fetchContracts(page);
-    } catch {
-      toast.error("Failed to update status");
+      toast.success(
+        selectedContract.isLive
+          ? "Long Stay contract deactivated"
+          : "Long Stay contract activated"
+      );
+      await fetchContracts(page);
+      setShowStatusModal(false);
+      setSelectedContract(null);
+    } catch (err) {
+      console.error("Status toggle failed:", err);
+      toast.error(
+        err?.response?.data?.message ||
+          "Failed to update Long Stay contract status"
+      );
+    } finally {
+      setStatusUpdating(false);
     }
   };
 
@@ -88,38 +119,62 @@ export default function LongStayContract() {
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-3" style={{ minWidth: 0, overflowX: "hidden" }}>
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <Button variant="outline-secondary" onClick={() => navigate(-1)}>
-              <FaArrowLeft className="me-2" />
+        <main className="flex-grow-1 p-4" style={{ minWidth: 0, overflowX: "hidden" }}>
+          {/* Page header — mirrors LastMinuteContractRate. The Back
+              button + h3 title sit above the card; HotelTitleBadge is
+              kept so the hotel context the original page surfaced
+              isn't lost. */}
+          <div className="d-flex align-items-center gap-3 mb-3">
+            <Button
+              variant="outline-primary"
+              onClick={() => navigate(-1)}
+              className="d-flex align-items-center btn-sm gap-2"
+            >
+              <FaArrowLeft />
               Back
             </Button>
-            <h4 className="m-0">Long Stay Contracts</h4>
+            <h3 className="mb-0">Long Stay Contracts</h3>
             <HotelTitleBadge hotelId={id} className="ms-2" />
-            <Button
-              variant="success"
-              onClick={() =>
-                navigate(`/hotel-actions/hotel/${id}/long-stay-contract/create`)
-              }
-            >
-              <FaPlus className="me-2" />
-              Create Long Stay
-            </Button>
           </div>
 
-          <Card>
-            <Card.Body>
-              <Form.Control
-                type="search"
-                placeholder="Search by rate code..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="mb-3"
-              />
-              <Table bordered hover responsive>
-                <thead className="table-light">
+          <Card className="shadow-sm rounded-xl mb-3">
+            <Card.Header className="d-flex justify-content-between align-items-center text-white">
+              <span
+                className="fw-semibold cursor-pointer text-primary"
+                style={{ padding: "10px" }}
+              >
+                Long Stay Contracts
+              </span>
+              <Form.Group className="hotel-search-bar position-relative">
+                <Form.Control
+                  type="search"
+                  placeholder="Search by rate code..."
+                  className="form-control-modern-sm"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </Form.Group>
+              <Button
+                className="btn-green create-btn"
+                onClick={() =>
+                  navigate(`/hotel-actions/hotel/${id}/long-stay-contract/create`)
+                }
+              >
+                + Create
+              </Button>
+            </Card.Header>
+
+            <Card.Body className="p-0">
+              <Table
+                striped
+                bordered
+                hover
+                responsive
+                className="mb-0 align-middle"
+              >
+                <thead>
                   <tr>
-                    <th style={{ width: 80 }}>S/N</th>
+                    <th style={{ width: 100 }}>S/N</th>
                     <th>Rate Code</th>
                     <th>Cost Type</th>
                     <th>Validity</th>
@@ -162,35 +217,48 @@ export default function LongStayContract() {
                           {c.validityFrom} → {c.validityTo}
                         </td>
                         <td>
-                          <Form.Check
-                            type="switch"
-                            checked={Boolean(c.isLive)}
-                            onChange={() => handleStatusToggle(c)}
-                            label={c.isLive ? "Active" : "Inactive"}
-                          />
+                          {/* Clickable Active/Inactive badge — opens
+                              the confirm modal, then PATCHes /status.
+                              Mirrors /contract-rate's two-step flow so
+                              accidental clicks don't flip the flag. */}
+                          <Badge
+                            bg={c.isLive ? "success" : "danger"}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => handleStatusToggle(c)}
+                            title={`Click to ${
+                              c.isLive ? "deactivate" : "activate"
+                            } Long Stay contract`}
+                          >
+                            {c.isLive ? "Active" : "Inactive"}
+                          </Badge>
                         </td>
                         <td>
-                          <Button
-                            size="sm"
-                            variant="outline-primary"
-                            className="me-2"
-                            onClick={() =>
-                              navigate(
-                                `/hotel-actions/hotel/${id}/long-stay-contract/${c.longStayContractId}/edit`
-                              )
-                            }
-                          >
-                            <FaEdit />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline-danger"
-                            onClick={() =>
-                              handleDelete(c.longStayContractId, c.rateCode)
-                            }
-                          >
-                            <FaTrash />
-                          </Button>
+                          <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() =>
+                                navigate(
+                                  `/hotel-actions/hotel/${id}/long-stay-contract/${c.longStayContractId}/edit`
+                                )
+                              }
+                              title="Edit"
+                            >
+                              <FaEdit /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() =>
+                                handleDelete(c.longStayContractId, c.rateCode)
+                              }
+                              title="Delete"
+                            >
+                              <FaTrash /> Delete
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -199,7 +267,7 @@ export default function LongStayContract() {
               </Table>
 
               {totalPages > 1 && (
-                <Pagination className="justify-content-center">
+                <Pagination className="justify-content-center m-3">
                   {Array.from({ length: totalPages }).map((_, i) => (
                     <Pagination.Item
                       key={i}
@@ -213,6 +281,56 @@ export default function LongStayContract() {
               )}
             </Card.Body>
           </Card>
+
+          {/* Status-toggle confirmation modal — mirrors /contract-rate.
+              Asks the operator to confirm, then PATCHes the new isLive
+              value via updateContractStatus(). */}
+          <Modal
+            show={showStatusModal}
+            onHide={() => setShowStatusModal(false)}
+            centered
+            size="sm"
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton={!statusUpdating}>
+              <Modal.Title>Confirm Status Change</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p>
+                Are you sure you want to{" "}
+                {selectedContract?.isLive ? "deactivate" : "activate"} this
+                Long Stay contract?
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setShowStatusModal(false)}
+                disabled={statusUpdating}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={updateContractStatus}
+                disabled={statusUpdating}
+              >
+                {statusUpdating ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Processing...
+                  </>
+                ) : (
+                  "Confirm"
+                )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>

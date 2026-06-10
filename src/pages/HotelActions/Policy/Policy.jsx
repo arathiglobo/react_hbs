@@ -302,20 +302,26 @@ const Policy = () => {
                           </Badge>
                         </td>
                         <td>
-                          <div className="d-flex gap-3 justify-content-center">
-                            <FaEdit
-                              className="text-warning"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                          <div className="d-flex gap-2 justify-content-center">
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleEdit(policy.policyId)}
                               title="Edit"
-                            />
+                            >
+                              <FaEdit /> Edit
+                            </Button>
 
-                            <FaTrash
-                              className="text-danger"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleDelete(policy)}
                               title="Delete"
-                            />
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>

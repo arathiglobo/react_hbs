@@ -345,20 +345,26 @@ export default function ContractRate() {
 
                         <td>
                           <div className="d-flex gap-2">
-                            <FaEdit
-                              className="text-primary"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleEdit(rate.contractrateId)}
                               title="Edit"
-                            />
-                            <FaTrash
-                              className="text-danger"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                            >
+                              <FaEdit /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
                               onClick={() =>
                                 handleDelete(rate.contractrateId, rate.rateCode)
                               }
                               title="Delete"
-                            />
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>

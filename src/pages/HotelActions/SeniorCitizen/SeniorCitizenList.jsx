@@ -23,7 +23,7 @@ import React, { useEffect, useState } from "react";
 import {
   Card, Row, Col, Button, Table, Form, Modal, Spinner, Badge,
 } from "react-bootstrap";
-import { FaPlus, FaEdit, FaTrash, FaArrowLeft, FaUserClock } from "react-icons/fa";
+import { FaEdit, FaTrash, FaArrowLeft, FaUserClock } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
@@ -192,52 +192,80 @@ export default function SeniorCitizenList() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm border-0">
-            <Card.Body>
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                  <Button variant="link" className="p-0 me-2"
-                          onClick={() => navigate(`/hotel-details/${hotelId}`)}>
-                    <FaArrowLeft /> Back
-                  </Button>
-                  <h5 className="mb-0 d-inline">
-                    <FaUserClock className="me-2 text-primary" />
-                    Senior Citizen Discount
-                  </h5>
-                  <HotelTitleBadge hotelId={hotelId} className="ms-2" />
-                  <div className="text-muted small mt-1">Hotel ID: {hotelId}</div>
-                  <div className="text-muted small">
-                    The configured discount/markup is applied to the contract rate
-                    for any guest aged 60+ at search time.
-                  </div>
-                </div>
-                <Button variant="primary" size="sm" onClick={openCreate}>
-                  <FaPlus className="me-1" /> Add Discount
-                </Button>
-              </div>
+          {/* Page header — mirrors LastMinuteContractRate. The
+              FaUserClock accent + age-60 caption are preserved because
+              they convey functional info (who the discount applies to). */}
+          <div className="d-flex align-items-center gap-3 mb-2">
+            <Button
+              variant="outline-primary"
+              onClick={() => navigate(`/hotel-details/${hotelId}`)}
+              className="d-flex align-items-center btn-sm gap-2"
+            >
+              <FaArrowLeft />
+              Back
+            </Button>
+            <h3 className="mb-0 d-flex align-items-center">
+              <FaUserClock className="me-2 text-primary" />
+              Senior Citizen Discount
+            </h3>
+            <HotelTitleBadge hotelId={hotelId} className="ms-2" />
+          </div>
+          <div className="text-muted small mb-3">
+            The configured discount/markup is applied to the contract rate
+            for any guest aged 60+ at search time.
+          </div>
 
-              {loading ? (
-                <div className="text-center py-5"><Spinner animation="border" /></div>
-              ) : (
-                <Table striped bordered hover responsive size="sm">
-                  <thead className="table-light">
+          <Card className="shadow-sm rounded-xl mb-3">
+            <Card.Header className="d-flex justify-content-between align-items-center text-white">
+              <span
+                className="fw-semibold cursor-pointer text-primary"
+                style={{ padding: "10px" }}
+              >
+                Senior Citizen Discount
+              </span>
+              <Button className="btn-green create-btn" onClick={openCreate}>
+                + Create
+              </Button>
+            </Card.Header>
+
+            <Card.Body className="p-0">
+              <Table
+                striped
+                bordered
+                hover
+                responsive
+                className="mb-0 align-middle"
+              >
+                <thead>
+                  <tr>
+                    <th style={{ width: 100 }}>S/N</th>
+                    <th>Discount Type</th>
+                    <th>Discount Value</th>
+                    <th>Valid From</th>
+                    <th>Valid To</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th style={{ width: 160 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
                     <tr>
-                      <th>#</th>
-                      <th>Discount Type</th>
-                      <th>Discount Value</th>
-                      <th>Valid From</th>
-                      <th>Valid To</th>
-                      <th>Description</th>
-                      <th>Active</th>
-                      <th>Actions</th>
+                      <td colSpan={8} className="text-center py-4">
+                        <Spinner animation="border" />
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {rows.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center text-muted py-4">
+                  ) : rows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="text-center text-muted py-4"
+                      >
                         No discount configured yet.
-                      </td></tr>
-                    ) : rows.map((row, idx) => {
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((row, idx) => {
                       const pid = row.promotionId || row.id;
                       return (
                         <tr key={pid}>
@@ -247,25 +275,39 @@ export default function SeniorCitizenList() {
                           <td>{row.validFrom || "-"}</td>
                           <td>{row.validTo || "-"}</td>
                           <td>{row.description || "-"}</td>
-                          <td><Badge bg={row.active ? "success" : "secondary"}>
-                            {row.active ? "YES" : "NO"}
-                          </Badge></td>
                           <td>
-                            <Button size="sm" variant="outline-primary" className="me-1"
-                                    onClick={() => openEdit(row)}>
-                              <FaEdit />
-                            </Button>
-                            <Button size="sm" variant="outline-danger"
-                                    onClick={() => handleDelete(pid)}>
-                              <FaTrash />
-                            </Button>
+                            <Badge bg={row.active ? "success" : "danger"}>
+                              {row.active ? "Active" : "Inactive"}
+                            </Badge>
+                          </td>
+                          <td>
+                            <div className="d-flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="d-flex align-items-center gap-1"
+                                onClick={() => openEdit(row)}
+                                title="Edit"
+                              >
+                                <FaEdit /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                className="d-flex align-items-center gap-1"
+                                onClick={() => handleDelete(pid)}
+                                title="Delete"
+                              >
+                                <FaTrash /> Delete
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </Table>
-              )}
+                    })
+                  )}
+                </tbody>
+              </Table>
             </Card.Body>
           </Card>
         </main>

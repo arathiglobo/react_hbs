@@ -20,6 +20,7 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
+import HotelTitleBadge from "../../components/HotelTitleBadge";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import {
@@ -1683,9 +1684,12 @@ const handleAmenityChange = (e) => {
             {/* Header Section */}
             <div className="d-flex justify-content-between align-items-center mb-4">
               <div>
-                <h2 className="text-primary mb-1">
+                <h2 className="text-primary mb-1 d-flex align-items-center gap-2">
                   <FaHotel className="me-2" />
                   {isEditMode ? "Edit Hotel" : "Hotel Registration"}
+                  {/* Badge only appears in edit mode — there's no hotel
+                      id to resolve when registering a brand-new one. */}
+                  {isEditMode && <HotelTitleBadge hotelId={id} />}
                 </h2>
                 <p className="text-muted mb-0">
                   {isEditMode

@@ -34,6 +34,12 @@ export default function CompanyProfile() {
     mobile: "",
     postOffice: "",
     whitelistedSupplierCodes: [],
+    // Company-wide branding: a small logo rendered on the LEFT of every
+    // voucher / invoice PDF, plus a larger banner image shown on the
+    // profile view. Both live as base64 strings (data URL or raw) to
+    // mirror the AgentReg.jsx pattern — no separate upload endpoint.
+    companyLogo: null,
+    companyImage: null,
   });
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -53,6 +59,31 @@ export default function CompanyProfile() {
   const toString = (value) => {
     if (value == null || value === undefined) return "";
     return String(value);
+  };
+
+  // Mirrors AgentReg.jsx's helper — turn a File picked from <input
+  // type="file"> into a data: URL so it can be sent in JSON.
+  const convertToBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+
+  // Resolve any of the supported shapes (File object freshly picked,
+  // data URL coming back from the backend, or raw base64 without
+  // prefix) into an <img src=…>-friendly string. Returns null when
+  // the input is empty so the preview block can be skipped.
+  const resolveImageSrc = (value) => {
+    if (!value) return null;
+    if (value instanceof File) return URL.createObjectURL(value);
+    if (typeof value === "string") {
+      return value.startsWith("data:")
+        ? value
+        : `data:image/*;base64,${value}`;
+    }
+    return null;
   };
 
   // Helper function to safely trim string values
@@ -212,6 +243,8 @@ export default function CompanyProfile() {
       mobile: "",
       postOffice: "",
       whitelistedSupplierCodes: [],
+      companyLogo: null,
+      companyImage: null,
     });
     setValidationErrors({});
     setShowModal(true);
@@ -242,6 +275,11 @@ export default function CompanyProfile() {
           mobile: toString(data.mobile),
           postOffice: toString(data.postOffice),
           whitelistedSupplierCodes: data.whitelistedSupplierCodes || [],
+          // Backend returns these as base64 strings (or null). Stored
+          // as-is so the preview block can render them directly and so
+          // an unchanged edit roundtrips without re-uploading.
+          companyLogo: data.companyLogo || null,
+          companyImage: data.companyImage || null,
         });
         setValidationErrors({});
         setShowModal(true);
@@ -318,6 +356,27 @@ export default function CompanyProfile() {
         postOffice: safeTrim(formData.postOffice),
         whitelistedSupplierCodes: formData.whitelistedSupplierCodes,
       };
+
+      // Logo / image handling — mirror AgentReg.jsx. Only attach the
+      // key when the user picked a fresh File on this open of the modal.
+      // For edits where the user didn't touch the field, omit the key so
+      // the backend preserves whatever logo is already saved.
+      try {
+        if (formData.companyLogo instanceof File) {
+          payload.companyLogo = await convertToBase64(formData.companyLogo);
+        } else if (!editing && typeof formData.companyLogo === "string") {
+          payload.companyLogo = formData.companyLogo;
+        }
+        if (formData.companyImage instanceof File) {
+          payload.companyImage = await convertToBase64(formData.companyImage);
+        } else if (!editing && typeof formData.companyImage === "string") {
+          payload.companyImage = formData.companyImage;
+        }
+      } catch (err) {
+        console.error("Error converting image to base64:", err);
+        toast.error("Error processing image file");
+        return;
+      }
 
       let response;
       if (editing) {
@@ -820,6 +879,75 @@ export default function CompanyProfile() {
                     </Form.Group>
                   </Col>
                 </Row>
+
+                {/* Company branding — logo goes on the LEFT of every
+                    voucher / invoice PDF, image is the larger cover/
+                    banner shown on the profile view. Pattern lifted
+                    from AgentReg.jsx so the two flows stay consistent. */}
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Company Logo</Form.Label>
+                      <Form.Control
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) =>
+                          handleInputChange(
+                            "companyLogo",
+                            e.target.files[0] || null,
+                          )
+                        }
+                      />
+                      {formData.companyLogo && (
+                        <div className="mt-2">
+                          <img
+                            src={resolveImageSrc(formData.companyLogo)}
+                            alt="Company Logo"
+                            style={{
+                              maxHeight: "60px",
+                              maxWidth: "100%",
+                              border: "1px solid #ddd",
+                              borderRadius: "4px",
+                              padding: "2px",
+                              background: "#fff",
+                            }}
+                          />
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Company Image</Form.Label>
+                      <Form.Control
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) =>
+                          handleInputChange(
+                            "companyImage",
+                            e.target.files[0] || null,
+                          )
+                        }
+                      />
+                      {formData.companyImage && (
+                        <div className="mt-2">
+                          <img
+                            src={resolveImageSrc(formData.companyImage)}
+                            alt="Company Image"
+                            style={{
+                              maxHeight: "100px",
+                              maxWidth: "100%",
+                              border: "1px solid #ddd",
+                              borderRadius: "4px",
+                              padding: "2px",
+                              background: "#fff",
+                            }}
+                          />
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+                </Row>
               </Form>
             </Modal.Body>
             <Modal.Footer>
@@ -864,17 +992,54 @@ export default function CompanyProfile() {
                 <div className="company-details-view">
                   <Row className="mb-4">
                     <Col md={12}>
-                      <div className="p-3 bg-indigo-subtle border border-indigo-subtle rounded-3">
-                        <h4 className="mb-1 fw-bold text-indigo">
-                          {viewData.companyName}
-                        </h4>
-                        <p className="mb-0 text-muted d-flex align-items-center gap-2">
-                          <i className="bi bi-person-check"></i> Authorized:{" "}
-                          <strong>{viewData.authorizedPerson}</strong>
-                        </p>
+                      <div className="p-3 bg-indigo-subtle border border-indigo-subtle rounded-3 d-flex align-items-center gap-3">
+                        {viewData.companyLogo && (
+                          <img
+                            src={resolveImageSrc(viewData.companyLogo)}
+                            alt="Company Logo"
+                            style={{
+                              height: "56px",
+                              width: "56px",
+                              objectFit: "contain",
+                              background: "#fff",
+                              border: "1px solid #e9ecef",
+                              borderRadius: "6px",
+                              padding: "4px",
+                            }}
+                          />
+                        )}
+                        <div>
+                          <h4 className="mb-1 fw-bold text-indigo">
+                            {viewData.companyName}
+                          </h4>
+                          <p className="mb-0 text-muted d-flex align-items-center gap-2">
+                            <i className="bi bi-person-check"></i> Authorized:{" "}
+                            <strong>{viewData.authorizedPerson}</strong>
+                          </p>
+                        </div>
                       </div>
                     </Col>
                   </Row>
+                  {viewData.companyImage && (
+                    <Row className="mb-4">
+                      <Col md={12}>
+                        <label className="small text-uppercase fw-bold text-muted mb-1">
+                          Company Image
+                        </label>
+                        <div className="p-2 bg-light rounded-3 border text-center">
+                          <img
+                            src={resolveImageSrc(viewData.companyImage)}
+                            alt="Company"
+                            style={{
+                              maxHeight: "240px",
+                              maxWidth: "100%",
+                              borderRadius: "4px",
+                            }}
+                          />
+                        </div>
+                      </Col>
+                    </Row>
+                  )}
 
                   <Row className="g-4">
                     <Col md={6}>

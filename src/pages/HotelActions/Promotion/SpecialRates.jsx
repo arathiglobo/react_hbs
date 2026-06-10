@@ -15,6 +15,7 @@ import Select from "react-select";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
 
 const SpecialRates = () => {
@@ -321,6 +322,51 @@ const SpecialRates = () => {
       // Combine both room and meal rates
       const allSpecialRateRoomDTO = [...specialRateRoomDTO, ...mealRateDTO];
 
+      // Backend DTOs declare ocuppancyTypeIid as Long and rate/adultrate
+      // /childrate as Double. Jackson can NOT parse "" into either, so
+      // empty-string slots crash the controller with a 500. Coerce
+      // them to null/0 before POST.
+      const toNumOrNull = (v) =>
+        v === "" || v === undefined || v === null ? null : v;
+      const sanitizedRoomDTO = allSpecialRateRoomDTO.map((r) => ({
+        ...r,
+        hotelRoomcategoryId: toNumOrNull(r.hotelRoomcategoryId),
+        hotelRoomTypeId: toNumOrNull(r.hotelRoomTypeId),
+        ocuppancyTypeIid: toNumOrNull(r.ocuppancyTypeIid),
+        rate: r.rate === "" || r.rate === undefined || r.rate === null
+          ? 0
+          : Number(r.rate),
+        adultrate: toNumOrNull(r.adultrate),
+        childrate: toNumOrNull(r.childrate),
+      }));
+
+      // Now drop the placeholder rows the form generates for every
+      // category × room-type × occupancy combination the operator
+      // never actually filled in. Two shapes the backend treats as
+      // "junk" (HotelSpecialRateService throws
+      // "Occupancy type is required for non-extra-bed rooms" on these):
+      //
+      //   * extraBed=false AND ocuppancyTypeIid is null
+      //     (no occupancy chosen → backend NPEs on the FK lookup)
+      //   * extraBed=false AND rate is 0/missing AND no adult/child rate
+      //     (operator left the slot empty — nothing to persist)
+      //
+      // Extra-bed rows are kept whenever adultrate OR childrate is set,
+      // even when ocuppancyTypeIid is null (that's the form's intent
+      // for an extra-bed surcharge — see SpecialRates.jsx lines 285-303).
+      const hasValue = (v) =>
+        v !== null && v !== undefined && v !== "" && Number(v) !== 0;
+      const filteredRoomDTO = sanitizedRoomDTO.filter((r) => {
+        if (r.extraBed) {
+          // Keep extra-bed rows only if at least one of the two
+          // extra-bed surcharges is filled in.
+          return hasValue(r.adultrate) || hasValue(r.childrate);
+        }
+        // Normal occupancy row — require BOTH an occupancy id and a
+        // positive rate (rate=0 with no occupancy is a placeholder).
+        return r.ocuppancyTypeIid != null && hasValue(r.rate);
+      });
+
       const specialratesaveReq = {
         marketype: formData.marketType.map((m) => m.value),
         excludeCountrys: formData.excludeNationality.map((c) => c.value),
@@ -338,16 +384,24 @@ const SpecialRates = () => {
         minlengthStay: String(formData.minimumStay),
         maxlengthStay: String(formData.maximumStay),
         remark: formData.remarks || "",
+        // combinedPromoId is a Long on the backend — Jackson can't parse
+        // "" → Long. Send null when no combine option was picked.
         combinedPromoId:
-          formData.combinedStayPay || formData.combinedDiscount || "",
+          formData.combinedStayPay || formData.combinedDiscount || null,
         promotype: formData.combinedStayPay
           ? "SAP"
           : formData.combinedDiscount
             ? "DSR"
             : "",
-        specialRateValidityDTO: [...validityList, ...blackoutDates],
+        // Drop empty blackout rows (operator added the slot then
+        // didn't fill in the dates — sending these crashes the
+        // validity persistence step). Keep validity rows as-is.
+        specialRateValidityDTO: [
+          ...validityList,
+          ...blackoutDates.filter((b) => b.validityFrom && b.validityTo),
+        ],
         promotionCompulsoryDTO: [],
-        specialRateRoomDTO: allSpecialRateRoomDTO,
+        specialRateRoomDTO: filteredRoomDTO,
       };
 
       console.log("Payload specialratesaveReq:", specialratesaveReq);
@@ -383,7 +437,10 @@ const SpecialRates = () => {
               >
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              <h4 className="fw-semibold text-dark mb-0">Save Special Rate</h4>
+              <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
+                Save Special Rate
+                <HotelTitleBadge hotelId={id} />
+              </h4>
             </div>
 
             <Card className="shadow-sm border-0 p-4 rounded-4 bg-white">

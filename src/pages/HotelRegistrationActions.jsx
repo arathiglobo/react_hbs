@@ -314,7 +314,7 @@ const HotelRegistrationActions = () => {
       status: "none",
       count: null,
     },
-    { label: "Book Hotel", icon: FaBed, status: "none", count: null },
+    // { label: "Book Hotel", icon: FaBed, status: "none", count: null },
   ];
 
   // Fetch hotel data

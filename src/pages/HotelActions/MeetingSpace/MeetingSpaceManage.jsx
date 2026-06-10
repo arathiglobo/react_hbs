@@ -40,6 +40,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import Select from "react-select";
 import Swal from "sweetalert2";
 
@@ -221,6 +222,13 @@ export default function MeetingSpaceManage() {
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [hotelName, setHotelName] = useState("");
+
+  // Status-toggle modal state — mirrors the ContractRate pattern.
+  // The status column on this page is a string ("Active" / "Inactive")
+  // rather than a boolean, so the PATCH body uses { status: "..." }.
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedSpace, setSelectedSpace] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
 
   // form state
   const [showForm, setShowForm] = useState(false);
@@ -536,6 +544,44 @@ export default function MeetingSpaceManage() {
     }
   };
 
+  // Open the confirm modal for the row whose badge was clicked.
+  const handleStatusToggle = (row) => {
+    setSelectedSpace(row);
+    setShowStatusModal(true);
+  };
+
+  // PATCH the new status, refresh the list, close the modal.
+  // The status column stores a string ("Active" / "Inactive") rather
+  // than a boolean, so we send the literal target value.
+  const updateSpaceStatus = async () => {
+    if (!selectedSpace) return;
+    try {
+      setStatusUpdating(true);
+      const next =
+        selectedSpace.status === "Active" ? "Inactive" : "Active";
+      await axiosInstance.patch(
+        `/api/meet-and-space/${selectedSpace.id}/status`,
+        { status: next }
+      );
+      toast.success(
+        next === "Active"
+          ? "Meeting space activated"
+          : "Meeting space deactivated"
+      );
+      await fetchSpaces(page, search);
+      setShowStatusModal(false);
+      setSelectedSpace(null);
+    } catch (err) {
+      console.error("Status toggle failed:", err);
+      toast.error(
+        err?.response?.data?.message ||
+          "Failed to update meeting-space status"
+      );
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
   const handleDelete = async (row) => {
     const result = await Swal.fire({
       title: `Delete "${row.spaceName}"?`,
@@ -569,10 +615,15 @@ export default function MeetingSpaceManage() {
               <FaArrowLeft />
               Back
             </Button>
-            <h3 className="mb-0">
+            <h3 className="mb-0 d-flex align-items-center">
               <FaUsers className="me-2 text-primary" /> Meeting &amp; Space
-              {hotelName ? ` — ${hotelName}` : ""}
             </h3>
+            {/* HotelTitleBadge replaces the inline " — {hotelName}"
+                rendering so this page matches the rest of the action
+                inner pages. The hotelName state is kept (used in the
+                save payload at line ~475) — only the display copy
+                here is delegated to the badge. */}
+            <HotelTitleBadge hotelId={hotelId} className="ms-2" />
           </div>
 
           <Card className="shadow-sm rounded-xl mb-3">
@@ -650,26 +701,40 @@ export default function MeetingSpaceManage() {
                           </span>
                         </td>
                         <td>
+                          {/* Clickable Active/Inactive badge — opens
+                              the confirm modal then PATCHes /status.
+                              Mirrors /contract-rate. */}
                           <Badge
                             bg={s.status === "Active" ? "success" : "danger"}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => handleStatusToggle(s)}
+                            title={`Click to ${
+                              s.status === "Active" ? "deactivate" : "activate"
+                            } meeting space`}
                           >
                             {s.status}
                           </Badge>
                         </td>
                         <td>
                           <div className="d-flex gap-2">
-                            <FaEdit
-                              className="text-primary"
-                              style={{ cursor: "pointer", fontSize: 18 }}
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
                               title="Edit"
                               onClick={() => openEdit(s)}
-                            />
-                            <FaTrash
-                              className="text-danger"
-                              style={{ cursor: "pointer", fontSize: 18 }}
+                            >
+                              <FaEdit /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
                               title="Delete"
                               onClick={() => handleDelete(s)}
-                            />
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -1205,6 +1270,54 @@ export default function MeetingSpaceManage() {
               "Update Space"
             ) : (
               "Create Space"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Status-toggle confirmation modal — mirrors /contract-rate. */}
+      <Modal
+        show={showStatusModal}
+        onHide={() => setShowStatusModal(false)}
+        centered
+        size="sm"
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!statusUpdating}>
+          <Modal.Title>Confirm Status Change</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            Are you sure you want to{" "}
+            {selectedSpace?.status === "Active" ? "deactivate" : "activate"}{" "}
+            this meeting space?
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowStatusModal(false)}
+            disabled={statusUpdating}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={updateSpaceStatus}
+            disabled={statusUpdating}
+          >
+            {statusUpdating ? (
+              <>
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                  aria-hidden="true"
+                ></span>
+                Processing...
+              </>
+            ) : (
+              "Confirm"
             )}
           </Button>
         </Modal.Footer>

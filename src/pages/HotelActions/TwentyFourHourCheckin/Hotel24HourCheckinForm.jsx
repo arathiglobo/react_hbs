@@ -5,6 +5,7 @@ import { FaArrowLeft } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
 
 /**
@@ -140,8 +141,9 @@ export default function Hotel24HourCheckinForm({ mode }) {
             >
               <FaArrowLeft /> Back
             </Button>
-            <h5 className="mb-0">
+            <h5 className="mb-0 d-flex align-items-center gap-2">
               {isEdit ? "Edit" : "Add"} 24 Hour Check-In Configuration
+              <HotelTitleBadge hotelId={hotelId} />
             </h5>
           </div>
 

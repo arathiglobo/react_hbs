@@ -14,6 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
 import Select from "react-select";
 
@@ -380,8 +381,9 @@ export default function EditDiscountPromotion() {
               >
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              <h4 className="fw-semibold mb-0 text-dark">
+              <h4 className="fw-semibold mb-0 text-dark d-flex align-items-center gap-2">
                 Edit Discount Promotion
+                <HotelTitleBadge hotelId={id} />
               </h4>
             </div>
 

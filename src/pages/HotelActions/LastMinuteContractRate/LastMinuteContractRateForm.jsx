@@ -17,6 +17,7 @@ import Select from "react-select";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
 
 /**
@@ -619,8 +620,9 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
               <Button variant="outline-secondary" onClick={() => navigate(-1)}>
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              <h4 className="fw-semibold text-dark mb-0">
+              <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
                 {isEdit ? "Edit" : "Create"} Last Minute Contract Rate
+                <HotelTitleBadge hotelId={hotelId} />
               </h4>
             </div>
 

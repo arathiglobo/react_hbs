@@ -1572,24 +1572,33 @@ const HotelAvailability = () => {
                           </td>
                           <td>
                             <div className="d-flex gap-2">
-                              <FaEdit
-                                className="text-primary"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => openEditModal(item)}
                                 title="Edit"
-                              />
-                              <FaEye
-                                className="text-info"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEdit /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-info"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => openViewModal(item)}
                                 title="View"
-                              />
-                              <FaTrash
-                                className="text-danger"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => handleDelete(item)}
                                 title="Delete"
-                              />
+                              >
+                                <FaTrash /> Delete
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -1738,24 +1747,33 @@ const HotelAvailability = () => {
                           </td>
                           <td>
                             <div className="d-flex gap-2">
-                              <FaEdit
-                                className="text-primary"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => openEditBlock(item)}
                                 title="Edit"
-                              />
-                              <FaEye
-                                className="text-info"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEdit /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-info"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => openViewBlock(item)}
                                 title="View"
-                              />
-                              <FaTrash
-                                className="text-danger"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => handleDeleteBlock(item)}
                                 title="Delete"
-                              />
+                              >
+                                <FaTrash /> Delete
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -1871,24 +1889,33 @@ const HotelAvailability = () => {
                           </td>
                           <td>
                             <div className="d-flex gap-2">
-                              <FaEdit
-                                className="text-primary"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => openEditStopSale(item)}
                                 title="Edit"
-                              />
-                              <FaEye
-                                className="text-info"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEdit /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-info"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => openViewStopSale(item)}
                                 title="View"
-                              />
-                              <FaTrash
-                                className="text-danger"
-                                style={{ cursor: "pointer", fontSize: "18px" }}
+                              >
+                                <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                className="d-flex align-items-center gap-1"
                                 onClick={() => handleDeleteStopSale(item)}
                                 title="Delete"
-                              />
+                              >
+                                <FaTrash /> Delete
+                              </Button>
                             </div>
                           </td>
                         </tr>

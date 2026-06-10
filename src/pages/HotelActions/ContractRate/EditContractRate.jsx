@@ -16,6 +16,7 @@ import { FaArrowLeft, FaSave, FaPlus } from "react-icons/fa";
 import Select from "react-select";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
@@ -480,8 +481,13 @@ export default function EditContractRate() {
               <Button variant="outline-secondary" onClick={() => navigate(-1)}>
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              <h4 className="fw-semibold text-dark mb-0">
+              {/* Title row — HotelTitleBadge resolves the hotel id to
+                  its name so the operator can see at a glance which
+                  hotel this Contract Rate belongs to. Same component
+                  used on the action grid and the list pages. */}
+              <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
                 Edit Contract Rate
+                <HotelTitleBadge hotelId={id} />
               </h4>
               <Button variant="success" onClick={handleUpdate}>
                 <FaSave className="me-1" /> Update

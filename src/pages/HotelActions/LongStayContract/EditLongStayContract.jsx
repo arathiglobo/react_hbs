@@ -11,6 +11,7 @@ import {
 } from "react-bootstrap";
 import { FaArrowLeft } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
@@ -276,7 +277,10 @@ export default function EditLongStayContract() {
               <FaArrowLeft className="me-2" />
               Back
             </Button>
-            <h4 className="m-0">Edit Long Stay Contract</h4>
+            <h4 className="m-0 d-flex align-items-center gap-2">
+              Edit Long Stay Contract
+              <HotelTitleBadge hotelId={id} />
+            </h4>
             <span />
           </div>
 

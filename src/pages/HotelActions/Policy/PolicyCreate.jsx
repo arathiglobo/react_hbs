@@ -12,6 +12,7 @@ import {
 } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaTrash } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import { toast } from "react-hot-toast";
@@ -202,7 +203,10 @@ const PolicyCreate = () => {
               <Button variant="outline-secondary" className="rounded-pill px-3" onClick={() => navigate(-1)}>
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              <h4 className="fw-semibold text-dark mb-0">Save Policy Details</h4>
+              <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
+                Save Policy Details
+                <HotelTitleBadge hotelId={id} />
+              </h4>
             </div>
 
             <Card className="shadow-sm border-0 p-4 rounded-4 bg-white">
@@ -250,7 +254,7 @@ const PolicyCreate = () => {
                       ) : (
                         <Form.Select
                           className="rounded-3"
-                          style={{ height: "38px" }}
+                          style={{ height: "46px" }}
                           value={formData.marketTypeId[0] || ""}
                           onChange={(e) =>
                             setFormData({

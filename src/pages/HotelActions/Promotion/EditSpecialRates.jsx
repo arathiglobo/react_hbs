@@ -14,6 +14,7 @@ import Select from "react-select";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
 
 export default function EditSpecialRates() {
@@ -497,6 +498,36 @@ export default function EditSpecialRates() {
       // Combine both room and meal rates
       const allSpecialRateRoomDTO = [...specialRateRoomDTO, ...mealRateDTO];
 
+      // See SpecialRates.jsx — coerce empty-string numeric slots to
+      // null/0 so Jackson can deserialize the backend Long/Double DTO
+      // fields. Without this an untouched extra-bed row sends
+      // ocuppancyTypeIid: "" / adultrate: "" and the PUT 500s.
+      const toNumOrNull = (v) =>
+        v === "" || v === undefined || v === null ? null : v;
+      const sanitizedRoomDTO = allSpecialRateRoomDTO.map((r) => ({
+        ...r,
+        hotelRoomcategoryId: toNumOrNull(r.hotelRoomcategoryId),
+        hotelRoomTypeId: toNumOrNull(r.hotelRoomTypeId),
+        ocuppancyTypeIid: toNumOrNull(r.ocuppancyTypeIid),
+        rate: r.rate === "" || r.rate === undefined || r.rate === null
+          ? 0
+          : Number(r.rate),
+        adultrate: toNumOrNull(r.adultrate),
+        childrate: toNumOrNull(r.childrate),
+      }));
+
+      // Filter out placeholder rows the operator never filled in.
+      // Backend throws "Occupancy type is required for non-extra-bed
+      // rooms" on non-extra-bed rows with no occupancy / no rate.
+      const hasValue = (v) =>
+        v !== null && v !== undefined && v !== "" && Number(v) !== 0;
+      const filteredRoomDTO = sanitizedRoomDTO.filter((r) => {
+        if (r.extraBed) {
+          return hasValue(r.adultrate) || hasValue(r.childrate);
+        }
+        return r.ocuppancyTypeIid != null && hasValue(r.rate);
+      });
+
       const specialratesaveReq = {
         marketype: formData.marketType.map((m) => m.value),
         excludeCountrys: formData.excludeNationality.map((c) => c.value),
@@ -514,16 +545,24 @@ export default function EditSpecialRates() {
         minlengthStay: String(formData.minimumStay),
         maxlengthStay: String(formData.maximumStay),
         remark: formData.remarks || "",
+        // combinedPromoId is a Long on the backend — Jackson can't
+        // parse "" → Long. Send null when nothing was selected.
         combinedPromoId:
-          formData.combinedStayPay || formData.combinedDiscount || "",
+          formData.combinedStayPay || formData.combinedDiscount || null,
         promotype: formData.combinedStayPay
           ? "SAP"
           : formData.combinedDiscount
             ? "DSR"
             : "",
-        specialRateValidityDTO: [...validityList, ...blackoutDates],
+        // Drop empty blackout rows (operator added the slot then
+        // didn't fill in the dates — sending these crashes the
+        // validity persistence step). Keep validity rows as-is.
+        specialRateValidityDTO: [
+          ...validityList,
+          ...blackoutDates.filter((b) => b.validityFrom && b.validityTo),
+        ],
         promotionCompulsoryDTO: [],
-        specialRateRoomDTO: allSpecialRateRoomDTO,
+        specialRateRoomDTO: filteredRoomDTO,
       };
 
       // console.log("Payload specialratesaveReq:", specialratesaveReq);
@@ -563,7 +602,10 @@ export default function EditSpecialRates() {
               >
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              <h4 className="fw-semibold text-dark mb-0">Edit Special Rate</h4>
+              <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
+                Edit Special Rate
+                <HotelTitleBadge hotelId={id} />
+              </h4>
             </div>
 
             <Card className="shadow-sm border-0 p-4 rounded-4 bg-white">

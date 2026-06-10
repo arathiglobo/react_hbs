@@ -235,18 +235,24 @@ export default function DayStayContract() {
                         </td>
                         <td>
                           <div className="d-flex gap-2">
-                            <FaEdit
-                              className="text-primary"
-                              style={{ cursor: "pointer", fontSize: 18 }}
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleEdit(r.id)}
                               title="Edit"
-                            />
-                            <FaTrash
-                              className="text-danger"
-                              style={{ cursor: "pointer", fontSize: 18 }}
+                            >
+                              <FaEdit /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleDelete(r.id, r.rateCode)}
                               title="Delete"
-                            />
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>
